@@ -27,9 +27,9 @@ constexpr uint16_t kLongPressMs = 900;
 namespace WaveshareAmoled206::Axp2101Wiring {
 constexpr bool kReleaseBusBeforeRead = false;
 constexpr bool kEnablePowerKeyIrqs = true;
-constexpr bool kRequiresPowerKeyConfig = false;
+constexpr bool kRequiresPowerKeyConfig = true;
 constexpr uint8_t kPowerKeyOnTimeValue = 0x00;
-constexpr uint8_t kPowerKeyOffTimeValue = 0x00;
+constexpr uint8_t kPowerKeyOffTimeValue = 0x01;
 }
 
 namespace WaveshareAmoled206::DisplayWiring {

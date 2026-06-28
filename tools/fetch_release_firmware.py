@@ -33,6 +33,10 @@ DEFAULT_OPTIONAL_ASSETS = (
     "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin",
     "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin",
 )
+ASSET_FALLBACKS = {
+    "rsvp-nano-esp32-s3-touch-lcd-3.49.bin": ("rsvp-nano.bin",),
+    "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin": ("rsvp-nano-rev2.bin",),
+}
 DEFAULT_MANIFEST = {
     "name": "RSVP Nano",
     "version": "dev",
@@ -126,6 +130,21 @@ def find_asset(release: dict, name: str, required: bool = True) -> dict | None:
     return None
 
 
+def find_asset_with_fallback(release: dict, name: str, required: bool = True) -> tuple[dict | None, str | None]:
+    asset = find_asset(release, name, required=False)
+    if asset is not None:
+        return asset, name
+
+    for fallback in ASSET_FALLBACKS.get(name, ()):
+        asset = find_asset(release, fallback, required=False)
+        if asset is not None:
+            return asset, fallback
+
+    if required:
+        raise SystemExit(f"Latest release is missing required asset: {name}")
+    return None, None
+
+
 def load_manifest(path: Path, fallback: dict) -> dict:
     if not path.exists():
         return json.loads(json.dumps(fallback))
@@ -173,26 +192,26 @@ def main() -> int:
         requested_assets = tuple(args.assets)
         include_rev2 = any("rev2" in asset_name for asset_name in requested_assets)
         for asset_name in requested_assets:
-            asset = find_asset(release, asset_name)
+            asset, release_asset_name = find_asset_with_fallback(release, asset_name)
             url = str(asset.get("browser_download_url", "")).strip()
             if not url:
                 raise SystemExit(f"Release asset is missing browser_download_url: {asset_name}")
             destination = WEB_FIRMWARE_DIR / asset_name
-            print(f"Downloading {asset_name} from {tag_name} -> {destination}")
+            print(f"Downloading {release_asset_name} from {tag_name} -> {destination}")
             download_file(url, destination)
     else:
         for asset_name in DEFAULT_REQUIRED_ASSETS:
-            asset = find_asset(release, asset_name)
+            asset, release_asset_name = find_asset_with_fallback(release, asset_name)
             url = str(asset.get("browser_download_url", "")).strip()
             if not url:
                 raise SystemExit(f"Release asset is missing browser_download_url: {asset_name}")
             destination = WEB_FIRMWARE_DIR / asset_name
-            print(f"Downloading {asset_name} from {tag_name} -> {destination}")
+            print(f"Downloading {release_asset_name} from {tag_name} -> {destination}")
             download_file(url, destination)
 
         include_rev2 = True
         for asset_name in DEFAULT_OPTIONAL_ASSETS:
-            asset = find_asset(release, asset_name, required=False)
+            asset, release_asset_name = find_asset_with_fallback(release, asset_name, required=False)
             if asset is None:
                 print(f"Skipping optional release asset not present in {tag_name}: {asset_name}")
                 include_rev2 = False
@@ -203,7 +222,7 @@ def main() -> int:
                 include_rev2 = False
                 continue
             destination = WEB_FIRMWARE_DIR / asset_name
-            print(f"Downloading {asset_name} from {tag_name} -> {destination}")
+            print(f"Downloading {release_asset_name} from {tag_name} -> {destination}")
             download_file(url, destination)
 
     write_manifest(tag_name, include_rev2)

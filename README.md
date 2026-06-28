@@ -2,7 +2,7 @@
 
 RSVP Nano is an open-source ESP32-S3 reading device that shows text one word at a time using RSVP, Rapid Serial Visual Presentation. It is designed for small screens, SD card libraries, fast reading, and a simple browser-first workflow for converting and uploading books.
 
-This README is written for the current release, `v0.0.8`.
+This README tracks the current main branch and the `preview-v0.0.9` preview.
 
 ## What You Need
 
@@ -58,10 +58,9 @@ option instead; it uses the alternate GPIO42 backlight profile.
 For Waveshare Touch AMOLED 1.8 boards, choose the V1 option for SH8601 display / FT3168 touch
 hardware. Choose the V2 Test option only for newer CO5300 display / CST816 touch hardware.
 
-The hosted flasher installs the latest published GitHub Release. For `v0.0.8`, that means the
-release build includes the firmware, SD card, RSS, companion sync, USB transfer, quick settings,
-browser flasher, menu, input, battery, display, multi-board, compact timer, and one-handed reader
-control work described below.
+The hosted flasher installs the latest published GitHub Release. Preview builds add the current
+multi-board firmware, durable SD progress, OTA tag pinning, and companion app progress editing work
+described below.
 
 Make sure your USB cable is a data cable.
 
@@ -81,7 +80,7 @@ Create these folders on the card:
 /config
 ```
 
-Books go in `/books/books`. Articles go in `/books/articles`. Older libraries with files directly inside `/books` are still read for compatibility, but the split folders are the recommended layout for `v0.0.8`.
+Books go in `/books/books`. Articles go in `/books/articles`. Older libraries with files directly inside `/books` are still read for compatibility, but the split folders are the recommended layout.
 
 If the device cannot see the SD card, the most common causes are:
 
@@ -123,7 +122,7 @@ Use this layout:
 /books/articles/my-article.rsvp
 ```
 
-On first open, the firmware may create `.ridx` and `.rdat` sidecar files next to a book. These are the SD-backed word index and normalized word data used for long books. Leave them on the card; they are rebuilt automatically if the source book changes.
+On first open, the firmware may create `.ridx` and `.rdat` sidecar files next to a book. These are the SD-backed word index and normalized word data used for long books. It also writes a hidden `.rpos` sidecar for durable reading progress. Leave these files on the card; cache files are rebuilt automatically if the source book changes, and stale progress is ignored.
 
 Large books now load through the same indexed reading path as smaller books, with progress messages while indexes and time estimates are prepared. If a book cannot be prepared, the device should return to the menu with a readable reason instead of silently failing.
 
@@ -166,7 +165,7 @@ a native companion app installed.
 ### Option 4: Native Companion Apps
 
 The iOS and Android companion apps support companion sync, article drafts, share/import flows, RSS
-feed management, device settings, and library progress.
+feed management, device settings, library progress, and setting a book's saved resume location.
 
 Public app distribution is not set up yet. The iOS app can be installed from a Mac with Xcode, and
 the Android app can be built and installed with Android Studio or the Android SDK.
@@ -205,8 +204,9 @@ RSS support in `v0.0.8` includes:
 Some feeds still block embedded clients, require JavaScript, return very large pages, or publish summaries instead of full articles. Those are feed or website limitations rather than SD card problems.
 
 OTA updates use GitHub Releases. Open `Settings -> Firmware update` on the device after Wi-Fi is configured.
-By default the updater follows the latest release; advanced `/config/ota.conf` setups can set
-`github_tag` to pin checks to one release tag.
+By default the updater follows the latest release; `/config/ota.conf` or the device Wi-Fi settings
+can set `github_tag` to pin checks to one release tag. Preview/fork channels can use
+`owner/repo@tag`, for example `ReKylee/rsvpnano@preview-v0.0.9`.
 
 ## Device Controls
 
@@ -422,6 +422,7 @@ The native companion apps are working locally, but public distribution is not se
 Current app features include:
 
 - Library view for books and articles.
+- Exact book progress and saved-location editing when the reader has indexed the book.
 - Article drafts, editing, preview, and sync.
 - Share/import flows.
 - Fetch article title and text where available.
@@ -500,7 +501,7 @@ Open the Xcode project from that folder when installing the app locally.
 To export browser-flasher and OTA firmware assets for a release:
 
 ```bash
-python3 tools/export_web_firmware.py --version v0.0.8
+python3 tools/export_web_firmware.py --version preview-v0.0.9
 ```
 
 That writes:
@@ -530,6 +531,16 @@ web/firmware/manifest-esp32-s3-touch-amoled-2.41.json
 ```
 
 ## Project Status
+
+`preview-v0.0.9` adds the current multi-board firmware base plus companion and storage polish:
+
+- Adds durable `.rpos` reading progress next to each book, with NVS kept as the fast runtime cache.
+- Restores progress from `.rpos` first, then backfills from per-book or legacy NVS when needed.
+- Exposes opaque book IDs, source identity, word counts, exact saved positions, and chapters through
+  the companion API.
+- Lets the native companion app set a saved book location by chapter, slider, or exact word number.
+- Adds OTA release-tag pinning, including fork preview tags in `owner/repo@tag` form.
+- Uses board-specific full-image asset names for the LCD 3.49 browser flasher builds.
 
 `v0.0.8` focuses on reader touch ergonomics and more resilient RSS downloads:
 

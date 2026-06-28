@@ -102,6 +102,7 @@ The app cannot change the reader firmware UI. The firmware currently shows the A
 - List, upload, and delete books/articles on the reader.
 - Read and save reader settings.
 - Read, save, and clear reader Wi-Fi settings.
+- Set a book's saved resume location when indexed metadata is available.
 - Add local RSS feeds and sync them to the reader.
 - Save text/article drafts locally.
 - Fetch URL-only article drafts.

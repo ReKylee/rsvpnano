@@ -87,5 +87,6 @@ articles.
 
 The app can list/upload/delete books, read and save device settings, read/save/clear Wi-Fi
 settings, add local RSS feeds, sync RSS feeds, save article drafts, fetch URL-only article drafts,
-and sync saved articles. Device API sync uses the shared `NanoClient`/controller services and should
-stay thin in the Compose layer.
+sync saved articles, and set a book's saved resume location when indexed metadata is available.
+Device API sync uses the shared `NanoClient`/controller services and should stay thin in the Compose
+layer.

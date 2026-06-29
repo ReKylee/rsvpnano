@@ -1,6 +1,7 @@
 package com.rsvpnano.ui
 
 import com.rsvpnano.app.CompanionNotice
+import com.rsvpnano.app.CompanionThemeCatalogSnapshot
 import com.rsvpnano.app.NanoConnectionState
 import com.rsvpnano.app.NanoDeviceSyncService
 import com.rsvpnano.app.NanoWifiConnector
@@ -156,13 +157,14 @@ class CompanionPresenter(
     fun refreshThemeCatalog() {
         scope.launch {
             setNotice(CompanionNotice.Attention("Loading online themes..."))
-            runCatching { companionController.fetchThemeCatalog(THEME_CATALOG_URL) }
-                .onSuccess { snapshot ->
+            runCatching { fetchFirstThemeCatalog() }
+                .onSuccess { (catalogUrl, snapshot) ->
                     updateState {
                         val selected = it.selectedCatalogThemeId.takeIf { id -> snapshot.themes.any { theme -> theme.id == id } }
                             ?: snapshot.themes.firstOrNull()?.id.orEmpty()
                         it.copy(
                             themeCatalog = snapshot.themes,
+                            themeCatalogUrl = catalogUrl,
                             selectedCatalogThemeId = selected,
                             notice = CompanionNotice.Success("Loaded ${snapshot.themes.size} online themes."),
                         )
@@ -859,7 +861,7 @@ class CompanionPresenter(
                     )
                 }
             }.onFailure { error ->
-                markDisconnected(error.message ?: "Reader disconnected before uploading the theme.")
+                setNotice(CompanionNotice.Error(themeUploadError(error)))
             }
         }
     }
@@ -879,8 +881,9 @@ class CompanionPresenter(
             }
 
             setNotice(CompanionNotice.Attention("Downloading ${theme.name}..."))
+            val catalogUrl = state.themeCatalogUrl.ifBlank { THEME_CATALOG_URLS.first() }
             val themeFile = runCatching {
-                companionController.downloadTheme(THEME_CATALOG_URL, theme)
+                companionController.downloadTheme(catalogUrl, theme)
             }.onFailure { error ->
                 setNotice(CompanionNotice.Error(error.message ?: "Theme download failed."))
             }.getOrNull() ?: return@launch
@@ -904,7 +907,7 @@ class CompanionPresenter(
                     )
                 }
             }.onFailure { error ->
-                markDisconnected(error.message ?: "Reader disconnected before installing the theme.")
+                setNotice(CompanionNotice.Error(themeUploadError(error)))
             }
         }
     }
@@ -1117,6 +1120,27 @@ class CompanionPresenter(
         return nanoNetworkController.withNanoNetwork(block)
     }
 
+    private suspend fun fetchFirstThemeCatalog(): Pair<String, CompanionThemeCatalogSnapshot> {
+        var lastError: Throwable? = null
+        for (url in THEME_CATALOG_URLS) {
+            val result = runCatching { companionController.fetchThemeCatalog(url) }
+            if (result.isSuccess) {
+                return url to result.getOrThrow()
+            }
+            lastError = result.exceptionOrNull()
+        }
+        throw lastError ?: IllegalStateException("Online theme catalog could not be loaded.")
+    }
+
+    private fun themeUploadError(error: Throwable): String {
+        val message = error.message.orEmpty()
+        return if ("HTTP 404" in message) {
+            "Reader firmware does not support theme upload yet. Flash this firmware build first."
+        } else {
+            message.ifBlank { "Theme upload failed." }
+        }
+    }
+
     private fun currentRememberableNano(): RememberedNano? {
         return current.currentNano ?: nanoIdentity(nanoNetworkController.snapshot.value)
     }
@@ -1154,7 +1178,10 @@ class CompanionPresenter(
 
     private companion object {
         const val MIN_REFRESH_INDICATOR_MS = 650L
-        const val THEME_CATALOG_URL = "https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/themes/index.json"
+        val THEME_CATALOG_URLS = listOf(
+            "https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/themes/index.json",
+            "https://raw.githubusercontent.com/ReKylee/rsvpnano/main/themes/index.json",
+        )
     }
 }
 

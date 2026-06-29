@@ -1,8 +1,12 @@
-const CATALOG_URL = "https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/themes/index.json";
+const CATALOG_URLS = [
+  "https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/themes/index.json",
+  "https://raw.githubusercontent.com/ReKylee/rsvpnano/main/themes/index.json",
+];
 
 const state = {
   rootHandle: null,
   catalog: [],
+  catalogUrl: CATALOG_URLS[0],
 };
 
 const elements = {};
@@ -63,17 +67,23 @@ async function chooseRoot() {
 }
 
 async function loadCatalog() {
-  try {
-    const response = await fetch(CATALOG_URL, { cache: "no-store" });
-    if (!response.ok) throw new Error(`Catalog returned HTTP ${response.status}`);
-    state.catalog = await response.json();
-    elements.onlineSelect.innerHTML = state.catalog
-      .map((theme) => `<option value="${escapeHtml(theme.id)}">${escapeHtml(theme.name)}</option>`)
-      .join("");
-  } catch (error) {
-    elements.onlineSelect.innerHTML = '<option value="">Catalog unavailable</option>';
-    setStatus("Online themes unavailable", error.message || "Theme catalog could not be loaded.", "error");
+  let lastError = null;
+  for (const catalogUrl of CATALOG_URLS) {
+    try {
+      const response = await fetch(catalogUrl, { cache: "no-store" });
+      if (!response.ok) throw new Error(`Catalog returned HTTP ${response.status}`);
+      state.catalog = await response.json();
+      state.catalogUrl = catalogUrl;
+      elements.onlineSelect.innerHTML = state.catalog
+        .map((theme) => `<option value="${escapeHtml(theme.id)}">${escapeHtml(theme.name)}</option>`)
+        .join("");
+      return;
+    } catch (error) {
+      lastError = error;
+    }
   }
+  elements.onlineSelect.innerHTML = '<option value="">Catalog unavailable</option>';
+  setStatus("Online themes unavailable", lastError?.message || "Theme catalog could not be loaded.", "error");
 }
 
 async function installCatalogTheme(theme) {
@@ -82,7 +92,7 @@ async function installCatalogTheme(theme) {
     return;
   }
   setStatus("Downloading theme", theme.name, "busy");
-  const response = await fetch(new URL(theme.file, CATALOG_URL), { cache: "no-store" });
+  const response = await fetch(new URL(theme.file, state.catalogUrl), { cache: "no-store" });
   if (!response.ok) throw new Error(`Theme returned HTTP ${response.status}`);
   await writeThemeFile(theme.file, await response.blob());
   setStatus("Theme installed", `${theme.name} was written to /themes/${theme.file}.`, "success");

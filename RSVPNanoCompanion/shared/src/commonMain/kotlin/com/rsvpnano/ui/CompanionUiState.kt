@@ -36,6 +36,7 @@ data class CompanionUiState(
     val settingsSaveStatus: String? = null,
     val bookJob: BookJob? = null,
     val themeCatalog: List<NanoThemeCatalogItem> = emptyList(),
+    val themeCatalogUrl: String = "",
     val selectedCatalogThemeId: String = "",
     val notice: CompanionNotice = CompanionNotice.Neutral("Ready"),
 ) {

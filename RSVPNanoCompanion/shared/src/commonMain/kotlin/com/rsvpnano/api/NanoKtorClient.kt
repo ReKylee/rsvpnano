@@ -155,13 +155,17 @@ class NanoKtorClient(
 
     override suspend fun fetchThemeCatalog(url: String): List<NanoThemeCatalogItem> {
         val response = httpClient.get(url)
-        ensureSuccess(response.status)
+        if (!response.status.isSuccess()) {
+            throw NanoClientError("Theme catalog returned HTTP ${response.status}")
+        }
         return json.decodeFromString(ListSerializer(NanoThemeCatalogItem.serializer()), response.body<String>())
     }
 
     override suspend fun downloadTheme(url: String): ByteArray {
         val response = httpClient.get(url)
-        ensureSuccess(response.status)
+        if (!response.status.isSuccess()) {
+            throw NanoClientError("Theme download returned HTTP ${response.status}")
+        }
         return response.body()
     }
 

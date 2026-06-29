@@ -259,8 +259,7 @@ namespace {
     constexpr const char* kPrefBookPath = "book";
     constexpr const char* kPrefWpm = "wpm";
     constexpr const char* kPrefBrightness = "bright";
-    constexpr const char* kPrefDarkMode = "dark";
-    constexpr const char* kPrefNightMode = "night";
+    constexpr const char* kPrefThemeId = "theme_id";
     constexpr const char* kPrefUiLanguage = "ui_lang";
     constexpr const char* kPrefReaderMode = "read_mode";
     constexpr const char* kPrefHandedness = "handed";
@@ -554,28 +553,28 @@ namespace {
     bool sdCardFolderRepairNeeded(const StorageManager::DiagnosticResult& result) {
         return result.mounted
             && (!result.booksDirectory || !result.bookFilesDirectory || !result.articleFilesDirectory
-                || !result.configDirectory);
+                || !result.configDirectory || !result.themesDirectory);
     }
 
-    DisplayManager::ReaderTypeface readerTypefaceFromSetting(uint8_t value) {
-        switch (static_cast<DisplayManager::ReaderTypeface>(value)) {
-        case DisplayManager::ReaderTypeface::Standard:
-        case DisplayManager::ReaderTypeface::OpenDyslexic:
-        case DisplayManager::ReaderTypeface::AtkinsonHyperlegible:
-            return static_cast<DisplayManager::ReaderTypeface>(value);
+    DisplayTheme::ReaderTypeface readerTypefaceFromSetting(uint8_t value) {
+        switch (static_cast<DisplayTheme::ReaderTypeface>(value)) {
+        case DisplayTheme::ReaderTypeface::Standard:
+        case DisplayTheme::ReaderTypeface::OpenDyslexic:
+        case DisplayTheme::ReaderTypeface::AtkinsonHyperlegible:
+            return static_cast<DisplayTheme::ReaderTypeface>(value);
         }
-        return DisplayManager::ReaderTypeface::Standard;
+        return DisplayTheme::ReaderTypeface::Standard;
     }
 
-    DisplayManager::ReaderTypeface nextReaderTypeface(DisplayManager::ReaderTypeface current) {
+    DisplayTheme::ReaderTypeface nextReaderTypeface(DisplayTheme::ReaderTypeface current) {
         switch (readerTypefaceFromSetting(static_cast<uint8_t>(current))) {
-        case DisplayManager::ReaderTypeface::Standard:
-            return DisplayManager::ReaderTypeface::AtkinsonHyperlegible;
-        case DisplayManager::ReaderTypeface::AtkinsonHyperlegible:
-            return DisplayManager::ReaderTypeface::OpenDyslexic;
-        case DisplayManager::ReaderTypeface::OpenDyslexic:
+        case DisplayTheme::ReaderTypeface::Standard:
+            return DisplayTheme::ReaderTypeface::AtkinsonHyperlegible;
+        case DisplayTheme::ReaderTypeface::AtkinsonHyperlegible:
+            return DisplayTheme::ReaderTypeface::OpenDyslexic;
+        case DisplayTheme::ReaderTypeface::OpenDyslexic:
         default:
-            return DisplayManager::ReaderTypeface::Standard;
+            return DisplayTheme::ReaderTypeface::Standard;
         }
     }
 
@@ -734,8 +733,6 @@ void App::begin() {
     typographyConfig_.guideGap =
         static_cast<uint8_t>(clampIntSetting(preferences_.getUChar(kPrefTypographyGuideGap, typographyConfig_.guideGap),
                                              kTypographyGuideGapMin, kTypographyGuideGapMax));
-    darkMode_ = preferences_.getBool(kPrefDarkMode, darkMode_);
-    nightMode_ = preferences_.getBool(kPrefNightMode, nightMode_);
     applyHandednessSettings(0, false);
     applyDisplayPreferences(0, false);
     applyTypographySettings(0, false);
@@ -770,6 +767,20 @@ void App::begin() {
 
     display_.renderProgress("SD", "Loading books", "Use SD converter for EPUB", 0);
     storageReady_ = storage_.begin();
+    {
+        const String savedThemeId = preferences_.getString(kPrefThemeId, "");
+        themeStore_.loadFromSd();
+        if (!savedThemeId.isEmpty()) {
+            themeStore_.selectById(savedThemeId);
+        }
+        typographyConfig_.typeface = themeStore_.selected().typeface;
+        preferences_.putUChar(kPrefReaderTypeface, static_cast<uint8_t>(typographyConfig_.typeface));
+        applyTypographySettings(millis(), false);
+        applyDisplayPreferences(millis(), false);
+        Serial.printf("[theme] loaded %u themes, selected=%s\n",
+                      static_cast<unsigned int>(themeStore_.themes().size()),
+                      themeStore_.selected().id.c_str());
+    }
     const uint16_t savedWpm = preferences_.getUShort(kPrefWpm, reader_.wpm());
     reader_.setWpm(savedWpm);
 
@@ -1313,12 +1324,13 @@ void App::openQuickSettings(uint32_t nowMs) {
 }
 
 uint8_t App::currentBrightnessPercent() const {
-    return nightMode_ ? kNightBrightnessLevels[brightnessLevelIndex_] : kBrightnessLevels[brightnessLevelIndex_];
+    return themeStore_.selected().lowBrightness ? kNightBrightnessLevels[brightnessLevelIndex_]
+                                                : kBrightnessLevels[brightnessLevelIndex_];
 }
 
 void App::applyDisplayPreferences(uint32_t nowMs, bool rerender) {
-    display_.setDarkMode(darkMode_);
-    display_.setNightMode(nightMode_);
+    const DisplayTheme::Theme& theme = themeStore_.selected();
+    display_.setTheme(theme);
     display_.setBrightnessPercent(currentBrightnessPercent());
 
     if (!rerender) {
@@ -1459,8 +1471,12 @@ void App::reloadRuntimePreferences(uint32_t nowMs, bool rerender) {
     typographyConfig_.guideGap =
         static_cast<uint8_t>(clampIntSetting(preferences_.getUChar(kPrefTypographyGuideGap, typographyConfig_.guideGap),
                                              kTypographyGuideGapMin, kTypographyGuideGapMax));
-    darkMode_ = preferences_.getBool(kPrefDarkMode, darkMode_);
-    nightMode_ = preferences_.getBool(kPrefNightMode, nightMode_);
+    const String savedThemeId = preferences_.getString(kPrefThemeId, "");
+    if (!savedThemeId.isEmpty()) {
+        themeStore_.selectById(savedThemeId);
+    }
+    typographyConfig_.typeface = themeStore_.selected().typeface;
+    preferences_.putUChar(kPrefReaderTypeface, static_cast<uint8_t>(typographyConfig_.typeface));
 
     reader_.setWpm(preferences_.getUShort(kPrefWpm, reader_.wpm()));
     applyReaderUiOrientation();
@@ -1505,18 +1521,12 @@ void App::cycleBrightness() {
 }
 
 void App::cycleThemeMode(uint32_t nowMs) {
-    if (nightMode_) {
-        nightMode_ = false;
-        darkMode_ = true;
-    } else if (darkMode_) {
-        darkMode_ = false;
-    } else {
-        darkMode_ = true;
-        nightMode_ = true;
-    }
-
-    preferences_.putBool(kPrefDarkMode, darkMode_);
-    preferences_.putBool(kPrefNightMode, nightMode_);
+    themeStore_.selectNext();
+    typographyConfig_.typeface = themeStore_.selected().typeface;
+    preferences_.putUChar(kPrefReaderTypeface, static_cast<uint8_t>(typographyConfig_.typeface));
+    applyTypographySettings(nowMs, false);
+    const DisplayTheme::Theme& theme = themeStore_.selected();
+    preferences_.putString(kPrefThemeId, theme.id);
     Serial.printf("[display] theme=%s\n", themeModeLabel().c_str());
     applyDisplayPreferences(nowMs);
 }
@@ -3956,7 +3966,7 @@ void App::rebuildSettingsMenuItems() {
         settingsMenuItems_.push_back("Installed: " + firmwareVersionLabel());
     } else if (menuScreen_ == MenuScreen::SettingsDisplay) {
         settingsMenuItems_.push_back(uiText(UiText::Back));
-        settingsMenuItems_.push_back("Display mode: " + themeModeLabel());
+        settingsMenuItems_.push_back("Theme: " + themeModeLabel());
         settingsMenuItems_.push_back(uiText(UiText::Brightness) + ": " + String(currentBrightnessPercent()) + "%");
         settingsMenuItems_.push_back("Reader hand: " + handednessLabel());
         settingsMenuItems_.push_back("Footer label: " + footerMetricModeLabel());
@@ -4307,10 +4317,7 @@ String App::uiText(UiText key) const {
 }
 
 String App::themeModeLabel() const {
-    if (nightMode_) {
-        return uiText(UiText::Night);
-    }
-    return darkMode_ ? uiText(UiText::Dark) : uiText(UiText::Light);
+    return themeStore_.selected().name;
 }
 
 String App::phantomWordsLabel() const {
@@ -4362,11 +4369,11 @@ String App::readerFontSizeLabel() const {
 
 String App::readerTypefaceLabel() const {
     switch (typographyConfig_.typeface) {
-    case DisplayManager::ReaderTypeface::AtkinsonHyperlegible:
+    case DisplayTheme::ReaderTypeface::AtkinsonHyperlegible:
         return "Atkinson";
-    case DisplayManager::ReaderTypeface::OpenDyslexic:
+    case DisplayTheme::ReaderTypeface::OpenDyslexic:
         return "OpenDyslexic";
-    case DisplayManager::ReaderTypeface::Standard:
+    case DisplayTheme::ReaderTypeface::Standard:
     default:
         return uiText(UiText::Standard);
     }
@@ -4768,6 +4775,17 @@ void App::enterUsbTransfer(uint32_t nowMs) {
         Serial.printf("[app] USB transfer failed: %s\n", usbTransfer_.statusMessage());
         display_.renderStatus("USB", "SD not ready", "Returning");
         storageReady_ = storage_.begin();
+        if (storageReady_) {
+            const String savedThemeId = preferences_.getString(kPrefThemeId, "");
+            themeStore_.loadFromSd();
+            if (!savedThemeId.isEmpty()) {
+                themeStore_.selectById(savedThemeId);
+            }
+            typographyConfig_.typeface = themeStore_.selected().typeface;
+            preferences_.putUChar(kPrefReaderTypeface, static_cast<uint8_t>(typographyConfig_.typeface));
+            applyTypographySettings(millis(), false);
+            applyDisplayPreferences(millis(), false);
+        }
         if (storageReady_ && usingStorageBook_ && !currentBookPath_.isEmpty()) {
             const int refreshedBookIndex = findBookIndexByPath(currentBookPath_);
             BookOpenOptions reloadOptions;
@@ -4807,6 +4825,15 @@ void App::exitUsbTransfer(uint32_t nowMs) {
 
     storageReady_ = storage_.begin();
     if (storageReady_) {
+        const String savedThemeId = preferences_.getString(kPrefThemeId, "");
+        themeStore_.loadFromSd();
+        if (!savedThemeId.isEmpty()) {
+            themeStore_.selectById(savedThemeId);
+        }
+        typographyConfig_.typeface = themeStore_.selected().typeface;
+        preferences_.putUChar(kPrefReaderTypeface, static_cast<uint8_t>(typographyConfig_.typeface));
+        applyTypographySettings(millis(), false);
+        applyDisplayPreferences(millis(), false);
         const int refreshedBookIndex = findBookIndexByPath(currentBookPath_);
         if (refreshedBookIndex >= 0) {
             const size_t resumeIndex = reader_.currentIndex();
@@ -5356,6 +5383,17 @@ void App::wakeFromSleep() {
 
     const bool displayReady = display_.wakeFromSleep();
     storageReady_ = storage_.begin();
+    if (storageReady_) {
+        const String savedThemeId = preferences_.getString(kPrefThemeId, "");
+        themeStore_.loadFromSd();
+        if (!savedThemeId.isEmpty()) {
+            themeStore_.selectById(savedThemeId);
+        }
+        typographyConfig_.typeface = themeStore_.selected().typeface;
+        preferences_.putUChar(kPrefReaderTypeface, static_cast<uint8_t>(typographyConfig_.typeface));
+        applyTypographySettings(millis(), false);
+        applyDisplayPreferences(millis(), false);
+    }
 
     if (storageReady_ && usingStorageBook_ && !currentBookPath_.isEmpty()) {
         const size_t resumeIndex = reader_.currentIndex();

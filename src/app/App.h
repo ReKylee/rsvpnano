@@ -17,6 +17,7 @@
 #include "storage/StorageManager.h"
 #include "storage/index/IndexedBookStore.h"
 #include "sync/CompanionSyncManager.h"
+#include "display/ThemeStore.h"
 #include "timer/FocusTimer.h"
 #include "ui/Localization.h"
 #include "update/OtaUpdater.h"
@@ -581,8 +582,7 @@ private:
     BatteryLabelMode batteryLabelMode_ = BatteryLabelMode::Percent;
     ScreensaverMode screensaverMode_ = ScreensaverMode::Life;
     PauseMode pauseMode_ = PauseMode::SentenceEnd;
-    bool darkMode_ = true;
-    bool nightMode_ = false;
+    ThemeStore themeStore_;
     UiLanguage uiLanguage_ = UiLanguage::English;
     ReaderMode readerMode_ = ReaderMode::Rsvp;
     HandednessMode handednessMode_ = HandednessMode::Right;

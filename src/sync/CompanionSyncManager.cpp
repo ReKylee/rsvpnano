@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <vector>
 
+#include "display/ThemeStore.h"
 #include "settings/PreferenceKeys.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
@@ -23,8 +24,9 @@ using namespace settings;
 constexpr const char *kMdnsName = "rsvp-nano";
 constexpr const char *kRssConfigPath = "/config/rss.conf";
 constexpr size_t kMaxMetadataLineChars = 160;
-constexpr size_t kMaxSettingsPatchBytes = 2048;
+constexpr size_t kMaxSettingsPatchBytes = 8192;
 constexpr size_t kMaxRssFeedsPatchBytes = 4096;
+constexpr size_t kMaxThemeUploadBytes = 4096;
 constexpr size_t kMaxRssFeeds = 24;
 constexpr uint16_t kDefaultWpm = 300;
 constexpr uint16_t kMinWpm = 10;
@@ -57,6 +59,24 @@ bool ensureLibraryDirectories() {
   return StorageFiles::ensureDirectory(StoragePaths::kBooksPath, "sync") &&
          StorageFiles::ensureDirectory(StoragePaths::kBookFilesPath, "sync") &&
          StorageFiles::ensureDirectory(StoragePaths::kArticleFilesPath, "sync");
+}
+
+bool ensureThemeDirectory() {
+  return StorageFiles::ensureDirectory(StoragePaths::kThemesPath, "sync");
+}
+
+String readSmallTextFile(const String &path) {
+  File file = Board::Storage::filesystem().open(path, FILE_READ);
+  String text;
+  if (!file) {
+    return text;
+  }
+  text.reserve(std::min(static_cast<size_t>(file.size()), kMaxThemeUploadBytes));
+  while (file.available() && text.length() < kMaxThemeUploadBytes) {
+    text += static_cast<char>(file.read());
+  }
+  file.close();
+  return text;
 }
 
 const char kWebCompanionHtml[] PROGMEM = R"HTML(<!doctype html>
@@ -136,7 +156,11 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <label>Punctuation <span id="punctuationMsValue"></span></label><input id="punctuationMs" type="range" min="0" max="600" step="50">
 </div>
 <div class="card"><h2>Display</h2>
-<label>Display mode</label><select id="displayMode"><option value="dark">Dark</option><option value="light">Light</option><option value="night">Night</option></select>
+<label>Theme</label><select id="themeId"></select>
+<label>Online theme</label><select id="onlineThemeId"></select>
+<div class="row"><button id="installOnlineThemeButton">Install online theme</button></div>
+<label>Theme file</label><input id="themeFileInput" type="file" accept=".rtheme">
+<div class="row"><button id="uploadThemeButton">Upload theme file</button></div>
 <label>Brightness <span id="brightnessValue"></span></label><input id="brightnessIndex" type="range" min="0" max="4">
 <label>Reader hand</label><select id="handedness"><option value="right">Right</option><option value="left">Left</option></select>
 <label>Reader controls</label><select id="readerControls"><option value="standard">Standard</option><option value="rewind_top_right">Rewind top-right</option></select>
@@ -188,7 +212,8 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 </section>
 </main>
 <script>
-const $=id=>document.getElementById(id);let settings=null;
+const $=id=>document.getElementById(id);let settings=null;let themeCatalog=[];
+const THEME_CATALOG_URL='https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/themes/index.json';
 function status(msg){$('status').textContent=msg}
 async function api(path,opts){const r=await fetch(path,opts);const t=await r.text();let j={};try{j=t?JSON.parse(t):{}}catch(e){throw new Error(t||'Bad response')}if(!r.ok||j.ok===false)throw new Error(j.error||r.statusText);return j}
 function bytes(n){return n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB'}
@@ -201,15 +226,20 @@ async function refresh(){try{const info=await api('/api/info');$('infoBox').inne
 async function delBook(name){if(!confirm('Delete '+name+'?'))return;try{await api('/api/books?name='+encodeURIComponent(name),{method:'DELETE'});await refresh();status('Deleted '+name)}catch(e){status('Delete failed: '+e.message)}}
 async function uploadBlob(blob,name,category){const fd=new FormData();fd.append('file',blob,name);await api('/api/books?name='+encodeURIComponent(name)+'&category='+encodeURIComponent(category),{method:'POST',body:fd})}
 async function uploadPicked(inputId,category){const f=$(inputId).files[0];if(!f){status('Choose a file first.');return}try{await uploadBlob(f,f.name,category);$(inputId).value='';await refresh();status('Uploaded '+f.name)}catch(e){status('Upload failed: '+e.message)}}
+async function uploadThemeBlob(blob,name){const fd=new FormData();fd.append('file',blob,name);await api('/api/themes?name='+encodeURIComponent(name),{method:'POST',body:fd})}
+async function uploadPickedTheme(){const f=$('themeFileInput').files[0];if(!f){status('Choose a theme file first.');return}try{await uploadThemeBlob(f,f.name);$('themeFileInput').value='';await loadSettings();status('Uploaded theme '+f.name)}catch(e){status('Theme upload failed: '+e.message)}}
+async function loadThemeCatalog(){try{themeCatalog=await fetch(THEME_CATALOG_URL,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Catalog unavailable');return r.json()});$('onlineThemeId').innerHTML=themeCatalog.map(t=>`<option value="${html(t.id)}">${html(t.name)}</option>`).join('')}catch(e){$('onlineThemeId').innerHTML='<option value="">Catalog unavailable</option>'}}
+async function installOnlineTheme(){const id=val('onlineThemeId');const theme=themeCatalog.find(t=>t.id===id);if(!theme){status('Choose an online theme first.');return}try{const url=new URL(theme.file,THEME_CATALOG_URL).toString();const blob=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Theme unavailable');return r.blob()});await uploadThemeBlob(blob,theme.file);settings=await api('/api/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({display:{themeId:theme.id}})});await loadSettings();status('Installed '+theme.name)}catch(e){status('Online theme install failed: '+e.message)}}
 async function syncArticle(){const f=articleFile();if(!$('articleBody').value.trim()){status('Paste article text first.');return}try{await uploadBlob(f.blob,f.name,'article');localStorage.removeItem('rsvpArticleDraft');await refresh();status('Synced '+f.name)}catch(e){status('Article sync failed: '+e.message)}}
 function saveDraft(){localStorage.setItem('rsvpArticleDraft',JSON.stringify({title:$('articleTitle').value,author:$('articleAuthor').value,body:$('articleBody').value}));status('Draft saved in this browser.')}
 function loadDraft(){try{const d=JSON.parse(localStorage.getItem('rsvpArticleDraft')||'{}');$('articleTitle').value=d.title||'';$('articleAuthor').value=d.author||'';$('articleBody').value=d.body||''}catch(e){}}
 function val(id){const e=$(id);return e.type==='checkbox'?e.checked:e.value}
 function setVal(id,v){const e=$(id);if(e.type==='checkbox')e.checked=!!v;else e.value=v}
+function setThemeOptions(){const themes=(settings&&settings.themes)||[];$('themeId').innerHTML=themes.map(t=>`<option value="${html(t.id)}">${html(t.name)}</option>`).join('')||'<option value="default">Default</option>'}
 function snapWpm(v){v=Math.max(10,Math.min(1000,Math.round(+v||300)));return v<=100?Math.max(10,Math.min(100,Math.round(v/10)*10)):Math.min(1000,100+Math.round((v-100)/25)*25)}
 function updateLabels(){['wpm','longWordMs','complexWordMs','punctuationMs','brightnessIndex','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>{const l=$(id+'Value')||$(id.replace('Index','')+'Value');if(l)l.textContent=$(id).value+(id==='wpm'?' WPM':id.includes('Ms')?' ms':'')})}
-async function loadSettings(){try{settings=await api('/api/settings');setVal('readerMode',settings.reading.readerMode);setVal('pauseMode',settings.reading.pauseMode);setVal('wpm',snapWpm(settings.reading.wpm));setVal('longWordMs',settings.reading.pacing.longWordMs);setVal('complexWordMs',settings.reading.pacing.complexWordMs);setVal('punctuationMs',settings.reading.pacing.punctuationMs);setVal('displayMode',settings.display.nightMode?'night':settings.display.darkMode?'dark':'light');setVal('brightnessIndex',settings.display.brightnessIndex);setVal('handedness',settings.display.handedness);setVal('readerControls',settings.display.readerControls||'standard');setVal('footerMetric',settings.display.footerMetric);setVal('batteryLabel',settings.display.batteryLabel);setVal('readingBattery',settings.display.readingBattery);setVal('readingChapter',settings.display.readingChapter);setVal('readingProgress',settings.display.readingProgress);setVal('typeface',settings.typography.typeface);setVal('fontSizeIndex',settings.display.fontSizeIndex);setVal('tracking',settings.typography.tracking);setVal('anchorPercent',settings.typography.anchorPercent);setVal('guideWidth',settings.typography.guideWidth);setVal('guideGap',settings.typography.guideGap);setVal('focusHighlight',settings.typography.focusHighlight);setVal('phantomWords',settings.display.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
-async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const mode=val('displayMode');const payload={reading:{wpm:+val('wpm'),readerMode:val('readerMode'),pauseMode:val('pauseMode'),pacing:{longWordMs:+val('longWordMs'),complexWordMs:+val('complexWordMs'),punctuationMs:+val('punctuationMs')}},display:{darkMode:mode==='dark',nightMode:mode==='night',brightnessIndex:+val('brightnessIndex'),handedness:val('handedness'),readerControls:val('readerControls'),footerMetric:val('footerMetric'),batteryLabel:val('batteryLabel'),readingBattery:val('readingBattery'),readingChapter:val('readingChapter'),readingProgress:val('readingProgress'),phantomWords:val('phantomWords'),fontSizeIndex:+val('fontSizeIndex')},typography:{typeface:val('typeface'),focusHighlight:val('focusHighlight'),tracking:+val('tracking'),anchorPercent:+val('anchorPercent'),guideWidth:+val('guideWidth'),guideGap:+val('guideGap')}};try{settings=await api('/api/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});status('Settings saved. Exit sync mode to apply all reader changes.')}catch(e){status('Settings save failed: '+e.message)}}
+async function loadSettings(){try{settings=await api('/api/settings');setThemeOptions();if(!themeCatalog.length)loadThemeCatalog();setVal('readerMode',settings.reading.readerMode);setVal('pauseMode',settings.reading.pauseMode);setVal('wpm',snapWpm(settings.reading.wpm));setVal('longWordMs',settings.reading.pacing.longWordMs);setVal('complexWordMs',settings.reading.pacing.complexWordMs);setVal('punctuationMs',settings.reading.pacing.punctuationMs);setVal('themeId',settings.display.themeId||'default');setVal('brightnessIndex',settings.display.brightnessIndex);setVal('handedness',settings.display.handedness);setVal('readerControls',settings.display.readerControls||'standard');setVal('footerMetric',settings.display.footerMetric);setVal('batteryLabel',settings.display.batteryLabel);setVal('readingBattery',settings.display.readingBattery);setVal('readingChapter',settings.display.readingChapter);setVal('readingProgress',settings.display.readingProgress);setVal('typeface',settings.typography.typeface);setVal('fontSizeIndex',settings.display.fontSizeIndex);setVal('tracking',settings.typography.tracking);setVal('anchorPercent',settings.typography.anchorPercent);setVal('guideWidth',settings.typography.guideWidth);setVal('guideGap',settings.typography.guideGap);setVal('focusHighlight',settings.typography.focusHighlight);setVal('phantomWords',settings.display.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
+async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const payload={reading:{wpm:+val('wpm'),readerMode:val('readerMode'),pauseMode:val('pauseMode'),pacing:{longWordMs:+val('longWordMs'),complexWordMs:+val('complexWordMs'),punctuationMs:+val('punctuationMs')}},display:{themeId:val('themeId'),brightnessIndex:+val('brightnessIndex'),handedness:val('handedness'),readerControls:val('readerControls'),footerMetric:val('footerMetric'),batteryLabel:val('batteryLabel'),readingBattery:val('readingBattery'),readingChapter:val('readingChapter'),readingProgress:val('readingProgress'),phantomWords:val('phantomWords'),fontSizeIndex:+val('fontSizeIndex')},typography:{typeface:val('typeface'),focusHighlight:val('focusHighlight'),tracking:+val('tracking'),anchorPercent:+val('anchorPercent'),guideWidth:+val('guideWidth'),guideGap:+val('guideGap')}};try{settings=await api('/api/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});status('Settings saved. Exit sync mode to apply all reader changes.')}catch(e){status('Settings save failed: '+e.message)}}
 async function loadWifi(){try{const w=await api('/api/wifi');$('wifiSsid').value=w.ssid||'';$('wifiPassword').value='';$('wifiCurrent').textContent=w.configured?'Saved network: '+w.ssid:'No home Wi-Fi saved.'}catch(e){status('Wi-Fi load failed: '+e.message)}}
 async function saveWifi(){const ssid=$('wifiSsid').value.trim();if(!ssid){status('Enter a Wi-Fi SSID first.');return}try{const w=await api('/api/wifi',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password:$('wifiPassword').value})});$('wifiPassword').value='';$('wifiCurrent').textContent='Saved network: '+w.ssid;status('Wi-Fi saved for RSS and OTA.')}catch(e){status('Wi-Fi save failed: '+e.message)}}
 async function forgetWifi(){if(!confirm('Forget saved Wi-Fi?'))return;try{await api('/api/wifi',{method:'DELETE'});$('wifiSsid').value='';$('wifiPassword').value='';$('wifiCurrent').textContent='No home Wi-Fi saved.';status('Wi-Fi credentials cleared.')}catch(e){status('Forget Wi-Fi failed: '+e.message)}}
@@ -218,7 +248,7 @@ async function saveRss(){const feeds=$('rssFeeds').value.split(/\n+/).map(s=>s.t
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.tab).classList.add('active');if(b.dataset.tab==='settings'){loadSettings();loadWifi()}if(b.dataset.tab==='rss')loadRss()});
 $('wpm').oninput=()=>{setVal('wpm',snapWpm(val('wpm')));updateLabels()};
 ['longWordMs','complexWordMs','punctuationMs','brightnessIndex','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>$(id).oninput=updateLabels);
-$('refreshBooksButton').onclick=refresh;$('refreshArticlesButton').onclick=refresh;$('uploadBookButton').onclick=()=>uploadPicked('bookFileInput','book');$('uploadArticleButton').onclick=()=>uploadPicked('articleFileInput','article');$('syncArticleButton').onclick=syncArticle;$('saveDraftButton').onclick=saveDraft;$('saveSettingsButton').onclick=saveSettings;$('saveWifiButton').onclick=saveWifi;$('forgetWifiButton').onclick=forgetWifi;$('saveRssButton').onclick=saveRss;$('reloadRssButton').onclick=loadRss;
+$('refreshBooksButton').onclick=refresh;$('refreshArticlesButton').onclick=refresh;$('uploadBookButton').onclick=()=>uploadPicked('bookFileInput','book');$('uploadArticleButton').onclick=()=>uploadPicked('articleFileInput','article');$('uploadThemeButton').onclick=uploadPickedTheme;$('installOnlineThemeButton').onclick=installOnlineTheme;$('syncArticleButton').onclick=syncArticle;$('saveDraftButton').onclick=saveDraft;$('saveSettingsButton').onclick=saveSettings;$('saveWifiButton').onclick=saveWifi;$('forgetWifiButton').onclick=forgetWifi;$('saveRssButton').onclick=saveRss;$('reloadRssButton').onclick=loadRss;
 loadDraft();refresh();
 </script>
 </body>
@@ -667,6 +697,18 @@ void CompanionSyncManager::handleBookUploadStatic() {
   }
 }
 
+void CompanionSyncManager::handleThemesStatic() {
+  if (instance_ != nullptr) {
+    instance_->handleThemes();
+  }
+}
+
+void CompanionSyncManager::handleThemeUploadStatic() {
+  if (instance_ != nullptr) {
+    instance_->handleThemeUpload();
+  }
+}
+
 void CompanionSyncManager::handleNotFoundStatic() {
   if (instance_ != nullptr) {
     instance_->handleNotFound();
@@ -696,6 +738,7 @@ bool CompanionSyncManager::startServer() {
   server_.on("/api/books", HTTP_DELETE, handleBookDeleteStatic);
   server_.on("/api/books", HTTP_POST, handleBooksStatic, handleBookUploadStatic);
   server_.on("/api/books/position", HTTP_PATCH, handleBookPositionStatic);
+  server_.on("/api/themes", HTTP_POST, handleThemesStatic, handleThemeUploadStatic);
   server_.on("/api/settings", HTTP_GET, handleSettingsStatic);
   server_.on("/api/settings", HTTP_PATCH, handleSettingsStatic);
   server_.on("/api/settings", HTTP_PUT, handleSettingsStatic);
@@ -898,6 +941,70 @@ void CompanionSyncManager::handleBooks() {
   uploadFinalPath_ = "";
 }
 
+void CompanionSyncManager::handleThemes() {
+  if (uploadFile_) {
+    uploadFile_.close();
+  }
+
+  if (!uploadError_.isEmpty()) {
+    Board::Storage::filesystem().remove(uploadTmpPath_);
+    server_.send(400, "application/json",
+                 String("{\"ok\":false,\"error\":\"") + jsonEscape(uploadError_) + "\"}");
+    uploadError_ = "";
+    uploadTmpPath_ = "";
+    uploadFinalPath_ = "";
+    return;
+  }
+
+  if (uploadTmpPath_.isEmpty() || uploadFinalPath_.isEmpty()) {
+    server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing theme upload\"}");
+    return;
+  }
+
+  File tmpFile = Board::Storage::filesystem().open(uploadTmpPath_, FILE_READ);
+  const size_t uploadSize = tmpFile ? static_cast<size_t>(tmpFile.size()) : 0;
+  if (tmpFile) {
+    tmpFile.close();
+  }
+  if (uploadSize == 0 || uploadSize > kMaxThemeUploadBytes) {
+    Board::Storage::filesystem().remove(uploadTmpPath_);
+    uploadTmpPath_ = "";
+    uploadFinalPath_ = "";
+    server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid theme size\"}");
+    return;
+  }
+
+  DisplayTheme::Theme theme;
+  String error;
+  const String id = DisplayTheme::themeIdFromPath(uploadFinalPath_);
+  if (!DisplayTheme::parseThemeText(readSmallTextFile(uploadTmpPath_), id, theme, error)) {
+    Board::Storage::filesystem().remove(uploadTmpPath_);
+    uploadTmpPath_ = "";
+    uploadFinalPath_ = "";
+    server_.send(400, "application/json",
+                 String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
+    return;
+  }
+
+  Board::Storage::filesystem().remove(uploadFinalPath_);
+  if (!Board::Storage::filesystem().rename(uploadTmpPath_, uploadFinalPath_)) {
+    Board::Storage::filesystem().remove(uploadTmpPath_);
+    uploadTmpPath_ = "";
+    uploadFinalPath_ = "";
+    server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Theme save failed\"}");
+    return;
+  }
+
+  statusLine1_ = "Theme received";
+  statusLine2_ = uploadFinalPath_;
+  Serial.printf("[sync] theme ready %s\n", uploadFinalPath_.c_str());
+  server_.send(201, "application/json",
+               String("{\"ok\":true,\"path\":\"") + jsonEscape(uploadFinalPath_) +
+                   "\",\"id\":\"" + jsonEscape(id) + "\"}");
+  uploadTmpPath_ = "";
+  uploadFinalPath_ = "";
+}
+
 void CompanionSyncManager::handleBookDelete() {
   String path;
   const String id = server_.arg("id");
@@ -1056,6 +1163,62 @@ void CompanionSyncManager::handleBookUpload() {
   }
 }
 
+void CompanionSyncManager::handleThemeUpload() {
+  HTTPUpload &upload = server_.upload();
+
+  if (upload.status == UPLOAD_FILE_START) {
+    String filename = sanitizeFilename(server_.arg("name"));
+    if (filename.isEmpty()) {
+      filename = sanitizeFilename(upload.filename);
+    }
+    if (filename.isEmpty()) {
+      uploadError_ = "Missing filename";
+      return;
+    }
+    if (!DisplayTheme::hasThemeExtension(filename)) {
+      filename += DisplayTheme::kThemeExtension;
+    }
+    if (!ensureThemeDirectory()) {
+      uploadError_ = "Themes folder unavailable";
+      return;
+    }
+
+    uploadFinalPath_ = String(StoragePaths::kThemesPath) + "/" + filename;
+    uploadTmpPath_ = uploadFinalPath_ + ".tmp";
+    Board::Storage::filesystem().remove(uploadTmpPath_);
+    uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_, FILE_WRITE);
+    if (!uploadFile_) {
+      uploadError_ = "Could not create file";
+      return;
+    }
+    uploadError_ = "";
+    statusLine1_ = "Receiving theme";
+    statusLine2_ = filename;
+    Serial.printf("[sync] theme upload start %s\n", uploadFinalPath_.c_str());
+    return;
+  }
+
+  if (upload.status == UPLOAD_FILE_WRITE) {
+    if (!uploadError_.isEmpty() || !uploadFile_) {
+      return;
+    }
+    if (upload.totalSize + upload.currentSize > kMaxThemeUploadBytes) {
+      uploadError_ = "Theme too large";
+      return;
+    }
+    const size_t written = uploadFile_.write(upload.buf, upload.currentSize);
+    if (written != upload.currentSize) {
+      uploadError_ = "Write failed";
+    }
+    return;
+  }
+
+  if (upload.status == UPLOAD_FILE_ABORTED) {
+    uploadError_ = "Upload aborted";
+    finishUpload(false);
+  }
+}
+
 void CompanionSyncManager::handleNotFound() {
   server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Not found\"}");
 }
@@ -1113,9 +1276,16 @@ String CompanionSyncManager::settingsJson() {
   const uint8_t guideGap = static_cast<uint8_t>(
       clampInt(preferences_.getUChar(kPrefTypographyGuideGap, kDefaultTypographyGuideGap),
                kMinTypographyGuideGap, kMaxTypographyGuideGap));
+  ThemeStore themeStore;
+  themeStore.loadFromSd();
+  const String savedThemeId = preferences_.getString(kPrefThemeId, "");
+  if (!savedThemeId.isEmpty()) {
+    themeStore.selectById(savedThemeId);
+  }
+  const DisplayTheme::Theme &selectedTheme = themeStore.selected();
 
   String body;
-  body.reserve(1320);
+  body.reserve(2600);
   body += "{\"ok\":true,\"version\":1";
   body += ",\"reading\":{";
   body += "\"wpm\":" + String(wpm);
@@ -1131,10 +1301,8 @@ String CompanionSyncManager::settingsJson() {
           ",\"punctuationMs\":" + String(punctuationDelay) + "}";
   body += "}";
   body += ",\"display\":{";
-  body += "\"brightnessIndex\":" + String(brightness);
-  body += ",\"darkMode\":" + String(preferences_.getBool(kPrefDarkMode, false) ? "true" : "false");
-  body += ",\"nightMode\":" +
-          String(preferences_.getBool(kPrefNightMode, false) ? "true" : "false");
+  body += "\"themeId\":\"" + jsonEscape(selectedTheme.id) + "\"";
+  body += ",\"brightnessIndex\":" + String(brightness);
   body += ",\"handedness\":\"";
   body += enumLabel(handedness, handednessLabels, 2);
   body += "\"";
@@ -1169,6 +1337,21 @@ String CompanionSyncManager::settingsJson() {
   body += ",\"guideWidth\":" + String(guideWidth);
   body += ",\"guideGap\":" + String(guideGap);
   body += "}";
+  const std::vector<DisplayTheme::Theme> &themes = themeStore.themes();
+  body += ",\"themeCount\":" + String(themes.size());
+  body += ",\"themes\":[";
+  for (size_t i = 0; i < themes.size(); ++i) {
+    if (i > 0) {
+      body += ",";
+    }
+    body += "{\"id\":\"" + jsonEscape(themes[i].id) + "\"";
+    body += ",\"name\":\"" + jsonEscape(themes[i].name) + "\"";
+    body += ",\"builtIn\":" + String(themes[i].builtIn ? "true" : "false");
+    body += ",\"typeface\":\"";
+    body += DisplayTheme::readerTypefaceName(themes[i].typeface);
+    body += "\"}";
+  }
+  body += "]";
   body += ",\"limits\":{";
   body += "\"wpm\":{\"min\":" + String(kMinWpm) + ",\"max\":" + String(kMaxWpm) + "}";
   body += ",\"brightnessIndex\":{\"min\":0,\"max\":" + String(kMaxBrightness) + "}";
@@ -1202,6 +1385,7 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
   int intValue = 0;
   bool boolValue = false;
   String stringValue;
+  bool themeTypefaceApplied = false;
 
   if (readJsonInt(body, "wpm", intValue)) {
     if (intValue < kMinWpm || intValue > kMaxWpm) {
@@ -1255,11 +1439,17 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
     }
     preferences_.putUChar(kPrefBrightness, static_cast<uint8_t>(intValue));
   }
-  if (readJsonBool(body, "darkMode", boolValue)) {
-    preferences_.putBool(kPrefDarkMode, boolValue);
-  }
-  if (readJsonBool(body, "nightMode", boolValue)) {
-    preferences_.putBool(kPrefNightMode, boolValue);
+  if (readJsonString(body, "themeId", stringValue)) {
+    ThemeStore themeStore;
+    themeStore.loadFromSd();
+    if (!themeStore.selectById(stringValue)) {
+      error = "themeId does not match an available theme";
+      return false;
+    }
+    const DisplayTheme::Theme &theme = themeStore.selected();
+    preferences_.putString(kPrefThemeId, theme.id);
+    preferences_.putUChar(kPrefReaderTypeface, static_cast<uint8_t>(theme.typeface));
+    themeTypefaceApplied = true;
   }
   if (readJsonString(body, "handedness", stringValue)) {
     const int value = enumValue(stringValue, handednessLabels, 2);
@@ -1319,7 +1509,7 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
     }
     preferences_.putUChar(kPrefReaderFontSize, static_cast<uint8_t>(intValue));
   }
-  if (readJsonString(body, "typeface", stringValue)) {
+  if (!themeTypefaceApplied && readJsonString(body, "typeface", stringValue)) {
     const int value = enumValue(stringValue, typefaceLabels, 3);
     if (value < 0) {
       error = "typeface must be standard, open_dyslexic, or atkinson";

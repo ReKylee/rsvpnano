@@ -1,0 +1,21 @@
+@rtheme
+name=Tokyo Night
+typeface=standard
+
+background=#1a1b26
+foreground=#c0caf5
+muted=#9aa5ce
+subtle=#565f89
+accent=#f7768e
+accent_bar=#7aa2f7
+break_accent=#9ece6a
+on_accent=#1a1b26
+surface=#16161e
+surface_muted=#292e42
+surface_active=#3b4261
+outline=#565f89
+guide=#737aa2
+guide_focus=#f7768e
+phantom=#565f89
+progress_track=#292e42
+

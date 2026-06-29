@@ -42,6 +42,8 @@ class CompanionSyncManager {
   static void handleBookPositionStatic();
   static void handleBooksStatic();
   static void handleBookUploadStatic();
+  static void handleThemesStatic();
+  static void handleThemeUploadStatic();
   static void handleNotFoundStatic();
 
   bool startAccessPoint();
@@ -57,6 +59,8 @@ class CompanionSyncManager {
   void handleBookPosition();
   void handleBooks();
   void handleBookUpload();
+  void handleThemes();
+  void handleThemeUpload();
   void handleNotFound();
   String settingsJson();
   bool applySettingsJson(const String &body, String &error);

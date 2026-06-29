@@ -4,17 +4,12 @@
 #include <vector>
 
 #include "board/BoardTypes.h"
+#include "display/DisplayTheme.h"
 
 class DisplayManager {
  public:
-  enum class ReaderTypeface : uint8_t {
-    Standard = 0,
-    OpenDyslexic = 1,
-    AtkinsonHyperlegible = 2,
-  };
-
   struct TypographyConfig {
-    ReaderTypeface typeface = ReaderTypeface::Standard;
+    DisplayTheme::ReaderTypeface typeface = DisplayTheme::ReaderTypeface::Standard;
     bool focusHighlight = true;
     int8_t trackingPx = 0;
     uint8_t anchorPercent = 35;
@@ -63,14 +58,11 @@ class DisplayManager {
   void setBatteryLabel(const String &label);
   void setBrightnessPercent(uint8_t percent);
   void flashBacklight(uint8_t count, uint32_t onMs, uint32_t offMs);
-  void setDarkMode(bool darkMode);
-  void setNightMode(bool nightMode);
+  void setTheme(const DisplayTheme::Theme &theme);
   void setUiOrientation(Board::UiOrientation orientation);
   void setUiRotated180(bool rotated180);
   void setTypographyConfig(const TypographyConfig &config);
   TypographyConfig typographyConfig() const;
-  bool darkMode() const;
-  bool nightMode() const;
   void prepareForSleep();
   bool wakeFromSleep();
   void renderCenteredWord(const String &word, uint16_t color = 0xFFFF);
@@ -147,15 +139,15 @@ class DisplayManager {
   String fitTinyText(const String &text, int maxWidth, int scale) const;
   String fitTinyTextTrailing(const String &text, int maxWidth, int scale) const;
   void drawGlyph(int x, int y, char c, uint16_t color);
-  void drawGlyph(int x, int y, char c, uint16_t color, ReaderTypeface typeface);
+  void drawGlyph(int x, int y, char c, uint16_t color, DisplayTheme::ReaderTypeface typeface);
   void drawSerifGlyphScaled(int x, int y, char c, uint16_t color, int divisor);
   void drawSerifGlyphScaled(int x, int y, char c, uint16_t color, int divisor,
-                            ReaderTypeface typeface);
+                            DisplayTheme::ReaderTypeface typeface);
   void drawSerif70Glyph(int x, int y, char c, uint16_t color);
-  void drawSerif70Glyph(int x, int y, char c, uint16_t color, ReaderTypeface typeface);
+  void drawSerif70Glyph(int x, int y, char c, uint16_t color, DisplayTheme::ReaderTypeface typeface);
   void drawSerifGlyphScaledPercent(int x, int y, char c, uint16_t color, uint8_t scalePercent);
   void drawSerifGlyphScaledPercent(int x, int y, char c, uint16_t color, uint8_t scalePercent,
-                                   ReaderTypeface typeface);
+                                   DisplayTheme::ReaderTypeface typeface);
   void fillVirtualRect(int x, int y, int width, int height, uint16_t color);
   void drawSerifTextAt(const String &text, int x, int y, uint16_t color, int divisor);
   void drawSerif70TextAt(const String &text, int x, int y, uint16_t color);
@@ -195,8 +187,7 @@ class DisplayManager {
   size_t txBufferBytes_ = 0;
   bool initialized_ = false;
   uint8_t brightnessPercent_ = 100;
-  bool darkMode_ = true;
-  bool nightMode_ = false;
+  DisplayTheme::Theme theme_ = DisplayTheme::defaultTheme();
   Board::UiOrientation uiOrientation_ = Board::UiOrientation::Landscape;
   bool tickerPlaybackFrameActive_ = false;
   String lastRenderKey_;

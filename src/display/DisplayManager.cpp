@@ -17,6 +17,8 @@
 #include "text/LatinText.h"
 
 namespace {
+using ReaderTypeface = DisplayTheme::ReaderTypeface;
+
 constexpr int kDisplayWidth = Board::Config::DISPLAY_WIDTH;
 constexpr int kDisplayHeight = Board::Config::DISPLAY_HEIGHT;
 constexpr int kPanelNativeWidth = Board::Config::PANEL_NATIVE_WIDTH;
@@ -27,17 +29,6 @@ constexpr int kMaxTextScale = 1;
 constexpr uint8_t kGlyphAlphaThreshold = 16;
 constexpr uint16_t kTrueBlack = 0x0000;
 constexpr uint16_t kPureWhite = 0xFFFF;
-constexpr uint16_t kDarkWordColor = 0xFFFF;
-constexpr uint16_t kLightWordColor = 0x0000;
-constexpr uint16_t kFocusLetterColor = 0xF800;
-constexpr uint16_t kNightWordColor = 0xFCE0;
-constexpr uint16_t kNightFocusColor = 0xFA80;
-constexpr uint16_t kDarkMenuDimColor = 0x8410;
-constexpr uint16_t kLightMenuDimColor = 0x6B4D;
-constexpr uint16_t kDarkFooterColor = 0x528A;
-constexpr uint16_t kLightFooterColor = 0x5ACB;
-constexpr uint8_t kNightDimAlpha = 92;
-constexpr uint8_t kNightFooterAlpha = 132;
 constexpr int kRsvpSideMargin = 12;
 constexpr int kRsvpGuideTickHeight = 5;
 constexpr int kRsvpGuideTopOffset = 7;
@@ -188,14 +179,14 @@ DisplayManager::TypographyConfig &activeTypographyConfig() {
   return config;
 }
 
-DisplayManager::ReaderTypeface sanitizeReaderTypeface(DisplayManager::ReaderTypeface typeface) {
+ReaderTypeface sanitizeReaderTypeface(ReaderTypeface typeface) {
   switch (typeface) {
-    case DisplayManager::ReaderTypeface::Standard:
-    case DisplayManager::ReaderTypeface::OpenDyslexic:
-    case DisplayManager::ReaderTypeface::AtkinsonHyperlegible:
+    case ReaderTypeface::Standard:
+    case ReaderTypeface::OpenDyslexic:
+    case ReaderTypeface::AtkinsonHyperlegible:
       return typeface;
   }
-  return DisplayManager::ReaderTypeface::Standard;
+  return ReaderTypeface::Standard;
 }
 
 int clampTypographyTracking(int value) {
@@ -234,11 +225,11 @@ int currentGuideGap() {
   return clampTypographyGuideGap(activeTypographyConfig().guideGap);
 }
 
-DisplayManager::ReaderTypeface currentReaderTypeface() {
+ReaderTypeface currentReaderTypeface() {
   return sanitizeReaderTypeface(activeTypographyConfig().typeface);
 }
 
-DisplayManager::ReaderTypeface effectiveReaderTypefaceForText(const String &) {
+ReaderTypeface effectiveReaderTypefaceForText(const String &) {
   return currentReaderTypeface();
 }
 
@@ -266,13 +257,13 @@ String readerChromeKey(const DisplayManager::ReaderChrome &chrome) {
          String(chrome.showPreviousSentenceHint ? 1 : 0);
 }
 
-int baseGlyphHeightForTypeface(DisplayManager::ReaderTypeface typeface) {
+int baseGlyphHeightForTypeface(ReaderTypeface typeface) {
   switch (typeface) {
-    case DisplayManager::ReaderTypeface::OpenDyslexic:
+    case ReaderTypeface::OpenDyslexic:
       return kEmbeddedOpenDyslexicHeight;
-    case DisplayManager::ReaderTypeface::AtkinsonHyperlegible:
+    case ReaderTypeface::AtkinsonHyperlegible:
       return kEmbeddedAtkinsonHeight;
-    case DisplayManager::ReaderTypeface::Standard:
+    case ReaderTypeface::Standard:
     default:
       return kEmbeddedSerifHeight;
   }
@@ -282,13 +273,13 @@ int baseGlyphHeight() {
   return baseGlyphHeightForTypeface(currentReaderTypeface());
 }
 
-int mediumGlyphHeightForTypeface(DisplayManager::ReaderTypeface typeface) {
+int mediumGlyphHeightForTypeface(ReaderTypeface typeface) {
   switch (typeface) {
-    case DisplayManager::ReaderTypeface::OpenDyslexic:
+    case ReaderTypeface::OpenDyslexic:
       return kEmbeddedOpenDyslexic70Height;
-    case DisplayManager::ReaderTypeface::AtkinsonHyperlegible:
+    case ReaderTypeface::AtkinsonHyperlegible:
       return kEmbeddedAtkinson70Height;
-    case DisplayManager::ReaderTypeface::Standard:
+    case ReaderTypeface::Standard:
     default:
       return kEmbeddedSerif70Height;
   }
@@ -382,13 +373,13 @@ ReaderGlyph serif70GlyphForByte(uint8_t value) {
           glyph.xAdvance, kEmbeddedSerif70Height};
 }
 
-ReaderGlyph glyphFor(char c, DisplayManager::ReaderTypeface typeface) {
+ReaderGlyph glyphFor(char c, ReaderTypeface typeface) {
   const uint8_t value = LatinText::byteValue(c);
   uint8_t baseValue = 0;
   const uint8_t lookupValue = invertedPunctuationBaseByte(value, baseValue) ? baseValue : value;
 
   switch (typeface) {
-    case DisplayManager::ReaderTypeface::OpenDyslexic: {
+    case ReaderTypeface::OpenDyslexic: {
       const uint8_t glyphValue =
           (lookupValue >= kEmbeddedOpenDyslexicFirstChar &&
            lookupValue <= kEmbeddedOpenDyslexicLastChar)
@@ -399,7 +390,7 @@ ReaderGlyph glyphFor(char c, DisplayManager::ReaderTypeface typeface) {
       return {kEmbeddedOpenDyslexicBitmaps + glyph.bitmapOffset, glyph.xOffset, glyph.width,
               glyph.xAdvance, kEmbeddedOpenDyslexicHeight};
     }
-    case DisplayManager::ReaderTypeface::AtkinsonHyperlegible: {
+    case ReaderTypeface::AtkinsonHyperlegible: {
       const uint8_t glyphValue =
           (lookupValue >= kEmbeddedAtkinsonFirstChar && lookupValue <= kEmbeddedAtkinsonLastChar)
               ? lookupValue
@@ -409,7 +400,7 @@ ReaderGlyph glyphFor(char c, DisplayManager::ReaderTypeface typeface) {
       return {kEmbeddedAtkinsonBitmaps + glyph.bitmapOffset, glyph.xOffset, glyph.width,
               glyph.xAdvance, kEmbeddedAtkinsonHeight};
     }
-    case DisplayManager::ReaderTypeface::Standard:
+    case ReaderTypeface::Standard:
     default:
       return serifGlyphForByte(lookupValue);
   }
@@ -417,13 +408,13 @@ ReaderGlyph glyphFor(char c, DisplayManager::ReaderTypeface typeface) {
 
 ReaderGlyph glyphFor(char c) { return glyphFor(c, currentReaderTypeface()); }
 
-ReaderGlyph glyph70For(char c, DisplayManager::ReaderTypeface typeface) {
+ReaderGlyph glyph70For(char c, ReaderTypeface typeface) {
   const uint8_t value = LatinText::byteValue(c);
   uint8_t baseValue = 0;
   const uint8_t lookupValue = invertedPunctuationBaseByte(value, baseValue) ? baseValue : value;
 
   switch (typeface) {
-    case DisplayManager::ReaderTypeface::OpenDyslexic: {
+    case ReaderTypeface::OpenDyslexic: {
       const uint8_t glyphValue =
           (lookupValue >= kEmbeddedOpenDyslexic70FirstChar &&
            lookupValue <= kEmbeddedOpenDyslexic70LastChar)
@@ -434,7 +425,7 @@ ReaderGlyph glyph70For(char c, DisplayManager::ReaderTypeface typeface) {
       return {kEmbeddedOpenDyslexic70Bitmaps + glyph.bitmapOffset, glyph.xOffset, glyph.width,
               glyph.xAdvance, kEmbeddedOpenDyslexic70Height};
     }
-    case DisplayManager::ReaderTypeface::AtkinsonHyperlegible: {
+    case ReaderTypeface::AtkinsonHyperlegible: {
       const uint8_t glyphValue =
           (lookupValue >= kEmbeddedAtkinson70FirstChar &&
            lookupValue <= kEmbeddedAtkinson70LastChar)
@@ -445,7 +436,7 @@ ReaderGlyph glyph70For(char c, DisplayManager::ReaderTypeface typeface) {
       return {kEmbeddedAtkinson70Bitmaps + glyph.bitmapOffset, glyph.xOffset, glyph.width,
               glyph.xAdvance, kEmbeddedAtkinson70Height};
     }
-    case DisplayManager::ReaderTypeface::Standard:
+    case ReaderTypeface::Standard:
     default:
       return serif70GlyphForByte(lookupValue);
   }
@@ -613,7 +604,7 @@ TextLayoutMetrics serifWordLayout(const String &word, int focusIndex, int diviso
   TextLayoutMetrics layout;
   int cursorX = 0;
   const bool trackFocus = focusIndex >= 0;
-  const DisplayManager::ReaderTypeface typeface = effectiveReaderTypefaceForText(word);
+  const ReaderTypeface typeface = effectiveReaderTypefaceForText(word);
 
   for (size_t i = 0; i < word.length(); ++i) {
     const ReaderGlyph glyph = glyphFor(word[i], typeface);
@@ -649,7 +640,7 @@ TextLayoutMetrics serifWordLayoutScaledPercent(const String &word, int focusInde
   TextLayoutMetrics layout;
   int cursorX = 0;
   const bool trackFocus = focusIndex >= 0;
-  const DisplayManager::ReaderTypeface typeface = effectiveReaderTypefaceForText(word);
+  const ReaderTypeface typeface = effectiveReaderTypefaceForText(word);
 
   for (size_t i = 0; i < word.length(); ++i) {
     const ReaderGlyph glyph = glyphFor(word[i], typeface);
@@ -685,7 +676,7 @@ TextLayoutMetrics serif70WordLayout(const String &word, int focusIndex) {
   TextLayoutMetrics layout;
   int cursorX = 0;
   const bool trackFocus = focusIndex >= 0;
-  const DisplayManager::ReaderTypeface typeface = effectiveReaderTypefaceForText(word);
+  const ReaderTypeface typeface = effectiveReaderTypefaceForText(word);
 
   for (size_t i = 0; i < word.length(); ++i) {
     const ReaderGlyph glyph = glyph70For(word[i], typeface);
@@ -903,22 +894,12 @@ void DisplayManager::flashBacklight(uint8_t count, uint32_t onMs, uint32_t offMs
   }
 }
 
-void DisplayManager::setDarkMode(bool darkMode) {
-  if (darkMode_ == darkMode) {
+void DisplayManager::setTheme(const DisplayTheme::Theme &theme) {
+  if (theme_.id == theme.id && theme_.colors == theme.colors && theme_.lowBrightness == theme.lowBrightness) {
     return;
   }
 
-  darkMode_ = darkMode;
-  tickerPlaybackFrameActive_ = false;
-  lastRenderKey_ = "";
-}
-
-void DisplayManager::setNightMode(bool nightMode) {
-  if (nightMode_ == nightMode) {
-    return;
-  }
-
-  nightMode_ = nightMode;
+  theme_ = theme;
   tickerPlaybackFrameActive_ = false;
   lastRenderKey_ = "";
 }
@@ -964,10 +945,6 @@ void DisplayManager::setTypographyConfig(const TypographyConfig &config) {
 DisplayManager::TypographyConfig DisplayManager::typographyConfig() const {
   return activeTypographyConfig();
 }
-
-bool DisplayManager::darkMode() const { return darkMode_; }
-
-bool DisplayManager::nightMode() const { return nightMode_; }
 
 bool DisplayManager::begin() {
   ESP_LOGI(kDisplayTag, "Begin");
@@ -1086,46 +1063,31 @@ void DisplayManager::clearVirtualBuffer(int width, int height) {
 }
 
 uint16_t DisplayManager::backgroundColor() const {
-  if (nightMode_) {
-    return kTrueBlack;
-  }
-  return darkMode_ ? kTrueBlack : kPureWhite;
+  return theme_.colors[static_cast<size_t>(DisplayTheme::ColorRole::Background)];
 }
 
 uint16_t DisplayManager::wordColor() const {
-  if (nightMode_) {
-    return kNightWordColor;
-  }
-  return darkMode_ ? kDarkWordColor : kLightWordColor;
+  return theme_.colors[static_cast<size_t>(DisplayTheme::ColorRole::Foreground)];
 }
 
 uint16_t DisplayManager::focusColor() const {
-  if (nightMode_) {
-    return kNightFocusColor;
-  }
-  return kFocusLetterColor;
+  return theme_.colors[static_cast<size_t>(DisplayTheme::ColorRole::Accent)];
 }
 
 uint16_t DisplayManager::dimColor() const {
-  if (nightMode_) {
-    return blendOverBackground(wordColor(), kNightDimAlpha);
-  }
-  return darkMode_ ? kDarkMenuDimColor : kLightMenuDimColor;
+  return theme_.colors[static_cast<size_t>(DisplayTheme::ColorRole::Muted)];
 }
 
 uint16_t DisplayManager::footerColor() const {
-  if (nightMode_) {
-    return blendOverBackground(wordColor(), kNightFooterAlpha);
-  }
-  return darkMode_ ? kDarkFooterColor : kLightFooterColor;
+  return theme_.colors[static_cast<size_t>(DisplayTheme::ColorRole::Subtle)];
 }
 
 uint16_t DisplayManager::selectedBarColor() const {
-  return nightMode_ ? focusColor() : kFocusLetterColor;
+  return theme_.colors[static_cast<size_t>(DisplayTheme::ColorRole::AccentBar)];
 }
 
 uint16_t DisplayManager::focusTimerBreakColor() const {
-  return nightMode_ ? rgb565(112, 176, 126) : rgb565(68, 132, 88);
+  return theme_.colors[static_cast<size_t>(DisplayTheme::ColorRole::BreakAccent)];
 }
 
 uint16_t DisplayManager::blendOverBackground(uint16_t rgb565, uint8_t alpha) const {
@@ -1643,7 +1605,7 @@ void DisplayManager::drawRsvpAnchorGuide(int anchorX, int textY, int textHeight)
   const int rightX = std::min(kVirtualBufferWidth - 1, anchorX + guideHalfWidth);
   const int leftWidth = std::max(0, (anchorX - guideGap) - leftX);
   const int rightWidth = std::max(0, rightX - (anchorX + guideGap) + 1);
-  const uint16_t guideColor = blendOverBackground(wordColor(), nightMode_ ? 136 : 96);
+  const uint16_t guideColor = blendOverBackground(wordColor(), theme_.lowBrightness ? 136 : 96);
   const uint16_t guideTickColor = currentFocusHighlightEnabled() ? focusColor() : guideColor;
 
   fillVirtualRect(leftX, topY, leftWidth, 1, guideColor);
@@ -1843,8 +1805,8 @@ void DisplayManager::renderCenteredWord(const String &word, uint16_t color) {
   String normalized = word;
   const uint16_t renderColor = (color == kPureWhite) ? wordColor() : color;
   const String renderKey = "center|" + normalized + "|" + String(renderColor) + "|b:" +
-                           batteryLabel_ + "|d:" + String(darkMode_ ? 1 : 0) + "|n:" +
-                           String(nightMode_ ? 1 : 0);
+                           batteryLabel_ + "|d:" + String(backgroundColor() != kPureWhite ? 1 : 0) + "|n:" +
+                           String(theme_.lowBrightness ? 1 : 0);
 
   if (!initialized_ || renderKey == lastRenderKey_) {
     return;
@@ -1871,8 +1833,8 @@ void DisplayManager::renderRsvpWord(const String &word, const String &chapterLab
   const String renderKey =
       "rsvp|" + word + "|" + chapterLabel + "|" + String(progressPercent) + "|" +
       String(showFooter ? 1 : 0) + "|f:" + footerStatusLabel + "|b:" + batteryLabel_ +
-      "|rc:" + readerChromeKey(chrome) + "|d:" + String(darkMode_ ? 1 : 0) + "|n:" +
-      String(nightMode_ ? 1 : 0);
+      "|rc:" + readerChromeKey(chrome) + "|d:" + String(backgroundColor() != kPureWhite ? 1 : 0) + "|n:" +
+      String(theme_.lowBrightness ? 1 : 0);
   if (!initialized_ || renderKey == lastRenderKey_) {
     return;
   }
@@ -1914,7 +1876,7 @@ void DisplayManager::renderRsvpWordWithWpm(const String &word, uint16_t wpm,
       "rsvp_wpm|" + word + "|" + wpmText + "|" + chapterLabel + "|" +
       String(progressPercent) + "|" + String(showFooter ? 1 : 0) + "|f:" + footerStatusLabel +
       "|b:" + batteryLabel_ + "|rc:" + readerChromeKey(chrome) + "|d:" +
-      String(darkMode_ ? 1 : 0) + "|n:" + String(nightMode_ ? 1 : 0);
+      String(backgroundColor() != kPureWhite ? 1 : 0) + "|n:" + String(theme_.lowBrightness ? 1 : 0);
   if (!initialized_ || renderKey == lastRenderKey_) {
     return;
   }
@@ -1959,8 +1921,8 @@ void DisplayManager::renderPhantomRsvpWord(const String &beforeText, const Strin
       "rsvp_phantom|" + beforeText + "|" + word + "|" + afterText + "|s:" +
       String(fontSizeLevel) + "|" + chapterLabel + "|" + String(progressPercent) + "|" +
       String(showFooter ? 1 : 0) + "|f:" + footerStatusLabel + "|b:" + batteryLabel_ +
-      "|rc:" + readerChromeKey(chrome) + "|d:" + String(darkMode_ ? 1 : 0) + "|n:" +
-      String(nightMode_ ? 1 : 0);
+      "|rc:" + readerChromeKey(chrome) + "|d:" + String(backgroundColor() != kPureWhite ? 1 : 0) + "|n:" +
+      String(theme_.lowBrightness ? 1 : 0);
   if (!initialized_ || renderKey == lastRenderKey_) {
     return;
   }
@@ -2084,9 +2046,9 @@ void DisplayManager::renderWordTickerView(const std::vector<ContextWord> &words,
   renderKey += "|f:";
   renderKey += String(showFooter ? 1 : 0);
   renderKey += "|d:";
-  renderKey += String(darkMode_ ? 1 : 0);
+  renderKey += String(backgroundColor() != kPureWhite ? 1 : 0);
   renderKey += "|n:";
-  renderKey += String(nightMode_ ? 1 : 0);
+  renderKey += String(theme_.lowBrightness ? 1 : 0);
   renderKey += "|wc:";
   renderKey += String(words.size());
   renderKey += "|rc:";
@@ -2296,7 +2258,7 @@ void DisplayManager::renderTypographyPreview(const String &beforeText, const Str
       String(static_cast<unsigned int>(config.anchorPercent)) + "|w:" +
       String(static_cast<unsigned int>(config.guideHalfWidth)) + "|g:" +
       String(static_cast<unsigned int>(config.guideGap)) + "|b:" + batteryLabel_ + "|d:" +
-      String(darkMode_ ? 1 : 0) + "|n:" + String(nightMode_ ? 1 : 0);
+      String(backgroundColor() != kPureWhite ? 1 : 0) + "|n:" + String(theme_.lowBrightness ? 1 : 0);
   if (!initialized_ || renderKey == lastRenderKey_) {
     return;
   }
@@ -2396,7 +2358,7 @@ void DisplayManager::renderPhantomRsvpWordWithWpm(const String &beforeText, cons
       String(fontSizeLevel) + "|" + wpmText + "|" + chapterLabel + "|" +
       String(progressPercent) + "|" + String(showFooter ? 1 : 0) + "|f:" + footerStatusLabel +
       "|b:" + batteryLabel_ + "|rc:" + readerChromeKey(chrome) + "|d:" +
-      String(darkMode_ ? 1 : 0) + "|n:" + String(nightMode_ ? 1 : 0);
+      String(backgroundColor() != kPureWhite ? 1 : 0) + "|n:" + String(theme_.lowBrightness ? 1 : 0);
   if (!initialized_ || renderKey == lastRenderKey_) {
     return;
   }
@@ -2631,7 +2593,7 @@ void DisplayManager::renderScrollView(const std::vector<ContextWord> &words, uin
       String(currentWordIndex) + "|" + String(words.size()) + "|" + String(scrollOffset) +
       "|" + chapterLabel + "|" + String(progressPercent) + "|o:" + overlayText + "|f:" +
       footerStatusLabel + "|b:" + batteryLabel_ + "|rc:" + readerChromeKey(chrome) + "|d:" +
-      String(darkMode_ ? 1 : 0) + "|n:" + String(nightMode_ ? 1 : 0);
+      String(backgroundColor() != kPureWhite ? 1 : 0) + "|n:" + String(theme_.lowBrightness ? 1 : 0);
   if (!initialized_ || renderKey == lastRenderKey_) {
     return;
   }
@@ -2712,9 +2674,9 @@ void DisplayManager::renderMenu(const std::vector<String> &items, size_t selecte
   renderKey += "|b:";
   renderKey += batteryLabel_;
   renderKey += "|d:";
-  renderKey += String(darkMode_ ? 1 : 0);
+  renderKey += String(backgroundColor() != kPureWhite ? 1 : 0);
   renderKey += "|n:";
-  renderKey += String(nightMode_ ? 1 : 0);
+  renderKey += String(theme_.lowBrightness ? 1 : 0);
   for (const String &item : items) {
     renderKey += "|";
     renderKey += item;
@@ -2780,9 +2742,9 @@ void DisplayManager::renderLibrary(const std::vector<LibraryItem> &items, size_t
   renderKey += "|b:";
   renderKey += batteryLabel_;
   renderKey += "|d:";
-  renderKey += String(darkMode_ ? 1 : 0);
+  renderKey += String(backgroundColor() != kPureWhite ? 1 : 0);
   renderKey += "|n:";
-  renderKey += String(nightMode_ ? 1 : 0);
+  renderKey += String(theme_.lowBrightness ? 1 : 0);
   for (const LibraryItem &item : items) {
     renderKey += "|";
     renderKey += item.title;
@@ -2861,9 +2823,9 @@ void DisplayManager::renderTextEntry(const String &title, const String &prompt, 
   renderKey += "|b:";
   renderKey += batteryLabel_;
   renderKey += "|d:";
-  renderKey += String(darkMode_ ? 1 : 0);
+  renderKey += String(backgroundColor() != kPureWhite ? 1 : 0);
   renderKey += "|n:";
-  renderKey += String(nightMode_ ? 1 : 0);
+  renderKey += String(theme_.lowBrightness ? 1 : 0);
   for (const Button &button : buttons) {
     renderKey += "|";
     renderKey += button.label;
@@ -2931,9 +2893,9 @@ void DisplayManager::renderTextEntry(const String &title, const String &prompt, 
         button.active ? selectedBarColor() : (button.accent ? focusColor() : dimColor());
     uint16_t fillColor = backgroundColor();
     if (button.active) {
-      fillColor = blendOverBackground(borderColor, nightMode_ ? 128 : 40);
+      fillColor = blendOverBackground(borderColor, theme_.lowBrightness ? 128 : 40);
     } else if (button.accent) {
-      fillColor = blendOverBackground(borderColor, nightMode_ ? 92 : 24);
+      fillColor = blendOverBackground(borderColor, theme_.lowBrightness ? 92 : 24);
     }
 
     fillVirtualRect(button.x, button.y, button.width, button.height, borderColor);
@@ -2984,8 +2946,8 @@ void DisplayManager::renderTextEntry(const String &title, const String &prompt, 
 
 void DisplayManager::renderStatus(const String &title, const String &line1, const String &line2) {
   const String renderKey = "status|" + title + "|" + line1 + "|" + line2 + "|b:" +
-                           batteryLabel_ + "|d:" + String(darkMode_ ? 1 : 0) + "|n:" +
-                           String(nightMode_ ? 1 : 0);
+                           batteryLabel_ + "|d:" + String(backgroundColor() != kPureWhite ? 1 : 0) + "|n:" +
+                           String(theme_.lowBrightness ? 1 : 0);
   if (!initialized_ || renderKey == lastRenderKey_) {
     return;
   }
@@ -3020,8 +2982,8 @@ void DisplayManager::renderProgress(const String &title, const String &line1, co
   progressPercent = std::max(-1, std::min(100, progressPercent));
   const String renderKey =
       "progress|" + title + "|" + line1 + "|" + line2 + "|" + String(progressPercent) +
-      "|b:" + batteryLabel_ + "|d:" + String(darkMode_ ? 1 : 0) + "|n:" +
-      String(nightMode_ ? 1 : 0);
+      "|b:" + batteryLabel_ + "|d:" + String(backgroundColor() != kPureWhite ? 1 : 0) + "|n:" +
+      String(theme_.lowBrightness ? 1 : 0);
   if (!initialized_ || renderKey == lastRenderKey_) {
     return;
   }
@@ -3067,8 +3029,8 @@ void DisplayManager::renderLifeScreensaver(const std::vector<uint32_t> &cells, u
                                            uint16_t rows, uint32_t generation,
                                            const std::vector<uint32_t> *dimCells) {
   const String renderKey = "life|" + String(generation) + "|" + String(columns) + "|" +
-                           String(rows) + "|d:" + String(darkMode_ ? 1 : 0) + "|n:" +
-                           String(nightMode_ ? 1 : 0) + "|w0:" +
+                           String(rows) + "|d:" + String(backgroundColor() != kPureWhite ? 1 : 0) + "|n:" +
+                           String(theme_.lowBrightness ? 1 : 0) + "|w0:" +
                            String(cells.empty() ? 0UL : static_cast<unsigned long>(cells[0])) +
                            "|w1:" +
                            String(cells.empty()
@@ -3095,7 +3057,7 @@ void DisplayManager::renderLifeScreensaver(const std::vector<uint32_t> &cells, u
   const int xOffset = std::max(0, (virtualWidth - renderWidth) / 2);
   const int yOffset = std::max(0, (virtualHeight - renderHeight) / 2);
   const uint16_t lifeColor = panelColor(wordColor());
-  const uint16_t dimLifeColor = panelColor(blendOverBackground(wordColor(), nightMode_ ? 82 : 96));
+  const uint16_t dimLifeColor = panelColor(blendOverBackground(wordColor(), theme_.lowBrightness ? 82 : 96));
 
   clearVirtualBuffer(virtualWidth, virtualHeight);
   auto drawPackedCells = [&](const std::vector<uint32_t> &source, uint16_t color) {
@@ -3166,9 +3128,9 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
   renderKey += "|b:";
   renderKey += batteryLabel_;
   renderKey += "|d:";
-  renderKey += String(darkMode_ ? 1 : 0);
+  renderKey += String(backgroundColor() != kPureWhite ? 1 : 0);
   renderKey += "|n:";
-  renderKey += String(nightMode_ ? 1 : 0);
+  renderKey += String(theme_.lowBrightness ? 1 : 0);
 
   if (!initialized_ || renderKey == lastRenderKey_) {
     return;
@@ -3180,7 +3142,7 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
 
   const uint16_t accent = breakAccent ? focusTimerBreakColor() : focusColor();
   const uint16_t baseTextColor = wordColor();
-  const uint16_t inverseTextColor = nightMode_ || darkMode_ ? wordColor() : kPureWhite;
+  const uint16_t inverseTextColor = theme_.lowBrightness || backgroundColor() != kPureWhite ? wordColor() : kPureWhite;
   const uint16_t instructionColor = accent;
   int fillX = 0;
   int fillY = 0;

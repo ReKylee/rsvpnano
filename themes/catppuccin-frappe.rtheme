@@ -1,0 +1,21 @@
+@rtheme
+name=Catppuccin Frappe
+typeface=standard
+
+background=#303446
+foreground=#c6d0f5
+muted=#a5adce
+subtle=#838ba7
+accent=#e78284
+accent_bar=#e78284
+break_accent=#a6d189
+on_accent=#232634
+surface=#292c3c
+surface_muted=#414559
+surface_active=#51576d
+outline=#626880
+guide=#737994
+guide_focus=#e78284
+phantom=#737994
+progress_track=#414559
+

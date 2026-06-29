@@ -1,0 +1,21 @@
+@rtheme
+name=Catppuccin Macchiato
+typeface=standard
+
+background=#24273a
+foreground=#cad3f5
+muted=#a5adcb
+subtle=#8087a2
+accent=#ed8796
+accent_bar=#ed8796
+break_accent=#a6da95
+on_accent=#181926
+surface=#1e2030
+surface_muted=#363a4f
+surface_active=#494d64
+outline=#5b6078
+guide=#6e738d
+guide_focus=#ed8796
+phantom=#6e738d
+progress_track=#363a4f
+

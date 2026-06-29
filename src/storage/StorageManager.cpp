@@ -128,7 +128,7 @@ bool StorageManager::loadIndexedBook(size_t index, IndexedBookStore& store, Book
 StorageManager::DiagnosticResult StorageManager::diagnoseSdCard() {
     DiagnosticResult result = SdDiagnostics::diagnoseCard(mounted_, statusCallback_, statusContext_);
     if (!result.booksDirectory || !result.bookFilesDirectory || !result.articleFilesDirectory
-        || !result.configDirectory) {
+        || !result.configDirectory || !result.themesDirectory) {
         return result;
     }
 
@@ -143,7 +143,8 @@ StorageManager::DiagnosticResult StorageManager::diagnoseSdCard() {
     {
         // Probe every required folder before reporting the card as writable.
         SdDiagnostics::probeWritableFolders(result, statusCallback_, statusContext_);
-        if (!result.writable || !result.booksWritable || !result.articlesWritable || !result.configWritable) {
+        if (!result.writable || !result.booksWritable || !result.articlesWritable || !result.configWritable
+            || !result.themesWritable) {
             return result;
         }
     }

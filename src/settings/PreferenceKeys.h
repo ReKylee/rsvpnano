@@ -16,8 +16,7 @@ constexpr const char *kPrefRecentSeq = "seq";
 // Reader + display.
 constexpr const char *kPrefWpm = "wpm";
 constexpr const char *kPrefBrightness = "bright";
-constexpr const char *kPrefDarkMode = "dark";
-constexpr const char *kPrefNightMode = "night";
+constexpr const char *kPrefThemeId = "theme_id";
 constexpr const char *kPrefYellowMode = "yellow_md";
 constexpr const char *kPrefUiLanguage = "ui_lang";
 constexpr const char *kPrefReaderMode = "read_mode";

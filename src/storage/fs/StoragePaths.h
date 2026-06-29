@@ -9,6 +9,7 @@ namespace StoragePaths {
     constexpr const char* kBookFilesPath = "/books/books";
     constexpr const char* kArticleFilesPath = "/books/articles";
     constexpr const char* kConfigPath = "/config";
+    constexpr const char* kThemesPath = "/themes";
     constexpr const char* kTextExtension = ".txt";
     constexpr const char* kRsvpExtension = ".rsvp";
     constexpr const char* kEpubExtension = ".epub";

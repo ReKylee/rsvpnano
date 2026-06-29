@@ -1,0 +1,21 @@
+@rtheme
+name=Solarized Dark
+typeface=standard
+
+background=#002b36
+foreground=#fdf6e3
+muted=#93a1a1
+subtle=#839496
+accent=#dc322f
+accent_bar=#268bd2
+break_accent=#859900
+on_accent=#002b36
+surface=#073642
+surface_muted=#0b3f4a
+surface_active=#134b56
+outline=#586e75
+guide=#657b83
+guide_focus=#dc322f
+phantom=#586e75
+progress_track=#073642
+

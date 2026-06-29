@@ -76,7 +76,8 @@ namespace SdDiagnostics {
             return StorageFiles::ensureDirectory(StoragePaths::kBooksPath, "sd-check")
                 && StorageFiles::ensureDirectory(StoragePaths::kBookFilesPath, "sd-check")
                 && StorageFiles::ensureDirectory(StoragePaths::kArticleFilesPath, "sd-check")
-                && StorageFiles::ensureDirectory(StoragePaths::kConfigPath, "sd-check");
+                && StorageFiles::ensureDirectory(StoragePaths::kConfigPath, "sd-check")
+                && StorageFiles::ensureDirectory(StoragePaths::kThemesPath, "sd-check");
         }
 
         bool isSupportedFrequency(int frequencyKhz) {
@@ -416,14 +417,16 @@ namespace SdDiagnostics {
         result.bookFilesDirectory = StorageFiles::directoryExists(StoragePaths::kBookFilesPath);
         result.articleFilesDirectory = StorageFiles::directoryExists(StoragePaths::kArticleFilesPath);
         result.configDirectory = StorageFiles::directoryExists(StoragePaths::kConfigPath);
+        result.themesDirectory = StorageFiles::directoryExists(StoragePaths::kThemesPath);
         if (!result.booksDirectory || !result.bookFilesDirectory || !result.articleFilesDirectory
-            || !result.configDirectory) {
+            || !result.configDirectory || !result.themesDirectory) {
             result.summary = "Folders missing";
             result.detail = "Can create layout";
             Serial.printf("[sd-check] v0.0.4 folders missing /books=%u /books/books=%u "
-                          "/books/articles=%u /config=%u\n",
+                          "/books/articles=%u /config=%u /themes=%u\n",
                           result.booksDirectory ? 1 : 0, result.bookFilesDirectory ? 1 : 0,
-                          result.articleFilesDirectory ? 1 : 0, result.configDirectory ? 1 : 0);
+                          result.articleFilesDirectory ? 1 : 0, result.configDirectory ? 1 : 0,
+                          result.themesDirectory ? 1 : 0);
             report("Folders missing", "Confirm repair", 38);
             return result;
         }
@@ -443,17 +446,19 @@ namespace SdDiagnostics {
         result.booksWritable = verifyWritableFolder(StoragePaths::kBookFilesPath);
         result.articlesWritable = verifyWritableFolder(StoragePaths::kArticleFilesPath);
         result.configWritable = verifyWritableFolder(StoragePaths::kConfigPath);
+        result.themesWritable = verifyWritableFolder(StoragePaths::kThemesPath);
         if (!result.writable) {
             result.summary = "Write test failed";
             result.detail = "Format FAT32 MBR";
             Serial.println("[sd-check] /books write/delete probe failed");
             return;
         }
-        if (!result.booksWritable || !result.articlesWritable || !result.configWritable) {
+        if (!result.booksWritable || !result.articlesWritable || !result.configWritable || !result.themesWritable) {
             result.summary = "Folder write failed";
             result.detail = "Format FAT32 MBR";
-            Serial.printf("[sd-check] folder write failed books=%u articles=%u config=%u\n",
-                          result.booksWritable ? 1 : 0, result.articlesWritable ? 1 : 0, result.configWritable ? 1 : 0);
+            Serial.printf("[sd-check] folder write failed books=%u articles=%u config=%u themes=%u\n",
+                          result.booksWritable ? 1 : 0, result.articlesWritable ? 1 : 0,
+                          result.configWritable ? 1 : 0, result.themesWritable ? 1 : 0);
             return;
         }
 
@@ -477,15 +482,16 @@ namespace SdDiagnostics {
         const bool bookFilesOk = StorageFiles::directoryExists(StoragePaths::kBookFilesPath);
         const bool articleFilesOk = StorageFiles::directoryExists(StoragePaths::kArticleFilesPath);
         const bool configOk = StorageFiles::directoryExists(StoragePaths::kConfigPath);
+        const bool themesOk = StorageFiles::directoryExists(StoragePaths::kThemesPath);
         const bool ok = rootWritable && foldersOk;
         if (ok) {
             Serial.println("[sd-check] repaired v0.0.4 folder layout");
         } else {
             Serial.printf("[sd-check] folder repair failed rootWritable=%u /books=%u "
                           "/books/books=%u "
-                          "/books/articles=%u /config=%u\n",
+                          "/books/articles=%u /config=%u /themes=%u\n",
                           rootWritable ? 1 : 0, booksOk ? 1 : 0, bookFilesOk ? 1 : 0, articleFilesOk ? 1 : 0,
-                          configOk ? 1 : 0);
+                          configOk ? 1 : 0, themesOk ? 1 : 0);
         }
         return ok;
     }

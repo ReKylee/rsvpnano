@@ -79,6 +79,28 @@ String readSmallTextFile(const String &path) {
   return text;
 }
 
+bool replaceUploadedFile(const String &tmpPath, const String &finalPath) {
+  const String backupPath = finalPath + ".bak";
+  Board::Storage::filesystem().remove(backupPath);
+
+  const bool hadFinal = StorageFiles::fileExists(finalPath);
+  if (hadFinal && !Board::Storage::filesystem().rename(finalPath, backupPath)) {
+    return false;
+  }
+
+  if (Board::Storage::filesystem().rename(tmpPath, finalPath)) {
+    if (hadFinal) {
+      Board::Storage::filesystem().remove(backupPath);
+    }
+    return true;
+  }
+
+  if (hadFinal) {
+    Board::Storage::filesystem().rename(backupPath, finalPath);
+  }
+  return false;
+}
+
 const char kWebCompanionHtml[] PROGMEM = R"HTML(<!doctype html>
 <html lang="en">
 <head>
@@ -986,8 +1008,7 @@ void CompanionSyncManager::handleThemes() {
     return;
   }
 
-  Board::Storage::filesystem().remove(uploadFinalPath_);
-  if (!Board::Storage::filesystem().rename(uploadTmpPath_, uploadFinalPath_)) {
+  if (!replaceUploadedFile(uploadTmpPath_, uploadFinalPath_)) {
     Board::Storage::filesystem().remove(uploadTmpPath_);
     uploadTmpPath_ = "";
     uploadFinalPath_ = "";
@@ -2022,8 +2043,7 @@ void CompanionSyncManager::finishUpload(bool success) {
   }
 
   if (success && uploadError_.isEmpty()) {
-    Board::Storage::filesystem().remove(uploadFinalPath_);
-    if (!Board::Storage::filesystem().rename(uploadTmpPath_, uploadFinalPath_)) {
+    if (!replaceUploadedFile(uploadTmpPath_, uploadFinalPath_)) {
       uploadError_ = "Rename failed";
       Board::Storage::filesystem().remove(uploadTmpPath_);
     } else {

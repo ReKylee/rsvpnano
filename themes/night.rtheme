@@ -1,7 +1,6 @@
 @rtheme
 name=Night
 typeface=standard
-low_brightness=true
 
 background=#000000
 foreground=#ff9c00

@@ -31,9 +31,9 @@ constexpr size_t kMaxRssFeeds = 24;
 constexpr uint16_t kDefaultWpm = 300;
 constexpr uint16_t kMinWpm = 10;
 constexpr uint16_t kMaxWpm = 1000;
-constexpr uint8_t kDefaultBrightness = 3;
-constexpr uint8_t kMaxBrightness = 4;
-constexpr uint8_t kMaxUiLanguage = 1;
+constexpr uint8_t kDefaultBrightness = 13;
+constexpr uint8_t kMaxBrightness = 19;
+constexpr uint8_t kMaxUiLanguage = 5;
 constexpr uint8_t kMaxReaderMode = 1;
 constexpr uint8_t kMaxHandedness = 1;
 constexpr uint8_t kMaxFooterMetric = 2;
@@ -183,7 +183,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <div class="row"><button id="installOnlineThemeButton">Install online theme</button></div>
 <label>Theme file</label><input id="themeFileInput" type="file" accept=".rtheme">
 <div class="row"><button id="uploadThemeButton">Upload theme file</button></div>
-<label>Brightness <span id="brightnessValue"></span></label><input id="brightnessIndex" type="range" min="0" max="4">
+<label>Brightness <span id="brightnessValue"></span></label><input id="brightnessIndex" type="range" min="0" max="19">
 <label>Reader hand</label><select id="handedness"><option value="right">Right</option><option value="left">Left</option></select>
 <label>Reader controls</label><select id="readerControls"><option value="standard">Standard</option><option value="rewind_top_right">Rewind top-right</option></select>
 <label>Footer label</label><select id="footerMetric"><option value="percentage">Percentage</option><option value="chapter_time">Chapter time</option><option value="book_time">Book time</option></select>
@@ -259,7 +259,7 @@ function val(id){const e=$(id);return e.type==='checkbox'?e.checked:e.value}
 function setVal(id,v){const e=$(id);if(e.type==='checkbox')e.checked=!!v;else e.value=v}
 function setThemeOptions(){const themes=(settings&&settings.themes)||[];$('themeId').innerHTML=themes.map(t=>`<option value="${html(t.id)}">${html(t.name)}</option>`).join('')||'<option value="default">Default</option>'}
 function snapWpm(v){v=Math.max(10,Math.min(1000,Math.round(+v||300)));return v<=100?Math.max(10,Math.min(100,Math.round(v/10)*10)):Math.min(1000,100+Math.round((v-100)/25)*25)}
-function updateLabels(){['wpm','longWordMs','complexWordMs','punctuationMs','brightnessIndex','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>{const l=$(id+'Value')||$(id.replace('Index','')+'Value');if(l)l.textContent=$(id).value+(id==='wpm'?' WPM':id.includes('Ms')?' ms':'')})}
+function updateLabels(){['wpm','longWordMs','complexWordMs','punctuationMs','brightnessIndex','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>{const l=$(id+'Value')||$(id.replace('Index','')+'Value');if(l)l.textContent=id==='brightnessIndex'?(5+(+$(id).value*5))+'%':$(id).value+(id==='wpm'?' WPM':id.includes('Ms')?' ms':'')})}
 async function loadSettings(){try{settings=await api('/api/settings');setThemeOptions();if(!themeCatalog.length)loadThemeCatalog();setVal('readerMode',settings.reading.readerMode);setVal('pauseMode',settings.reading.pauseMode);setVal('wpm',snapWpm(settings.reading.wpm));setVal('longWordMs',settings.reading.pacing.longWordMs);setVal('complexWordMs',settings.reading.pacing.complexWordMs);setVal('punctuationMs',settings.reading.pacing.punctuationMs);setVal('themeId',settings.display.themeId||'default');setVal('brightnessIndex',settings.display.brightnessIndex);setVal('handedness',settings.display.handedness);setVal('readerControls',settings.display.readerControls||'standard');setVal('footerMetric',settings.display.footerMetric);setVal('batteryLabel',settings.display.batteryLabel);setVal('readingBattery',settings.display.readingBattery);setVal('readingChapter',settings.display.readingChapter);setVal('readingProgress',settings.display.readingProgress);setVal('typeface',settings.typography.typeface);setVal('fontSizeIndex',settings.display.fontSizeIndex);setVal('tracking',settings.typography.tracking);setVal('anchorPercent',settings.typography.anchorPercent);setVal('guideWidth',settings.typography.guideWidth);setVal('guideGap',settings.typography.guideGap);setVal('focusHighlight',settings.typography.focusHighlight);setVal('phantomWords',settings.display.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
 async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const payload={reading:{wpm:+val('wpm'),readerMode:val('readerMode'),pauseMode:val('pauseMode'),pacing:{longWordMs:+val('longWordMs'),complexWordMs:+val('complexWordMs'),punctuationMs:+val('punctuationMs')}},display:{themeId:val('themeId'),brightnessIndex:+val('brightnessIndex'),handedness:val('handedness'),readerControls:val('readerControls'),footerMetric:val('footerMetric'),batteryLabel:val('batteryLabel'),readingBattery:val('readingBattery'),readingChapter:val('readingChapter'),readingProgress:val('readingProgress'),phantomWords:val('phantomWords'),fontSizeIndex:+val('fontSizeIndex')},typography:{typeface:val('typeface'),focusHighlight:val('focusHighlight'),tracking:+val('tracking'),anchorPercent:+val('anchorPercent'),guideWidth:+val('guideWidth'),guideGap:+val('guideGap')}};try{settings=await api('/api/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});status('Settings saved. Exit sync mode to apply all reader changes.')}catch(e){status('Settings save failed: '+e.message)}}
 async function loadWifi(){try{const w=await api('/api/wifi');$('wifiSsid').value=w.ssid||'';$('wifiPassword').value='';$('wifiCurrent').textContent=w.configured?'Saved network: '+w.ssid:'No home Wi-Fi saved.'}catch(e){status('Wi-Fi load failed: '+e.message)}}
@@ -1301,7 +1301,7 @@ String CompanionSyncManager::settingsJson() {
   themeStore.loadFromSd();
   const String savedThemeId = preferences_.getString(kPrefThemeId, "");
   if (!savedThemeId.isEmpty()) {
-    themeStore.selectById(savedThemeId);
+    themeStore.selectById(savedThemeId.c_str());
   }
   const DisplayTheme::Theme &selectedTheme = themeStore.selected();
 
@@ -1455,7 +1455,7 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
   }
   if (readJsonInt(body, "brightnessIndex", intValue)) {
     if (intValue < 0 || intValue > kMaxBrightness) {
-      error = "brightnessIndex must be between 0 and 4";
+      error = "brightnessIndex must be between 0 and 19";
       return false;
     }
     preferences_.putUChar(kPrefBrightness, static_cast<uint8_t>(intValue));
@@ -1463,7 +1463,7 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
   if (readJsonString(body, "themeId", stringValue)) {
     ThemeStore themeStore;
     themeStore.loadFromSd();
-    if (!themeStore.selectById(stringValue)) {
+    if (!themeStore.selectById(stringValue.c_str())) {
       error = "themeId does not match an available theme";
       return false;
     }

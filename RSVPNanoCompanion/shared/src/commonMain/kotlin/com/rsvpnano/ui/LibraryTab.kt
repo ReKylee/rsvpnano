@@ -71,6 +71,7 @@ import com.rsvpnano.converters.RsvpSupportedFileTypes
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.PendingUpload
+import kotlin.math.roundToInt
 
 private enum class LibraryFilter(val label: String) {
     All("All"),
@@ -415,8 +416,17 @@ private fun LibraryBookDialog(
     } else {
         (book.wordIndex ?: 0).coerceIn(0, wordCount - 1)
     }
+    fun percentForIndex(index: Int): Int {
+        if (wordCount == null || wordCount <= 1) return 0
+        return ((index.toFloat() / (wordCount - 1).toFloat()) * 100f).roundToInt().coerceIn(0, 100)
+    }
+    fun indexForPercent(percent: Int): Int {
+        if (wordCount == null || wordCount <= 1) return 0
+        return ((percent.coerceIn(0, 100) / 100f) * (wordCount - 1).toFloat()).roundToInt()
+            .coerceIn(0, wordCount - 1)
+    }
     var targetWordIndex by remember(book.id) { mutableStateOf(initialWordIndex) }
-    var wordText by remember(book.id) { mutableStateOf((initialWordIndex + 1).toString()) }
+    var targetPercent by remember(book.id) { mutableStateOf(percentForIndex(initialWordIndex)) }
     val chapters = if (wordCount == null) {
         emptyList()
     } else {
@@ -427,7 +437,11 @@ private fun LibraryBookDialog(
             return
         }
         targetWordIndex = index.coerceIn(0, wordCount - 1)
-        wordText = (targetWordIndex + 1).toString()
+        targetPercent = percentForIndex(targetWordIndex)
+    }
+    fun updatePercent(percent: Float) {
+        targetPercent = percent.roundToInt().coerceIn(0, 100)
+        targetWordIndex = indexForPercent(targetPercent)
     }
     fun currentChapterIndex(): Int {
         if (chapters.isEmpty()) {
@@ -453,15 +467,6 @@ private fun LibraryBookDialog(
         title = { Text(text = book.displayTitle) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (!book.author.isNullOrBlank()) {
-                    Text(text = "Author: ${book.author}")
-                }
-                Text(text = "Size: ${book.byteLabel}")
-                Text(text = "Path: ${book.displayName}")
-                Text(text = "Type: ${if (book.isArticle) "Article" else "Book"}")
-                book.progressPercent?.let { progress ->
-                    Text(text = "Progress: ${progress.coerceIn(0, 100)}%")
-                }
                 if (wordCount == null || book.sourceSize == null || book.sourceFingerprint == null) {
                     Text(
                         text = "Resume location unavailable until the book has been indexed on the reader.",
@@ -469,9 +474,20 @@ private fun LibraryBookDialog(
                     )
                 } else {
                     val chapterIndex = currentChapterIndex()
-                    val chapterStart = chapters.getOrNull(chapterIndex)?.wordIndex ?: 0
-                    val chapterEnd = chapters.getOrNull(chapterIndex + 1)?.wordIndex ?: wordCount
-                    Text(text = "Resume location: word ${targetWordIndex + 1} of $wordCount")
+                    Text(
+                        text = "Resume at $targetPercent%",
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                    Text(
+                        text = "Word ${targetWordIndex + 1} of $wordCount",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Slider(
+                        value = targetPercent.toFloat(),
+                        onValueChange = ::updatePercent,
+                        valueRange = 0f..100f,
+                        steps = 99,
+                    )
                     if (chapters.isNotEmpty()) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -481,7 +497,7 @@ private fun LibraryBookDialog(
                                 onClick = { updateTarget(chapters[(chapterIndex - 1).coerceAtLeast(0)].wordIndex) },
                                 enabled = chapterIndex > 0,
                             ) {
-                                Text("Previous")
+                                Text("Prev chapter")
                             }
                             Text(
                                 text = "${chapterIndex + 1}/${chapters.size} ${chapters[chapterIndex].title}",
@@ -491,26 +507,10 @@ private fun LibraryBookDialog(
                                 onClick = { updateTarget(chapters[(chapterIndex + 1).coerceAtMost(chapters.lastIndex)].wordIndex) },
                                 enabled = chapterIndex in 0 until chapters.lastIndex,
                             ) {
-                                Text("Next")
+                                Text("Next chapter")
                             }
                         }
                     }
-                    if (chapterEnd - chapterStart > 1) {
-                        Slider(
-                            value = targetWordIndex.toFloat(),
-                            onValueChange = { updateTarget(it.toInt()) },
-                            valueRange = chapterStart.toFloat()..(chapterEnd - 1).toFloat(),
-                        )
-                    }
-                    OutlinedTextField(
-                        value = wordText,
-                        onValueChange = { value ->
-                            wordText = value.filter { it.isDigit() }.take(9)
-                            wordText.toIntOrNull()?.let { updateTarget(it - 1) }
-                        },
-                        label = { Text("Word number") },
-                        singleLine = true,
-                    )
                 }
             }
         },

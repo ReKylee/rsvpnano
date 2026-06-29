@@ -5,6 +5,7 @@ import com.rsvpnano.converters.RsvpBookFile
 import com.rsvpnano.converters.SharedArticle
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.models.NanoThemeCatalogItem
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.sync.RssFeedNormalizer
@@ -190,6 +191,67 @@ class NanoCompanionController(
         return CompanionBooksSnapshot(books = deviceSyncService.refreshBooks(baseUrl))
     }
 
+    suspend fun fetchThemeCatalog(catalogUrl: String): CompanionThemeCatalogSnapshot =
+        CompanionThemeCatalogSnapshot(themes = client.fetchThemeCatalog(catalogUrl))
+
+    suspend fun downloadTheme(catalogUrl: String, theme: NanoThemeCatalogItem): CompanionThemeFile {
+        require(theme.file.isNotBlank() && '/' !in theme.file && '\\' !in theme.file) {
+            "Theme catalog file path is invalid."
+        }
+        return CompanionThemeFile(
+            id = theme.id,
+            filename = theme.file,
+            data = client.downloadTheme(themeFileUrl(catalogUrl, theme.file)),
+        )
+    }
+
+    suspend fun uploadTheme(
+        baseUrl: String,
+        filename: String,
+        data: ByteArray,
+        onProgress: ((sent: Long, total: Long) -> Unit)? = null,
+    ): CompanionSettingsSnapshot {
+        verifyReachable(baseUrl)
+        val uploaded = deviceSyncService.uploadTheme(
+            baseUrl = baseUrl,
+            filename = filename,
+            data = data,
+            onProgress = onProgress,
+        )
+        val refreshed = deviceSyncService.refreshSettings(baseUrl)
+        val selected = uploaded.id
+            ?.takeIf { id -> refreshed.themes.any { it.id == id } }
+            ?.let { id -> deviceSyncService.saveSettings(baseUrl, refreshed.withThemeId(id)) }
+            ?: refreshed
+        return CompanionSettingsSnapshot(settings = selected, wifiSettings = null)
+    }
+
+    suspend fun installOnlineTheme(
+        baseUrl: String,
+        catalogUrl: String,
+        theme: NanoThemeCatalogItem,
+        onProgress: ((sent: Long, total: Long) -> Unit)? = null,
+    ): CompanionSettingsSnapshot {
+        verifyReachable(baseUrl)
+        require(theme.file.isNotBlank() && '/' !in theme.file && '\\' !in theme.file) {
+            "Theme catalog file path is invalid."
+        }
+        val data = client.downloadTheme(themeFileUrl(catalogUrl, theme.file))
+        deviceSyncService.uploadTheme(
+            baseUrl = baseUrl,
+            filename = theme.file,
+            data = data,
+            onProgress = onProgress,
+        )
+        val refreshed = deviceSyncService.refreshSettings(baseUrl)
+        val selected = if (refreshed.themes.any { it.id == theme.id }) {
+            deviceSyncService.saveSettings(baseUrl, refreshed.withThemeId(theme.id))
+        } else {
+            refreshed
+        }
+        return CompanionSettingsSnapshot(settings = selected, wifiSettings = null)
+    }
+
     suspend fun deleteBooks(baseUrl: String, bookIds: List<String>): CompanionBooksSnapshot {
         verifyReachable(baseUrl)
         bookIds.forEach { bookId ->
@@ -283,6 +345,9 @@ class NanoCompanionController(
         throw lastError ?: IllegalStateException("Device operation failed.")
     }
 
+    private fun themeFileUrl(catalogUrl: String, file: String): String =
+        catalogUrl.substringBeforeLast('/', missingDelimiterValue = catalogUrl) + "/" + file
+
     companion object {
         const val DEFAULT_CONNECTION_ATTEMPTS = 4
         const val DEFAULT_CONNECTION_RETRY_DELAY_MILLIS = 750L
@@ -338,6 +403,16 @@ data class CompanionRssSnapshot(
 
 data class CompanionBooksSnapshot(
     val books: List<NanoBook>,
+)
+
+data class CompanionThemeCatalogSnapshot(
+    val themes: List<NanoThemeCatalogItem>,
+)
+
+data class CompanionThemeFile(
+    val id: String,
+    val filename: String,
+    val data: ByteArray,
 )
 
 data class CompanionSettingsSnapshot(

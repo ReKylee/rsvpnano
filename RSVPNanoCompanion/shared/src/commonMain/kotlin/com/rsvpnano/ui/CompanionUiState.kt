@@ -8,6 +8,7 @@ import com.rsvpnano.app.isRequesting
 import com.rsvpnano.app.isWifiAttached
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.models.NanoThemeCatalogItem
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.RememberedNano
@@ -34,6 +35,8 @@ data class CompanionUiState(
     val isSavingSettings: Boolean = false,
     val settingsSaveStatus: String? = null,
     val bookJob: BookJob? = null,
+    val themeCatalog: List<NanoThemeCatalogItem> = emptyList(),
+    val selectedCatalogThemeId: String = "",
     val notice: CompanionNotice = CompanionNotice.Neutral("Ready"),
 ) {
     val status: String

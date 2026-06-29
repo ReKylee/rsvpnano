@@ -73,6 +73,7 @@ import com.rsvpnano.converters.RsvpSupportedFileTypes
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoSettingsSchema
+import com.rsvpnano.models.NanoTheme
 import com.rsvpnano.models.PendingUpload
 
 @Composable
@@ -89,6 +90,10 @@ fun SettingsTab(
     onForgetRememberedNano: () -> Unit,
     hasPermissions: Boolean,
     onGrantPermissions: () -> Unit,
+    onRefreshThemeCatalog: () -> Unit,
+    onSelectCatalogTheme: (String) -> Unit,
+    onInstallOnlineTheme: () -> Unit,
+    onUploadTheme: () -> Unit,
 ) {
     PullRefreshBox(
         isRefreshing = uiState.isRefreshing,
@@ -246,17 +251,45 @@ fun SettingsTab(
                         subtitle = "Screen mode, standby behavior, and reader status labels.",
                     ) {
                         ChoiceRow(
-                            label = "Display mode",
-                            selected = settings.appearanceMode,
-                            options = listOf(
-                                NanoSettingsSchema.APPEARANCE_LIGHT to "Light",
-                                NanoSettingsSchema.APPEARANCE_DARK to "Dark",
-                                NanoSettingsSchema.APPEARANCE_NIGHT to "Night",
-                            ),
-                            onSelected = { mode ->
-                                onUpdateSettings { it.withAppearanceMode(mode) }
-                            },
+                            label = "Theme",
+                            selected = settings.display.themeId,
+                            options = settings.themes.ifEmpty {
+                                listOf(NanoTheme(NanoSettingsSchema.THEME_DEFAULT, "Default", builtIn = true))
+                            }.map { theme -> theme.id to theme.name },
+                            onSelected = { themeId -> onUpdateSettings { it.withThemeId(themeId) } },
                         )
+                        HorizontalDivider()
+                        Text(text = "Theme library", style = MaterialTheme.typography.labelLarge)
+                        if (uiState.themeCatalog.isEmpty()) {
+                            FilledTonalButton(onClick = onRefreshThemeCatalog) {
+                                Icon(imageVector = Icons.Outlined.Sync, contentDescription = null)
+                                Text(text = "Load online themes")
+                            }
+                        } else {
+                            ChoiceRow(
+                                label = "Online theme",
+                                selected = uiState.selectedCatalogThemeId,
+                                options = uiState.themeCatalog.map { theme -> theme.id to theme.name },
+                                onSelected = onSelectCatalogTheme,
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilledTonalButton(
+                                onClick = onInstallOnlineTheme,
+                                enabled = uiState.themeCatalog.isNotEmpty(),
+                            ) {
+                                Icon(imageVector = Icons.Outlined.CloudUpload, contentDescription = null)
+                                Text(text = "Install selected")
+                            }
+                            TextButton(onClick = onRefreshThemeCatalog) {
+                                Icon(imageVector = Icons.Outlined.Sync, contentDescription = null)
+                                Text(text = "Refresh")
+                            }
+                        }
+                        FilledTonalButton(onClick = onUploadTheme) {
+                            Icon(imageVector = Icons.Outlined.UploadFile, contentDescription = null)
+                            Text(text = "Upload theme file")
+                        }
                         SliderRow(
                             label = "Brightness",
                             valueLabel = { value -> "${value.toInt() + 1} / 5" },

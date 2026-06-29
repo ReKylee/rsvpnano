@@ -5,6 +5,7 @@ import com.rsvpnano.models.NanoChapter
 import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.models.NanoThemeCatalogItem
 import com.rsvpnano.models.NanoUploadResponse
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.NanoWifiUpdate
@@ -26,6 +27,7 @@ import io.ktor.http.URLBuilder
 import io.ktor.http.appendPathSegments
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
 
@@ -121,6 +123,46 @@ class NanoKtorClient(
 
         val body = response.body<String>()
         return decodeDeviceResponse(response.status, body, NanoUploadResponse.serializer())
+    }
+
+    override suspend fun uploadTheme(
+        baseUrl: String,
+        name: String,
+        data: ByteArray,
+        onProgress: ((sent: Long, total: Long) -> Unit)?,
+    ): NanoUploadResponse {
+        val response = httpClient.post(buildUrl(baseUrl, "api/themes", query = listOf("name" to name))) {
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append("file", data, headers = io.ktor.http.Headers.build {
+                            append(HttpHeaders.ContentDisposition, "form-data; name=\"file\"; filename=\"$name\"")
+                            append(HttpHeaders.ContentType, ContentType.Application.OctetStream.toString())
+                        })
+                    }
+                )
+            )
+            onProgress?.let { progress ->
+                onUpload { sent, total ->
+                    progress(sent, total ?: data.size.toLong())
+                }
+            }
+        }
+
+        val body = response.body<String>()
+        return decodeDeviceResponse(response.status, body, NanoUploadResponse.serializer())
+    }
+
+    override suspend fun fetchThemeCatalog(url: String): List<NanoThemeCatalogItem> {
+        val response = httpClient.get(url)
+        ensureSuccess(response.status)
+        return json.decodeFromString(ListSerializer(NanoThemeCatalogItem.serializer()), response.body<String>())
+    }
+
+    override suspend fun downloadTheme(url: String): ByteArray {
+        val response = httpClient.get(url)
+        ensureSuccess(response.status)
+        return response.body()
     }
 
     override suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse {

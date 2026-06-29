@@ -58,6 +58,14 @@ class NanoDeviceSyncService(
     ): NanoUploadResponse =
         client.uploadBook(baseUrl = baseUrl, name = filename, data = data, category = category, onProgress = onProgress)
 
+    suspend fun uploadTheme(
+        baseUrl: String,
+        filename: String,
+        data: ByteArray,
+        onProgress: ((sent: Long, total: Long) -> Unit)? = null,
+    ): NanoUploadResponse =
+        client.uploadTheme(baseUrl = baseUrl, name = filename, data = data, onProgress = onProgress)
+
     suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse = client.deleteBook(baseUrl, id)
 
     suspend fun setBookPosition(

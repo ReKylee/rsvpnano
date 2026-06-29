@@ -53,6 +53,7 @@ data class NanoInfo(
 data class NanoUploadResponse(
     val ok: Boolean,
     val path: String? = null,
+    val id: String? = null,
     val error: String? = null,
 )
 
@@ -77,12 +78,30 @@ data class NanoWifiUpdate(
 )
 
 @Serializable
+data class NanoTheme(
+    val id: String,
+    val name: String,
+    val builtIn: Boolean = false,
+    val typeface: String = NanoSettingsSchema.TYPEFACE_STANDARD,
+)
+
+@Serializable
+data class NanoThemeCatalogItem(
+    val id: String,
+    val name: String,
+    val file: String,
+    val typeface: String = NanoSettingsSchema.TYPEFACE_STANDARD,
+)
+
+@Serializable
 data class NanoSettings(
     val ok: Boolean,
     val version: Int,
     val reading: Reading,
     val display: Display,
     val typography: Typography,
+    val themeCount: Int = 0,
+    val themes: List<NanoTheme> = emptyList(),
     val limits: Limits? = null,
 ) {
     @Serializable
@@ -103,9 +122,8 @@ data class NanoSettings(
 
     @Serializable
     data class Display(
+        val themeId: String = NanoSettingsSchema.THEME_DEFAULT,
         val brightnessIndex: Int,
-        val darkMode: Boolean,
-        val nightMode: Boolean,
         val handedness: String,
         val readerControls: String = NanoSettingsSchema.READER_CONTROLS_STANDARD,
         val footerMetric: String,
@@ -183,6 +201,9 @@ data class NanoSettings(
     fun withBrightnessIndex(value: Int): NanoSettings =
         copy(display = display.copy(brightnessIndex = NanoSettingsSchema.coerceBrightnessIndex(value)))
 
+    fun withThemeId(value: String): NanoSettings =
+        copy(display = display.copy(themeId = value.ifBlank { NanoSettingsSchema.THEME_DEFAULT }))
+
     fun withHandedness(value: String): NanoSettings =
         copy(display = display.copy(handedness = value))
 
@@ -213,9 +234,6 @@ data class NanoSettings(
     fun withLanguage(value: Int): NanoSettings =
         copy(display = display.copy(language = NanoSettingsSchema.coerceLanguage(value)))
 
-    fun withAppearance(darkMode: Boolean, nightMode: Boolean): NanoSettings =
-        copy(display = display.copy(darkMode = darkMode, nightMode = nightMode))
-
     fun withPhantomWords(value: Boolean): NanoSettings =
         copy(display = display.copy(phantomWords = value))
 
@@ -239,30 +257,14 @@ data class NanoSettings(
 
     fun withGuideGap(value: Int): NanoSettings =
         copy(typography = typography.copy(guideGap = NanoSettingsSchema.coerceGuideGap(value)))
-
-    val appearanceMode: String
-        get() = when {
-            display.nightMode -> NanoSettingsSchema.APPEARANCE_NIGHT
-            display.darkMode -> NanoSettingsSchema.APPEARANCE_DARK
-            else -> NanoSettingsSchema.APPEARANCE_LIGHT
-        }
-
-    fun withAppearanceMode(value: String): NanoSettings =
-        withAppearance(
-            darkMode = value == NanoSettingsSchema.APPEARANCE_DARK ||
-                value == NanoSettingsSchema.APPEARANCE_NIGHT,
-            nightMode = value == NanoSettingsSchema.APPEARANCE_NIGHT,
-        )
 }
 
 object NanoSettingsSchema {
+    const val THEME_DEFAULT = "default"
     const val READER_MODE_RSVP = "rsvp"
     const val READER_MODE_SCROLL = "scroll"
     const val PAUSE_MODE_SENTENCE_END = "sentence_end"
     const val PAUSE_MODE_INSTANT = "instant"
-    const val APPEARANCE_LIGHT = "light"
-    const val APPEARANCE_DARK = "dark"
-    const val APPEARANCE_NIGHT = "night"
     const val HANDEDNESS_LEFT = "left"
     const val HANDEDNESS_RIGHT = "right"
     const val READER_CONTROLS_STANDARD = "standard"

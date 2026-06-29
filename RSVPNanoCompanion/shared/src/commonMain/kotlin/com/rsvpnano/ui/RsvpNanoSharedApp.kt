@@ -101,6 +101,10 @@ fun RsvpNanoSharedApp(
     onAddRssFeed: () -> Unit,
     onRefreshRssFeeds: () -> Unit,
     onDeleteFeed: (String) -> Unit,
+    onRefreshThemeCatalog: () -> Unit,
+    onSelectCatalogTheme: (String) -> Unit,
+    onInstallOnlineTheme: () -> Unit,
+    onPickTheme: (displayName: String, data: ByteArray) -> Unit,
 ) {
     val colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
     MaterialTheme(colorScheme = colorScheme) {
@@ -120,11 +124,26 @@ fun RsvpNanoSharedApp(
                 }
             }
         }
+        val themePicker = rememberFilePickerLauncher(
+            type = FileKitType.File(extensions = listOf("rtheme")),
+        ) { file ->
+            if (file != null) {
+                scope.launch {
+                    onPickTheme(file.name, file.readBytes())
+                }
+            }
+        }
 
         LaunchedEffect(uiState.notice) {
             if (uiState.notice.showTransient) {
                 snackbarNotices[uiState.status] = uiState.notice
                 snackbarHostState.showSnackbar(uiState.status)
+            }
+        }
+
+        LaunchedEffect(selectedTab) {
+            if (selectedTab == CompanionTab.Settings && uiState.themeCatalog.isEmpty()) {
+                onRefreshThemeCatalog()
             }
         }
 
@@ -222,6 +241,10 @@ fun RsvpNanoSharedApp(
                         onForgetRememberedNano = onForgetRememberedNano,
                         hasPermissions = hasPermissions,
                         onGrantPermissions = onGrantPermissions,
+                        onRefreshThemeCatalog = onRefreshThemeCatalog,
+                        onSelectCatalogTheme = onSelectCatalogTheme,
+                        onInstallOnlineTheme = onInstallOnlineTheme,
+                        onUploadTheme = { themePicker.launch() },
                     )
                 }
             }

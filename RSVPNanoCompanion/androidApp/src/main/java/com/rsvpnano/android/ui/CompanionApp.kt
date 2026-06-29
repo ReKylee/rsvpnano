@@ -170,5 +170,9 @@ fun CompanionApp(
         onAddRssFeed = viewModel::addRssFeed,
         onRefreshRssFeeds = viewModel::refreshRssFeeds,
         onDeleteFeed = viewModel::deleteRssFeed,
+        onRefreshThemeCatalog = viewModel::refreshThemeCatalog,
+        onSelectCatalogTheme = viewModel::setSelectedCatalogThemeId,
+        onInstallOnlineTheme = viewModel::installSelectedOnlineTheme,
+        onPickTheme = viewModel::uploadThemeFile,
     )
 }

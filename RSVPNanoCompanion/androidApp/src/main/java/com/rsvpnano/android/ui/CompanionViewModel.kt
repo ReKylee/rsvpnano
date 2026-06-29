@@ -37,7 +37,9 @@ class CompanionViewModel(
     fun setDraftSourceUrl(value: String) = presenter.setDraftSourceUrl(value)
     fun setDraftBody(value: String) = presenter.setDraftBody(value)
     fun setRssFeedDraft(value: String) = presenter.setRssFeedDraft(value)
+    fun setSelectedCatalogThemeId(value: String) = presenter.setSelectedCatalogThemeId(value)
     fun refresh() = presenter.refresh()
+    fun refreshThemeCatalog() = presenter.refreshThemeCatalog()
     fun connect() = presenter.connect()
     fun recheckConnectionAfterResume() = presenter.recheckConnectionAfterResume()
     fun recheckConnectionAfterNetworkChange() = presenter.recheckConnectionAfterNetworkChange()
@@ -60,6 +62,8 @@ class CompanionViewModel(
     fun deleteDeviceBook(book: NanoBook) = presenter.deleteDeviceBook(book)
     fun setBookPosition(book: NanoBook, wordIndex: Int) = presenter.setBookPosition(book, wordIndex)
     fun uploadSelectedFile(displayName: String, data: ByteArray) = presenter.uploadSelectedFile(displayName, data)
+    fun uploadThemeFile(displayName: String, data: ByteArray) = presenter.uploadThemeFile(displayName, data)
+    fun installSelectedOnlineTheme() = presenter.installSelectedOnlineTheme()
     fun needsArticleFetch(draft: PendingUpload): Boolean = presenter.needsArticleFetch(draft)
 
     override fun onCleared() {

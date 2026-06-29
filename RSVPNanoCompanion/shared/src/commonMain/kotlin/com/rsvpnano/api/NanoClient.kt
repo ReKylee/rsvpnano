@@ -4,6 +4,7 @@ import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.models.NanoThemeCatalogItem
 import com.rsvpnano.models.NanoUploadResponse
 import com.rsvpnano.models.NanoWifiSettings
 
@@ -28,6 +29,16 @@ interface NanoClient {
         category: String? = null,
         onProgress: ((sent: Long, total: Long) -> Unit)? = null,
     ): NanoUploadResponse
+    suspend fun uploadTheme(
+        baseUrl: String,
+        name: String,
+        data: ByteArray,
+        onProgress: ((sent: Long, total: Long) -> Unit)? = null,
+    ): NanoUploadResponse = throw NanoClientError("Theme upload is not supported by this client.")
+    suspend fun fetchThemeCatalog(url: String): List<NanoThemeCatalogItem> =
+        throw NanoClientError("Theme catalog download is not supported by this client.")
+    suspend fun downloadTheme(url: String): ByteArray =
+        throw NanoClientError("Theme download is not supported by this client.")
     suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse
     suspend fun setBookPosition(
         baseUrl: String,

@@ -159,8 +159,6 @@ class PendingUploadSyncServiceTest {
         ),
         display = NanoSettings.Display(
             brightnessIndex = 1,
-            darkMode = false,
-            nightMode = false,
             handedness = "right",
             footerMetric = "battery",
             batteryLabel = "battery",

@@ -120,6 +120,8 @@ class CompanionPresenter(
 
     fun setRssFeedDraft(value: String) = updateState { it.copy(rssFeedDraft = value) }
 
+    fun setSelectedCatalogThemeId(value: String) = updateState { it.copy(selectedCatalogThemeId = value) }
+
     fun refresh() {
         scope.launch {
             val startedAt = currentTimeMillis()
@@ -148,6 +150,27 @@ class CompanionPresenter(
                 }
                 updateState { it.copy(isRefreshing = false) }
             }
+        }
+    }
+
+    fun refreshThemeCatalog() {
+        scope.launch {
+            setNotice(CompanionNotice.Attention("Loading online themes..."))
+            runCatching { companionController.fetchThemeCatalog(THEME_CATALOG_URL) }
+                .onSuccess { snapshot ->
+                    updateState {
+                        val selected = it.selectedCatalogThemeId.takeIf { id -> snapshot.themes.any { theme -> theme.id == id } }
+                            ?: snapshot.themes.firstOrNull()?.id.orEmpty()
+                        it.copy(
+                            themeCatalog = snapshot.themes,
+                            selectedCatalogThemeId = selected,
+                            notice = CompanionNotice.Success("Loaded ${snapshot.themes.size} online themes."),
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    setNotice(CompanionNotice.Error(error.message ?: "Online theme catalog could not be loaded."))
+                }
         }
     }
 
@@ -807,6 +830,85 @@ class CompanionPresenter(
         }
     }
 
+    fun uploadThemeFile(displayName: String, data: ByteArray) {
+        scope.launch {
+            val state = current
+            if (!state.isConnected) {
+                setNotice(CompanionNotice.Error("Connect to your Nano before uploading themes."))
+                return@launch
+            }
+            if (!displayName.endsWith(".rtheme", ignoreCase = true)) {
+                setNotice(CompanionNotice.Error("Theme files must use the .rtheme extension."))
+                return@launch
+            }
+            if (!ensureReaderReachable("uploading themes")) return@launch
+            setNotice(CompanionNotice.Attention("Uploading $displayName..."))
+            runCatching {
+                withNanoApi {
+                    companionController.uploadTheme(
+                        baseUrl = state.address,
+                        filename = displayName,
+                        data = data,
+                    )
+                }
+            }.onSuccess { snapshot ->
+                updateState {
+                    it.copy(
+                        settings = snapshot.settings,
+                        notice = CompanionNotice.Success("Uploaded $displayName."),
+                    )
+                }
+            }.onFailure { error ->
+                markDisconnected(error.message ?: "Reader disconnected before uploading the theme.")
+            }
+        }
+    }
+
+    fun installSelectedOnlineTheme() {
+        scope.launch {
+            val state = current
+            if (!state.isConnected) {
+                setNotice(CompanionNotice.Error("Connect to your Nano before installing themes."))
+                return@launch
+            }
+            val theme = state.themeCatalog.firstOrNull { it.id == state.selectedCatalogThemeId }
+                ?: state.themeCatalog.firstOrNull()
+            if (theme == null) {
+                setNotice(CompanionNotice.Error("Load the online theme list first."))
+                return@launch
+            }
+
+            setNotice(CompanionNotice.Attention("Downloading ${theme.name}..."))
+            val themeFile = runCatching {
+                companionController.downloadTheme(THEME_CATALOG_URL, theme)
+            }.onFailure { error ->
+                setNotice(CompanionNotice.Error(error.message ?: "Theme download failed."))
+            }.getOrNull() ?: return@launch
+
+            if (!ensureReaderReachable("installing themes")) return@launch
+            setNotice(CompanionNotice.Attention("Installing ${theme.name}..."))
+            runCatching {
+                withNanoApi {
+                    companionController.uploadTheme(
+                        baseUrl = state.address,
+                        filename = themeFile.filename,
+                        data = themeFile.data,
+                    )
+                }
+            }.onSuccess { snapshot ->
+                updateState {
+                    it.copy(
+                        settings = snapshot.settings,
+                        selectedCatalogThemeId = theme.id,
+                        notice = CompanionNotice.Success("Installed ${theme.name}."),
+                    )
+                }
+            }.onFailure { error ->
+                markDisconnected(error.message ?: "Reader disconnected before installing the theme.")
+            }
+        }
+    }
+
     fun needsArticleFetch(draft: PendingUpload): Boolean = companionController.needsArticleFetch(draft)
 
     private fun clearDraftEditor(
@@ -1052,6 +1154,7 @@ class CompanionPresenter(
 
     private companion object {
         const val MIN_REFRESH_INDICATOR_MS = 650L
+        const val THEME_CATALOG_URL = "https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/themes/index.json"
     }
 }
 

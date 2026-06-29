@@ -14,8 +14,6 @@ internal fun sampleSettings(): NanoSettings = NanoSettings(
     ),
     display = NanoSettings.Display(
         brightnessIndex = 1,
-        darkMode = false,
-        nightMode = false,
         handedness = "right",
         footerMetric = "battery",
         batteryLabel = "battery",

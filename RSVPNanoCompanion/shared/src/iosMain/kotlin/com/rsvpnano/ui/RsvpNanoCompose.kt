@@ -58,5 +58,9 @@ private fun RsvpNanoComposeApp(presenter: CompanionPresenter) {
         onAddRssFeed = presenter::addRssFeed,
         onRefreshRssFeeds = presenter::refreshRssFeeds,
         onDeleteFeed = presenter::deleteRssFeed,
+        onRefreshThemeCatalog = presenter::refreshThemeCatalog,
+        onSelectCatalogTheme = presenter::setSelectedCatalogThemeId,
+        onInstallOnlineTheme = presenter::installSelectedOnlineTheme,
+        onPickTheme = presenter::uploadThemeFile,
     )
 }

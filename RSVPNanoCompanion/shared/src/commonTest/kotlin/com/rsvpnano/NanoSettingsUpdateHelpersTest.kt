@@ -65,7 +65,7 @@ class NanoSettingsUpdateHelpersTest {
             .withReaderControls("rewind_top_right")
             .withFooterMetric("chapter_time")
             .withBatteryLabel("time_remaining")
-            .withAppearance(darkMode = true, nightMode = true)
+            .withThemeId("night")
             .withPhantomWords(true)
             .withFontSizeIndex(2)
 
@@ -76,9 +76,7 @@ class NanoSettingsUpdateHelpersTest {
         assertEquals("rewind_top_right", updated.display.readerControls)
         assertEquals("chapter_time", updated.display.footerMetric)
         assertEquals("time_remaining", updated.display.batteryLabel)
-        assertTrue(updated.display.darkMode)
-        assertTrue(updated.display.nightMode)
-        assertEquals("night", updated.appearanceMode)
+        assertEquals("night", updated.display.themeId)
         assertTrue(updated.display.phantomWords)
         assertEquals(2, updated.display.fontSizeIndex)
         assertEquals(original.reading, updated.reading)
@@ -86,20 +84,12 @@ class NanoSettingsUpdateHelpersTest {
     }
 
     @Test
-    fun appearanceModeHelperUpdatesDarkAndNightModeTogether() {
-        val light = sampleSettings().withAppearanceMode("light")
-        val dark = sampleSettings().withAppearanceMode("dark")
-        val night = sampleSettings().withAppearanceMode("night")
+    fun themeIdHelperFallsBackToDefaultWhenBlank() {
+        val custom = sampleSettings().withThemeId("catppuccin-mocha")
+        val blank = sampleSettings().withThemeId("")
 
-        assertFalse(light.display.darkMode)
-        assertFalse(light.display.nightMode)
-        assertEquals("light", light.appearanceMode)
-        assertTrue(dark.display.darkMode)
-        assertFalse(dark.display.nightMode)
-        assertEquals("dark", dark.appearanceMode)
-        assertTrue(night.display.darkMode)
-        assertTrue(night.display.nightMode)
-        assertEquals("night", night.appearanceMode)
+        assertEquals("catppuccin-mocha", custom.display.themeId)
+        assertEquals("default", blank.display.themeId)
     }
 
     @Test

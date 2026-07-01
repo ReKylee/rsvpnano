@@ -2,58 +2,60 @@
 
 This folder is intended for generated Arduino_GFX/U8g2 font headers.
 
-## Generic font conversion
+## Font conversion
 
-Use `tools/convert_ttf_to_u8g2.sh` for any TrueType/OpenType font that should become a U8g2 C header.
+Use `tools/convert_font_to_u8g2.py` for any TrueType, OpenType, TrueType Collection, or BDF font that should become a U8g2 C header.
 
-```bash
-SYMBOL=u8g2_font_rsvpnano_my_font_18_tf \
-OUT=src/fonts/MyFontU8g2.h \
-SIZE=18 \
-MAP='32-126' \
-tools/convert_ttf_to_u8g2.sh /path/to/MyFont-Regular.ttf
-```
-
-The generic script uses the normal U8g2 toolchain path:
+The script uses U8g2's own tooling for the final font encoding:
 
 ```text
-otf2bdf -> bdfconv -> U8g2 C header
+TTF/OTF/TTC --otf2bdf--> BDF --U8g2 bdfconv--> U8g2 C header
 ```
 
-Useful options:
-
-- `SIZE`: pixel size passed to `otf2bdf`.
-- `MAP`: U8g2/bdfconv glyph map, for example `32-126` or `32-126,8211,8212,8230`.
-- `OUT`: generated header path.
-- `SYMBOL`: exported U8g2 font symbol.
-- `FONT_LABEL`: human-readable source font name for the generated header comment.
-- `FONT_LICENSE_NOTE`: short license/attribution line for the generated header comment.
-- `OTF2BDF` / `BDFCONV`: explicit tool paths when they are not on `PATH`.
-
-## Noto Serif preset
-
-Use `tools/convert_noto_serif_to_u8g2.sh` to regenerate the Noto Serif U8g2 header from a local `NotoSerif-Regular.ttf` file. It is a thin preset wrapper around the generic converter.
-
-```bash
-NOTO_SERIF_TTF=/path/to/NotoSerif-Regular.ttf \
-  tools/convert_noto_serif_to_u8g2.sh
-```
-
-Default output:
+For BDF input, the first step is skipped:
 
 ```text
-src/fonts/NotoSerifU8g2.h
+BDF --U8g2 bdfconv--> U8g2 C header
 ```
 
-Default exported symbol:
+Example for Noto Serif:
 
-```cpp
-u8g2_font_rsvpnano_noto_serif_18_tf
+```bash
+python tools/convert_font_to_u8g2.py /path/to/NotoSerif-Regular.ttf \
+  --out src/fonts/NotoSerifU8g2.h \
+  --symbol u8g2_font_rsvpnano_noto_serif_18_tf \
+  --font-label "Noto Serif Regular" \
+  --license-note "Noto Serif is licensed under the SIL Open Font License 1.1."
 ```
 
-Default coverage is intentionally compact for firmware use:
+By default, the script uses compact firmware-oriented coverage:
 
 - printable Basic Latin, `U+0020..U+007E`
 - common reading punctuation: en dash, em dash, curly quotes, bullet, ellipsis
 
-Noto Serif is licensed under the SIL Open Font License 1.1. Keep the generated attribution comment in the checked-in font header.
+Pass `--map` to change glyph coverage:
+
+```bash
+python tools/convert_font_to_u8g2.py /path/to/MyFont-Regular.ttf \
+  --out src/fonts/MyFontU8g2.h \
+  --symbol u8g2_font_rsvpnano_my_font_18_tf \
+  --size 18 \
+  --map '32-126'
+```
+
+Useful options:
+
+- `--size`: pixel size passed to `otf2bdf` for TTF/OTF/TTC input.
+- `--map`: U8g2/bdfconv glyph map, for example `32-126` or `32-126,8211,8212,8230`.
+- `--out`: generated header path.
+- `--symbol`: exported U8g2 font symbol.
+- `--font-label`: human-readable source font name for the generated header comment.
+- `--license-note`: short license/attribution line for the generated header comment.
+- `--bdfconv`: explicit path to U8g2's `bdfconv` binary.
+- `--u8g2-repo`: path to an upstream U8g2 checkout; the script looks for `tools/font/bdfconv/bdfconv` there.
+- `--build-bdfconv`: run `make` in `<u8g2-repo>/tools/font/bdfconv` before conversion.
+- `--otf2bdf`: explicit path to `otf2bdf` when it is not on `PATH`.
+
+You can also set `BDFCONV`, `U8G2_REPO`, or `OTF2BDF` in the environment.
+
+Keep license and attribution comments in checked-in generated font headers.

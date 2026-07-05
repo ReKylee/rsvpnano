@@ -122,6 +122,8 @@ bool supportsSoftwarePowerOff() { return true; }
 
 bool powerOffUsesControllerWake() { return false; }
 
+bool powerButtonHeld() { return false; }
+
 bool shouldRequestShutdownOnPowerOff() {
   return WaveshareLcd349::Power::kRequestPmuShutdownOnPowerOff;
 }

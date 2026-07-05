@@ -2,6 +2,7 @@ package com.rsvpnano.ui
 
 import com.rsvpnano.app.CompanionNotice
 import com.rsvpnano.app.CompanionThemeCatalogSnapshot
+import com.rsvpnano.app.CompanionFontCatalogSnapshot
 import com.rsvpnano.app.NanoConnectionState
 import com.rsvpnano.app.NanoDeviceSyncService
 import com.rsvpnano.app.NanoWifiConnector
@@ -123,6 +124,10 @@ class CompanionPresenter(
 
     fun setSelectedCatalogThemeId(value: String) = updateState { it.copy(selectedCatalogThemeId = value) }
 
+    fun setSelectedCatalogFontId(value: String) = updateState { it.copy(selectedCatalogFontId = value) }
+
+    fun setSelectedCatalogFontSize(value: String) = updateState { it.copy(selectedCatalogFontSize = value) }
+
     fun refresh() {
         scope.launch {
             val startedAt = currentTimeMillis()
@@ -172,6 +177,28 @@ class CompanionPresenter(
                 }
                 .onFailure { error ->
                     setNotice(CompanionNotice.Error(error.message ?: "Online theme catalog could not be loaded."))
+                }
+        }
+    }
+
+    fun refreshFontCatalog() {
+        scope.launch {
+            setNotice(CompanionNotice.Attention("Loading online fonts..."))
+            runCatching { fetchFirstFontCatalog() }
+                .onSuccess { (catalogUrl, snapshot) ->
+                    updateState {
+                        val selected = it.selectedCatalogFontId.takeIf { id -> snapshot.fonts.any { font -> font.id == id } }
+                            ?: snapshot.fonts.firstOrNull()?.id.orEmpty()
+                        it.copy(
+                            fontCatalog = snapshot.fonts,
+                            fontCatalogUrl = catalogUrl,
+                            selectedCatalogFontId = selected,
+                            notice = CompanionNotice.Success("Loaded ${snapshot.fonts.size} online fonts."),
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    setNotice(CompanionNotice.Error(error.message ?: "Online font catalog could not be loaded."))
                 }
         }
     }
@@ -912,6 +939,98 @@ class CompanionPresenter(
         }
     }
 
+
+    fun uploadFontFile(displayName: String, data: ByteArray) {
+        scope.launch {
+            val state = current
+            if (!state.isConnected) {
+                setNotice(CompanionNotice.Error("Connect to your Nano before uploading fonts."))
+                return@launch
+            }
+            if (!displayName.endsWith(".rfont4", ignoreCase = true)) {
+                setNotice(CompanionNotice.Error("Font files must use the .rfont4 extension."))
+                return@launch
+            }
+            val inferredSize = inferFontSize(displayName)
+            val family = inferFontFamily(displayName)
+            if (!ensureReaderReachable("uploading fonts")) return@launch
+            setNotice(CompanionNotice.Attention("Uploading $displayName..."))
+            runCatching {
+                withNanoApi {
+                    companionController.uploadFont(
+                        baseUrl = state.address,
+                        family = family,
+                        size = inferredSize,
+                        filename = displayName,
+                        data = data,
+                    )
+                }
+            }.onSuccess { snapshot ->
+                updateState {
+                    it.copy(
+                        settings = snapshot.settings,
+                        notice = CompanionNotice.Success("Uploaded $displayName as $family / $inferredSize."),
+                    )
+                }
+            }.onFailure { error ->
+                setNotice(CompanionNotice.Error(fontUploadError(error)))
+            }
+        }
+    }
+
+    fun installSelectedOnlineFont() {
+        scope.launch {
+            val state = current
+            if (!state.isConnected) {
+                setNotice(CompanionNotice.Error("Connect to your Nano before installing fonts."))
+                return@launch
+            }
+            val font = state.fontCatalog.firstOrNull { it.id == state.selectedCatalogFontId }
+                ?: state.fontCatalog.firstOrNull()
+            if (font == null) {
+                setNotice(CompanionNotice.Error("Load the online font list first."))
+                return@launch
+            }
+            val size = state.selectedCatalogFontSize
+            if (font.files[size].isNullOrBlank()) {
+                setNotice(CompanionNotice.Error("That font does not include the selected size."))
+                return@launch
+            }
+
+            setNotice(CompanionNotice.Attention("Downloading ${font.name} $size..."))
+            val catalogUrl = state.fontCatalogUrl.ifBlank { FONT_CATALOG_URLS.first() }
+            val fontFile = runCatching {
+                companionController.downloadFont(catalogUrl, font, size)
+            }.onFailure { error ->
+                setNotice(CompanionNotice.Error(error.message ?: "Font download failed."))
+            }.getOrNull() ?: return@launch
+
+            if (!ensureReaderReachable("installing fonts")) return@launch
+            setNotice(CompanionNotice.Attention("Installing ${font.name} $size..."))
+            runCatching {
+                withNanoApi {
+                    companionController.uploadFont(
+                        baseUrl = state.address,
+                        family = fontFile.family,
+                        size = fontFile.size,
+                        filename = fontFile.filename,
+                        data = fontFile.data,
+                    )
+                }
+            }.onSuccess { snapshot ->
+                updateState {
+                    it.copy(
+                        settings = snapshot.settings,
+                        selectedCatalogFontId = font.id,
+                        notice = CompanionNotice.Success("Installed ${font.name} $size."),
+                    )
+                }
+            }.onFailure { error ->
+                setNotice(CompanionNotice.Error(fontUploadError(error)))
+            }
+        }
+    }
+
     fun needsArticleFetch(draft: PendingUpload): Boolean = companionController.needsArticleFetch(draft)
 
     private fun clearDraftEditor(
@@ -1141,6 +1260,29 @@ class CompanionPresenter(
         }
     }
 
+    private fun fontUploadError(error: Throwable): String {
+        val message = error.message.orEmpty()
+        return if ("HTTP 404" in message) {
+            "Reader firmware does not support font upload yet. Flash this firmware build first."
+        } else {
+            message.ifBlank { "Font upload failed." }
+        }
+    }
+
+    private fun inferFontSize(filename: String): String {
+        val lower = filename.lowercase()
+        return when {
+            "small" in lower -> "small"
+            "medium" in lower -> "medium"
+            "large" in lower -> "large"
+            else -> "large"
+        }
+    }
+
+    private fun inferFontFamily(filename: String): String =
+        filename.substringBeforeLast('.').replace(Regex("[-_ ]?(small|medium|large)$", RegexOption.IGNORE_CASE), "")
+            .ifBlank { "Custom Font" }
+
     private fun currentRememberableNano(): RememberedNano? {
         return current.currentNano ?: nanoIdentity(nanoNetworkController.snapshot.value)
     }
@@ -1181,6 +1323,10 @@ class CompanionPresenter(
         val THEME_CATALOG_URLS = listOf(
             "https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/themes/index.json",
             "https://raw.githubusercontent.com/ReKylee/rsvpnano/main/themes/index.json",
+        )
+        val FONT_CATALOG_URLS = listOf(
+            "https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/src/fonts/index.json",
+            "https://raw.githubusercontent.com/ReKylee/rsvpnano/main/src/fonts/index.json",
         )
     }
 }

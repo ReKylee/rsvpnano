@@ -62,5 +62,10 @@ private fun RsvpNanoComposeApp(presenter: CompanionPresenter) {
         onSelectCatalogTheme = presenter::setSelectedCatalogThemeId,
         onInstallOnlineTheme = presenter::installSelectedOnlineTheme,
         onPickTheme = presenter::uploadThemeFile,
+        onRefreshFontCatalog = presenter::refreshFontCatalog,
+        onSelectCatalogFont = presenter::setSelectedCatalogFontId,
+        onSelectCatalogFontSize = presenter::setSelectedCatalogFontSize,
+        onInstallOnlineFont = presenter::installSelectedOnlineFont,
+        onPickFont = presenter::uploadFontFile,
     )
 }

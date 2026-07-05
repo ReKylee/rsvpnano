@@ -1,12 +1,11 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
-#include <vector>
 
-// Packed-bit cell grid shared by the standby screensavers. One bit per cell,
-// 32 cells per word. Pure (no Arduino, no display) so the Game-of-Life rule and
-// the bit packing can be unit tested on the host.
+#include "standby/PackedGrid.h"
+
 namespace standby {
 
 struct LifePoint {
@@ -14,24 +13,50 @@ struct LifePoint {
   int8_t y;
 };
 
-// Linear-congruential step; returns the new state and advances rng in place.
-uint32_t advanceRng(uint32_t &rng);
+class IncrementalLifeGrid {
+ public:
+  void reset(uint16_t columns, uint16_t rows);
+  void clear();
+  void setAliveAt(int x, int y, bool alive);
+  void stampPattern(const LifePoint* points, size_t pointCount, int originX, int originY);
+  void finishSeed();
 
-size_t packedWordCount(size_t cellCount);
-bool cellAlive(const std::vector<uint32_t> &cells, size_t index);
-void setCell(std::vector<uint32_t> &cells, size_t index, bool alive);
-void setCellAt(std::vector<uint32_t> &cells, uint16_t columns, uint16_t rows, int x, int y,
-               bool alive);
+  size_t step();
 
-// Clears a margin-padded rect then stamps a pattern, but only if the pattern
-// fits within the grid. No-op when out of bounds.
-void clearAndStampPattern(std::vector<uint32_t> &cells, uint16_t columns, uint16_t rows,
-                          const LifePoint *points, size_t pointCount, int originX, int originY,
-                          int width, int height);
+  PackedGridView liveCells() const { return viewOf(liveCells_, wordCount_); }
+  PackedGridView dirtyCells() const { return viewOf(dirtyCells_, wordCount_); }
+  size_t liveCount() const { return liveCount_; }
+  bool fullRedraw() const { return fullRedraw_; }
+  void clearFullRedraw() { fullRedraw_ = false; }
 
-// Advances one Conway's Game of Life generation on a toroidal grid: reads cur,
-// writes next (resized as needed). Returns the number of live cells in next.
-size_t lifeStep(const std::vector<uint32_t> &cur, std::vector<uint32_t> &next, uint16_t columns,
-                uint16_t rows);
+ private:
+  static constexpr uint8_t kAliveMask = 0x80;
+  static constexpr uint8_t kNeighborMask = 0x0F;
+
+  size_t index(uint16_t x, uint16_t y) const;
+  size_t wrappedIndex(int x, int y) const;
+  bool alive(size_t index) const;
+  uint8_t neighborCount(size_t index) const;
+  void setAliveBit(size_t index, bool isAlive);
+  void addNeighborDelta(size_t index, int8_t delta);
+  void markActive(size_t index);
+  void markDirty(size_t index);
+  void rebuildNeighborCounts();
+  void rebuildLiveCells();
+
+  uint16_t columns_ = 0;
+  uint16_t rows_ = 0;
+  size_t cellCount_ = 0;
+  size_t wordCount_ = 0;
+  size_t liveCount_ = 0;
+  size_t changeCount_ = 0;
+  bool fullRedraw_ = true;
+  std::array<uint8_t, kMaxStandbyCells> cells_{};       // bit 7 = alive, bits 0..3 = exact neighbor count 0..8
+  PackedGridStorage active_{};                          // cells that can possibly change this generation
+  PackedGridStorage nextActive_{};                      // neighbors of cells that changed this generation
+  PackedGridStorage dirtyCells_{};                      // cells whose visual state changed this generation
+  PackedGridStorage liveCells_{};                       // packed 1-bit grid consumed by renderer
+  std::array<uint16_t, kMaxStandbyCells> changes_{};     // changed cell indices for neighbor-count updates
+};
 
 }  // namespace standby

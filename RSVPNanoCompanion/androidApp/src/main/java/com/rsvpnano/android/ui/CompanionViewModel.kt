@@ -38,8 +38,11 @@ class CompanionViewModel(
     fun setDraftBody(value: String) = presenter.setDraftBody(value)
     fun setRssFeedDraft(value: String) = presenter.setRssFeedDraft(value)
     fun setSelectedCatalogThemeId(value: String) = presenter.setSelectedCatalogThemeId(value)
+    fun setSelectedCatalogFontId(value: String) = presenter.setSelectedCatalogFontId(value)
+    fun setSelectedCatalogFontSize(value: String) = presenter.setSelectedCatalogFontSize(value)
     fun refresh() = presenter.refresh()
     fun refreshThemeCatalog() = presenter.refreshThemeCatalog()
+    fun refreshFontCatalog() = presenter.refreshFontCatalog()
     fun connect() = presenter.connect()
     fun recheckConnectionAfterResume() = presenter.recheckConnectionAfterResume()
     fun recheckConnectionAfterNetworkChange() = presenter.recheckConnectionAfterNetworkChange()
@@ -63,7 +66,9 @@ class CompanionViewModel(
     fun setBookPosition(book: NanoBook, wordIndex: Int) = presenter.setBookPosition(book, wordIndex)
     fun uploadSelectedFile(displayName: String, data: ByteArray) = presenter.uploadSelectedFile(displayName, data)
     fun uploadThemeFile(displayName: String, data: ByteArray) = presenter.uploadThemeFile(displayName, data)
+    fun uploadFontFile(displayName: String, data: ByteArray) = presenter.uploadFontFile(displayName, data)
     fun installSelectedOnlineTheme() = presenter.installSelectedOnlineTheme()
+    fun installSelectedOnlineFont() = presenter.installSelectedOnlineFont()
     fun needsArticleFetch(draft: PendingUpload): Boolean = presenter.needsArticleFetch(draft)
 
     override fun onCleared() {

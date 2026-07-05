@@ -5,6 +5,7 @@ import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoThemeCatalogItem
+import com.rsvpnano.models.NanoFontCatalogItem
 import com.rsvpnano.models.NanoUploadResponse
 import com.rsvpnano.models.NanoWifiSettings
 
@@ -35,10 +36,22 @@ interface NanoClient {
         data: ByteArray,
         onProgress: ((sent: Long, total: Long) -> Unit)? = null,
     ): NanoUploadResponse = throw NanoClientError("Theme upload is not supported by this client.")
+    suspend fun uploadFont(
+        baseUrl: String,
+        family: String,
+        size: String,
+        name: String,
+        data: ByteArray,
+        onProgress: ((sent: Long, total: Long) -> Unit)? = null,
+    ): NanoUploadResponse = throw NanoClientError("Font upload is not supported by this client.")
     suspend fun fetchThemeCatalog(url: String): List<NanoThemeCatalogItem> =
         throw NanoClientError("Theme catalog download is not supported by this client.")
     suspend fun downloadTheme(url: String): ByteArray =
         throw NanoClientError("Theme download is not supported by this client.")
+    suspend fun fetchFontCatalog(url: String): List<NanoFontCatalogItem> =
+        throw NanoClientError("Font catalog download is not supported by this client.")
+    suspend fun downloadFont(url: String): ByteArray =
+        throw NanoClientError("Font download is not supported by this client.")
     suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse
     suspend fun setBookPosition(
         baseUrl: String,

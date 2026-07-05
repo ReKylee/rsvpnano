@@ -1,8 +1,6 @@
 #include "drivers/audio/es8311/Es8311.h"
 
 #include <esp_log.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 
 namespace BoardDrivers::Es8311 {
 namespace {
@@ -77,48 +75,14 @@ bool initI2s(Context &context) {
     return true;
   }
 
-  i2s_config_t config = {};
-  config.mode = static_cast<i2s_mode_t>(I2S_MODE_MASTER | I2S_MODE_TX);
-  config.sample_rate = context.sampleRateHz;
-  config.bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT;
-  config.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT;
-  config.communication_format = I2S_COMM_FORMAT_STAND_I2S;
-  config.intr_alloc_flags = 0;
-  config.dma_buf_count = 4;
-  config.dma_buf_len = 240;
-  config.use_apll = false;
-  config.tx_desc_auto_clear = true;
-  config.fixed_mclk = 0;
-  config.mclk_multiple = I2S_MCLK_MULTIPLE_256;
-
-  esp_err_t result = i2s_driver_install(context.i2sPort, &config, 0, nullptr);
-  if (result != ESP_OK) {
-    ESP_LOGW(kTag, "Failed to install I2S driver: %s", esp_err_to_name(result));
+  context.i2s.setPort(context.i2sPort);
+  context.i2s.setPins(context.bclkPin, context.wsPin, context.dataOutPin, -1, context.mclkPin);
+  if (!context.i2s.begin(I2S_MODE_STD, context.sampleRateHz, I2S_DATA_BIT_WIDTH_16BIT,
+                         I2S_SLOT_MODE_STEREO)) {
+    ESP_LOGW(kTag, "Failed to start I2S TX: %d", context.i2s.lastError());
     return false;
   }
 
-  i2s_pin_config_t pinConfig = {};
-  pinConfig.mck_io_num = context.mclkPin;
-  pinConfig.bck_io_num = context.bclkPin;
-  pinConfig.ws_io_num = context.wsPin;
-  pinConfig.data_out_num = context.dataOutPin;
-  pinConfig.data_in_num = I2S_PIN_NO_CHANGE;
-
-  result = i2s_set_pin(context.i2sPort, &pinConfig);
-  if (result != ESP_OK) {
-    ESP_LOGW(kTag, "Failed to set I2S pins: %s", esp_err_to_name(result));
-    return false;
-  }
-
-  result =
-      i2s_set_clk(context.i2sPort, context.sampleRateHz, I2S_BITS_PER_SAMPLE_16BIT,
-                  I2S_CHANNEL_STEREO);
-  if (result != ESP_OK) {
-    ESP_LOGW(kTag, "Failed to set I2S clock: %s", esp_err_to_name(result));
-    return false;
-  }
-
-  i2s_zero_dma_buffer(context.i2sPort);
   context.i2sInitialized = true;
   return true;
 }
@@ -254,14 +218,13 @@ bool recoverOutputPath(Context &context) {
     return false;
   }
 
-  i2s_stop(context.i2sPort);
-  const esp_err_t result = i2s_start(context.i2sPort);
-  if (result != ESP_OK) {
-    ESP_LOGW(kTag, "Failed to restart I2S TX: %s", esp_err_to_name(result));
+  context.i2s.end();
+  context.i2sInitialized = false;
+  if (!initI2s(context)) {
+    ESP_LOGW(kTag, "Failed to restart I2S TX");
     return false;
   }
 
-  i2s_zero_dma_buffer(context.i2sPort);
   return true;
 }
 
@@ -274,14 +237,12 @@ bool writeSamples(Context &context, const int16_t *samples, size_t sampleCount,
   const uint8_t *data = reinterpret_cast<const uint8_t *>(samples);
   const size_t totalSize = sampleCount * sizeof(int16_t);
   size_t totalWritten = 0;
+  context.i2s.setTimeout(timeoutMs);
 
   while (totalWritten < totalSize) {
-    size_t bytesWritten = 0;
-    const esp_err_t result =
-        i2s_write(context.i2sPort, data + totalWritten, totalSize - totalWritten, &bytesWritten,
-                  pdMS_TO_TICKS(timeoutMs));
-    if (result != ESP_OK || bytesWritten == 0) {
-      ESP_LOGW(kTag, "Sample write failed: %s", esp_err_to_name(result));
+    const size_t bytesWritten = context.i2s.write(data + totalWritten, totalSize - totalWritten);
+    if (bytesWritten == 0) {
+      ESP_LOGW(kTag, "Sample write failed: %d", context.i2s.lastError());
       return false;
     }
     totalWritten += bytesWritten;

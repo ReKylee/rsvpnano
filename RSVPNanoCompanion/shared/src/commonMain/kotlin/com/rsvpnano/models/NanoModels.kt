@@ -85,6 +85,29 @@ data class NanoTheme(
     val typeface: String = NanoSettingsSchema.TYPEFACE_STANDARD,
 )
 
+
+@Serializable
+data class NanoFontSize(
+    val id: String,
+    val name: String,
+    val available: Boolean = false,
+)
+
+@Serializable
+data class NanoFont(
+    val id: String,
+    val name: String,
+    val builtIn: Boolean = false,
+    val sizes: List<NanoFontSize> = emptyList(),
+)
+
+@Serializable
+data class NanoFontCatalogItem(
+    val id: String,
+    val name: String,
+    val files: Map<String, String> = emptyMap(),
+)
+
 @Serializable
 data class NanoThemeCatalogItem(
     val id: String,
@@ -102,6 +125,8 @@ data class NanoSettings(
     val typography: Typography,
     val themeCount: Int = 0,
     val themes: List<NanoTheme> = emptyList(),
+    val fontCount: Int = 0,
+    val fonts: List<NanoFont> = emptyList(),
     val limits: Limits? = null,
 ) {
     @Serializable
@@ -292,7 +317,7 @@ object NanoSettingsSchema {
     const val PACING_MS_MAX = 600
     const val PACING_MS_STEP = 50
     const val BRIGHTNESS_MIN = 0
-    const val BRIGHTNESS_MAX = 4
+    const val BRIGHTNESS_MAX = 19
     const val STANDBY_TIMER_NEVER = 0
     const val STANDBY_TIMER_1_MIN = 1
     const val STANDBY_TIMER_5_MIN = 2

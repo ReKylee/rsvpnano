@@ -7,7 +7,7 @@
 #include "board/Board.h"
 #include "board/BoardInput.h"
 #include "converter/EpubConverter.h"
-#include "display/DisplayManager.h"
+#include "display/UiRenderer.h"
 #include "input/Input.h"
 #include "storage/fs/SdDiagnostics.h"
 #include "storage/fs/StorageFiles.h"
@@ -25,7 +25,7 @@ constexpr size_t kSdChunkBytes = 4096;
 constexpr uint16_t kDisplayColorA = 0x0000;
 constexpr uint16_t kDisplayColorB = 0xFFFF;
 
-DisplayManager gDisplay;
+UiRenderer gDisplay;
 bool gDisplayReady = false;
 
 void showStatus(const String &title, const String &line1 = "", const String &line2 = "") {
@@ -190,9 +190,8 @@ bool beginAudio() { return Board::Audio::begin(); }
 bool beepAudio() { return Board::Audio::beep(); }
 
 bool startButtonHeld() {
-  const Input::ControlMask controls = Board::Input::currentControls();
-  return Input::hasControl(controls, Input::InputPrimary) ||
-         Input::hasControl(controls, Input::InputPower);
+  const Input::PressActions actions = Board::Input::currentActions();
+  return actions.shortPress != Input::ActionNone || actions.longPress != Input::ActionNone;
 }
 
 void waitForStartInput() {
@@ -209,7 +208,7 @@ void waitForStartInput() {
   while (true) {
     Input::Event event;
     if (Input::poll(event, millis()) && Input::isTouchEvent(event) &&
-        event.gesture == Input::Gesture::TouchStart) {
+        Input::hasAction(event.actions, Input::ActionTouchStart)) {
       break;
     }
 

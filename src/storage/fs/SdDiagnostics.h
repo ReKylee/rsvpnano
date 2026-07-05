@@ -14,11 +14,13 @@ namespace SdDiagnostics {
         bool articleFilesDirectory = false;
         bool configDirectory = false;
         bool themesDirectory = false;
+        bool fontsDirectory = false;
         bool writable = false;
         bool booksWritable = false;
         bool articlesWritable = false;
         bool configWritable = false;
         bool themesWritable = false;
+        bool fontsWritable = false;
         bool foldersRepaired = false;
         size_t bookCount = 0;
         size_t unsupportedCount = 0;

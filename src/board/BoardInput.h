@@ -10,7 +10,7 @@ namespace Board::Input {
     void end();
     void cancel();
     ::Input::ControlTiming controlTiming();
-    ::Input::ControlMask currentControls();
+    ::Input::PressActions currentActions();
     ::Input::TouchSurface touchSurface();
     ::Input::TouchTiming touchTiming();
     bool beginTouch();

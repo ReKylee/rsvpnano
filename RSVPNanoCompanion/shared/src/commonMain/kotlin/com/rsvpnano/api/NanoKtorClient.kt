@@ -6,6 +6,7 @@ import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoThemeCatalogItem
+import com.rsvpnano.models.NanoFontCatalogItem
 import com.rsvpnano.models.NanoUploadResponse
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.NanoWifiUpdate
@@ -153,6 +154,42 @@ class NanoKtorClient(
         return decodeDeviceResponse(response.status, body, NanoUploadResponse.serializer())
     }
 
+    override suspend fun uploadFont(
+        baseUrl: String,
+        family: String,
+        size: String,
+        name: String,
+        data: ByteArray,
+        onProgress: ((sent: Long, total: Long) -> Unit)?,
+    ): NanoUploadResponse {
+        val response = httpClient.post(
+            buildUrl(
+                baseUrl = baseUrl,
+                path = "api/fonts",
+                query = listOf("family" to family, "size" to size, "name" to name),
+            )
+        ) {
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append("file", data, headers = io.ktor.http.Headers.build {
+                            append(HttpHeaders.ContentDisposition, "form-data; name=\"file\"; filename=\"$name\"")
+                            append(HttpHeaders.ContentType, ContentType.Application.OctetStream.toString())
+                        })
+                    }
+                )
+            )
+            onProgress?.let { progress ->
+                onUpload { sent, total ->
+                    progress(sent, total ?: data.size.toLong())
+                }
+            }
+        }
+
+        val body = response.body<String>()
+        return decodeDeviceResponse(response.status, body, NanoUploadResponse.serializer())
+    }
+
     override suspend fun fetchThemeCatalog(url: String): List<NanoThemeCatalogItem> {
         val response = httpClient.get(url)
         if (!response.status.isSuccess()) {
@@ -165,6 +202,22 @@ class NanoKtorClient(
         val response = httpClient.get(url)
         if (!response.status.isSuccess()) {
             throw NanoClientError("Theme download returned HTTP ${response.status}")
+        }
+        return response.body()
+    }
+
+    override suspend fun fetchFontCatalog(url: String): List<NanoFontCatalogItem> {
+        val response = httpClient.get(url)
+        if (!response.status.isSuccess()) {
+            throw NanoClientError("Font catalog returned HTTP ${response.status}")
+        }
+        return json.decodeFromString(ListSerializer(NanoFontCatalogItem.serializer()), response.body<String>())
+    }
+
+    override suspend fun downloadFont(url: String): ByteArray {
+        val response = httpClient.get(url)
+        if (!response.status.isSuccess()) {
+            throw NanoClientError("Font download returned HTTP ${response.status}")
         }
         return response.body()
     }

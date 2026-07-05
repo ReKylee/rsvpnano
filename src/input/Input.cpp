@@ -10,9 +10,12 @@ namespace {
 
 struct ControlsState {
   bool initialized = false;
-  ControlMask stableControls = InputNone;
-  ControlMask candidateControls = InputNone;
-  ControlMask activeControls = InputNone;
+  ActionMask stableShortActions = ActionNone;
+  ActionMask stableLongActions = ActionNone;
+  ActionMask candidateShortActions = ActionNone;
+  ActionMask candidateLongActions = ActionNone;
+  ActionMask activeShortActions = ActionNone;
+  ActionMask activeLongActions = ActionNone;
   bool releasedEvent = false;
   uint32_t candidateSinceMs = 0;
   uint32_t pressStartedMs = 0;
@@ -23,6 +26,7 @@ struct TouchState {
   Board::UiOrientation orientation = Board::UiOrientation::Portrait;
   bool initialized = false;
   bool active = false;
+  bool holdEmitted = false;
   uint8_t emptySamples = 0;
   uint8_t consecutiveReadFailures = 0;
   uint32_t startedAtMs = 0;
@@ -47,20 +51,27 @@ TouchSurface gTouchSurface;
 TouchTiming gTouchTiming;
 TouchState gTouch;
 
-void resetControls(ControlMask controls, uint32_t nowMs) {
+bool anyAction(ActionMask shortActions, ActionMask longActions) {
+  return shortActions != ActionNone || longActions != ActionNone;
+}
+
+void resetControls(ActionMask shortActions, ActionMask longActions, uint32_t nowMs) {
   gControls.initialized = true;
-  gControls.stableControls = controls;
-  gControls.candidateControls = controls;
-  gControls.activeControls = InputNone;
+  gControls.stableShortActions = shortActions;
+  gControls.stableLongActions = longActions;
+  gControls.candidateShortActions = shortActions;
+  gControls.candidateLongActions = longActions;
+  gControls.activeShortActions = ActionNone;
+  gControls.activeLongActions = ActionNone;
   gControls.releasedEvent = false;
   gControls.candidateSinceMs = nowMs;
-  gControls.pressStartedMs = controls == InputNone ? 0 : nowMs;
+  gControls.pressStartedMs = anyAction(shortActions, longActions) ? nowMs : 0;
   gControls.lastPressDurationMs = 0;
 }
 
-void updateControls(ControlMask controls, uint32_t nowMs) {
+void updateControls(ActionMask shortActions, ActionMask longActions, uint32_t nowMs) {
   if (!gControls.initialized) {
-    resetControls(controls, nowMs);
+    resetControls(shortActions, longActions, nowMs);
     return;
   }
 
@@ -68,12 +79,14 @@ void updateControls(ControlMask controls, uint32_t nowMs) {
 
   {
     // Debounce the raw bitmask before changing the stable pressed controls.
-    if (controls != gControls.candidateControls) {
-      gControls.candidateControls = controls;
+    if (shortActions != gControls.candidateShortActions || longActions != gControls.candidateLongActions) {
+      gControls.candidateShortActions = shortActions;
+      gControls.candidateLongActions = longActions;
       gControls.candidateSinceMs = nowMs;
     }
 
-    if (gControls.candidateControls == gControls.stableControls) {
+    if (gControls.candidateShortActions == gControls.stableShortActions &&
+        gControls.candidateLongActions == gControls.stableLongActions) {
       return;
     }
 
@@ -82,57 +95,83 @@ void updateControls(ControlMask controls, uint32_t nowMs) {
     }
   }
 
-  const ControlMask previousControls = gControls.stableControls;
-  gControls.stableControls = gControls.candidateControls;
+  const ActionMask previousShortActions = gControls.stableShortActions;
+  const ActionMask previousLongActions = gControls.stableLongActions;
+  gControls.stableShortActions = gControls.candidateShortActions;
+  gControls.stableLongActions = gControls.candidateLongActions;
 
   {
     // Track the gesture lifetime for whichever controls became active together.
-    if (previousControls == InputNone && gControls.stableControls != InputNone) {
-      gControls.activeControls = gControls.stableControls;
+    if (!anyAction(previousShortActions, previousLongActions) &&
+        anyAction(gControls.stableShortActions, gControls.stableLongActions)) {
+      gControls.activeShortActions = gControls.stableShortActions;
+      gControls.activeLongActions = gControls.stableLongActions;
       gControls.pressStartedMs = nowMs;
       gControls.lastPressDurationMs = 0;
       return;
     }
 
-    if (previousControls != InputNone && gControls.stableControls == InputNone) {
+    if (anyAction(previousShortActions, previousLongActions) &&
+        !anyAction(gControls.stableShortActions, gControls.stableLongActions)) {
       gControls.releasedEvent = true;
       gControls.lastPressDurationMs = nowMs - gControls.pressStartedMs;
       return;
     }
 
-    if (previousControls != gControls.stableControls) {
-      gControls.activeControls = gControls.stableControls;
+    if (previousShortActions != gControls.stableShortActions ||
+        previousLongActions != gControls.stableLongActions) {
+      gControls.activeShortActions = gControls.stableShortActions;
+      gControls.activeLongActions = gControls.stableLongActions;
       gControls.pressStartedMs = nowMs;
       gControls.lastPressDurationMs = 0;
     }
   }
 }
 
-bool pollControlsEvent(ControlMask controls, uint32_t nowMs, Event &event) {
-  updateControls(controls, nowMs);
+bool pollControlsEvent(ActionMask shortActions, ActionMask longActions, uint32_t nowMs, Event &event) {
+  updateControls(shortActions, longActions, nowMs);
 
-  if (gControls.stableControls != InputNone && gControls.activeControls != InputNone &&
+  if (anyAction(gControls.stableShortActions, gControls.stableLongActions) &&
+      anyAction(gControls.activeShortActions, gControls.activeLongActions) &&
       nowMs - gControls.pressStartedMs >= gControlTiming.longPressMs) {
-    event = {gControls.activeControls, Gesture::LongPressed};
-    gControls.activeControls = InputNone;
+    const ActionMask actions = gControls.activeLongActions;
+    if (actions == ActionNone) {
+      gControls.activeShortActions = ActionNone;
+      gControls.activeLongActions = ActionNone;
+      return false;
+    }
+    event = {};
+    event.actions = actions;
+    gControls.activeShortActions = ActionNone;
+    gControls.activeLongActions = ActionNone;
     return true;
   }
 
-  if (gControls.releasedEvent && gControls.activeControls != InputNone &&
+  if (gControls.releasedEvent && anyAction(gControls.activeShortActions, gControls.activeLongActions) &&
       gControls.lastPressDurationMs <= gControlTiming.shortPressMaxMs) {
-    event = {gControls.activeControls, Gesture::ShortPressed};
-    gControls.activeControls = InputNone;
+    const ActionMask actions = gControls.activeShortActions;
+    if (actions == ActionNone) {
+      gControls.activeShortActions = ActionNone;
+      gControls.activeLongActions = ActionNone;
+      return false;
+    }
+    event = {};
+    event.actions = actions;
+    gControls.activeShortActions = ActionNone;
+    gControls.activeLongActions = ActionNone;
     return true;
   }
 
   if (gControls.releasedEvent) {
-    gControls.activeControls = InputNone;
+    gControls.activeShortActions = ActionNone;
+    gControls.activeLongActions = ActionNone;
   }
   return false;
 }
 
 void resetTouchState() {
   gTouch.active = false;
+  gTouch.holdEmitted = false;
   gTouch.emptySamples = 0;
   gTouch.startedAtMs = 0;
   gTouch.startX = 0;
@@ -144,9 +183,9 @@ void resetTouchState() {
 constexpr uint8_t orientationQuarterTurns(Board::UiOrientation orientation) {
   switch (orientation) {
     case Board::UiOrientation::Landscape:
-      return 1;
-    case Board::UiOrientation::LandscapeFlipped:
       return 3;
+    case Board::UiOrientation::LandscapeFlipped:
+      return 1;
     case Board::UiOrientation::PortraitFlipped:
       return 2;
     case Board::UiOrientation::Portrait:
@@ -196,53 +235,11 @@ TouchMotion touchMotion(uint32_t nowMs) {
           nowMs - gTouch.startedAtMs};
 }
 
-bool matchesReleaseGesture(Gesture gesture, TouchMotion motion) {
-  switch (gesture) {
-    case Gesture::Tapped:
-      return motion.durationMs <= gTouchTiming.tapMaxDurationMs &&
-             motion.dx <= gTouchTiming.tapMoveTolerancePx &&
-             motion.dy <= gTouchTiming.tapMoveTolerancePx;
-
-    case Gesture::TopEdgeSwiped:
-      return gTouch.startY <= gTouchTiming.edgeSizePx && gTouch.lastY > gTouch.startY &&
-             gTouch.lastY - gTouch.startY >= gTouchTiming.swipeMinDistancePx;
-
-    case Gesture::BottomEdgeSwiped:
-    {
-      const uint16_t logicalHeight = []() {
-        switch (gTouch.orientation) {
-          case Board::UiOrientation::Landscape:
-          case Board::UiOrientation::LandscapeFlipped:
-            return gTouchSurface.width;
-          case Board::UiOrientation::Portrait:
-          case Board::UiOrientation::PortraitFlipped:
-          default:
-            return gTouchSurface.height;
-        }
-      }();
-      return logicalHeight > gTouchTiming.edgeSizePx &&
-             gTouch.startY >= logicalHeight - gTouchTiming.edgeSizePx &&
-             gTouch.lastY < gTouch.startY &&
-             gTouch.startY - gTouch.lastY >= gTouchTiming.swipeMinDistancePx;
-    }
-
-    default:
-      return false;
-  }
-}
-
-Gesture touchReleaseGesture(uint32_t nowMs) {
+bool touchReleaseIsTap(uint32_t nowMs) {
   const TouchMotion motion = touchMotion(nowMs);
-  if (matchesReleaseGesture(Gesture::Tapped, motion)) {
-    return Gesture::Tapped;
-  }
-  if (matchesReleaseGesture(Gesture::TopEdgeSwiped, motion)) {
-    return Gesture::TopEdgeSwiped;
-  }
-  if (matchesReleaseGesture(Gesture::BottomEdgeSwiped, motion)) {
-    return Gesture::BottomEdgeSwiped;
-  }
-  return Gesture::TouchEnd;
+  return motion.durationMs <= gTouchTiming.tapMaxDurationMs &&
+         motion.dx <= gTouchTiming.tapMoveTolerancePx &&
+         motion.dy <= gTouchTiming.tapMoveTolerancePx;
 }
 
 bool releaseTouch(uint32_t nowMs, Event &event) {
@@ -255,10 +252,16 @@ bool releaseTouch(uint32_t nowMs, Event &event) {
     return false;
   }
 
-  const Gesture gesture = touchReleaseGesture(nowMs);
+  const bool tapped = touchReleaseIsTap(nowMs);
   gTouch.active = false;
   gTouch.emptySamples = 0;
-  event = {InputTouch, gesture, gTouch.lastX, gTouch.lastY};
+  event = {};
+  event.x = gTouch.lastX;
+  event.y = gTouch.lastY;
+  event.actions = ActionTouchRelease;
+  if (tapped) {
+    event.actions |= ActionTap;
+  }
   return true;
 }
 
@@ -273,18 +276,31 @@ bool pollTouchContact(const TouchContact &contact, uint32_t nowMs, Event &event)
 
   if (!gTouch.active) {
     gTouch.active = true;
+    gTouch.holdEmitted = false;
     gTouch.startedAtMs = nowMs;
     gTouch.startX = mapped.x;
     gTouch.startY = mapped.y;
     gTouch.lastX = mapped.x;
     gTouch.lastY = mapped.y;
-    event = {InputTouch, Gesture::TouchStart, mapped.x, mapped.y};
+    event = {};
+    event.x = mapped.x;
+    event.y = mapped.y;
+    event.actions = ActionTouchStart;
     return true;
   }
 
   gTouch.lastX = mapped.x;
   gTouch.lastY = mapped.y;
-  event = {InputTouch, Gesture::TouchMove, mapped.x, mapped.y};
+  event = {};
+  event.x = mapped.x;
+  event.y = mapped.y;
+  event.actions = ActionTouchMove;
+  const TouchMotion motion = touchMotion(nowMs);
+  if (!gTouch.holdEmitted && motion.durationMs >= gTouchTiming.holdMs &&
+      motion.dx <= gTouchTiming.tapMoveTolerancePx && motion.dy <= gTouchTiming.tapMoveTolerancePx) {
+    gTouch.holdEmitted = true;
+    event.actions |= ActionTouchHold;
+  }
   return true;
 }
 
@@ -377,7 +393,8 @@ bool begin() {
 
   const uint32_t nowMs = millis();
   gControlTiming = Board::Input::controlTiming();
-  resetControls(Board::Input::currentControls(), nowMs);
+  const PressActions actions = Board::Input::currentActions();
+  resetControls(actions.shortPress, actions.longPress, nowMs);
 
   gTouchSurface = Board::Input::touchSurface();
   gTouchTiming = Board::Input::touchTiming();
@@ -393,7 +410,8 @@ void end() {
 
 void cancel() {
   const uint32_t nowMs = millis();
-  resetControls(Board::Input::currentControls(), nowMs);
+  const PressActions actions = Board::Input::currentActions();
+  resetControls(actions.shortPress, actions.longPress, nowMs);
   resetTouchState();
   gTouch.initialized = false;
   Board::Input::cancel();
@@ -402,8 +420,8 @@ void cancel() {
 bool poll(Event &event, uint32_t nowMs) {
   event = {};
 
-  const ControlMask controls = Board::Input::currentControls();
-  if (pollControlsEvent(controls, nowMs, event)) {
+  const PressActions actions = Board::Input::currentActions();
+  if (pollControlsEvent(actions.shortPress, actions.longPress, nowMs, event)) {
     return true;
   }
 

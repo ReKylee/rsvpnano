@@ -94,6 +94,11 @@ fun SettingsTab(
     onSelectCatalogTheme: (String) -> Unit,
     onInstallOnlineTheme: () -> Unit,
     onUploadTheme: () -> Unit,
+    onRefreshFontCatalog: () -> Unit,
+    onSelectCatalogFont: (String) -> Unit,
+    onSelectCatalogFontSize: (String) -> Unit,
+    onInstallOnlineFont: () -> Unit,
+    onUploadFont: () -> Unit,
 ) {
     PullRefreshBox(
         isRefreshing = uiState.isRefreshing,
@@ -405,13 +410,52 @@ fun SettingsTab(
                         ChoiceRow(
                             label = "Typeface",
                             selected = settings.typography.typeface,
-                            options = listOf(
-                                NanoSettingsSchema.TYPEFACE_STANDARD to "Standard",
-                                NanoSettingsSchema.TYPEFACE_ATKINSON to "Atkinson",
-                                NanoSettingsSchema.TYPEFACE_OPEN_DYSLEXIC to "OpenDyslexic",
-                            ),
+                            options = settings.fonts.ifEmpty {
+                                listOf(com.rsvpnano.models.NanoFont(NanoSettingsSchema.TYPEFACE_STANDARD, "Literata", builtIn = true))
+                            }.map { font -> font.id to font.name },
                             onSelected = { typeface -> onUpdateSettings { it.withTypeface(typeface) } },
                         )
+                        HorizontalDivider()
+                        Text(text = "Font library", style = MaterialTheme.typography.labelLarge)
+                        if (uiState.fontCatalog.isEmpty()) {
+                            FilledTonalButton(onClick = onRefreshFontCatalog) {
+                                Icon(imageVector = Icons.Outlined.Sync, contentDescription = null)
+                                Text(text = "Load online fonts")
+                            }
+                        } else {
+                            val selectedFont = uiState.fontCatalog.firstOrNull { it.id == uiState.selectedCatalogFontId }
+                                ?: uiState.fontCatalog.firstOrNull()
+                            ChoiceRow(
+                                label = "Online font",
+                                selected = uiState.selectedCatalogFontId,
+                                options = uiState.fontCatalog.map { font -> font.id to font.name },
+                                onSelected = onSelectCatalogFont,
+                            )
+                            ChoiceRow(
+                                label = "Online size",
+                                selected = uiState.selectedCatalogFontSize,
+                                options = listOf("large" to "Large", "medium" to "Medium", "small" to "Small")
+                                    .filter { (size, _) -> selectedFont?.files?.containsKey(size) ?: true },
+                                onSelected = onSelectCatalogFontSize,
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilledTonalButton(
+                                onClick = onInstallOnlineFont,
+                                enabled = uiState.fontCatalog.isNotEmpty(),
+                            ) {
+                                Icon(imageVector = Icons.Outlined.CloudUpload, contentDescription = null)
+                                Text(text = "Install font")
+                            }
+                            TextButton(onClick = onRefreshFontCatalog) {
+                                Icon(imageVector = Icons.Outlined.Sync, contentDescription = null)
+                                Text(text = "Refresh")
+                            }
+                        }
+                        FilledTonalButton(onClick = onUploadFont) {
+                            Icon(imageVector = Icons.Outlined.UploadFile, contentDescription = null)
+                            Text(text = "Upload .rfont4")
+                        }
                         SwitchRow(
                             label = "Focus highlight",
                             description = "Highlights the current word's focus point.",

@@ -8,7 +8,9 @@
 #include <vector>
 
 #include "display/ThemeStore.h"
-#include "settings/PreferenceKeys.h"
+#include "fonts/FontCatalog.h"
+#include "fonts/RFont4Format.h"
+#include "settings/PreferenceSpecs.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 #include "storage/index/IndexedBook.h"
@@ -17,9 +19,7 @@
 
 namespace {
 
-// Preference keys + NVS namespace are defined once in settings/PreferenceKeys.h
-// and shared with the device UI; pull them in so call sites are unchanged.
-using namespace settings;
+namespace pref = settings::prefs;
 
 constexpr const char *kMdnsName = "rsvp-nano";
 constexpr const char *kRssConfigPath = "/config/rss.conf";
@@ -27,6 +27,7 @@ constexpr size_t kMaxMetadataLineChars = 160;
 constexpr size_t kMaxSettingsPatchBytes = 8192;
 constexpr size_t kMaxRssFeedsPatchBytes = 4096;
 constexpr size_t kMaxThemeUploadBytes = 4096;
+constexpr size_t kMaxFontUploadBytes = 2UL * 1024UL * 1024UL;
 constexpr size_t kMaxRssFeeds = 24;
 constexpr uint16_t kDefaultWpm = 300;
 constexpr uint16_t kMinWpm = 10;
@@ -39,7 +40,6 @@ constexpr uint8_t kMaxHandedness = 1;
 constexpr uint8_t kMaxFooterMetric = 2;
 constexpr uint8_t kMaxBatteryLabel = 2;
 constexpr uint8_t kMaxReaderFontSize = 2;
-constexpr uint8_t kMaxReaderTypeface = 2;
 constexpr uint8_t kMaxPauseMode = 1;
 constexpr uint16_t kDefaultPacingDelayMs = 200;
 constexpr uint16_t kMaxPacingDelayMs = 600;
@@ -63,6 +63,17 @@ bool ensureLibraryDirectories() {
 
 bool ensureThemeDirectory() {
   return StorageFiles::ensureDirectory(StoragePaths::kThemesPath, "sync");
+}
+
+bool ensureFontDirectory() {
+  return StorageFiles::ensureDirectory(StoragePaths::kFontsPath, "sync");
+}
+
+bool ensureFontFamilyDirectory(const String &family) {
+  if (!ensureFontDirectory()) {
+    return false;
+  }
+  return StorageFiles::ensureDirectory((String(StoragePaths::kFontsPath) + "/" + family).c_str(), "sync");
 }
 
 String readSmallTextFile(const String &path) {
@@ -183,6 +194,14 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <div class="row"><button id="installOnlineThemeButton">Install online theme</button></div>
 <label>Theme file</label><input id="themeFileInput" type="file" accept=".rtheme">
 <div class="row"><button id="uploadThemeButton">Upload theme file</button></div>
+<hr>
+<label>Online font</label><select id="onlineFontId"></select>
+<label>Online font size</label><select id="onlineFontSize"><option value="large">Large</option><option value="medium">Medium</option><option value="small">Small</option></select>
+<div class="row"><button id="installOnlineFontButton">Install online font size</button></div>
+<label>Font family</label><input id="fontFamilyName" placeholder="Font folder name">
+<label>Font size</label><select id="fontUploadSize"><option value="large">Large</option><option value="medium">Medium</option><option value="small">Small</option></select>
+<label>Font file</label><input id="fontFileInput" type="file" accept=".rfont4">
+<div class="row"><button id="uploadFontButton">Upload font file</button></div>
 <label>Brightness <span id="brightnessValue"></span></label><input id="brightnessIndex" type="range" min="0" max="19">
 <label>Reader hand</label><select id="handedness"><option value="right">Right</option><option value="left">Left</option></select>
 <label>Reader controls</label><select id="readerControls"><option value="standard">Standard</option><option value="rewind_top_right">Rewind top-right</option></select>
@@ -234,8 +253,9 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 </section>
 </main>
 <script>
-const $=id=>document.getElementById(id);let settings=null;let themeCatalog=[];let themeCatalogUrl='';
+const $=id=>document.getElementById(id);let settings=null;let themeCatalog=[];let themeCatalogUrl='';let fontCatalog=[];let fontCatalogUrl='';
 const THEME_CATALOG_URLS=['https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/themes/index.json','https://raw.githubusercontent.com/ReKylee/rsvpnano/main/themes/index.json'];
+const FONT_CATALOG_URLS=['https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/src/fonts/index.json','https://raw.githubusercontent.com/ReKylee/rsvpnano/main/src/fonts/index.json'];
 function status(msg){$('status').textContent=msg}
 async function api(path,opts){const r=await fetch(path,opts);const t=await r.text();let j={};try{j=t?JSON.parse(t):{}}catch(e){throw new Error(t||'Bad response')}if(!r.ok||j.ok===false)throw new Error(j.error||r.statusText);return j}
 function bytes(n){return n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB'}
@@ -252,15 +272,22 @@ async function uploadThemeBlob(blob,name){const fd=new FormData();fd.append('fil
 async function uploadPickedTheme(){const f=$('themeFileInput').files[0];if(!f){status('Choose a theme file first.');return}try{await uploadThemeBlob(f,f.name);$('themeFileInput').value='';await loadSettings();status('Uploaded theme '+f.name)}catch(e){status('Theme upload failed: '+e.message)}}
 async function loadThemeCatalog(){for(const url of THEME_CATALOG_URLS){try{themeCatalog=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Catalog unavailable');return r.json()});themeCatalogUrl=url;$('onlineThemeId').innerHTML=themeCatalog.map(t=>`<option value="${html(t.id)}">${html(t.name)}</option>`).join('');return}catch(e){}}$('onlineThemeId').innerHTML='<option value="">Catalog unavailable</option>'}
 async function installOnlineTheme(){const id=val('onlineThemeId');const theme=themeCatalog.find(t=>t.id===id);if(!theme){status('Choose an online theme first.');return}try{const url=new URL(theme.file,themeCatalogUrl||THEME_CATALOG_URLS[0]).toString();const blob=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Theme unavailable');return r.blob()});await uploadThemeBlob(blob,theme.file);settings=await api('/api/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({display:{themeId:theme.id}})});await loadSettings();status('Installed '+theme.name)}catch(e){status('Online theme install failed: '+e.message)}}
+function fontFamilyFromName(name){return safeName(String(name||'font').replace(/\.rfont4$/i,'').replace(/[-_ ]?(large|medium|small)$/i,''))||'font'}
+async function uploadFontBlob(blob,family,size,name){const fd=new FormData();fd.append('file',blob,name||size+'.rfont4');await api('/api/fonts?family='+encodeURIComponent(family)+'&size='+encodeURIComponent(size)+'&name='+encodeURIComponent(name||size+'.rfont4'),{method:'POST',body:fd})}
+async function uploadPickedFont(){const f=$('fontFileInput').files[0];if(!f){status('Choose a font file first.');return}const family=$('fontFamilyName').value.trim()||fontFamilyFromName(f.name);const size=val('fontUploadSize');try{await uploadFontBlob(f,family,size,f.name);$('fontFileInput').value='';$('fontFamilyName').value='';await loadSettings();status('Uploaded '+family+' '+size)}catch(e){status('Font upload failed: '+e.message)}}
+async function loadFontCatalog(){for(const url of FONT_CATALOG_URLS){try{fontCatalog=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Catalog unavailable');return r.json()});fontCatalogUrl=url;$('onlineFontId').innerHTML=fontCatalog.map(f=>`<option value="${html(f.id)}">${html(f.name)}</option>`).join('');return}catch(e){}}$('onlineFontId').innerHTML='<option value="">Catalog unavailable</option>'}
+function onlineFontFile(font,size){if(font.files&&font.files[size])return font.files[size];return font.file||''}
+async function installOnlineFont(){const id=val('onlineFontId');const size=val('onlineFontSize');const font=fontCatalog.find(f=>f.id===id);if(!font){status('Choose an online font first.');return}const file=onlineFontFile(font,size);if(!file){status('This online font is missing '+size+'.');return}try{const url=new URL(file,fontCatalogUrl||FONT_CATALOG_URLS[0]).toString();const blob=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Font unavailable');return r.blob()});await uploadFontBlob(blob,font.name||font.id,size,file.split('/').pop()||size+'.rfont4');await loadSettings();status('Installed '+(font.name||font.id)+' '+size)}catch(e){status('Online font install failed: '+e.message)}}
 async function syncArticle(){const f=articleFile();if(!$('articleBody').value.trim()){status('Paste article text first.');return}try{await uploadBlob(f.blob,f.name,'article');localStorage.removeItem('rsvpArticleDraft');await refresh();status('Synced '+f.name)}catch(e){status('Article sync failed: '+e.message)}}
 function saveDraft(){localStorage.setItem('rsvpArticleDraft',JSON.stringify({title:$('articleTitle').value,author:$('articleAuthor').value,body:$('articleBody').value}));status('Draft saved in this browser.')}
 function loadDraft(){try{const d=JSON.parse(localStorage.getItem('rsvpArticleDraft')||'{}');$('articleTitle').value=d.title||'';$('articleAuthor').value=d.author||'';$('articleBody').value=d.body||''}catch(e){}}
 function val(id){const e=$(id);return e.type==='checkbox'?e.checked:e.value}
 function setVal(id,v){const e=$(id);if(e.type==='checkbox')e.checked=!!v;else e.value=v}
 function setThemeOptions(){const themes=(settings&&settings.themes)||[];$('themeId').innerHTML=themes.map(t=>`<option value="${html(t.id)}">${html(t.name)}</option>`).join('')||'<option value="default">Default</option>'}
+function setFontOptions(){const fonts=(settings&&settings.fonts)||[];$('typeface').innerHTML=fonts.map(f=>`<option value="${html(f.id)}">${html(f.name)}</option>`).join('')||'<option value="literata">Literata</option>'}
 function snapWpm(v){v=Math.max(10,Math.min(1000,Math.round(+v||300)));return v<=100?Math.max(10,Math.min(100,Math.round(v/10)*10)):Math.min(1000,100+Math.round((v-100)/25)*25)}
 function updateLabels(){['wpm','longWordMs','complexWordMs','punctuationMs','brightnessIndex','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>{const l=$(id+'Value')||$(id.replace('Index','')+'Value');if(l)l.textContent=id==='brightnessIndex'?(5+(+$(id).value*5))+'%':$(id).value+(id==='wpm'?' WPM':id.includes('Ms')?' ms':'')})}
-async function loadSettings(){try{settings=await api('/api/settings');setThemeOptions();if(!themeCatalog.length)loadThemeCatalog();setVal('readerMode',settings.reading.readerMode);setVal('pauseMode',settings.reading.pauseMode);setVal('wpm',snapWpm(settings.reading.wpm));setVal('longWordMs',settings.reading.pacing.longWordMs);setVal('complexWordMs',settings.reading.pacing.complexWordMs);setVal('punctuationMs',settings.reading.pacing.punctuationMs);setVal('themeId',settings.display.themeId||'default');setVal('brightnessIndex',settings.display.brightnessIndex);setVal('handedness',settings.display.handedness);setVal('readerControls',settings.display.readerControls||'standard');setVal('footerMetric',settings.display.footerMetric);setVal('batteryLabel',settings.display.batteryLabel);setVal('readingBattery',settings.display.readingBattery);setVal('readingChapter',settings.display.readingChapter);setVal('readingProgress',settings.display.readingProgress);setVal('typeface',settings.typography.typeface);setVal('fontSizeIndex',settings.display.fontSizeIndex);setVal('tracking',settings.typography.tracking);setVal('anchorPercent',settings.typography.anchorPercent);setVal('guideWidth',settings.typography.guideWidth);setVal('guideGap',settings.typography.guideGap);setVal('focusHighlight',settings.typography.focusHighlight);setVal('phantomWords',settings.display.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
+async function loadSettings(){try{settings=await api('/api/settings');setThemeOptions();setFontOptions();if(!themeCatalog.length)loadThemeCatalog();if(!fontCatalog.length)loadFontCatalog();setVal('readerMode',settings.reading.readerMode);setVal('pauseMode',settings.reading.pauseMode);setVal('wpm',snapWpm(settings.reading.wpm));setVal('longWordMs',settings.reading.pacing.longWordMs);setVal('complexWordMs',settings.reading.pacing.complexWordMs);setVal('punctuationMs',settings.reading.pacing.punctuationMs);setVal('themeId',settings.display.themeId||'default');setVal('brightnessIndex',settings.display.brightnessIndex);setVal('handedness',settings.display.handedness);setVal('readerControls',settings.display.readerControls||'standard');setVal('footerMetric',settings.display.footerMetric);setVal('batteryLabel',settings.display.batteryLabel);setVal('readingBattery',settings.display.readingBattery);setVal('readingChapter',settings.display.readingChapter);setVal('readingProgress',settings.display.readingProgress);setVal('typeface',settings.typography.typeface);setVal('fontSizeIndex',settings.display.fontSizeIndex);setVal('tracking',settings.typography.tracking);setVal('anchorPercent',settings.typography.anchorPercent);setVal('guideWidth',settings.typography.guideWidth);setVal('guideGap',settings.typography.guideGap);setVal('focusHighlight',settings.typography.focusHighlight);setVal('phantomWords',settings.display.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
 async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const payload={reading:{wpm:+val('wpm'),readerMode:val('readerMode'),pauseMode:val('pauseMode'),pacing:{longWordMs:+val('longWordMs'),complexWordMs:+val('complexWordMs'),punctuationMs:+val('punctuationMs')}},display:{themeId:val('themeId'),brightnessIndex:+val('brightnessIndex'),handedness:val('handedness'),readerControls:val('readerControls'),footerMetric:val('footerMetric'),batteryLabel:val('batteryLabel'),readingBattery:val('readingBattery'),readingChapter:val('readingChapter'),readingProgress:val('readingProgress'),phantomWords:val('phantomWords'),fontSizeIndex:+val('fontSizeIndex')},typography:{typeface:val('typeface'),focusHighlight:val('focusHighlight'),tracking:+val('tracking'),anchorPercent:+val('anchorPercent'),guideWidth:+val('guideWidth'),guideGap:+val('guideGap')}};try{settings=await api('/api/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});status('Settings saved. Exit sync mode to apply all reader changes.')}catch(e){status('Settings save failed: '+e.message)}}
 async function loadWifi(){try{const w=await api('/api/wifi');$('wifiSsid').value=w.ssid||'';$('wifiPassword').value='';$('wifiCurrent').textContent=w.configured?'Saved network: '+w.ssid:'No home Wi-Fi saved.'}catch(e){status('Wi-Fi load failed: '+e.message)}}
 async function saveWifi(){const ssid=$('wifiSsid').value.trim();if(!ssid){status('Enter a Wi-Fi SSID first.');return}try{const w=await api('/api/wifi',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password:$('wifiPassword').value})});$('wifiPassword').value='';$('wifiCurrent').textContent='Saved network: '+w.ssid;status('Wi-Fi saved for RSS and OTA.')}catch(e){status('Wi-Fi save failed: '+e.message)}}
@@ -270,7 +297,7 @@ async function saveRss(){const feeds=$('rssFeeds').value.split(/\n+/).map(s=>s.t
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.tab).classList.add('active');if(b.dataset.tab==='settings'){loadSettings();loadWifi()}if(b.dataset.tab==='rss')loadRss()});
 $('wpm').oninput=()=>{setVal('wpm',snapWpm(val('wpm')));updateLabels()};
 ['longWordMs','complexWordMs','punctuationMs','brightnessIndex','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>$(id).oninput=updateLabels);
-$('refreshBooksButton').onclick=refresh;$('refreshArticlesButton').onclick=refresh;$('uploadBookButton').onclick=()=>uploadPicked('bookFileInput','book');$('uploadArticleButton').onclick=()=>uploadPicked('articleFileInput','article');$('uploadThemeButton').onclick=uploadPickedTheme;$('installOnlineThemeButton').onclick=installOnlineTheme;$('syncArticleButton').onclick=syncArticle;$('saveDraftButton').onclick=saveDraft;$('saveSettingsButton').onclick=saveSettings;$('saveWifiButton').onclick=saveWifi;$('forgetWifiButton').onclick=forgetWifi;$('saveRssButton').onclick=saveRss;$('reloadRssButton').onclick=loadRss;
+$('refreshBooksButton').onclick=refresh;$('refreshArticlesButton').onclick=refresh;$('uploadBookButton').onclick=()=>uploadPicked('bookFileInput','book');$('uploadArticleButton').onclick=()=>uploadPicked('articleFileInput','article');$('uploadThemeButton').onclick=uploadPickedTheme;$('installOnlineThemeButton').onclick=installOnlineTheme;$('uploadFontButton').onclick=uploadPickedFont;$('installOnlineFontButton').onclick=installOnlineFont;$('syncArticleButton').onclick=syncArticle;$('saveDraftButton').onclick=saveDraft;$('saveSettingsButton').onclick=saveSettings;$('saveWifiButton').onclick=saveWifi;$('forgetWifiButton').onclick=forgetWifi;$('saveRssButton').onclick=saveRss;$('reloadRssButton').onclick=loadRss;
 loadDraft();refresh();
 </script>
 </body>
@@ -593,7 +620,7 @@ bool CompanionSyncManager::begin(const Config &config) {
   pairingCode_ = String(static_cast<uint32_t>(esp_random()) % 900000UL + 100000UL);
   statusLine1_ = "Starting sync";
   statusLine2_ = "Preparing Wi-Fi";
-  preferences_.begin(kPrefsNamespace, false);
+  preferences_.begin(settings::kPrefsNamespace, false);
 
   const bool networkReady = startAccessPoint();
   if (!networkReady) {
@@ -731,6 +758,18 @@ void CompanionSyncManager::handleThemeUploadStatic() {
   }
 }
 
+void CompanionSyncManager::handleFontsStatic() {
+  if (instance_ != nullptr) {
+    instance_->handleFonts();
+  }
+}
+
+void CompanionSyncManager::handleFontUploadStatic() {
+  if (instance_ != nullptr) {
+    instance_->handleFontUpload();
+  }
+}
+
 void CompanionSyncManager::handleNotFoundStatic() {
   if (instance_ != nullptr) {
     instance_->handleNotFound();
@@ -761,6 +800,7 @@ bool CompanionSyncManager::startServer() {
   server_.on("/api/books", HTTP_POST, handleBooksStatic, handleBookUploadStatic);
   server_.on("/api/books/position", HTTP_PATCH, handleBookPositionStatic);
   server_.on("/api/themes", HTTP_POST, handleThemesStatic, handleThemeUploadStatic);
+  server_.on("/api/fonts", HTTP_POST, handleFontsStatic, handleFontUploadStatic);
   server_.on("/api/settings", HTTP_GET, handleSettingsStatic);
   server_.on("/api/settings", HTTP_PATCH, handleSettingsStatic);
   server_.on("/api/settings", HTTP_PUT, handleSettingsStatic);
@@ -911,8 +951,8 @@ void CompanionSyncManager::handleWifi() {
   }
 
   if (server_.method() == HTTP_DELETE) {
-    preferences_.remove(kPrefWifiSsid);
-    preferences_.remove(kPrefWifiPass);
+    preferences_.remove(pref::WifiSsid::key());
+    preferences_.remove(pref::WifiPassword::key());
     statusLine1_ = "Wi-Fi cleared";
     statusLine2_ = "";
     server_.send(200, "application/json", wifiJson());
@@ -927,7 +967,7 @@ void CompanionSyncManager::handleWifi() {
   }
 
   statusLine1_ = "Wi-Fi saved";
-  statusLine2_ = preferences_.getString(kPrefWifiSsid, "");
+  statusLine2_ = preferences_.getString(pref::WifiSsid::key(), "");
   server_.send(200, "application/json", wifiJson());
 }
 
@@ -970,7 +1010,8 @@ void CompanionSyncManager::handleThemes() {
 
   if (!uploadError_.isEmpty()) {
     Board::Storage::filesystem().remove(uploadTmpPath_);
-    server_.send(400, "application/json",
+    const int status = uploadError_.indexOf("already exists") >= 0 ? 409 : 400;
+    server_.send(status, "application/json",
                  String("{\"ok\":false,\"error\":\"") + jsonEscape(uploadError_) + "\"}");
     uploadError_ = "";
     uploadTmpPath_ = "";
@@ -1008,6 +1049,14 @@ void CompanionSyncManager::handleThemes() {
     return;
   }
 
+  if (StorageFiles::fileExists(uploadFinalPath_)) {
+    Board::Storage::filesystem().remove(uploadTmpPath_);
+    uploadTmpPath_ = "";
+    uploadFinalPath_ = "";
+    server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Theme already exists\"}");
+    return;
+  }
+
   if (!replaceUploadedFile(uploadTmpPath_, uploadFinalPath_)) {
     Board::Storage::filesystem().remove(uploadTmpPath_);
     uploadTmpPath_ = "";
@@ -1024,6 +1073,170 @@ void CompanionSyncManager::handleThemes() {
                    "\",\"id\":\"" + jsonEscape(id) + "\"}");
   uploadTmpPath_ = "";
   uploadFinalPath_ = "";
+}
+
+
+void CompanionSyncManager::handleFonts() {
+  if (uploadFile_) {
+    uploadFile_.close();
+  }
+
+  if (!uploadError_.isEmpty()) {
+    Board::Storage::filesystem().remove(uploadTmpPath_);
+    const int status = uploadError_.indexOf("already exists") >= 0 ? 409 : 400;
+    server_.send(status, "application/json",
+                 String("{\"ok\":false,\"error\":\"") + jsonEscape(uploadError_) + "\"}");
+    uploadError_ = "";
+    uploadTmpPath_ = "";
+    uploadFinalPath_ = "";
+    return;
+  }
+
+  if (uploadTmpPath_.isEmpty() || uploadFinalPath_.isEmpty()) {
+    server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing font upload\"}");
+    return;
+  }
+
+  File tmpFile = Board::Storage::filesystem().open(uploadTmpPath_, FILE_READ);
+  const size_t uploadSize = tmpFile ? static_cast<size_t>(tmpFile.size()) : 0;
+  if (tmpFile) {
+    tmpFile.close();
+  }
+  if (uploadSize == 0 || uploadSize > kMaxFontUploadBytes) {
+    Board::Storage::filesystem().remove(uploadTmpPath_);
+    uploadTmpPath_ = "";
+    uploadFinalPath_ = "";
+    server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid font size\"}");
+    return;
+  }
+
+  String error;
+  if (!FontCatalog::validateFontFile(uploadTmpPath_, error)) {
+    Board::Storage::filesystem().remove(uploadTmpPath_);
+    uploadTmpPath_ = "";
+    uploadFinalPath_ = "";
+    server_.send(400, "application/json",
+                 String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
+    return;
+  }
+
+  if (StorageFiles::fileExists(uploadFinalPath_)) {
+    Board::Storage::filesystem().remove(uploadTmpPath_);
+    uploadTmpPath_ = "";
+    uploadFinalPath_ = "";
+    server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Font size already exists\"}");
+    return;
+  }
+
+  if (!replaceUploadedFile(uploadTmpPath_, uploadFinalPath_)) {
+    Board::Storage::filesystem().remove(uploadTmpPath_);
+    uploadTmpPath_ = "";
+    uploadFinalPath_ = "";
+    server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Font save failed\"}");
+    return;
+  }
+
+  statusLine1_ = "Font received";
+  statusLine2_ = uploadFinalPath_;
+  Serial.printf("[sync] font ready %s\n", uploadFinalPath_.c_str());
+  server_.send(201, "application/json",
+               String("{\"ok\":true,\"path\":\"") + jsonEscape(uploadFinalPath_) + "\"}");
+  uploadTmpPath_ = "";
+  uploadFinalPath_ = "";
+}
+
+void CompanionSyncManager::handleFontUpload() {
+  HTTPUpload &upload = server_.upload();
+
+  if (upload.status == UPLOAD_FILE_START) {
+    String family = sanitizeFilename(server_.arg("family"));
+    if (family.isEmpty()) {
+      family = sanitizeFilename(upload.filename);
+      const int dot = family.lastIndexOf('.');
+      if (dot > 0) {
+        family = family.substring(0, dot);
+      }
+    }
+    if (family.isEmpty()) {
+      uploadError_ = "Missing font family";
+      return;
+    }
+
+    String sizeId = server_.arg("size");
+    sizeId.toLowerCase();
+    const int sizeIndex = RFont4::sizeIndexForId(sizeId);
+    if (sizeIndex < 0) {
+      uploadError_ = "Font size must be large, medium, or small";
+      return;
+    }
+
+    String filename = sanitizeFilename(server_.arg("name"));
+    if (filename.isEmpty()) {
+      filename = sanitizeFilename(upload.filename);
+    }
+    if (!RFont4::hasFontExtension(filename)) {
+      filename += RFont4::kExtension;
+    }
+    if (!ensureFontFamilyDirectory(family)) {
+      uploadError_ = "Fonts folder unavailable";
+      return;
+    }
+
+    uploadFinalPath_ = String(StoragePaths::kFontsPath) + "/" + family + "/" + RFont4::sizeFilename(static_cast<uint8_t>(sizeIndex));
+    if (StorageFiles::fileExists(uploadFinalPath_)) {
+      uploadError_ = "Font size already exists";
+      return;
+    }
+    uploadTmpPath_ = uploadFinalPath_ + ".tmp";
+    Board::Storage::filesystem().remove(uploadTmpPath_);
+    uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_, FILE_WRITE);
+    if (!uploadFile_) {
+      uploadError_ = "Could not create file";
+      return;
+    }
+    uploadError_ = "";
+    statusLine1_ = "Receiving font";
+    statusLine2_ = family + " " + RFont4::sizeId(static_cast<uint8_t>(sizeIndex));
+    Serial.printf("[sync] font upload start %s\n", uploadFinalPath_.c_str());
+    return;
+  }
+
+  if (upload.status == UPLOAD_FILE_WRITE) {
+    if (!uploadError_.isEmpty() || !uploadFile_) {
+      return;
+    }
+    if (static_cast<size_t>(upload.totalSize) + static_cast<size_t>(upload.currentSize) > kMaxFontUploadBytes) {
+      uploadError_ = "Font file too large";
+      uploadFile_.close();
+      Board::Storage::filesystem().remove(uploadTmpPath_);
+      return;
+    }
+    const size_t written = uploadFile_.write(upload.buf, upload.currentSize);
+    if (written != upload.currentSize) {
+      uploadError_ = "Font write failed";
+      uploadFile_.close();
+      Board::Storage::filesystem().remove(uploadTmpPath_);
+    }
+    return;
+  }
+
+  if (upload.status == UPLOAD_FILE_END) {
+    if (uploadFile_) {
+      uploadFile_.close();
+    }
+    return;
+  }
+
+  if (upload.status == UPLOAD_FILE_ABORTED) {
+    if (uploadFile_) {
+      uploadFile_.close();
+    }
+    if (!uploadTmpPath_.isEmpty()) {
+      Board::Storage::filesystem().remove(uploadTmpPath_);
+    }
+    uploadError_ = "Upload aborted";
+    finishUpload(false);
+  }
 }
 
 void CompanionSyncManager::handleBookDelete() {
@@ -1205,6 +1418,10 @@ void CompanionSyncManager::handleThemeUpload() {
     }
 
     uploadFinalPath_ = String(StoragePaths::kThemesPath) + "/" + filename;
+    if (StorageFiles::fileExists(uploadFinalPath_)) {
+      uploadError_ = "Theme already exists";
+      return;
+    }
     uploadTmpPath_ = uploadFinalPath_ + ".tmp";
     Board::Storage::filesystem().remove(uploadTmpPath_);
     uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_, FILE_WRITE);
@@ -1250,63 +1467,68 @@ String CompanionSyncManager::settingsJson() {
   static const char *const readerControlLabels[] = {"standard", "rewind_top_right"};
   static const char *const footerMetricLabels[] = {"percentage", "chapter_time", "book_time"};
   static const char *const batteryLabelLabels[] = {"percent", "time_remaining", "voltage"};
-  static const char *const typefaceLabels[] = {"standard", "open_dyslexic", "atkinson"};
   static const char *const pauseModeLabels[] = {"sentence_end", "instant"};
 
   const uint16_t wpm =
-      clampU16(preferences_.getUShort(kPrefWpm, kDefaultWpm), kMinWpm, kMaxWpm);
+      clampU16(preferences_.getUShort(pref::Wpm::key(), kDefaultWpm), kMinWpm, kMaxWpm);
   const uint8_t readerMode =
-      static_cast<uint8_t>(clampInt(preferences_.getUChar(kPrefReaderMode, 0), 0, kMaxReaderMode));
+      static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::ReaderMode::key(), 0), 0, kMaxReaderMode));
   const uint8_t pauseMode =
-      static_cast<uint8_t>(clampInt(preferences_.getUChar(kPrefPauseMode, 0), 0, kMaxPauseMode));
+      static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::PauseMode::key(), 0), 0, kMaxPauseMode));
   const uint16_t longDelay =
-      clampU16(preferences_.getUShort(kPrefPacingLongMs, kDefaultPacingDelayMs), 0,
+      clampU16(preferences_.getUShort(pref::PacingLongWordDelay::key(), kDefaultPacingDelayMs), 0,
                kMaxPacingDelayMs);
   const uint16_t complexDelay =
-      clampU16(preferences_.getUShort(kPrefPacingComplexMs, kDefaultPacingDelayMs), 0,
+      clampU16(preferences_.getUShort(pref::PacingComplexWordDelay::key(), kDefaultPacingDelayMs), 0,
                kMaxPacingDelayMs);
   const uint16_t punctuationDelay =
-      clampU16(preferences_.getUShort(kPrefPacingPunctuationMs, kDefaultPacingDelayMs), 0,
+      clampU16(preferences_.getUShort(pref::PacingPunctuationDelay::key(), kDefaultPacingDelayMs), 0,
                kMaxPacingDelayMs);
   const uint8_t brightness = static_cast<uint8_t>(
-      clampInt(preferences_.getUChar(kPrefBrightness, kDefaultBrightness), 0, kMaxBrightness));
+      clampInt(preferences_.getUChar(pref::BrightnessIndex::key(), kDefaultBrightness), 0, kMaxBrightness));
   const uint8_t handedness =
-      static_cast<uint8_t>(clampInt(preferences_.getUChar(kPrefHandedness, 0), 0, kMaxHandedness));
+      static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::Handedness::key(), 0), 0, kMaxHandedness));
   const uint8_t readerControls =
-      preferences_.getBool(kPrefReaderControlsSwapped, false) ? 1 : 0;
+      preferences_.getBool(pref::ReaderControlsSwapped::key(), false) ? 1 : 0;
   const uint8_t footerMetric = static_cast<uint8_t>(
-      clampInt(preferences_.getUChar(kPrefFooterMetricMode, 0), 0, kMaxFooterMetric));
+      clampInt(preferences_.getUChar(pref::FooterMetricMode::key(), 0), 0, kMaxFooterMetric));
   const uint8_t batteryLabel = static_cast<uint8_t>(
-      clampInt(preferences_.getUChar(kPrefBatteryLabelMode, 0), 0, kMaxBatteryLabel));
+      clampInt(preferences_.getUChar(pref::BatteryLabelMode::key(), 0), 0, kMaxBatteryLabel));
   const uint8_t language =
-      static_cast<uint8_t>(clampInt(preferences_.getUChar(kPrefUiLanguage, 0), 0, kMaxUiLanguage));
+      static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::UiLanguage::key(), 0), 0, kMaxUiLanguage));
   const uint8_t fontSize = static_cast<uint8_t>(
-      clampInt(preferences_.getUChar(kPrefReaderFontSize, 0), 0, kMaxReaderFontSize));
-  const uint8_t typeface =
-      static_cast<uint8_t>(clampInt(preferences_.getUChar(kPrefReaderTypeface, 0), 0,
-                                    kMaxReaderTypeface));
+      clampInt(preferences_.getUChar(pref::ReaderFontSizeIndex::key(), 0), 0, kMaxReaderFontSize));
+  FontCatalog fontCatalog;
+  fontCatalog.loadFromSd();
+  uint8_t typeface = 0;
+  const String savedTypefaceId = preferences_.getString(pref::ReaderTypefaceId::key(), "");
+  if (savedTypefaceId.isEmpty() || !fontCatalog.indexForId(savedTypefaceId, typeface)) {
+    typeface = static_cast<uint8_t>(
+        clampInt(preferences_.getUChar(pref::ReaderTypefaceIndex::key(), 0), 0,
+                 std::max<int>(0, fontCatalog.typefaceCount() - 1)));
+  }
   const int tracking =
-      clampInt(preferences_.getChar(kPrefTypographyTracking, 0), kMinTypographyTracking,
+      clampInt(preferences_.getChar(pref::TypographyTracking::key(), 0), kMinTypographyTracking,
                kMaxTypographyTracking);
   const uint8_t anchor = static_cast<uint8_t>(
-      clampInt(preferences_.getUChar(kPrefTypographyAnchor, kDefaultTypographyAnchor),
+      clampInt(preferences_.getUChar(pref::TypographyAnchor::key(), kDefaultTypographyAnchor),
                kMinTypographyAnchor, kMaxTypographyAnchor));
   const uint8_t guideWidth = static_cast<uint8_t>(
-      clampInt(preferences_.getUChar(kPrefTypographyGuideWidth, kDefaultTypographyGuideWidth),
+      clampInt(preferences_.getUChar(pref::TypographyGuideWidth::key(), kDefaultTypographyGuideWidth),
                kMinTypographyGuideWidth, kMaxTypographyGuideWidth));
   const uint8_t guideGap = static_cast<uint8_t>(
-      clampInt(preferences_.getUChar(kPrefTypographyGuideGap, kDefaultTypographyGuideGap),
+      clampInt(preferences_.getUChar(pref::TypographyGuideGap::key(), kDefaultTypographyGuideGap),
                kMinTypographyGuideGap, kMaxTypographyGuideGap));
   ThemeStore themeStore;
   themeStore.loadFromSd();
-  const String savedThemeId = preferences_.getString(kPrefThemeId, "");
+  const String savedThemeId = preferences_.getString(pref::ThemeId::key(), "");
   if (!savedThemeId.isEmpty()) {
     themeStore.selectById(savedThemeId.c_str());
   }
   const DisplayTheme::Theme &selectedTheme = themeStore.selected();
 
   String body;
-  body.reserve(2600);
+  body.reserve(3600);
   body += "{\"ok\":true,\"version\":1";
   body += ",\"reading\":{";
   body += "\"wpm\":" + String(wpm);
@@ -1337,22 +1559,22 @@ String CompanionSyncManager::settingsJson() {
   body += enumLabel(batteryLabel, batteryLabelLabels, 3);
   body += "\"";
   body += ",\"readingBattery\":" +
-          String(preferences_.getBool(kPrefReaderBatteryVisible, true) ? "true" : "false");
+          String(preferences_.getBool(pref::ReaderBatteryVisible::key(), true) ? "true" : "false");
   body += ",\"readingChapter\":" +
-          String(preferences_.getBool(kPrefReaderChapterVisible, false) ? "true" : "false");
+          String(preferences_.getBool(pref::ReaderChapterVisible::key(), false) ? "true" : "false");
   body += ",\"readingProgress\":" +
-          String(preferences_.getBool(kPrefReaderProgressVisible, false) ? "true" : "false");
+          String(preferences_.getBool(pref::ReaderProgressVisible::key(), false) ? "true" : "false");
   body += ",\"language\":" + String(language);
   body += ",\"phantomWords\":" +
-          String(preferences_.getBool(kPrefPhantomWords, true) ? "true" : "false");
+          String(preferences_.getBool(pref::PhantomWords::key(), true) ? "true" : "false");
   body += ",\"fontSizeIndex\":" + String(fontSize);
   body += "}";
   body += ",\"typography\":{";
   body += "\"typeface\":\"";
-  body += enumLabel(typeface, typefaceLabels, 3);
+  body += jsonEscape(fontCatalog.typefaceId(typeface));
   body += "\"";
   body += ",\"focusHighlight\":" +
-          String(preferences_.getBool(kPrefTypographyFocusHighlight, true) ? "true" : "false");
+          String(preferences_.getBool(pref::TypographyFocusHighlight::key(), true) ? "true" : "false");
   body += ",\"tracking\":" + String(tracking);
   body += ",\"anchorPercent\":" + String(anchor);
   body += ",\"guideWidth\":" + String(guideWidth);
@@ -1371,6 +1593,32 @@ String CompanionSyncManager::settingsJson() {
     body += ",\"typeface\":\"";
     body += DisplayTheme::readerTypefaceName(themes[i].typeface);
     body += "\"}";
+  }
+  body += "]";
+  const std::vector<FontCatalog::Family>& fonts = fontCatalog.families();
+  body += ",\"fontCount\":" + String(fonts.size());
+  body += ",\"fonts\":[";
+  for (size_t i = 0; i < fonts.size(); ++i) {
+    if (i > 0) {
+      body += ",";
+    }
+    body += "{\"id\":\"" + jsonEscape(fonts[i].id) + "\"";
+    body += ",\"name\":\"" + jsonEscape(fonts[i].label) + "\"";
+    body += ",\"builtIn\":" + String(fonts[i].builtIn ? "true" : "false");
+    body += ",\"sizes\":[";
+    for (size_t size = 0; size < RFont4::kSizeCount; ++size) {
+      if (size > 0) {
+        body += ",";
+      }
+      body += "{\"id\":\"";
+      body += RFont4::sizeId(static_cast<uint8_t>(size));
+      body += "\",\"name\":\"";
+      body += RFont4::sizeLabel(static_cast<uint8_t>(size));
+      body += "\",\"available\":";
+      body += fontCatalog.hasSize(static_cast<uint8_t>(i), static_cast<uint8_t>(size)) ? "true" : "false";
+      body += "}";
+    }
+    body += "]}";
   }
   body += "]";
   body += ",\"limits\":{";
@@ -1400,7 +1648,6 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
   static const char *const readerControlLabels[] = {"standard", "rewind_top_right"};
   static const char *const footerMetricLabels[] = {"percentage", "chapter_time", "book_time"};
   static const char *const batteryLabelLabels[] = {"percent", "time_remaining", "voltage"};
-  static const char *const typefaceLabels[] = {"standard", "open_dyslexic", "atkinson"};
   static const char *const pauseModeLabels[] = {"sentence_end", "instant"};
 
   int intValue = 0;
@@ -1413,7 +1660,7 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
       error = "wpm must be between 10 and 1000";
       return false;
     }
-    preferences_.putUShort(kPrefWpm, static_cast<uint16_t>(intValue));
+    preferences_.putUShort(pref::Wpm::key(), static_cast<uint16_t>(intValue));
   }
   if (readJsonString(body, "readerMode", stringValue)) {
     const int value = enumValue(stringValue, readerModeLabels, 2);
@@ -1421,7 +1668,7 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
       error = "readerMode must be rsvp or scroll";
       return false;
     }
-    preferences_.putUChar(kPrefReaderMode, static_cast<uint8_t>(value));
+    preferences_.putUChar(pref::ReaderMode::key(), static_cast<uint8_t>(value));
   }
   if (readJsonString(body, "pauseMode", stringValue)) {
     const int value = enumValue(stringValue, pauseModeLabels, 2);
@@ -1429,36 +1676,36 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
       error = "pauseMode must be sentence_end or instant";
       return false;
     }
-    preferences_.putUChar(kPrefPauseMode, static_cast<uint8_t>(value));
+    preferences_.putUChar(pref::PauseMode::key(), static_cast<uint8_t>(value));
   }
-  preferences_.putBool(kPrefAccurateTime, true);
+  preferences_.putBool(pref::AccurateTime::key(), true);
   if (readJsonInt(body, "longWordMs", intValue)) {
     if (intValue < 0 || intValue > kMaxPacingDelayMs) {
       error = "longWordMs must be between 0 and 600";
       return false;
     }
-    preferences_.putUShort(kPrefPacingLongMs, static_cast<uint16_t>(intValue));
+    preferences_.putUShort(pref::PacingLongWordDelay::key(), static_cast<uint16_t>(intValue));
   }
   if (readJsonInt(body, "complexWordMs", intValue)) {
     if (intValue < 0 || intValue > kMaxPacingDelayMs) {
       error = "complexWordMs must be between 0 and 600";
       return false;
     }
-    preferences_.putUShort(kPrefPacingComplexMs, static_cast<uint16_t>(intValue));
+    preferences_.putUShort(pref::PacingComplexWordDelay::key(), static_cast<uint16_t>(intValue));
   }
   if (readJsonInt(body, "punctuationMs", intValue)) {
     if (intValue < 0 || intValue > kMaxPacingDelayMs) {
       error = "punctuationMs must be between 0 and 600";
       return false;
     }
-    preferences_.putUShort(kPrefPacingPunctuationMs, static_cast<uint16_t>(intValue));
+    preferences_.putUShort(pref::PacingPunctuationDelay::key(), static_cast<uint16_t>(intValue));
   }
   if (readJsonInt(body, "brightnessIndex", intValue)) {
     if (intValue < 0 || intValue > kMaxBrightness) {
       error = "brightnessIndex must be between 0 and 19";
       return false;
     }
-    preferences_.putUChar(kPrefBrightness, static_cast<uint8_t>(intValue));
+    preferences_.putUChar(pref::BrightnessIndex::key(), static_cast<uint8_t>(intValue));
   }
   if (readJsonString(body, "themeId", stringValue)) {
     ThemeStore themeStore;
@@ -1468,9 +1715,15 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
       return false;
     }
     const DisplayTheme::Theme &theme = themeStore.selected();
-    preferences_.putString(kPrefThemeId, theme.id);
-    preferences_.putUChar(kPrefReaderTypeface, static_cast<uint8_t>(theme.typeface));
-    themeTypefaceApplied = true;
+    preferences_.putString(pref::ThemeId::key(), theme.id);
+    FontCatalog fontCatalog;
+    fontCatalog.loadFromSd();
+    uint8_t themeTypeface = 0;
+    if (fontCatalog.indexForId(DisplayTheme::readerTypefaceName(theme.typeface), themeTypeface)) {
+      preferences_.putUChar(pref::ReaderTypefaceIndex::key(), themeTypeface);
+      preferences_.putString(pref::ReaderTypefaceId::key(), fontCatalog.typefaceId(themeTypeface));
+      themeTypefaceApplied = true;
+    }
   }
   if (readJsonString(body, "handedness", stringValue)) {
     const int value = enumValue(stringValue, handednessLabels, 2);
@@ -1478,7 +1731,7 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
       error = "handedness must be right or left";
       return false;
     }
-    preferences_.putUChar(kPrefHandedness, static_cast<uint8_t>(value));
+    preferences_.putUChar(pref::Handedness::key(), static_cast<uint8_t>(value));
   }
   if (readJsonString(body, "readerControls", stringValue)) {
     const int value = enumValue(stringValue, readerControlLabels, 2);
@@ -1486,7 +1739,7 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
       error = "readerControls must be standard or rewind_top_right";
       return false;
     }
-    preferences_.putBool(kPrefReaderControlsSwapped, value == 1);
+    preferences_.putBool(pref::ReaderControlsSwapped::key(), value == 1);
   }
   if (readJsonString(body, "footerMetric", stringValue)) {
     const int value = enumValue(stringValue, footerMetricLabels, 3);
@@ -1494,7 +1747,7 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
       error = "footerMetric must be percentage, chapter_time, or book_time";
       return false;
     }
-    preferences_.putUChar(kPrefFooterMetricMode, static_cast<uint8_t>(value));
+    preferences_.putUChar(pref::FooterMetricMode::key(), static_cast<uint8_t>(value));
   }
   if (readJsonString(body, "batteryLabel", stringValue)) {
     const int value = enumValue(stringValue, batteryLabelLabels, 3);
@@ -1502,82 +1755,85 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
       error = "batteryLabel must be percent, time_remaining, or voltage";
       return false;
     }
-    preferences_.putUChar(kPrefBatteryLabelMode, static_cast<uint8_t>(value));
+    preferences_.putUChar(pref::BatteryLabelMode::key(), static_cast<uint8_t>(value));
   }
   if (readJsonBool(body, "readingBattery", boolValue)) {
-    preferences_.putBool(kPrefReaderBatteryVisible, boolValue);
+    preferences_.putBool(pref::ReaderBatteryVisible::key(), boolValue);
   }
   if (readJsonBool(body, "readingChapter", boolValue)) {
-    preferences_.putBool(kPrefReaderChapterVisible, boolValue);
+    preferences_.putBool(pref::ReaderChapterVisible::key(), boolValue);
   }
   if (readJsonBool(body, "readingProgress", boolValue)) {
-    preferences_.putBool(kPrefReaderProgressVisible, boolValue);
+    preferences_.putBool(pref::ReaderProgressVisible::key(), boolValue);
   }
   if (readJsonInt(body, "language", intValue)) {
     if (intValue < 0 || intValue > kMaxUiLanguage) {
       error = "language is out of range";
       return false;
     }
-    preferences_.putUChar(kPrefUiLanguage, static_cast<uint8_t>(intValue));
+    preferences_.putUChar(pref::UiLanguage::key(), static_cast<uint8_t>(intValue));
   }
   if (readJsonBool(body, "phantomWords", boolValue)) {
-    preferences_.putBool(kPrefPhantomWords, boolValue);
+    preferences_.putBool(pref::PhantomWords::key(), boolValue);
   }
   if (readJsonInt(body, "fontSizeIndex", intValue)) {
     if (intValue < 0 || intValue > kMaxReaderFontSize) {
       error = "fontSizeIndex must be between 0 and 2";
       return false;
     }
-    preferences_.putUChar(kPrefReaderFontSize, static_cast<uint8_t>(intValue));
+    preferences_.putUChar(pref::ReaderFontSizeIndex::key(), static_cast<uint8_t>(intValue));
   }
   if (!themeTypefaceApplied && readJsonString(body, "typeface", stringValue)) {
-    const int value = enumValue(stringValue, typefaceLabels, 3);
-    if (value < 0) {
-      error = "typeface must be standard, open_dyslexic, or atkinson";
+    FontCatalog fontCatalog;
+    fontCatalog.loadFromSd();
+    uint8_t value = 0;
+    if (!fontCatalog.indexForId(stringValue, value)) {
+      error = "typeface does not match an available font";
       return false;
     }
-    preferences_.putUChar(kPrefReaderTypeface, static_cast<uint8_t>(value));
+    preferences_.putUChar(pref::ReaderTypefaceIndex::key(), value);
+    preferences_.putString(pref::ReaderTypefaceId::key(), fontCatalog.typefaceId(value));
   }
   if (readJsonBool(body, "focusHighlight", boolValue)) {
-    preferences_.putBool(kPrefTypographyFocusHighlight, boolValue);
+    preferences_.putBool(pref::TypographyFocusHighlight::key(), boolValue);
   }
   if (readJsonInt(body, "tracking", intValue)) {
     if (intValue < kMinTypographyTracking || intValue > kMaxTypographyTracking) {
       error = "tracking is out of range";
       return false;
     }
-    preferences_.putChar(kPrefTypographyTracking, static_cast<int8_t>(intValue));
+    preferences_.putChar(pref::TypographyTracking::key(), static_cast<int8_t>(intValue));
   }
   if (readJsonInt(body, "anchorPercent", intValue)) {
     if (intValue < kMinTypographyAnchor || intValue > kMaxTypographyAnchor) {
       error = "anchorPercent is out of range";
       return false;
     }
-    preferences_.putUChar(kPrefTypographyAnchor, static_cast<uint8_t>(intValue));
+    preferences_.putUChar(pref::TypographyAnchor::key(), static_cast<uint8_t>(intValue));
   }
   if (readJsonInt(body, "guideWidth", intValue)) {
     if (intValue < kMinTypographyGuideWidth || intValue > kMaxTypographyGuideWidth) {
       error = "guideWidth is out of range";
       return false;
     }
-    preferences_.putUChar(kPrefTypographyGuideWidth, static_cast<uint8_t>(intValue));
+    preferences_.putUChar(pref::TypographyGuideWidth::key(), static_cast<uint8_t>(intValue));
   }
   if (readJsonInt(body, "guideGap", intValue)) {
     if (intValue < kMinTypographyGuideGap || intValue > kMaxTypographyGuideGap) {
       error = "guideGap is out of range";
       return false;
     }
-    preferences_.putUChar(kPrefTypographyGuideGap, static_cast<uint8_t>(intValue));
+    preferences_.putUChar(pref::TypographyGuideGap::key(), static_cast<uint8_t>(intValue));
   }
 
   return true;
 }
 
 String CompanionSyncManager::wifiJson() {
-  const String ssid = preferences_.getString(kPrefWifiSsid, "");
+  const String ssid = preferences_.getString(pref::WifiSsid::key(), "");
   return String("{\"ok\":true,\"configured\":") + (ssid.isEmpty() ? "false" : "true") +
          ",\"ssid\":\"" + jsonEscape(ssid) + "\",\"passwordSet\":" +
-         (preferences_.getString(kPrefWifiPass, "").isEmpty() ? "false" : "true") + "}";
+         (preferences_.getString(pref::WifiPassword::key(), "").isEmpty() ? "false" : "true") + "}";
 }
 
 bool CompanionSyncManager::applyWifiJson(const String &body, String &error) {
@@ -1608,8 +1864,8 @@ bool CompanionSyncManager::applyWifiJson(const String &body, String &error) {
     return false;
   }
 
-  preferences_.putString(kPrefWifiSsid, ssid);
-  preferences_.putString(kPrefWifiPass, password);
+  preferences_.putString(pref::WifiSsid::key(), ssid);
+  preferences_.putString(pref::WifiPassword::key(), password);
   return true;
 }
 

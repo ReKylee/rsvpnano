@@ -53,12 +53,13 @@ void cancel() {}
           WaveshareC6TouchLcd147::Buttons::kLongPressMs};
 }
 
-::Input::ControlMask currentControls() {
-  ::Input::ControlMask controls = ::Input::InputNone;
+::Input::PressActions currentActions() {
+  ::Input::PressActions actions = {};
   if (primaryPressedRaw()) {
-    controls |= ::Input::InputPrimary;
+    actions.shortPress |= ::Input::ActionSelect | ::Input::ActionPlayPause;
+    actions.longPress |= ::Input::ActionStandby;
   }
-  return controls;
+  return actions;
 }
 
 ::Input::TouchSurface touchSurface() {

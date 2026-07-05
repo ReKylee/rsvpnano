@@ -25,6 +25,10 @@ namespace StoragePaths {
         return hasExtension(path, kEpubExtension);
     }
 
+    bool hasFontExtension(const String& path) {
+        return hasExtension(path, kFontExtension);
+    }
+
     String parentDirectoryForPath(const String& path) {
         const int separator = path.lastIndexOf('/');
         if (separator <= 0) {

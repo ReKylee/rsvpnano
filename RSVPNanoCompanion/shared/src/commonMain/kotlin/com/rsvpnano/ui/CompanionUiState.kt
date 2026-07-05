@@ -9,6 +9,7 @@ import com.rsvpnano.app.isWifiAttached
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoThemeCatalogItem
+import com.rsvpnano.models.NanoFontCatalogItem
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.RememberedNano
@@ -38,6 +39,10 @@ data class CompanionUiState(
     val themeCatalog: List<NanoThemeCatalogItem> = emptyList(),
     val themeCatalogUrl: String = "",
     val selectedCatalogThemeId: String = "",
+    val fontCatalog: List<NanoFontCatalogItem> = emptyList(),
+    val fontCatalogUrl: String = "",
+    val selectedCatalogFontId: String = "",
+    val selectedCatalogFontSize: String = "large",
     val notice: CompanionNotice = CompanionNotice.Neutral("Ready"),
 ) {
     val status: String

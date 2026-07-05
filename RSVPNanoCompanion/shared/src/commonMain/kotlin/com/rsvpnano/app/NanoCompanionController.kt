@@ -6,6 +6,7 @@ import com.rsvpnano.converters.SharedArticle
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoThemeCatalogItem
+import com.rsvpnano.models.NanoFontCatalogItem
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.sync.RssFeedNormalizer
@@ -194,6 +195,9 @@ class NanoCompanionController(
     suspend fun fetchThemeCatalog(catalogUrl: String): CompanionThemeCatalogSnapshot =
         CompanionThemeCatalogSnapshot(themes = client.fetchThemeCatalog(catalogUrl))
 
+    suspend fun fetchFontCatalog(catalogUrl: String): CompanionFontCatalogSnapshot =
+        CompanionFontCatalogSnapshot(fonts = client.fetchFontCatalog(catalogUrl))
+
     suspend fun downloadTheme(catalogUrl: String, theme: NanoThemeCatalogItem): CompanionThemeFile {
         require(theme.file.isNotBlank() && '/' !in theme.file && '\\' !in theme.file) {
             "Theme catalog file path is invalid."
@@ -202,6 +206,20 @@ class NanoCompanionController(
             id = theme.id,
             filename = theme.file,
             data = client.downloadTheme(themeFileUrl(catalogUrl, theme.file)),
+        )
+    }
+
+    suspend fun downloadFont(catalogUrl: String, font: NanoFontCatalogItem, size: String): CompanionFontFile {
+        val file = font.files[size].orEmpty()
+        require(isSafeFontCatalogPath(file)) {
+            "Font catalog file path is invalid."
+        }
+        return CompanionFontFile(
+            id = font.id,
+            family = font.name,
+            size = size,
+            filename = file.substringAfterLast('/'),
+            data = client.downloadFont(catalogFileUrl(catalogUrl, file)),
         )
     }
 
@@ -223,6 +241,54 @@ class NanoCompanionController(
             ?.takeIf { id -> refreshed.themes.any { it.id == id } }
             ?.let { id -> deviceSyncService.saveSettings(baseUrl, refreshed.withThemeId(id)) }
             ?: refreshed
+        return CompanionSettingsSnapshot(settings = selected, wifiSettings = null)
+    }
+
+    suspend fun uploadFont(
+        baseUrl: String,
+        family: String,
+        size: String,
+        filename: String,
+        data: ByteArray,
+        onProgress: ((sent: Long, total: Long) -> Unit)? = null,
+    ): CompanionSettingsSnapshot {
+        verifyReachable(baseUrl)
+        deviceSyncService.uploadFont(
+            baseUrl = baseUrl,
+            family = family,
+            size = size,
+            filename = filename,
+            data = data,
+            onProgress = onProgress,
+        )
+        return CompanionSettingsSnapshot(settings = deviceSyncService.refreshSettings(baseUrl), wifiSettings = null)
+    }
+
+    suspend fun installOnlineFont(
+        baseUrl: String,
+        catalogUrl: String,
+        font: NanoFontCatalogItem,
+        sizes: List<String> = font.files.keys.sorted(),
+        onProgress: ((sent: Long, total: Long) -> Unit)? = null,
+    ): CompanionSettingsSnapshot {
+        verifyReachable(baseUrl)
+        sizes.forEach { size ->
+            val file = downloadFont(catalogUrl, font, size)
+            deviceSyncService.uploadFont(
+                baseUrl = baseUrl,
+                family = font.name,
+                size = size,
+                filename = file.filename,
+                data = file.data,
+                onProgress = onProgress,
+            )
+        }
+        val refreshed = deviceSyncService.refreshSettings(baseUrl)
+        val selected = if (refreshed.fonts.any { it.id == font.id }) {
+            deviceSyncService.saveSettings(baseUrl, refreshed.withTypeface(font.id))
+        } else {
+            refreshed
+        }
         return CompanionSettingsSnapshot(settings = selected, wifiSettings = null)
     }
 
@@ -348,6 +414,16 @@ class NanoCompanionController(
     private fun themeFileUrl(catalogUrl: String, file: String): String =
         catalogUrl.substringBeforeLast('/', missingDelimiterValue = catalogUrl) + "/" + file
 
+    private fun catalogFileUrl(catalogUrl: String, file: String): String =
+        catalogUrl.substringBeforeLast('/', missingDelimiterValue = catalogUrl) + "/" + file
+
+    private fun isSafeFontCatalogPath(file: String): Boolean =
+        file.isNotBlank() &&
+            !file.startsWith('/') &&
+            '\\' !in file &&
+            ".." !in file.split('/') &&
+            file.endsWith(".rfont4", ignoreCase = true)
+
     companion object {
         const val DEFAULT_CONNECTION_ATTEMPTS = 4
         const val DEFAULT_CONNECTION_RETRY_DELAY_MILLIS = 750L
@@ -409,8 +485,20 @@ data class CompanionThemeCatalogSnapshot(
     val themes: List<NanoThemeCatalogItem>,
 )
 
+data class CompanionFontCatalogSnapshot(
+    val fonts: List<NanoFontCatalogItem>,
+)
+
 data class CompanionThemeFile(
     val id: String,
+    val filename: String,
+    val data: ByteArray,
+)
+
+data class CompanionFontFile(
+    val id: String,
+    val family: String,
+    val size: String,
     val filename: String,
     val data: ByteArray,
 )

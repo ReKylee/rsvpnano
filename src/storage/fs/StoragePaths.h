@@ -10,12 +10,14 @@ namespace StoragePaths {
     constexpr const char* kArticleFilesPath = "/books/articles";
     constexpr const char* kConfigPath = "/config";
     constexpr const char* kThemesPath = "/themes";
+    constexpr const char* kFontsPath = "/fonts";
     constexpr const char* kTextExtension = ".txt";
     constexpr const char* kRsvpExtension = ".rsvp";
     constexpr const char* kEpubExtension = ".epub";
     constexpr const char* kIndexExtension = ".ridx";
     constexpr const char* kDataExtension = ".rdat";
     constexpr const char* kProgressExtension = ".rpos";
+    constexpr const char* kFontExtension = ".rfont4";
     constexpr const char* kTempExtension = ".tmp";
     constexpr const char* kFailedExtension = ".failed";
     constexpr const char* kConvertingExtension = ".converting";
@@ -23,6 +25,7 @@ namespace StoragePaths {
     bool hasTextExtension(const String& path);
     bool hasRsvpExtension(const String& path);
     bool hasEpubExtension(const String& path);
+    bool hasFontExtension(const String& path);
     String parentDirectoryForPath(const String& path);
     String siblingPathWithExtension(const String& path, const char* extension);
     String epubSiblingPathForRsvp(const String& rsvpPath);

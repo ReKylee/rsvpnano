@@ -56,15 +56,19 @@ void cancel() {}
           WaveshareAmoled18::Buttons::kLongPressMs};
 }
 
-::Input::ControlMask currentControls() {
-  ::Input::ControlMask controls = ::Input::InputNone;
-  if (primaryPressedRaw()) {
-    controls |= ::Input::InputPrimary;
+::Input::PressActions currentActions() {
+  ::Input::PressActions actions = {};
+  const bool primaryPressed = primaryPressedRaw();
+  const bool powerPressed = powerPressedRaw();
+  if (primaryPressed) {
+    actions.shortPress |= ::Input::ActionSelect | ::Input::ActionPlayPause;
+    actions.longPress |= ::Input::ActionStandby;
   }
-  if (powerPressedRaw()) {
-    controls |= ::Input::InputPower;
+  if (powerPressed) {
+    actions.shortPress |= ::Input::ActionOpenMenu | ::Input::ActionBack;
+    actions.longPress |= ::Input::ActionPowerOff;
   }
-  return controls;
+  return actions;
 }
 
 ::Input::TouchSurface touchSurface() {

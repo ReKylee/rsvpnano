@@ -4,7 +4,7 @@
 
 #include <Wire.h>
 
-#include "drivers/power/axp2101/Axp2101.h"
+#include "board/BoardPower.h"
 #include "drivers/touch/cst92xx/cst92xx.h"
 #include "platforms/waveshare_amoled_216/WaveshareAmoled216.h"
 
@@ -29,7 +29,7 @@ bool primaryPressedRaw() {
   return !digitalRead(WaveshareAmoled216::Buttons::kBootPin);
 }
 
-bool powerPressedRaw() { return BoardDrivers::Axp2101::isPowerButtonHeld(); }
+bool powerPressedRaw() { return Board::Power::powerButtonHeld(); }
 
 bool keyPressedRaw() {
   if constexpr (WaveshareAmoled216::Buttons::kKeyPin < 0) {
@@ -66,18 +66,24 @@ void cancel() {}
           WaveshareAmoled216::Buttons::kLongPressMs};
 }
 
-::Input::ControlMask currentControls() {
-  ::Input::ControlMask controls = ::Input::InputNone;
-  if (primaryPressedRaw()) {
-    controls |= ::Input::InputPrimary;
+::Input::PressActions currentActions() {
+  ::Input::PressActions actions = {};
+  const bool primaryPressed = primaryPressedRaw();
+  const bool powerPressed = powerPressedRaw();
+  const bool keyPressed = keyPressedRaw();
+  if (primaryPressed) {
+    actions.shortPress |= ::Input::ActionSelect | ::Input::ActionPlayPause;
+    actions.longPress |= ::Input::ActionStandby;
   }
-  if (powerPressedRaw()) {
-    controls |= ::Input::InputPower;
+  if (powerPressed) {
+    actions.shortPress |= ::Input::ActionOpenMenu | ::Input::ActionBack;
+    actions.longPress |= ::Input::ActionPowerOff;
   }
-  if (keyPressedRaw()) {
-    controls |= ::Input::InputKey;
+  if (keyPressed) {
+    actions.shortPress |= ::Input::ActionDown | ::Input::ActionPlayPause;
+    actions.longPress |= ::Input::ActionUp;
   }
-  return controls;
+  return actions;
 }
 
 ::Input::TouchSurface touchSurface() {

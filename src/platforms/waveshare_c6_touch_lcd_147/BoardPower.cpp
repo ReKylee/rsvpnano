@@ -67,6 +67,8 @@ bool supportsSoftwarePowerOff() { return false; }
 
 bool powerOffUsesControllerWake() { return false; }
 
+bool powerButtonHeld() { return false; }
+
 bool shouldRequestShutdownOnPowerOff() {
   return WaveshareC6TouchLcd147::Power::kRequestPmuShutdownOnPowerOff;
 }

@@ -4,7 +4,7 @@
 
 #include <Wire.h>
 
-#include "drivers/power/axp2101/Axp2101.h"
+#include "board/BoardPower.h"
 #include "drivers/touch/ft6336/ft6336.h"
 #include "platforms/waveshare_amoled_206/WaveshareAmoled206.h"
 
@@ -29,7 +29,7 @@ bool primaryPressedRaw() {
   return !digitalRead(WaveshareAmoled206::Buttons::kBootPin);
 }
 
-bool powerPressedRaw() { return BoardDrivers::Axp2101::isPowerButtonHeld(); }
+bool powerPressedRaw() { return Board::Power::powerButtonHeld(); }
 
 void configureButtonPins() {
   if constexpr (WaveshareAmoled206::Buttons::kBootPin >= 0) {
@@ -56,15 +56,19 @@ void cancel() {}
           WaveshareAmoled206::Buttons::kLongPressMs};
 }
 
-::Input::ControlMask currentControls() {
-  ::Input::ControlMask controls = ::Input::InputNone;
-  if (primaryPressedRaw()) {
-    controls |= ::Input::InputPrimary;
+::Input::PressActions currentActions() {
+  ::Input::PressActions actions = {};
+  const bool primaryPressed = primaryPressedRaw();
+  const bool powerPressed = powerPressedRaw();
+  if (primaryPressed) {
+    actions.shortPress |= ::Input::ActionSelect | ::Input::ActionPlayPause;
+    actions.longPress |= ::Input::ActionStandby;
   }
-  if (powerPressedRaw()) {
-    controls |= ::Input::InputPower;
+  if (powerPressed) {
+    actions.shortPress |= ::Input::ActionOpenMenu | ::Input::ActionBack;
+    actions.longPress |= ::Input::ActionPowerOff;
   }
-  return controls;
+  return actions;
 }
 
 ::Input::TouchSurface touchSurface() {

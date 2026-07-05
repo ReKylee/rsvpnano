@@ -18,6 +18,7 @@ namespace Board::Power {
     bool releaseBatteryPowerHold();
     bool supportsSoftwarePowerOff();
     bool powerOffUsesControllerWake();
+    bool powerButtonHeld();
     bool shouldRequestShutdownOnPowerOff();
     bool shouldReleaseBatteryPowerBeforeDeepSleep();
 

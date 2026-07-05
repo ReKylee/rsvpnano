@@ -174,5 +174,10 @@ fun CompanionApp(
         onSelectCatalogTheme = viewModel::setSelectedCatalogThemeId,
         onInstallOnlineTheme = viewModel::installSelectedOnlineTheme,
         onPickTheme = viewModel::uploadThemeFile,
+        onRefreshFontCatalog = viewModel::refreshFontCatalog,
+        onSelectCatalogFont = viewModel::setSelectedCatalogFontId,
+        onSelectCatalogFontSize = viewModel::setSelectedCatalogFontSize,
+        onInstallOnlineFont = viewModel::installSelectedOnlineFont,
+        onPickFont = viewModel::uploadFontFile,
     )
 }

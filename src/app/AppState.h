@@ -2,11 +2,13 @@
 
 enum class AppState {
     Booting,
-    Paused,
-    Playing,
+    ReaderPaused,
+    ReaderPlaying,
     Menu,
-    CompanionSync,
+    Sync,
     UsbTransfer,
+    FocusTimer,
+    Ota,
     Standby,
     Sleeping,
 };

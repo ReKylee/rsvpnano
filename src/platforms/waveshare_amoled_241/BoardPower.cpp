@@ -110,6 +110,8 @@ bool supportsSoftwarePowerOff() { return true; }
 
 bool powerOffUsesControllerWake() { return false; }
 
+bool powerButtonHeld() { return false; }
+
 bool shouldRequestShutdownOnPowerOff() {
   return WaveshareAmoled241::Power::kRequestPmuShutdownOnPowerOff;
 }

@@ -1,8 +1,8 @@
 #pragma once
 
 #include <Arduino.h>
+#include <ESP_I2S.h>
 #include <Wire.h>
-#include <driver/i2s.h>
 
 namespace BoardDrivers::Es8311 {
 
@@ -14,6 +14,7 @@ struct Context {
       : wire(wire),
         address(address),
         i2sPort(i2sPort),
+        i2s(i2sPort),
         mclkPin(mclkPin),
         bclkPin(bclkPin),
         wsPin(wsPin),
@@ -23,10 +24,11 @@ struct Context {
   TwoWire *wire = nullptr;
   uint8_t address = 0;
   i2s_port_t i2sPort = I2S_NUM_0;
-  int mclkPin = I2S_PIN_NO_CHANGE;
-  int bclkPin = I2S_PIN_NO_CHANGE;
-  int wsPin = I2S_PIN_NO_CHANGE;
-  int dataOutPin = I2S_PIN_NO_CHANGE;
+  I2SClass i2s;
+  int mclkPin = -1;
+  int bclkPin = -1;
+  int wsPin = -1;
+  int dataOutPin = -1;
   uint32_t sampleRateHz = 16000;
   bool available = false;
   bool i2sInitialized = false;

@@ -105,6 +105,11 @@ fun RsvpNanoSharedApp(
     onSelectCatalogTheme: (String) -> Unit,
     onInstallOnlineTheme: () -> Unit,
     onPickTheme: (displayName: String, data: ByteArray) -> Unit,
+    onRefreshFontCatalog: () -> Unit,
+    onSelectCatalogFont: (String) -> Unit,
+    onSelectCatalogFontSize: (String) -> Unit,
+    onInstallOnlineFont: () -> Unit,
+    onPickFont: (displayName: String, data: ByteArray) -> Unit,
 ) {
     val colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
     MaterialTheme(colorScheme = colorScheme) {
@@ -133,6 +138,15 @@ fun RsvpNanoSharedApp(
                 }
             }
         }
+        val fontPicker = rememberFilePickerLauncher(
+            type = FileKitType.File(extensions = listOf("rfont4")),
+        ) { file ->
+            if (file != null) {
+                scope.launch {
+                    onPickFont(file.name, file.readBytes())
+                }
+            }
+        }
 
         LaunchedEffect(uiState.notice) {
             if (uiState.notice.showTransient) {
@@ -144,6 +158,9 @@ fun RsvpNanoSharedApp(
         LaunchedEffect(selectedTab) {
             if (selectedTab == CompanionTab.Settings && uiState.themeCatalog.isEmpty()) {
                 onRefreshThemeCatalog()
+            }
+            if (selectedTab == CompanionTab.Settings && uiState.fontCatalog.isEmpty()) {
+                onRefreshFontCatalog()
             }
         }
 
@@ -245,6 +262,11 @@ fun RsvpNanoSharedApp(
                         onSelectCatalogTheme = onSelectCatalogTheme,
                         onInstallOnlineTheme = onInstallOnlineTheme,
                         onUploadTheme = { themePicker.launch() },
+                        onRefreshFontCatalog = onRefreshFontCatalog,
+                        onSelectCatalogFont = onSelectCatalogFont,
+                        onSelectCatalogFontSize = onSelectCatalogFontSize,
+                        onInstallOnlineFont = onInstallOnlineFont,
+                        onUploadFont = { fontPicker.launch() },
                     )
                 }
             }

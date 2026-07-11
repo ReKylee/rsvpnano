@@ -86,72 +86,71 @@ namespace screens {
             result.open = true;
         }
 
-        if (!ui.redraw({kViewportX, static_cast<int16_t>(kViewportY - 2), kViewportWidth,
-                        static_cast<int16_t>(kViewportHeight + kDetailHeight + 10)},
-                       signature(items, selectedIndex_))) {
-            return result;
-        }
+        const bool redrawShelf = ui.redraw({kViewportX, static_cast<int16_t>(kViewportY - 2), kViewportWidth,
+                                            static_cast<int16_t>(kViewportHeight + 4)},
+                                           signature(items, selectedIndex_));
+        if (redrawShelf) {
+            Arduino_GFX& gfx = ui.gfx();
+            const uint16_t foreground = ui.color(ui::themes::ColorRole::Foreground);
+            const uint16_t muted = ui.color(ui::themes::ColorRole::Muted);
+            const uint16_t accent = ui.color(ui::themes::ColorRole::Accent);
+            const uint16_t outline = ui.color(ui::themes::ColorRole::Outline);
+            const int16_t marker = static_cast<int16_t>(kViewportX + kViewportWidth / 2);
+            gfx.drawFastVLine(marker, kViewportY, kViewportHeight, ui.color(ui::themes::ColorRole::ProgressTrack));
 
-        Arduino_GFX& gfx = ui.gfx();
-        const uint16_t foreground = ui.color(ui::themes::ColorRole::Foreground);
-        const uint16_t muted = ui.color(ui::themes::ColorRole::Muted);
-        const uint16_t accent = ui.color(ui::themes::ColorRole::Accent);
-        const uint16_t outline = ui.color(ui::themes::ColorRole::Outline);
-        const int16_t marker = static_cast<int16_t>(kViewportX + kViewportWidth / 2);
-        gfx.drawFastVLine(marker, kViewportY, kViewportHeight, ui.color(ui::themes::ColorRole::ProgressTrack));
-
-        if (items.empty()) {
-            gfx.setTextSize(2);
-            gfx.setTextColor(muted);
-            gfx.setCursor(kViewportX + 12, kViewportY + 42);
-            gfx.print("No Library Items");
-            return result;
-        }
-
-        int16_t left = 0;
-        for (size_t index = 0; index < items.size(); ++index) {
-            const int16_t width = spineWidth(items[index], index);
-            const int16_t height = spineHeight(items[index], index);
-            const int16_t x = static_cast<int16_t>(kViewportX + left + offset_);
-            left = static_cast<int16_t>(left + width + kGap);
-            if (x + width < kViewportX || x > kViewportX + kViewportWidth)
-                continue;
-            const bool active = index == selectedIndex_;
-            const int16_t y = static_cast<int16_t>(kViewportY + kViewportHeight - height - (active ? 8 : 0));
-            const uint16_t fill = spineColor(index, items[index].article);
-            gfx.fillRect(x, y, width, height, fill);
-            gfx.drawRect(x, y, width, height, foreground);
-            if (active)
-                gfx.fillRect(x, static_cast<int16_t>(y - 2), width, 2, accent);
-            if (items[index].progress > 0) {
-                gfx.fillRect(static_cast<int16_t>(x + width - 9), y, 5,
-                             std::max<int16_t>(8, static_cast<int16_t>(height * items[index].progress / 100)), 0xDACA);
+            if (items.empty()) {
+                gfx.setTextSize(2);
+                gfx.setTextColor(muted);
+                gfx.setCursor(kViewportX + 12, kViewportY + 42);
+                gfx.print("No Library Items");
+            } else {
+                int16_t left = 0;
+                for (size_t index = 0; index < items.size(); ++index) {
+                    const int16_t width = spineWidth(items[index], index);
+                    const int16_t height = spineHeight(items[index], index);
+                    const int16_t x = static_cast<int16_t>(kViewportX + left + offset_);
+                    left = static_cast<int16_t>(left + width + kGap);
+                    if (x + width < kViewportX || x > kViewportX + kViewportWidth)
+                        continue;
+                    const bool active = index == selectedIndex_;
+                    const int16_t y = static_cast<int16_t>(kViewportY + kViewportHeight - height - (active ? 8 : 0));
+                    const uint16_t fill = spineColor(index, items[index].article);
+                    gfx.fillRect(x, y, width, height, fill);
+                    gfx.drawRect(x, y, width, height, foreground);
+                    if (active)
+                        gfx.fillRect(x, static_cast<int16_t>(y - 2), width, 2, accent);
+                    if (items[index].progress > 0) {
+                        gfx.fillRect(static_cast<int16_t>(x + width - 9), y, 5,
+                                     std::max<int16_t>(8, static_cast<int16_t>(height * items[index].progress / 100)),
+                                     0xDACA);
+                    }
+                    gfx.setTextSize(1);
+                    gfx.setTextColor(0xFF9C);
+                    int16_t textY = static_cast<int16_t>(y + 6);
+                    for (size_t character = 0; character < items[index].spineLabel.length() && textY + 8 < y + height;
+                         ++character, textY = static_cast<int16_t>(textY + 11)) {
+                        gfx.setCursor(static_cast<int16_t>(x + width / 2 - 3), textY);
+                        gfx.write(static_cast<uint8_t>(items[index].spineLabel[character]));
+                    }
+                }
             }
-            gfx.setTextSize(1);
-            gfx.setTextColor(0xFF9C);
-            int16_t textY = static_cast<int16_t>(y + 6);
-            for (size_t character = 0; character < items[index].spineLabel.length() && textY + 8 < y + height;
-                 ++character, textY = static_cast<int16_t>(textY + 11)) {
-                gfx.setCursor(static_cast<int16_t>(x + width / 2 - 3), textY);
-                gfx.write(static_cast<uint8_t>(items[index].spineLabel[character]));
-            }
+            gfx.drawFastHLine(kViewportX, 128, kViewportWidth, outline);
+            gfx.drawFastHLine(kViewportX, 129, kViewportWidth, outline);
         }
-        gfx.drawFastHLine(kViewportX, 128, kViewportWidth, outline);
-        gfx.drawFastHLine(kViewportX, 129, kViewportWidth, outline);
 
+        if (items.empty())
+            return result;
+
+        constexpr int16_t progressWidth = 62;
+        constexpr int16_t detailGap = 12;
+        const int16_t textWidth = static_cast<int16_t>(kViewportWidth - progressWidth - detailGap);
         const LibraryItem& item = items[selectedIndex_];
-        gfx.setTextSize(2);
-        gfx.setTextColor(foreground);
-        gfx.setCursor(kViewportX, kDetailY);
-        gfx.print(item.title);
-        gfx.setTextSize(1);
-        gfx.setTextColor(muted);
-        gfx.setCursor(kViewportX, kDetailY + 18);
-        gfx.print(item.detail);
-        gfx.setTextSize(2);
-        gfx.setTextColor(accent);
-        gfx.setCursor(kViewportX + kViewportWidth - 62, kDetailY + 7);
-        gfx.print(item.progressLabel);
+        ui.label({kViewportX, kDetailY, textWidth, 16}, item.title.c_str(), 2);
+        ui.label({kViewportX, static_cast<int16_t>(kDetailY + 18), textWidth, 8}, item.detail.c_str(), 1,
+                 ui::themes::ColorRole::Muted);
+        ui.label({static_cast<int16_t>(kViewportX + kViewportWidth - progressWidth), static_cast<int16_t>(kDetailY + 7),
+                  progressWidth, 16},
+                 item.progressLabel.c_str(), 2, ui::themes::ColorRole::Accent);
         return result;
     }
 
@@ -289,7 +288,7 @@ namespace screens {
     String LibraryScreen::detailLine(const String& author, const String& chapter) {
         String result = author.isEmpty() ? String("Unknown") : author;
         if (!chapter.isEmpty())
-            result += " · " + chapter;
+            result += " | " + chapter;
         return result;
     }
 

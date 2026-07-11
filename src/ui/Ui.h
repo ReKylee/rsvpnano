@@ -74,6 +74,12 @@ namespace ui {
         bool changed = false;
     };
 
+    enum class Icon : uint8_t {
+        None,
+        Bookmark,
+        Power,
+    };
+
     class Context {
     public:
         static constexpr size_t kSlotCapacity = 64;
@@ -94,7 +100,8 @@ namespace ui {
 
         void label(Rect rect, std::string_view text, uint8_t textSize = 2,
                    ui::themes::ColorRole role = ui::themes::ColorRole::Foreground);
-        bool button(Rect rect, std::string_view text);
+        bool button(Rect rect, std::string_view text, Icon icon = Icon::None);
+        bool iconButton(Rect rect, Icon icon);
         bool tab(Rect rect, std::string_view text, bool active);
         void progress(Rect rect, int value, int minimum = 0, int maximum = 100);
         SliderResult slider(Rect rect, int value, int minimum, int maximum, int step = 1);
@@ -146,6 +153,7 @@ namespace ui {
         void clear(Rect rect);
         void markDirty(Rect rect);
         void drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color, bool centered = false);
+        void drawIcon(Rect rect, Icon icon, uint16_t color, uint16_t surface);
         int valueAt(Rect rect, uint16_t x, int minimum, int maximum, int step) const;
         bool tapped(size_t slot, Rect rect);
         void resetTouchGesture();

@@ -4,38 +4,51 @@
 
 namespace {
 
-int gFlushes = 0;
-int gRegionFlushes = 0;
-ui::TouchContact gContact;
+    int gFlushes = 0;
+    int gRegionFlushes = 0;
+    ui::TouchContact gContact;
 
-void flush() { ++gFlushes; }
-bool flushRegion(uint16_t, uint16_t, uint16_t, uint16_t) {
-    ++gRegionFlushes;
-    return true;
-}
-bool beginTouch() { return true; }
-bool touchReady() { return true; }
-bool readTouch(ui::TouchContact& contact) { contact = gContact; return true; }
-ui::Orientation touchOrientation() { return ui::Orientation::Portrait; }
+    void flush() {
+        ++gFlushes;
+    }
+    bool flushRegion(uint16_t, uint16_t, uint16_t, uint16_t) {
+        ++gRegionFlushes;
+        return true;
+    }
+    bool beginTouch() {
+        return true;
+    }
+    bool touchReady() {
+        return true;
+    }
+    bool readTouch(ui::TouchContact& contact) {
+        contact = gContact;
+        return true;
+    }
+    ui::Orientation touchOrientation() {
+        return ui::Orientation::Portrait;
+    }
 
-void enableTouch(ui::Context& context) {
-    ui::TouchTiming timing;
-    timing.releaseConfirmSamples = 1;
-    timing.pollIntervalMs = 0;
-    context.setTouchSource({{100, 100}, timing, &beginTouch, &touchReady, &readTouch,
-                            &touchOrientation}, 0);
-}
+    void enableTouch(ui::Context& context) {
+        ui::TouchTiming timing;
+        timing.releaseConfirmSamples = 1;
+        timing.pollIntervalMs = 0;
+        context.setTouchSource({{100, 100}, timing, &beginTouch, &touchReady, &readTouch, &touchOrientation}, 0);
+    }
 
-ui::themes::Theme theme() {
-    ui::themes::Theme value;
-    value.colors.fill(0xFFFF);
-    value.colors[static_cast<size_t>(ui::themes::ColorRole::Background)] = 0;
-    return value;
-}
+    ui::themes::Theme theme() {
+        ui::themes::Theme value;
+        value.colors.fill(0xFFFF);
+        value.colors[static_cast<size_t>(ui::themes::ColorRole::Background)] = 0;
+        return value;
+    }
 
 } // namespace
 
-void setUp() { gFlushes = gRegionFlushes = 0; gContact = {}; }
+void setUp() {
+    gFlushes = gRegionFlushes = 0;
+    gContact = {};
+}
 void tearDown() {}
 
 void test_unchanged_widget_does_not_draw_or_flush() {
@@ -111,11 +124,23 @@ void test_layout_cursors_are_deterministic() {
     TEST_ASSERT_EQUAL_INT16(24, grid.next().y);
 }
 
+void test_labels_truncate_to_their_rectangles() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx, &flush, &flushRegion);
+    auto colors = theme();
+    context.setTheme(colors);
+    context.beginFrame(1);
+    context.label({0, 0, 30, 8}, "123456789", 1);
+    context.endFrame();
+    TEST_ASSERT_EQUAL(5, gfx.textWrites);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_unchanged_widget_does_not_draw_or_flush);
     RUN_TEST(test_changed_and_removed_widgets_redraw);
     RUN_TEST(test_button_and_slider_consume_touch);
     RUN_TEST(test_layout_cursors_are_deterministic);
+    RUN_TEST(test_labels_truncate_to_their_rectangles);
     return UNITY_END();
 }

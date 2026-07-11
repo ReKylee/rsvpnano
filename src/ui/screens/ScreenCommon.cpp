@@ -24,7 +24,7 @@ namespace screens::detail {
                    active == Screen::FocusGenres || active == Screen::FocusSession)) {
             screen = Screen::FocusGenres;
         }
-        if (ui.button({static_cast<int16_t>(ui.width() - 38), 7, 28, 28}, "O")) {
+        if (ui.iconButton({static_cast<int16_t>(ui.width() - 38), 7, 28, 28}, ui::Icon::Power)) {
             return Action::PowerOff;
         }
         return Action::None;

@@ -25,6 +25,11 @@ namespace screens {
         constexpr uint32_t kWpmFeedbackMs = 900;
         constexpr int kMaxScrubSteps = 96;
         constexpr uint32_t kBatterySampleMs = 120000;
+        constexpr uint16_t kBatteryGoodColor = ui::themes::rgb565(126, 176, 92);
+        constexpr uint16_t kBatteryMediumColor = ui::themes::rgb565(214, 163, 58);
+        constexpr uint16_t kBatteryLowColor = ui::themes::rgb565(200, 82, 82);
+        constexpr uint8_t kBatteryMediumPercent = 35;
+        constexpr uint8_t kBatteryLowPercent = 18;
         constexpr size_t kPhantomBeforeTargets[] = {64, 96, 144};
         constexpr size_t kPhantomAfterTargets[] = {96, 144, 208};
 
@@ -80,6 +85,31 @@ namespace screens {
             if (length <= 13)
                 return 3;
             return 4;
+        }
+
+        uint16_t batteryFillColor(uint8_t percent, bool charging) {
+            if (charging || percent > kBatteryMediumPercent)
+                return kBatteryGoodColor;
+            return percent <= kBatteryLowPercent ? kBatteryLowColor : kBatteryMediumColor;
+        }
+
+        void drawFittedText(Arduino_GFX& gfx, const String& text, int16_t x, int16_t y, uint8_t size,
+                            int16_t maxWidth) {
+            const size_t capacity = static_cast<size_t>(std::max<int16_t>(0, maxWidth) / (6 * size));
+            if (text.length() <= capacity) {
+                gfx.setCursor(x, y);
+                gfx.print(text);
+                return;
+            }
+            const size_t dots = std::min<size_t>(3, capacity);
+            size_t length = capacity > dots ? capacity - dots : 0;
+            while (length > 0 && (static_cast<uint8_t>(text[length]) & 0xC0U) == 0x80U)
+                --length;
+            gfx.setCursor(x, y);
+            for (size_t index = 0; index < length; ++index)
+                gfx.write(static_cast<uint8_t>(text[index]));
+            for (size_t index = 0; index < dots; ++index)
+                gfx.write('.');
         }
 
     } // namespace
@@ -238,6 +268,9 @@ namespace screens {
                           static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
         gfx.drawFastHLine(static_cast<int16_t>(anchor + typography_.guideGap), guideBottom,
                           static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
+        const uint16_t marker = typography_.focusHighlight ? ui.color(ui::themes::ColorRole::Accent) : guide;
+        gfx.drawFastVLine(anchor, guideTop, 5, marker);
+        gfx.drawFastVLine(anchor, static_cast<int16_t>(guideBottom - 4), 5, marker);
 
         if (!before.isEmpty())
             drawText(before, static_cast<int16_t>(x - 24 - textWidth(before)), baseline,
@@ -254,8 +287,10 @@ namespace screens {
         gfx.setCursor(18, static_cast<int16_t>(ui.height() / 2 - 8));
         gfx.print("<<");
         if (!reading) {
-            gfx.setCursor(18, static_cast<int16_t>(ui.height() - 26));
-            gfx.print(chapterLabel.isEmpty() ? "START" : chapterLabel);
+            const int16_t footerWidth = static_cast<int16_t>(footer.length() * 12);
+            const int16_t footerX = static_cast<int16_t>(ui.width() - 18 - footerWidth);
+            drawFittedText(gfx, chapterLabel.isEmpty() ? String("START") : chapterLabel, 18,
+                           static_cast<int16_t>(ui.height() - 26), 2, static_cast<int16_t>(footerX - 42));
             drawBattery(ui);
         }
         gfx.setCursor(static_cast<int16_t>(ui.width() - 18 - footer.length() * 12),
@@ -597,18 +632,31 @@ namespace screens {
         if (battery_.percent == 0 && battery_.voltage <= 0)
             return;
         Arduino_GFX& gfx = ui.gfx();
-        const int16_t x = static_cast<int16_t>(ui.width() - 92);
+        const String label = battery_.showVoltage && battery_.voltage > 0 ? String(battery_.voltage, 2) + "V"
+                                                                          : String(battery_.percent) + "%";
+        constexpr int16_t iconWidth = 26;
+        constexpr int16_t capWidth = 3;
+        constexpr int16_t gap = 7;
+        const int16_t labelWidth = static_cast<int16_t>(label.length() * 12);
+        const int16_t totalWidth = static_cast<int16_t>(iconWidth + capWidth + gap + labelWidth);
+        const int16_t x = std::max<int16_t>(4, static_cast<int16_t>(ui.width() - totalWidth - 10));
         gfx.drawRect(x, 10, 26, 13, ui.color(ui::themes::ColorRole::Muted));
         gfx.fillRect(static_cast<int16_t>(x + 26), 14, 3, 5, ui.color(ui::themes::ColorRole::Muted));
         const int16_t fill = battery_.charging ? 22 : static_cast<int16_t>(22 * battery_.percent / 100);
         if (fill > 0)
-            gfx.fillRect(static_cast<int16_t>(x + 2), 12, fill, 9, ui.color(ui::themes::ColorRole::Accent));
+            gfx.fillRect(static_cast<int16_t>(x + 2), 12, fill, 9,
+                         batteryFillColor(battery_.percent, battery_.charging));
+        if (battery_.charging) {
+            const uint16_t background = ui.color(ui::themes::ColorRole::Background);
+            gfx.drawLine(static_cast<int16_t>(x + 15), 12, static_cast<int16_t>(x + 11), 17, background);
+            gfx.drawLine(static_cast<int16_t>(x + 11), 17, static_cast<int16_t>(x + 16), 17, background);
+            gfx.drawLine(static_cast<int16_t>(x + 16), 17, static_cast<int16_t>(x + 12), 22, background);
+        }
         gfx.setFont(static_cast<const GFXfont*>(nullptr));
         gfx.setTextSize(2);
         gfx.setTextColor(ui.color(ui::themes::ColorRole::Muted));
-        gfx.setCursor(static_cast<int16_t>(x + 36), 6);
-        gfx.print(battery_.showVoltage && battery_.voltage > 0 ? String(battery_.voltage, 2) + "V"
-                                                               : String(battery_.percent) + "%");
+        gfx.setCursor(static_cast<int16_t>(x + iconWidth + capWidth + gap), 6);
+        gfx.print(label);
     }
 
     uint32_t ReaderScreen::frameSignature(const String& before, const String& word, const String& after,

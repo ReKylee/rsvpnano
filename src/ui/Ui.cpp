@@ -17,6 +17,17 @@ namespace ui {
             return static_cast<int16_t>(8U * std::max<uint8_t>(1, size));
         }
 
+        size_t fittedLength(std::string_view text, size_t capacity) {
+            if (text.size() <= capacity)
+                return text.size();
+            if (capacity <= 3)
+                return 0;
+            size_t length = capacity - 3;
+            while (length > 0 && (static_cast<uint8_t>(text[length]) & 0xC0U) == 0x80U)
+                --length;
+            return length;
+        }
+
     } // namespace
 
     Context::Context(Arduino_GFX& gfx, Flush flush, FlushRegion flushRegion) :
@@ -136,13 +147,48 @@ namespace ui {
         drawText(rect, text, textSize, color(role));
     }
 
-    bool Context::button(Rect rect, std::string_view text) {
-        const Claim widget = claim(Kind::Button, rect, signature(text));
+    bool Context::button(Rect rect, std::string_view text, Icon icon) {
+        const size_t slot = nextSlot_;
+        const bool activated = tapped(slot, rect);
+        const bool pressed = capturedSlot_ == slot;
+        uint32_t state = combine(signature(text), static_cast<uint8_t>(icon));
+        state = combine(state, pressed);
+        const Claim widget = claim(Kind::Button, rect, state);
         if (widget.changed) {
+            const uint16_t surface =
+                color(pressed ? ui::themes::ColorRole::SurfaceActive : ui::themes::ColorRole::SurfaceMuted);
+            gfx_.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
             gfx_.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
-            drawText(rect, text, 2, color(ui::themes::ColorRole::Foreground), true);
+            if (rect.w > 16 && rect.h >= 28)
+                gfx_.fillRect(static_cast<int16_t>(rect.x + 8), static_cast<int16_t>(rect.y + rect.h - 3),
+                              static_cast<int16_t>(rect.w - 16), 2, color(ui::themes::ColorRole::Accent));
+            const int16_t iconWidth = icon == Icon::None ? 0 : std::min<int16_t>(34, rect.w / 3);
+            drawText({static_cast<int16_t>(rect.x + 6), rect.y,
+                      static_cast<int16_t>(std::max<int16_t>(0, rect.w - iconWidth - 12)), rect.h},
+                     text, 2, color(pressed ? ui::themes::ColorRole::OnAccent : ui::themes::ColorRole::Foreground),
+                     true);
+            if (icon != Icon::None)
+                drawIcon({static_cast<int16_t>(rect.x + rect.w - iconWidth), rect.y, iconWidth, rect.h}, icon,
+                         color(ui::themes::ColorRole::Accent), surface);
         }
-        return tapped(widget.index, rect);
+        return activated;
+    }
+
+    bool Context::iconButton(Rect rect, Icon icon) {
+        const size_t slot = nextSlot_;
+        const bool activated = tapped(slot, rect);
+        const bool pressed = capturedSlot_ == slot;
+        uint32_t state = combine(static_cast<uint8_t>(icon), pressed);
+        const Claim widget = claim(Kind::Button, rect, state);
+        if (widget.changed) {
+            const uint16_t surface =
+                color(pressed ? ui::themes::ColorRole::SurfaceActive : ui::themes::ColorRole::SurfaceMuted);
+            gfx_.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 7, surface);
+            gfx_.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 7, color(ui::themes::ColorRole::Outline));
+            drawIcon(rect, icon, color(pressed ? ui::themes::ColorRole::Accent : ui::themes::ColorRole::Muted),
+                     surface);
+        }
+        return activated;
     }
 
     bool Context::tab(Rect rect, std::string_view text, bool active) {
@@ -334,20 +380,54 @@ namespace ui {
     }
 
     void Context::drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t textColor, bool centered) {
+        if (rect.w <= 0 || rect.h <= 0)
+            return;
+        const uint8_t size = std::max<uint8_t>(1, textSize);
+        const size_t capacity = static_cast<size_t>(std::max<int16_t>(0, rect.w) / (6 * size));
+        const bool truncated = text.size() > capacity;
+        const size_t length = fittedLength(text, capacity);
+        const size_t dots = truncated ? std::min<size_t>(3, capacity) : 0;
+        const int16_t renderedWidth = static_cast<int16_t>((length + dots) * 6U * size);
         gfx_.setFont(static_cast<const GFXfont*>(nullptr));
-        gfx_.setTextSize(textSize);
+        gfx_.setTextSize(size);
         gfx_.setTextWrap(false);
         gfx_.setTextColor(textColor);
         const int16_t x =
-            centered
-                ? std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + (rect.w - textWidth(text, textSize)) / 2))
-                : rect.x;
-        const int16_t y = centered ? static_cast<int16_t>(rect.y + (rect.h - textHeight(textSize)) / 2) : rect.y;
+            centered ? std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + (rect.w - renderedWidth) / 2)) : rect.x;
+        const int16_t y = static_cast<int16_t>(rect.y + std::max<int16_t>(0, (rect.h - textHeight(size)) / 2));
         gfx_.setCursor(x, y);
-        for (char value: text) {
-            gfx_.write(static_cast<uint8_t>(value));
-        }
+        for (size_t index = 0; index < length; ++index)
+            gfx_.write(static_cast<uint8_t>(text[index]));
+        for (size_t index = 0; index < dots; ++index)
+            gfx_.write('.');
         drew_ = true;
+    }
+
+    void Context::drawIcon(Rect rect, Icon icon, uint16_t ink, uint16_t surface) {
+        const int16_t cx = static_cast<int16_t>(rect.x + rect.w / 2);
+        const int16_t cy = static_cast<int16_t>(rect.y + rect.h / 2);
+        switch (icon) {
+        case Icon::Bookmark: {
+            const int16_t width = std::max<int16_t>(1, std::min<int16_t>(13, static_cast<int16_t>(rect.w - 6)));
+            const int16_t height = std::max<int16_t>(1, std::min<int16_t>(30, static_cast<int16_t>(rect.h - 4)));
+            const int16_t x = static_cast<int16_t>(cx - width / 2);
+            const int16_t y = static_cast<int16_t>(rect.y + 1);
+            gfx_.fillRect(x, y, width, height, ink);
+            for (int16_t row = 0; row <= std::min<int16_t>(6, height - 1); ++row) {
+                const int16_t half = std::min<int16_t>(row, width / 2);
+                gfx_.drawFastHLine(static_cast<int16_t>(cx - half), static_cast<int16_t>(y + height - 7 + row),
+                                   static_cast<int16_t>(half * 2 + 1), surface);
+            }
+            break;
+        }
+        case Icon::Power:
+            gfx_.drawCircle(cx, static_cast<int16_t>(cy + 1), 8, ink);
+            gfx_.fillRect(static_cast<int16_t>(cx - 3), static_cast<int16_t>(cy - 9), 7, 10, surface);
+            gfx_.drawFastVLine(cx, static_cast<int16_t>(cy - 9), 9, ink);
+            break;
+        default:
+            break;
+        }
     }
 
     int Context::valueAt(Rect rect, uint16_t x, int minimum, int maximum, int step) const {

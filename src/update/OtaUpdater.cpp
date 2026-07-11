@@ -200,15 +200,17 @@ bool OtaUpdater::loadConfig(Config& config) const {
 OtaUpdater::Config OtaUpdater::config(Preferences& preferences) const {
     Config result;
     loadConfig(result);
-    const String ssid = settings::load<settings::prefs::WifiSsid>(preferences);
-    if (!ssid.isEmpty()) {
-        result.wifiSsid = ssid;
-        result.wifiPassword = settings::load<settings::prefs::WifiPassword>(preferences);
+    const std::string ssid = settings::load<settings::prefs::WifiSsid>(preferences);
+    if (!ssid.empty()) {
+        result.wifiSsid = ssid.c_str();
+        result.wifiPassword = settings::load<settings::prefs::WifiPassword>(preferences).c_str();
     }
-    const String owner = settings::load<settings::prefs::OtaOwner>(preferences);
-    if (!owner.isEmpty())
-        result.githubOwner = owner;
-    result.githubTag = settings::nvs::get(preferences, settings::prefs::OtaTag::key(), result.githubTag);
+    const std::string owner = settings::load<settings::prefs::OtaOwner>(preferences);
+    if (!owner.empty())
+        result.githubOwner = owner.c_str();
+    const std::string githubTag =
+        settings::nvs::get(preferences, settings::prefs::OtaTag::key(), std::string{result.githubTag.c_str()});
+    result.githubTag = githubTag.c_str();
     return result;
 }
 

@@ -13,9 +13,9 @@ namespace screens {
             setBrightness(static_cast<uint8_t>((config.brightnessIndex + 1U) * 5U));
 
         themes.loadFromSd();
-        const String savedThemeId = settings::load<pref::ThemeId>(preferences);
-        if (!savedThemeId.isEmpty())
-            themes.selectById({savedThemeId.c_str(), savedThemeId.length()});
+        const std::string savedThemeId = settings::load<pref::ThemeId>(preferences);
+        if (!savedThemeId.empty())
+            themes.selectById(savedThemeId);
         ui.setTheme(themes.selected());
     }
 
@@ -34,19 +34,18 @@ namespace screens {
                 setBrightness(static_cast<uint8_t>(brightness.value));
         }
 
-        String theme = "Theme: ";
-        theme += themes.selected().name.c_str();
-        if (ui.button(column.next(28), theme.c_str())) {
+        const std::string theme = "Theme: " + themes.selected().name;
+        if (ui.button(column.next(28), theme)) {
             themes.selectNext();
-            settings::save<pref::ThemeId>(preferences, String(themes.selected().id.c_str()));
+            settings::save<pref::ThemeId>(preferences, themes.selected().id);
             ui.setTheme(themes.selected());
         }
 
-        String standby = "Standby: Off";
+        std::string standby = "Standby: Off";
         if (config.standbyIndex < standbyDurations.size() && standbyDurations[config.standbyIndex] != 0) {
-            standby = "Standby: " + String(standbyDurations[config.standbyIndex] / 60000UL) + "m";
+            standby = "Standby: " + std::to_string(standbyDurations[config.standbyIndex] / 60000UL) + "m";
         }
-        if (ui.button(column.next(28), standby.c_str())) {
+        if (ui.button(column.next(28), standby)) {
             config.standbyIndex = settings::cycle<pref::StandbyTimerIndex>(preferences, standbyDurations.size());
         }
     }

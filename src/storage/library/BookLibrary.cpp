@@ -1,5 +1,6 @@
 #include "storage/library/BookLibrary.h"
 
+#include <Arduino.h>
 #include <algorithm>
 #include <vector>
 #include "board/BoardStorage.h"
@@ -76,8 +77,8 @@ namespace BookLibrary {
             });
         }
 
-        std::vector<String> collectBookPaths(bool onDeviceEpubConversionEnabled) {
-            std::vector<String> bookPaths;
+        std::vector<std::string> collectBookPaths(bool onDeviceEpubConversionEnabled) {
+            std::vector<std::string> bookPaths;
             const uint32_t startedMs = millis();
             const std::vector<DirectoryEntryInfo> entries = scanLibraryDirectories();
             size_t cacheProbeCount = 0;
@@ -120,13 +121,13 @@ namespace BookLibrary {
 
                 if ((!hasStaleGeneratedRsvp(path) && StoragePaths::hasRsvpExtension(path)) || isReadableText(path)
                     || isPendingEpub(path)) {
-                    bookPaths.push_back(path);
+                    bookPaths.emplace_back(path.c_str(), path.length());
                 }
             }
 
-            std::sort(bookPaths.begin(), bookPaths.end(), [](const String& left, const String& right) {
-                String leftKey = StoragePaths::displayNameForPath(left);
-                String rightKey = StoragePaths::displayNameForPath(right);
+            std::sort(bookPaths.begin(), bookPaths.end(), [](const std::string& left, const std::string& right) {
+                String leftKey = StoragePaths::displayNameForPath(left.c_str());
+                String rightKey = StoragePaths::displayNameForPath(right.c_str());
                 leftKey.toLowerCase();
                 rightKey.toLowerCase();
                 return leftKey < rightKey;
@@ -157,14 +158,14 @@ namespace BookLibrary {
 
         const Counts counts = [&]() {
             Counts counts;
-            counts.rsvp = std::count_if(listing.paths.begin(), listing.paths.end(), [](const String& path) {
-                return hasRsvpExtension(path);
+            counts.rsvp = std::count_if(listing.paths.begin(), listing.paths.end(), [](const std::string& path) {
+                return hasRsvpExtension(path.c_str());
             });
-            counts.text = std::count_if(listing.paths.begin(), listing.paths.end(), [](const String& path) {
-                return hasTextExtension(path);
+            counts.text = std::count_if(listing.paths.begin(), listing.paths.end(), [](const std::string& path) {
+                return hasTextExtension(path.c_str());
             });
-            counts.pendingEpub = std::count_if(listing.paths.begin(), listing.paths.end(), [](const String& path) {
-                return hasEpubExtension(path);
+            counts.pendingEpub = std::count_if(listing.paths.begin(), listing.paths.end(), [](const std::string& path) {
+                return hasEpubExtension(path.c_str());
             });
             return counts;
         }();
@@ -177,7 +178,8 @@ namespace BookLibrary {
 
             const uint32_t startedMs = millis();
             size_t rsvpMetadataCount = 0;
-            for (const String& path: listing.paths) {
+            for (const std::string& storedPath: listing.paths) {
+                const String path{storedPath.c_str()};
                 String title;
                 String author;
 
@@ -190,8 +192,8 @@ namespace BookLibrary {
                     author = EpubCache::libraryLabel(path);
                 }
 
-                listing.titles.push_back(title);
-                listing.authors.push_back(author);
+                listing.titles.emplace_back(title.c_str(), title.length());
+                listing.authors.emplace_back(author.c_str(), author.length());
             }
 
             Serial.printf("[storage] Metadata cache: %u entries (%u rsvp) in %lu ms\n",
@@ -217,8 +219,8 @@ namespace BookLibrary {
     void printListing(const Listing& listing) {
         Serial.println("[storage] Listing /books, /books/books, /books/articles "
                        "(.rsvp/.txt/.epub pending conversion):");
-        for (const String& path: listing.paths) {
-            File entry = Board::Storage::filesystem().open(path);
+        for (const std::string& path: listing.paths) {
+            File entry = Board::Storage::filesystem().open(path.c_str());
             if (!entry || entry.isDirectory()) {
                 if (entry) {
                     entry.close();
@@ -240,7 +242,7 @@ namespace BookLibrary {
         });
     }
 
-    String pathAt(const Listing& listing, size_t index) {
+    std::string pathAt(const Listing& listing, size_t index) {
         if (index >= listing.paths.size()) {
             return "";
         }
@@ -248,26 +250,27 @@ namespace BookLibrary {
     }
 
     bool isArticle(const Listing& listing, size_t index) {
-        const String path = pathAt(listing, index);
-        return path.startsWith(String(kArticleFilesPath) + "/");
+        const std::string path = pathAt(listing, index);
+        return std::string_view{path}.starts_with("/books/articles/");
     }
 
-    String displayName(const Listing& listing, size_t index) {
-        const String path = pathAt(listing, index);
-        if (path.isEmpty()) {
+    std::string displayName(const Listing& listing, size_t index) {
+        const std::string path = pathAt(listing, index);
+        if (path.empty()) {
             return "";
         }
 
-        if (index < listing.titles.size() && !listing.titles[index].isEmpty()) {
+        if (index < listing.titles.size() && !listing.titles[index].empty()) {
             return listing.titles[index];
         }
 
-        return normalizeDisplayText(displayNameWithoutExtension(path));
+        const String name = normalizeDisplayText(displayNameWithoutExtension(path.c_str()));
+        return {name.c_str(), name.length()};
     }
 
-    String authorName(const Listing& listing, size_t index) {
-        const String path = pathAt(listing, index);
-        if (path.isEmpty()) {
+    std::string authorName(const Listing& listing, size_t index) {
+        const std::string path = pathAt(listing, index);
+        if (path.empty()) {
             return "";
         }
 
@@ -275,15 +278,18 @@ namespace BookLibrary {
             return listing.authors[index];
         }
 
-        if (hasEpubExtension(path)) {
-            return EpubCache::libraryLabel(path);
+        if (hasEpubExtension(path.c_str())) {
+            const String label = EpubCache::libraryLabel(path.c_str());
+            return {label.c_str(), label.length()};
         }
 
-        return readRsvpDirectiveValue(path, "@author");
+        const String author = readRsvpDirectiveValue(path.c_str(), "@author");
+        return {author.c_str(), author.length()};
     }
 
-    int indexOfPath(const Listing& listing, const String& target) {
-        const auto item = std::find(listing.paths.begin(), listing.paths.end(), target);
+    int indexOfPath(const Listing& listing, std::string_view target) {
+        const auto item = std::find_if(listing.paths.begin(), listing.paths.end(),
+                                       [target](const std::string& path) { return path == target; });
         if (item == listing.paths.end()) {
             return -1;
         }

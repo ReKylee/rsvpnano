@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <FS.h>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "reader/BookWordSource.h"
@@ -44,18 +45,18 @@ public:
     IndexedBookStore(const IndexedBookStore&) = delete;
     IndexedBookStore& operator=(const IndexedBookStore&) = delete;
 
-    bool open(const String& indexPath, const String& dataPath, const Header& header);
+    bool open(const char* indexPath, const char* dataPath, const Header& header);
     void close();
     bool isOpen() const;
 
     size_t wordCount() const override;
-    String wordAt(size_t index) const override;
+    std::string wordAt(size_t index) const override;
     void prefetchAround(size_t index) const override;
 
-    const String& indexPath() const {
+    const std::string& indexPath() const {
         return indexPath_;
     }
-    const String& dataPath() const {
+    const std::string& dataPath() const {
         return dataPath_;
     }
     uint32_t sourceSize() const {
@@ -69,12 +70,12 @@ private:
     bool loadWordWindow(size_t index) const;
     bool readRecords(size_t startIndex, size_t count, std::vector<WordRecord>& records) const;
 
-    String indexPath_;
-    String dataPath_;
+    std::string indexPath_;
+    std::string dataPath_;
     Header header_;
     mutable File indexFile_;
     mutable File dataFile_;
-    mutable std::vector<String> cachedWords_;
+    mutable std::vector<std::string> cachedWords_;
     mutable size_t cachedStart_ = static_cast<size_t>(-1);
     mutable size_t cachedCount_ = 0;
 };

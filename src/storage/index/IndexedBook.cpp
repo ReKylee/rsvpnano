@@ -156,7 +156,7 @@ namespace IndexedBook {
             }
 
             ChapterMarker marker;
-            marker.title = title;
+            marker.title.assign(title.c_str(), title.length());
             marker.wordIndex = buildContext.wordCount;
 
             if (!buildContext.metadata->chapters.empty()
@@ -307,11 +307,13 @@ namespace IndexedBook {
                     return true;
                 }
                 if (buildContext.metadata != nullptr && RsvpText::prefixHasBoundary(lowered, "@title")) {
-                    buildContext.metadata->title = RsvpText::directiveValue(trimmed, "@title");
+                    const String value = RsvpText::directiveValue(trimmed, "@title");
+                    buildContext.metadata->title.assign(value.c_str(), value.length());
                     return true;
                 }
                 if (buildContext.metadata != nullptr && RsvpText::prefixHasBoundary(lowered, "@author")) {
-                    buildContext.metadata->author = RsvpText::directiveValue(trimmed, "@author");
+                    const String value = RsvpText::directiveValue(trimmed, "@author");
+                    buildContext.metadata->author.assign(value.c_str(), value.length());
                     return true;
                 }
                 return true;
@@ -401,10 +403,13 @@ namespace IndexedBook {
             }
 
             metadata.wordCount = header.wordCount;
-            metadata.title = RsvpText::readRsvpDirectiveValue(path, "@title");
-            metadata.author = RsvpText::readRsvpDirectiveValue(path, "@author");
-            if (metadata.title.isEmpty()) {
-                metadata.title = RsvpText::normalizeDisplayText(displayNameWithoutExtension(path));
+            const String title = RsvpText::readRsvpDirectiveValue(path, "@title");
+            const String author = RsvpText::readRsvpDirectiveValue(path, "@author");
+            metadata.title.assign(title.c_str(), title.length());
+            metadata.author.assign(author.c_str(), author.length());
+            if (metadata.title.empty()) {
+                const String fallback = RsvpText::normalizeDisplayText(displayNameWithoutExtension(path));
+                metadata.title.assign(fallback.c_str(), fallback.length());
             }
 
             if (header.paragraphCount > 0) {
@@ -456,7 +461,7 @@ namespace IndexedBook {
                     for (uint32_t j = 0; j < titleLength; ++j) {
                         title += record.title[j];
                     }
-                    marker.title = title;
+                    marker.title.assign(title.c_str(), title.length());
                     metadata.chapters.push_back(marker);
                 }
             }
@@ -657,8 +662,9 @@ namespace IndexedBook {
                 if (metadata.paragraphStarts.empty()) {
                     metadata.paragraphStarts.push_back(0);
                 }
-                if (metadata.title.isEmpty()) {
-                    metadata.title = RsvpText::normalizeDisplayText(displayNameWithoutExtension(path));
+                if (metadata.title.empty()) {
+                    const String fallback = RsvpText::normalizeDisplayText(displayNameWithoutExtension(path));
+                    metadata.title.assign(fallback.c_str(), fallback.length());
                 }
 
                 header.magic = IndexedBookStore::kMagic;
@@ -761,8 +767,8 @@ namespace IndexedBook {
                 for (size_t i = 0; !parseFailed && i < metadata.chapters.size(); ++i) {
                     ChapterRecord record;
                     record.wordIndex = static_cast<uint32_t>(metadata.chapters[i].wordIndex);
-                    const String& title = metadata.chapters[i].title;
-                    record.titleLength = std::min<uint32_t>(title.length(), sizeof(record.title));
+                    const std::string& title = metadata.chapters[i].title;
+                    record.titleLength = std::min<uint32_t>(title.size(), sizeof(record.title));
                     for (uint32_t j = 0; j < record.titleLength; ++j) {
                         record.title[j] = title[j];
                     }
@@ -875,7 +881,7 @@ namespace IndexedBook {
                 return false;
             }
 
-            path = BookLibrary::pathAt(library, index);
+            path = BookLibrary::pathAt(library, index).c_str();
             if (hasEpubExtension(path)) {
                 if (!request.allowEpubConversion) {
                     report("Index needed", displayNameForPath(path).c_str(), "Open from library", 100);
@@ -888,7 +894,7 @@ namespace IndexedBook {
                 }
 
                 BookLibrary::refresh(library, true, RSVP_ON_DEVICE_EPUB_CONVERSION);
-                const int convertedIndex = BookLibrary::indexOfPath(library, rsvpPath);
+                const int convertedIndex = BookLibrary::indexOfPath(library, rsvpPath.c_str());
                 if (convertedIndex < 0) {
                     Serial.printf("[storage] Converted RSVP not found in refreshed library: %s\n", rsvpPath.c_str());
                     report("Book open failed", displayNameForPath(path).c_str(), "Conversion cache missing", 100);
@@ -948,7 +954,9 @@ namespace IndexedBook {
             }
 
             report("Opening book", displayNameForPath(path).c_str(), "Opening word cache", 80);
-            if (!store.open(indexedIndexPathFor(path), indexedDataPathFor(path), header)) {
+            const String indexPath = indexedIndexPathFor(path);
+            const String dataPath = indexedDataPathFor(path);
+            if (!store.open(indexPath.c_str(), dataPath.c_str(), header)) {
                 metadata.clear();
                 report("Book open failed", displayNameForPath(path).c_str(), "Index unreadable", 100);
                 return false;
@@ -956,7 +964,7 @@ namespace IndexedBook {
         }
 
         if (request.loadedPath != nullptr) {
-            *request.loadedPath = path;
+            request.loadedPath->assign(path.c_str(), path.length());
         }
         if (request.loadedIndex != nullptr) {
             *request.loadedIndex = parsedIndex;

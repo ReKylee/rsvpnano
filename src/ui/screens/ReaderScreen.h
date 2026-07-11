@@ -54,14 +54,14 @@ namespace screens {
         void update(Preferences& preferences, uint32_t nowMs);
 
     private:
-        int focusIndex(const String& word) const;
-        int16_t textWidth(const String& text) const;
-        void drawText(const String& text, int16_t x, int16_t baseline, uint16_t color);
-        void drawWord(const String& word, int16_t x, int16_t baseline, int focus, ui::Context& ui);
-        String phantomBefore(const ReadingLoop& reader, uint8_t sizeIndex) const;
-        String phantomAfter(const ReadingLoop& reader, uint8_t sizeIndex) const;
-        uint32_t frameSignature(const String& before, const String& word, const String& after, const String& overlay,
-                                const ReaderSettings& settings) const;
+        int focusIndex(std::string_view word) const;
+        int16_t textWidth(std::string_view text) const;
+        void drawText(std::string_view text, int16_t x, int16_t baseline, uint16_t color);
+        void drawWord(std::string_view word, int16_t x, int16_t baseline, int focus, ui::Context& ui);
+        std::string phantomBefore(const ReadingLoop& reader, uint8_t sizeIndex) const;
+        std::string phantomAfter(const ReadingLoop& reader, uint8_t sizeIndex) const;
+        uint32_t frameSignature(std::string_view before, std::string_view word, std::string_view after,
+                                std::string_view overlay, const ReaderSettings& settings) const;
 
         enum class TouchIntent : uint8_t {
             None,

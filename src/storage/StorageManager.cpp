@@ -1,5 +1,6 @@
 #include "storage/StorageManager.h"
 
+#include <Arduino.h>
 #include <cstdint>
 #include "board/BoardStorage.h"
 
@@ -91,11 +92,11 @@ size_t StorageManager::bookCount() const {
     return library_.paths.size();
 }
 
-int StorageManager::bookIndex(const String& path) const {
+int StorageManager::bookIndex(std::string_view path) const {
     return BookLibrary::indexOfPath(library_, path);
 }
 
-String StorageManager::bookPath(size_t index) const {
+std::string StorageManager::bookPath(size_t index) const {
     return BookLibrary::pathAt(library_, index);
 }
 
@@ -103,11 +104,11 @@ bool StorageManager::bookIsArticle(size_t index) const {
     return BookLibrary::isArticle(library_, index);
 }
 
-String StorageManager::bookDisplayName(size_t index) const {
+std::string StorageManager::bookDisplayName(size_t index) const {
     return BookLibrary::displayName(library_, index);
 }
 
-String StorageManager::bookAuthorName(size_t index) const {
+std::string StorageManager::bookAuthorName(size_t index) const {
     return BookLibrary::authorName(library_, index);
 }
 

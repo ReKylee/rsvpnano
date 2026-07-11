@@ -1,14 +1,16 @@
 #pragma once
 
-#include <Arduino.h>
+#include <cstddef>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace BookLibrary {
 
     struct Listing {
-        std::vector<String> paths;
-        std::vector<String> titles;
-        std::vector<String> authors;
+        std::vector<std::string> paths;
+        std::vector<std::string> titles;
+        std::vector<std::string> authors;
     };
 
     void clear(Listing& listing);
@@ -16,10 +18,10 @@ namespace BookLibrary {
     void printListing(const Listing& listing);
     size_t unsupportedFileCount();
 
-    String pathAt(const Listing& listing, size_t index);
+    std::string pathAt(const Listing& listing, size_t index);
     bool isArticle(const Listing& listing, size_t index);
-    String displayName(const Listing& listing, size_t index);
-    String authorName(const Listing& listing, size_t index);
-    int indexOfPath(const Listing& listing, const String& target);
+    std::string displayName(const Listing& listing, size_t index);
+    std::string authorName(const Listing& listing, size_t index);
+    int indexOfPath(const Listing& listing, std::string_view target);
 
 } // namespace BookLibrary

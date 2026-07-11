@@ -45,8 +45,4 @@ namespace screens::detail {
         return {8, 8, static_cast<int16_t>(ui.width() - 16), static_cast<int16_t>(ui.height() - 16)};
     }
 
-    String onOff(bool enabled) {
-        return enabled ? "On" : "Off";
-    }
-
 } // namespace screens::detail

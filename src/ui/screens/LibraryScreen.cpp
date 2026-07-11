@@ -35,7 +35,7 @@ namespace screens {
             ui::Column column{detail::content(ui), 4};
             const size_t visible = std::min<size_t>(items.size(), std::max<int16_t>(1, column.bounds.h / 24));
             for (size_t index = 0; index < visible; ++index) {
-                if (ui.button(column.next(20), items[index].title.c_str())) {
+                if (ui.button(column.next(20), items[index].title)) {
                     result.open = index == selectedIndex_;
                     selectedIndex_ = index;
                 }
@@ -145,12 +145,12 @@ namespace screens {
         constexpr int16_t detailGap = 12;
         const int16_t textWidth = static_cast<int16_t>(detailRect.w - progressWidth - detailGap);
         const LibraryItem& item = items[selectedIndex_];
-        ui.label({detailRect.x, detailRect.y, textWidth, 16}, item.title.c_str(), 2);
-        ui.label({detailRect.x, static_cast<int16_t>(detailRect.y + 18), textWidth, 8}, item.detail.c_str(), 1,
+        ui.label({detailRect.x, detailRect.y, textWidth, 16}, item.title, 2);
+        ui.label({detailRect.x, static_cast<int16_t>(detailRect.y + 18), textWidth, 8}, item.detail, 1,
                  ui::themes::ColorRole::Muted);
         ui.label({static_cast<int16_t>(detailRect.x + detailRect.w - progressWidth),
                   static_cast<int16_t>(detailRect.y + 7), progressWidth, 16},
-                 item.progressLabel.c_str(), 2, ui::themes::ColorRole::Accent, ui::TextAlign::Right);
+                 item.progressLabel, 2, ui::themes::ColorRole::Accent, ui::TextAlign::Right);
         return result;
     }
 
@@ -194,10 +194,10 @@ namespace screens {
             item.article = storage.bookIsArticle(index);
             item.spineLabel = spineLabel(item.title);
 
-            const String path = storage.bookPath(index);
+            const std::string path = storage.bookPath(index);
             BookMetadata metadata;
             IndexedBookStore::Header header;
-            const bool metadataLoaded = IndexedBook::readMetadata(path, metadata, &header);
+            const bool metadataLoaded = IndexedBook::readMetadata(path.c_str(), metadata, &header);
             uint32_t wordIndex = 0;
             bool hasPosition = false;
 
@@ -209,13 +209,13 @@ namespace screens {
             } else if (metadataLoaded && header.wordCount > 0) {
                 const ReadingProgress::BookIdentity identity{header.sourceSize, header.sourceFingerprint,
                                                              header.wordCount};
-                hasPosition = ReadingProgress::readPositionSidecar(path, identity, wordIndex);
+                hasPosition = ReadingProgress::readPositionSidecar(path.c_str(), identity, wordIndex);
                 if (!hasPosition) {
-                    const String positionKey = ReadingProgress::positionKey(path);
+                    const String positionKey = ReadingProgress::positionKey(path.c_str());
                     if (preferences.isKey(positionKey.c_str())) {
-                        const String countKey = ReadingProgress::wordCountKey(path);
-                        const String sizeKey = ReadingProgress::sourceSizeKey(path);
-                        const String fingerprintKey = ReadingProgress::sourceFingerprintKey(path);
+                        const String countKey = ReadingProgress::wordCountKey(path.c_str());
+                        const String sizeKey = ReadingProgress::sourceSizeKey(path.c_str());
+                        const String fingerprintKey = ReadingProgress::sourceFingerprintKey(path.c_str());
                         const bool countMatches = !preferences.isKey(countKey.c_str())
                                                || preferences.getUInt(countKey.c_str(), 0) == header.wordCount;
                         const bool sourceMatches =
@@ -252,52 +252,75 @@ namespace screens {
         if (book.fromStorage && index == book.index && bookStore.isOpen()) {
             return ReadingProgress::percent(reader.currentIndex(), reader.wordCount());
         }
-        const String path = storage.bookPath(index);
-        const String positionKey = ReadingProgress::positionKey(path);
-        const String countKey = ReadingProgress::wordCountKey(path);
+        const std::string path = storage.bookPath(index);
+        const String positionKey = ReadingProgress::positionKey(path.c_str());
+        const String countKey = ReadingProgress::wordCountKey(path.c_str());
         if (!preferences.isKey(positionKey.c_str()) || !preferences.isKey(countKey.c_str()))
             return 0;
         return ReadingProgress::percent(preferences.getUInt(positionKey.c_str(), 0),
                                         preferences.getUInt(countKey.c_str(), 0));
     }
 
-    String LibraryScreen::spineLabel(const String& title) {
-        String cleaned = title;
-        cleaned.trim();
-        String lowered = cleaned;
-        lowered.toLowerCase();
-        if (lowered.startsWith("the "))
-            cleaned = cleaned.substring(4);
-        else if (lowered.startsWith("an "))
-            cleaned = cleaned.substring(3);
-        else if (lowered.startsWith("a "))
-            cleaned = cleaned.substring(2);
+    std::string LibraryScreen::spineLabel(std::string_view title) {
+        while (!title.empty()
+               && (title.front() == ' ' || title.front() == '\t' || title.front() == '\r' || title.front() == '\n'))
+            title.remove_prefix(1);
+        while (!title.empty()
+               && (title.back() == ' ' || title.back() == '\t' || title.back() == '\r' || title.back() == '\n'))
+            title.remove_suffix(1);
+        const auto startsWith = [title](std::string_view prefix) {
+            if (title.size() < prefix.size())
+                return false;
+            for (size_t index = 0; index < prefix.size(); ++index) {
+                const char character = title[index] >= 'A' && title[index] <= 'Z'
+                                         ? static_cast<char>(title[index] - 'A' + 'a')
+                                         : title[index];
+                if (character != prefix[index])
+                    return false;
+            }
+            return true;
+        };
+        if (startsWith("the "))
+            title.remove_prefix(4);
+        else if (startsWith("an "))
+            title.remove_prefix(3);
+        else if (startsWith("a "))
+            title.remove_prefix(2);
 
-        String result;
+        std::string result;
         result.reserve(7);
-        for (size_t index = 0; index < cleaned.length() && result.length() < 7; ++index) {
-            char character = cleaned[index];
+        for (char character: title) {
+            if (result.size() == 7)
+                break;
             if (character >= 'a' && character <= 'z')
                 character = static_cast<char>(character - 'a' + 'A');
             if ((character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9'))
-                result += character;
+                result.push_back(character);
         }
-        return result.isEmpty() ? String("BOOK") : result;
+        return result.empty() ? std::string{"BOOK"} : result;
     }
 
-    String LibraryScreen::detailLine(const String& author, const String& chapter) {
-        String result = author.isEmpty() ? String("Unknown") : author;
-        if (!chapter.isEmpty())
-            result += " | " + chapter;
+    std::string LibraryScreen::detailLine(std::string_view author, std::string_view chapter) {
+        std::string result{author.empty() ? std::string_view{"Unknown"} : author};
+        if (!chapter.empty()) {
+            result += " | ";
+            result += chapter;
+        }
         return result;
     }
 
-    String LibraryScreen::progressLabel(uint8_t progress) {
+    std::string LibraryScreen::progressLabel(uint8_t progress) {
         if (progress == 0)
             return "new";
         if (progress >= 100)
             return "done";
-        return String(progress) + "%";
+        std::string result;
+        result.reserve(3);
+        if (progress >= 10)
+            result.push_back(static_cast<char>('0' + progress / 10));
+        result.push_back(static_cast<char>('0' + progress % 10));
+        result.push_back('%');
+        return result;
     }
 
     int16_t LibraryScreen::centeredOffset(const std::vector<LibraryItem>& items, size_t index,
@@ -377,7 +400,7 @@ namespace screens {
         uint32_t value = ui::Context::combine(static_cast<uint32_t>(offset_), static_cast<uint32_t>(current));
         value = ui::Context::combine(value, items.size());
         for (const LibraryItem& item: items) {
-            value = ui::Context::signature(item.title.c_str(), value);
+            value = ui::Context::signature(item.title, value);
             value = ui::Context::combine(value, item.progress);
         }
         return value;

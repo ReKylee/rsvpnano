@@ -501,7 +501,7 @@ namespace {
         }
     }
 
-    int letterCharacterCount(const String& word) {
+    int letterCharacterCount(std::string_view word) {
         int count = 0;
         for (size_t i = 0; i < word.length(); ++i) {
             if (isLetterCharacter(word[i])) {
@@ -511,7 +511,7 @@ namespace {
         return count;
     }
 
-    int digitCharacterCount(const String& word) {
+    int digitCharacterCount(std::string_view word) {
         int count = 0;
         for (size_t i = 0; i < word.length(); ++i) {
             if (isDigitCharacter(word[i])) {
@@ -521,7 +521,7 @@ namespace {
         return count;
     }
 
-    int uppercaseLetterCount(const String& word) {
+    int uppercaseLetterCount(std::string_view word) {
         int count = 0;
         for (size_t i = 0; i < word.length(); ++i) {
             if (isUppercaseLetter(word[i])) {
@@ -531,7 +531,7 @@ namespace {
         return count;
     }
 
-    int readableCharacterCount(const String& word) {
+    int readableCharacterCount(std::string_view word) {
         int count = 0;
         for (size_t i = 0; i < word.length(); ++i) {
             if (isWordCharacter(word[i])) {
@@ -541,11 +541,11 @@ namespace {
         return count;
     }
 
-    int approximateSyllableGroupCount(const String& word) {
+    int approximateSyllableGroupCount(std::string_view word) {
         int groups = 0;
         int letterCount = 0;
         bool previousWasVowel = false;
-        String lettersOnly;
+        std::string lettersOnly;
         lettersOnly.reserve(word.length());
 
         for (size_t i = 0; i < word.length(); ++i) {
@@ -566,8 +566,8 @@ namespace {
             previousWasVowel = vowel;
         }
 
-        if (groups > 1 && letterCount > 3 && lettersOnly.endsWith("e") && !lettersOnly.endsWith("le")
-            && !lettersOnly.endsWith("ye")) {
+        if (groups > 1 && letterCount > 3 && lettersOnly.ends_with("e") && !lettersOnly.ends_with("le")
+            && !lettersOnly.ends_with("ye")) {
             --groups;
         }
 
@@ -578,7 +578,7 @@ namespace {
         return groups;
     }
 
-    int compoundJoinerCount(const String& word) {
+    int compoundJoinerCount(std::string_view word) {
         int count = 0;
         for (size_t i = 1; i + 1 < word.length(); ++i) {
             if (!isSegmentSeparator(word[i])) {
@@ -592,7 +592,7 @@ namespace {
         return count;
     }
 
-    int technicalConnectorCount(const String& word) {
+    int technicalConnectorCount(std::string_view word) {
         int count = 0;
         for (size_t i = 1; i + 1 < word.length(); ++i) {
             if (!isTechnicalConnector(word[i])) {
@@ -606,7 +606,7 @@ namespace {
         return count;
     }
 
-    int lastMeaningfulCharIndex(const String& word) {
+    int lastMeaningfulCharIndex(std::string_view word) {
         for (int i = static_cast<int>(word.length()) - 1; i >= 0; --i) {
             if (!isIgnoredTrailingChar(word[static_cast<size_t>(i)])) {
                 return i;
@@ -615,7 +615,7 @@ namespace {
         return -1;
     }
 
-    char trailingRhythmChar(const String& word) {
+    char trailingRhythmChar(std::string_view word) {
         const int index = lastMeaningfulCharIndex(word);
         if (index >= 0) {
             return word[static_cast<size_t>(index)];
@@ -623,7 +623,7 @@ namespace {
         return '\0';
     }
 
-    int trailingRepeatedCharCount(const String& word, char target) {
+    int trailingRepeatedCharCount(std::string_view word, char target) {
         int count = 0;
         for (int i = lastMeaningfulCharIndex(word); i >= 0; --i) {
             const char c = word[static_cast<size_t>(i)];
@@ -635,11 +635,11 @@ namespace {
         return count;
     }
 
-    bool endsWithEllipsis(const String& word) {
+    bool endsWithEllipsis(std::string_view word) {
         return trailingRepeatedCharCount(word, '.') >= 3;
     }
 
-    bool startsWithLowercaseLetter(const String& word) {
+    bool startsWithLowercaseLetter(std::string_view word) {
         for (size_t i = 0; i < word.length(); ++i) {
             if (isLowercaseLetter(word[i])) {
                 return true;
@@ -651,7 +651,7 @@ namespace {
         return false;
     }
 
-    bool isDottedInitialism(const String& word) {
+    bool isDottedInitialism(std::string_view word) {
         const int end = lastMeaningfulCharIndex(word);
         if (end <= 0) {
             return false;
@@ -677,9 +677,10 @@ namespace {
         return expectLetter && letterCount >= 2;
     }
 
-    bool looksLikeAbbreviation(const String& word, bool nextWordStartsLowercase) {
-        String lowered = word;
-        lowered.toLowerCase();
+    bool looksLikeAbbreviation(std::string_view word, bool nextWordStartsLowercase) {
+        std::string lowered{word};
+        std::transform(lowered.begin(), lowered.end(), lowered.begin(),
+                       [](char value) { return static_cast<char>(LatinText::toLowercaseByte(value)); });
 
         constexpr const char* kKnownAbbreviations[] = {
             "mr.",  "mrs.", "ms.", "dr.",  "prof.", "sr.",  "jr.",  "st.", "vs.",   "etc.", "e.g.",
@@ -692,7 +693,7 @@ namespace {
             }
         }
 
-        if (!lowered.endsWith(".")) {
+        if (!lowered.ends_with(".")) {
             return false;
         }
 
@@ -735,7 +736,7 @@ namespace {
         return (static_cast<uint32_t>(bonusPercent) * static_cast<uint32_t>(clampPacingDelayMs(delayMs))) / 100UL;
     }
 
-    uint16_t lengthBonusPercentForWord(const String& word) {
+    uint16_t lengthBonusPercentForWord(std::string_view word) {
         const int readableLength = readableCharacterCount(word);
         if (readableLength == 0) {
             return 0;
@@ -774,7 +775,7 @@ namespace {
         return std::min<uint16_t>(kLongWordMaxPercent, bonusPercent);
     }
 
-    uint16_t complexityBonusPercentForWord(const String& word) {
+    uint16_t complexityBonusPercentForWord(std::string_view word) {
         uint16_t bonusPercent = 0;
         const int syllableGroups = approximateSyllableGroupCount(word);
         if (syllableGroups > kSyllableBonusAfterCount) {
@@ -806,7 +807,7 @@ namespace {
         return std::min<uint16_t>(kComplexWordMaxPercent, bonusPercent);
     }
 
-    uint16_t punctuationPausePercentForWord(const String& word, bool nextWordStartsLowercase) {
+    uint16_t punctuationPausePercentForWord(std::string_view word, bool nextWordStartsLowercase) {
         if (endsWithEllipsis(word)) {
             return kEllipsisPausePercent;
         }
@@ -832,9 +833,9 @@ namespace {
         }
     }
 
-    uint32_t pacingBonusMsForWord(const String& word, bool nextWordStartsLowercase,
+    uint32_t pacingBonusMsForWord(std::string_view word, bool nextWordStartsLowercase,
                                   const ReadingLoop::PacingConfig& config) {
-        if (word.isEmpty()) {
+        if (word.empty()) {
             return 0;
         }
 
@@ -850,7 +851,7 @@ namespace {
         return totalBonusMs;
     }
 
-    uint32_t durationForWord(const String& word, bool nextWordStartsLowercase, uint32_t baseIntervalMs,
+    uint32_t durationForWord(std::string_view word, bool nextWordStartsLowercase, uint32_t baseIntervalMs,
                              const ReadingLoop::PacingConfig& config) {
         if (baseIntervalMs == 0) {
             return 0;
@@ -867,7 +868,7 @@ void ReadingLoop::begin(uint32_t nowMs) {
     setCurrentWordFromIndex();
 }
 
-void ReadingLoop::setWords(std::vector<String> words, uint32_t nowMs) {
+void ReadingLoop::setWords(std::vector<std::string> words, uint32_t nowMs) {
     playing_ = false;
     wordSource_ = nullptr;
     loadedWords_ = std::move(words);
@@ -923,7 +924,7 @@ bool ReadingLoop::update(uint32_t nowMs, bool allowCatchUp) {
     return changed;
 }
 
-const String& ReadingLoop::currentWord() const {
+const std::string& ReadingLoop::currentWord() const {
     return currentWord_;
 }
 
@@ -945,7 +946,7 @@ uint32_t ReadingLoop::currentWordDurationMs() const {
     if (nextIndex < wordCount()) {
         nextWordStartsLowercase = startsWithLowercaseLetter(wordAt(nextIndex));
     } else if (!usingLoadedBook() && nextIndex < kDemoWordCount) {
-        nextWordStartsLowercase = startsWithLowercaseLetter(String(kDemoWords[nextIndex]));
+        nextWordStartsLowercase = startsWithLowercaseLetter(kDemoWords[nextIndex]);
     }
 
     return durationForWord(currentWord_, nextWordStartsLowercase, wordIntervalMs(), pacingConfig_);
@@ -957,7 +958,7 @@ uint32_t ReadingLoop::wordPacingBonusMsAt(size_t index) const {
         return 0;
     }
 
-    const String word = wordAt(index);
+    const std::string word = wordAt(index);
     const bool nextLowercase = nextWordStartsLowercaseAt(index);
     return pacingBonusMsForWord(word, nextLowercase, pacingConfig_);
 }
@@ -1142,14 +1143,14 @@ size_t ReadingLoop::wordCount() const {
     return kDemoWordCount;
 }
 
-String ReadingLoop::wordAt(size_t index) const {
+std::string ReadingLoop::wordAt(size_t index) const {
     if (wordSource_ != nullptr) {
         return wordSource_->wordAt(index);
     }
     if (!loadedWords_.empty()) {
         return loadedWords_[index];
     }
-    return String(kDemoWords[index]);
+    return kDemoWords[index];
 }
 
 bool ReadingLoop::usingLoadedBook() const {
@@ -1170,8 +1171,8 @@ bool ReadingLoop::wordEndsSentenceAt(size_t wordIndex) const {
         return false;
     }
 
-    const String word = wordAt(wordIndex);
-    if (word.isEmpty()) {
+    const std::string word = wordAt(wordIndex);
+    if (word.empty()) {
         return false;
     }
 

@@ -17,15 +17,15 @@ namespace screens {
             settings::save<pref::Wpm>(preferences, reader.wpm());
         }
 
-        const String pause =
-            String("Pause: ") + (config.pauseMode == PauseMode::SentenceEnd ? "Sentence end" : "Instant");
-        if (ui.button(column.next(28), pause.c_str())) {
+        const std::string pause =
+            std::string{"Pause: "} + (config.pauseMode == PauseMode::SentenceEnd ? "Sentence end" : "Instant");
+        if (ui.button(column.next(28), pause)) {
             config.pauseMode = config.pauseMode == PauseMode::SentenceEnd ? PauseMode::Instant : PauseMode::SentenceEnd;
             settings::save<pref::PauseMode>(preferences, static_cast<uint8_t>(config.pauseMode));
         }
 
-        const String phantom = "Phantom words: " + detail::onOff(config.phantomWords);
-        if (ui.button(column.next(28), phantom.c_str())) {
+        const std::string phantom = std::string{"Phantom words: "} + (config.phantomWords ? "On" : "Off");
+        if (ui.button(column.next(28), phantom)) {
             config.phantomWords = settings::toggle<pref::PhantomWords>(preferences);
         }
     }

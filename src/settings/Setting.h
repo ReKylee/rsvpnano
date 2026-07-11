@@ -6,6 +6,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 #include "settings/Nvs.h"
 
@@ -123,7 +124,7 @@ namespace settings {
 
     template<Key Name>
     struct StringSetting : PreferenceKey<Name> {
-        using Value = String;
+        using Value = std::string;
 
         static Value defaultValue() {
             return "";

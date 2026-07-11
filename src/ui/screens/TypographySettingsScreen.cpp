@@ -11,21 +11,22 @@ namespace screens {
         if (ui.button(column.next(20), "Back"))
             screen = Screen::Settings;
 
-        const String size = "Size: " + String(FontCatalog::sizeLabel(config.fontSizeIndex));
-        if (ui.button(column.next(22), size.c_str())) {
+        const std::string size = std::string{"Size: "} + FontCatalog::sizeLabel(config.fontSizeIndex);
+        if (ui.button(column.next(22), size)) {
             config.fontSizeIndex = settings::cycle<pref::ReaderFontSizeIndex>(preferences, FontCatalog::sizeCount());
             config.font = fonts.loadFont(config.typefaceIndex, config.fontSizeIndex);
         }
 
-        const String typeface = "Typeface: " + String(fonts.typefaceLabel(config.typefaceIndex));
-        if (ui.button(column.next(22), typeface.c_str())) {
+        const std::string typeface = std::string{"Typeface: "} + fonts.typefaceLabel(config.typefaceIndex);
+        if (ui.button(column.next(22), typeface)) {
             config.typefaceIndex = settings::cycle<pref::ReaderTypefaceIndex>(preferences, fonts.typefaceCount());
-            settings::save<pref::ReaderTypefaceId>(preferences, fonts.typefaceId(config.typefaceIndex));
+            settings::save<pref::ReaderTypefaceId>(preferences, fonts.typefaceId(config.typefaceIndex).c_str());
             config.font = fonts.loadFont(config.typefaceIndex, config.fontSizeIndex);
         }
 
-        const String focus = "Focus letter: " + detail::onOff(config.typography.focusHighlight);
-        if (ui.button(column.next(22), focus.c_str())) {
+        const std::string focus =
+            std::string{"Focus letter: "} + (config.typography.focusHighlight ? "On" : "Off");
+        if (ui.button(column.next(22), focus)) {
             config.typography.focusHighlight = settings::toggle<pref::TypographyFocusHighlight>(preferences);
         }
 
@@ -53,7 +54,7 @@ namespace screens {
 
             settings::save<pref::ReaderFontSizeIndex>(preferences, config.fontSizeIndex, FontCatalog::sizeCount());
             settings::save<pref::ReaderTypefaceIndex>(preferences, config.typefaceIndex, fonts.typefaceCount());
-            settings::save<pref::ReaderTypefaceId>(preferences, fonts.typefaceId(config.typefaceIndex));
+            settings::save<pref::ReaderTypefaceId>(preferences, fonts.typefaceId(config.typefaceIndex).c_str());
             settings::save<pref::TypographyFocusHighlight>(preferences, config.typography.focusHighlight);
             settings::save<pref::TypographyTracking>(preferences, config.typography.tracking);
             settings::save<pref::TypographyAnchor>(preferences, config.typography.anchor);

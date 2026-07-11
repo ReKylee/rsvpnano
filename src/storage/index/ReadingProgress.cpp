@@ -39,8 +39,8 @@ namespace ReadingProgress {
 
         bool writeSessionSidecar(const Session& session, const IndexedBookStore& store, uint32_t wordIndex,
                                  uint32_t wordCount) {
-            return session.fromStorage && !session.path.isEmpty() && store.isOpen() && wordCount > 0
-                && writePositionSidecar(session.path, {store.sourceSize(), store.sourceFingerprint(), wordCount},
+            return session.fromStorage && !session.path.empty() && store.isOpen() && wordCount > 0
+                && writePositionSidecar(session.path.c_str(), {store.sourceSize(), store.sourceFingerprint(), wordCount},
                                         wordIndex);
         }
 
@@ -48,8 +48,8 @@ namespace ReadingProgress {
                                 uint32_t& wordIndex) {
             wordIndex = kNoSavedWordIndex;
             const uint32_t wordCount = static_cast<uint32_t>(reader.wordCount());
-            return session.fromStorage && !session.path.isEmpty() && store.isOpen() && wordCount > 0
-                && readPositionSidecar(session.path, {store.sourceSize(), store.sourceFingerprint(), wordCount},
+            return session.fromStorage && !session.path.empty() && store.isOpen() && wordCount > 0
+                && readPositionSidecar(session.path.c_str(), {store.sourceSize(), store.sourceFingerprint(), wordCount},
                                        wordIndex);
         }
 
@@ -149,7 +149,7 @@ namespace ReadingProgress {
 
     void Session::save(Preferences& preferences, const IndexedBookStore& store, const ReadingLoop& reader, bool force,
                        uint32_t nowMs) {
-        if (!fromStorage || path.isEmpty() || (!force && nowMs - lastSaveMs < kSaveIntervalMs))
+        if (!fromStorage || path.empty() || (!force && nowMs - lastSaveMs < kSaveIntervalMs))
             return;
         const size_t wordIndex = reader.currentIndex();
         if (!force && wordIndex == lastSavedWordIndex)
@@ -162,17 +162,17 @@ namespace ReadingProgress {
 
     void Session::cache(Preferences& preferences, const IndexedBookStore& store, const ReadingLoop& reader,
                         uint32_t wordIndex) {
-        if (!fromStorage || path.isEmpty())
+        if (!fromStorage || path.empty())
             return;
         const size_t wordCount = reader.wordCount();
         if (wordCount > 0)
             wordIndex = std::min<uint32_t>(wordIndex, static_cast<uint32_t>(wordCount - 1));
-        settings::save<settings::prefs::BookPath>(preferences, path);
-        preferences.putUInt(positionKey(path).c_str(), wordIndex);
-        preferences.putUInt(wordCountKey(path).c_str(), static_cast<uint32_t>(wordCount));
+        settings::save<settings::prefs::BookPath>(preferences, path.c_str());
+        preferences.putUInt(positionKey(path.c_str()).c_str(), wordIndex);
+        preferences.putUInt(wordCountKey(path.c_str()).c_str(), static_cast<uint32_t>(wordCount));
         if (store.isOpen()) {
-            preferences.putUInt(sourceSizeKey(path).c_str(), store.sourceSize());
-            preferences.putUInt(sourceFingerprintKey(path).c_str(), store.sourceFingerprint());
+            preferences.putUInt(sourceSizeKey(path.c_str()).c_str(), store.sourceSize());
+            preferences.putUInt(sourceFingerprintKey(path.c_str()).c_str(), store.sourceFingerprint());
         }
         settings::save<settings::prefs::Wpm>(preferences, reader.wpm());
         lastSavedWordIndex = wordIndex;
@@ -188,16 +188,16 @@ namespace ReadingProgress {
         if (readSessionSidecar(*this, store, reader, wordIndex))
             return wordIndex;
 
-        const String savedPositionKey = positionKey(path);
+        const String savedPositionKey = positionKey(path.c_str());
         if (!preferences.isKey(savedPositionKey.c_str()))
             return kNoSavedWordIndex;
-        const String savedCountKey = wordCountKey(path);
+        const String savedCountKey = wordCountKey(path.c_str());
         if (preferences.isKey(savedCountKey.c_str())
             && preferences.getUInt(savedCountKey.c_str(), 0) != static_cast<uint32_t>(reader.wordCount())) {
             return kNoSavedWordIndex;
         }
-        const String savedSizeKey = sourceSizeKey(path);
-        const String savedFingerprintKey = sourceFingerprintKey(path);
+        const String savedSizeKey = sourceSizeKey(path.c_str());
+        const String savedFingerprintKey = sourceFingerprintKey(path.c_str());
         if (preferences.isKey(savedSizeKey.c_str()) && preferences.isKey(savedFingerprintKey.c_str())
             && (preferences.getUInt(savedSizeKey.c_str(), 0) != store.sourceSize()
                 || preferences.getUInt(savedFingerprintKey.c_str(), 0) != store.sourceFingerprint())) {
@@ -210,7 +210,7 @@ namespace ReadingProgress {
 
     bool Session::saveChapterTransition(Preferences& preferences, const IndexedBookStore& store, ReadingLoop& reader,
                                         size_t previousWordIndex, size_t currentWordIndex, uint32_t nowMs) {
-        if (!fromStorage || path.isEmpty())
+        if (!fromStorage || path.empty())
             return false;
         for (const ChapterMarker& chapter: metadata.chapters) {
             if (chapter.wordIndex == 0 || chapter.wordIndex <= previousWordIndex
@@ -224,10 +224,12 @@ namespace ReadingProgress {
         return false;
     }
 
-    String Session::title(const StorageManager& storage) const {
-        if (!metadata.title.isEmpty())
+    std::string Session::title(const StorageManager& storage) const {
+        if (!metadata.title.empty())
             return metadata.title;
-        return fromStorage ? storage.bookDisplayName(index) : String("Demo");
+        if (!fromStorage)
+            return "Demo";
+        return storage.bookDisplayName(index);
     }
 
 } // namespace ReadingProgress

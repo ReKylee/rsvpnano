@@ -126,11 +126,13 @@ void App::renderScreen(uint32_t nowMs) {
         return;
     case screens::Screen::Read:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        action = screens::read(immediateUi_,
-                               {readerScreen_.book.title(storage_), readerScreen_.book.metadata.author,
-                                ReadingProgress::percent(readerScreen_.reader.currentIndex(),
-                                                         readerScreen_.reader.wordCount())},
-                               screen_);
+        {
+            action = screens::read(immediateUi_,
+                                   {readerScreen_.book.title(storage_), readerScreen_.book.metadata.author,
+                                    ReadingProgress::percent(readerScreen_.reader.currentIndex(),
+                                                             readerScreen_.reader.wordCount())},
+                                   screen_);
+        }
         break;
     case screens::Screen::Chapters:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));

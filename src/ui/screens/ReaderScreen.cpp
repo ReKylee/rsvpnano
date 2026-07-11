@@ -1,6 +1,7 @@
 #include "ui/screens/ReaderScreen.h"
 
 #include <algorithm>
+#include <cstdio>
 
 #include "board/BoardPower.h"
 #include "settings/PreferenceSpecs.h"
@@ -32,7 +33,7 @@ namespace screens {
             return (value & 0xC0U) == 0x80U;
         }
 
-        bool nextCodepoint(const String& text, size_t& index, uint16_t& codepoint) {
+        bool nextCodepoint(std::string_view text, size_t& index, uint16_t& codepoint) {
             if (index >= text.length())
                 return false;
             const uint8_t first = static_cast<uint8_t>(text[index++]);
@@ -112,8 +113,8 @@ namespace screens {
         config.typography.guideGap = settings::load<settings::prefs::TypographyGuideGap>(preferences);
         config.pauseMode = static_cast<PauseMode>(settings::load<settings::prefs::PauseMode>(preferences));
 
-        const String savedTypefaceId = settings::load<settings::prefs::ReaderTypefaceId>(preferences);
-        if (savedTypefaceId.isEmpty() || !fonts.indexForId(savedTypefaceId, config.typefaceIndex)) {
+        const std::string savedTypefaceId = settings::load<settings::prefs::ReaderTypefaceId>(preferences);
+        if (savedTypefaceId.empty() || !fonts.indexForId(savedTypefaceId.c_str(), config.typefaceIndex)) {
             config.typefaceIndex =
                 settings::load<settings::prefs::ReaderTypefaceIndex>(preferences, fonts.typefaceCount());
         }
@@ -134,7 +135,7 @@ namespace screens {
         store.close();
         book.metadata.clear();
         StorageManager::IndexedBookLoadOptions options;
-        String loadedPath;
+        std::string loadedPath;
         size_t loadedIndex = index;
         options.loadedPath = &loadedPath;
         options.loadedIndex = &loadedIndex;
@@ -154,8 +155,8 @@ namespace screens {
             reader.seekTo(savedWord);
             book.cache(preferences, store, reader, static_cast<uint32_t>(reader.currentIndex()));
         } else {
-            settings::save<settings::prefs::BookPath>(preferences, book.path);
-            preferences.putUInt(ReadingProgress::wordCountKey(book.path).c_str(),
+            settings::save<settings::prefs::BookPath>(preferences, book.path.c_str());
+            preferences.putUInt(ReadingProgress::wordCountKey(book.path.c_str()).c_str(),
                                 static_cast<uint32_t>(reader.wordCount()));
         }
         return true;
@@ -164,8 +165,8 @@ namespace screens {
     void ReaderScreen::loadInitialBook(ui::Context& ui, StorageManager& storage, Preferences& preferences,
                                        uint32_t nowMs) {
         storage.refreshBooks();
-        const String savedPath = settings::load<settings::prefs::BookPath>(preferences);
-        if (!savedPath.isEmpty()) {
+        const std::string savedPath = settings::load<settings::prefs::BookPath>(preferences);
+        if (!savedPath.empty()) {
             const int savedBook = storage.bookIndex(savedPath);
             if (savedBook >= 0 && openBook(ui, storage, preferences, static_cast<size_t>(savedBook), nowMs))
                 return;
@@ -180,16 +181,18 @@ namespace screens {
     }
 
     void ReaderScreen::draw(ui::Context& ui, const StorageManager& storage, uint32_t nowMs) {
-        const String bookTitle = book.title(storage);
+        const std::string bookTitle = book.title(storage);
         const bool reading = reader.playing();
         const ReaderSettings& settings = session.settings;
-        const String before = settings.phantomWords ? phantomBefore(reader, settings.fontSizeIndex) : String();
-        const String after = settings.phantomWords ? phantomAfter(reader, settings.fontSizeIndex) : String();
+        const std::string before = settings.phantomWords ? phantomBefore(reader, settings.fontSizeIndex) : "";
+        const std::string after = settings.phantomWords ? phantomAfter(reader, settings.fontSizeIndex) : "";
         const ChapterMarker* chapter = book.metadata.chapterAt(reader.currentIndex());
-        const String chapterLabel = chapter != nullptr && !chapter->title.isEmpty() ? chapter->title : bookTitle;
+        const std::string_view chapterLabel = chapter != nullptr && !chapter->title.empty()
+                                                  ? std::string_view{chapter->title}
+                                                  : std::string_view{bookTitle};
         const uint8_t progress = ReadingProgress::percent(reader.currentIndex(), reader.wordCount());
-        const String footer = reading ? String(progress) + "%" : String("PAUSED");
-        const String overlay = session.wpmFeedbackUntilMs > nowMs ? String(reader.wpm()) + " WPM" : String();
+        const std::string footer = reading ? std::to_string(progress) + "%" : "PAUSED";
+        const std::string overlay = session.wpmFeedbackUntilMs > nowMs ? std::to_string(reader.wpm()) + " WPM" : "";
         const BatteryModel batteryModel = battery.view();
 
         font_ = settings.font;
@@ -201,7 +204,7 @@ namespace screens {
             text_.setFont(font_);
             text_.setColors(ui.color(ui::themes::ColorRole::Foreground), ui.color(ui::themes::ColorRole::Background));
 
-            const String& word = reader.currentWord();
+            const std::string& word = reader.currentWord();
             const int focus = focusIndex(word);
             const int16_t wordWidth = textWidth(word);
             int16_t focusCenter = wordWidth / 2;
@@ -239,11 +242,11 @@ namespace screens {
             gfx.drawFastVLine(anchor, guideTop, 5, marker);
             gfx.drawFastVLine(anchor, static_cast<int16_t>(guideBottom - 4), 5, marker);
 
-            if (!before.isEmpty())
+            if (!before.empty())
                 drawText(before, static_cast<int16_t>(x - 24 - textWidth(before)), baseline,
                          ui.blend(ui::themes::ColorRole::Foreground, 62));
             drawWord(word, x, baseline, focus, ui);
-            if (!after.isEmpty())
+            if (!after.empty())
                 drawText(after, static_cast<int16_t>(x + wordWidth + 24), baseline,
                          ui.blend(ui::themes::ColorRole::Foreground, 62));
 
@@ -253,31 +256,32 @@ namespace screens {
             gfx.setTextColor(ui.color(ui::themes::ColorRole::Muted));
             gfx.setCursor(18, static_cast<int16_t>(ui.height() / 2 - 8));
             gfx.print("<<");
-            if (!overlay.isEmpty()) {
+            if (!overlay.empty()) {
                 gfx.setTextColor(ui.color(ui::themes::ColorRole::Accent));
-                gfx.setCursor(static_cast<int16_t>((ui.width() - overlay.length() * 12) / 2),
+                gfx.setCursor(static_cast<int16_t>((ui.width() - overlay.size() * 12) / 2),
                               static_cast<int16_t>(ui.height() - 56));
-                gfx.print(overlay);
+                gfx.print(overlay.c_str());
             }
         }
 
-        const int16_t footerWidth = static_cast<int16_t>(footer.length() * 12);
+        const int16_t footerWidth = static_cast<int16_t>(footer.size() * 12);
         const int16_t footerX = static_cast<int16_t>(ui.width() - 18 - footerWidth);
         ui.label({18, static_cast<int16_t>(ui.height() - 26), static_cast<int16_t>(footerX - 42), 16},
-                 reading                  ? ""
-                 : chapterLabel.isEmpty() ? "START"
-                                          : chapterLabel.c_str(),
+                 reading ? std::string_view{} : chapterLabel.empty() ? std::string_view{"START"} : chapterLabel,
                  2, ui::themes::ColorRole::Muted);
-        ui.label({footerX, static_cast<int16_t>(ui.height() - 26), footerWidth, 16}, footer.c_str(), 2,
+        ui.label({footerX, static_cast<int16_t>(ui.height() - 26), footerWidth, 16}, footer, 2,
                  ui::themes::ColorRole::Muted, ui::TextAlign::Right);
 
-        const String batteryLabel = batteryModel.showVoltage && batteryModel.voltage > 0
-                                      ? String(batteryModel.voltage, 2) + "V"
-                                      : String(batteryModel.percent) + "%";
+        char batteryText[12];
+        if (batteryModel.showVoltage && batteryModel.voltage > 0)
+            std::snprintf(batteryText, sizeof(batteryText), "%.2fV", batteryModel.voltage);
+        else
+            std::snprintf(batteryText, sizeof(batteryText), "%u%%", static_cast<unsigned int>(batteryModel.percent));
+        const std::string_view batteryLabel{batteryText};
         const ui::Rect batteryArea = batteryRect(ui.width());
         ui.battery({batteryArea.x, batteryArea.y, static_cast<int16_t>(batteryArea.w - 10), batteryArea.h},
                    reading ? 0 : batteryModel.percent, !reading && batteryModel.charging,
-                   reading ? std::string_view{} : std::string_view{batteryLabel.c_str()});
+                   reading ? std::string_view{} : batteryLabel);
     }
 
     bool ReaderScreen::batteryTapped(const ui::Touch& touch) const {
@@ -500,7 +504,7 @@ namespace screens {
         return deltaX > 0 ? steps : -steps;
     }
 
-    String ReaderScreen::phantomBefore(const ReadingLoop& reader, uint8_t sizeIndex) const {
+    std::string ReaderScreen::phantomBefore(const ReadingLoop& reader, uint8_t sizeIndex) const {
         if (reader.wordCount() == 0)
             return "";
         const size_t target = kPhantomBeforeTargets[std::min<size_t>(sizeIndex, 2)];
@@ -510,17 +514,17 @@ namespace screens {
             --start;
             characters += reader.wordAt(start).length() + (start + 1 < reader.currentIndex());
         }
-        String result;
+        std::string result;
         result.reserve(characters);
         for (size_t index = start; index < reader.currentIndex(); ++index) {
-            if (!result.isEmpty())
+            if (!result.empty())
                 result += ' ';
             result += reader.wordAt(index);
         }
         return result;
     }
 
-    String ReaderScreen::phantomAfter(const ReadingLoop& reader, uint8_t sizeIndex) const {
+    std::string ReaderScreen::phantomAfter(const ReadingLoop& reader, uint8_t sizeIndex) const {
         if (reader.currentIndex() + 1 >= reader.wordCount())
             return "";
         const size_t target = kPhantomAfterTargets[std::min<size_t>(sizeIndex, 2)];
@@ -530,17 +534,17 @@ namespace screens {
             characters += reader.wordAt(end).length() + (end > reader.currentIndex() + 1);
             ++end;
         }
-        String result;
+        std::string result;
         result.reserve(characters);
         for (size_t index = reader.currentIndex() + 1; index < end; ++index) {
-            if (!result.isEmpty())
+            if (!result.empty())
                 result += ' ';
             result += reader.wordAt(index);
         }
         return result;
     }
 
-    int ReaderScreen::focusIndex(const String& word) const {
+    int ReaderScreen::focusIndex(std::string_view word) const {
         int characters = 0;
         for (size_t index = 0; index < word.length();) {
             uint16_t codepoint = 0;
@@ -549,7 +553,7 @@ namespace screens {
                 ++characters;
         }
         if (characters == 0)
-            return word.isEmpty() ? -1 : 0;
+            return word.empty() ? -1 : 0;
         const int target = std::min(focusOrdinal(characters), characters - 1);
         int ordinal = 0, glyph = 0;
         for (size_t index = 0; index < word.length(); ++glyph) {
@@ -561,10 +565,10 @@ namespace screens {
         return 0;
     }
 
-    int16_t ReaderScreen::textWidth(const String& value) const {
+    int16_t ReaderScreen::textWidth(std::string_view value) const {
         text_.setFont(font_);
         if (typography_.tracking == 0)
-            return text_.advance({value.c_str(), value.length()});
+            return text_.advance(value);
         int16_t width = 0;
         for (size_t index = 0; index < value.length();) {
             uint16_t codepoint = 0;
@@ -576,11 +580,11 @@ namespace screens {
         return width;
     }
 
-    void ReaderScreen::drawText(const String& value, int16_t x, int16_t baseline, uint16_t color) {
+    void ReaderScreen::drawText(std::string_view value, int16_t x, int16_t baseline, uint16_t color) {
         text_.setFont(font_);
         text_.setColors(color, background_);
         if (typography_.tracking == 0) {
-            text_.draw({value.c_str(), value.length()}, x, baseline);
+            text_.draw(value, x, baseline);
             return;
         }
         for (size_t index = 0; index < value.length();) {
@@ -591,7 +595,7 @@ namespace screens {
         }
     }
 
-    void ReaderScreen::drawWord(const String& word, int16_t x, int16_t baseline, int focus, ui::Context& ui) {
+    void ReaderScreen::drawWord(std::string_view word, int16_t x, int16_t baseline, int focus, ui::Context& ui) {
         int glyph = 0;
         for (size_t index = 0; index < word.length(); ++glyph) {
             uint16_t codepoint = 0;
@@ -604,12 +608,12 @@ namespace screens {
         }
     }
 
-    uint32_t ReaderScreen::frameSignature(const String& before, const String& word, const String& after,
-                                          const String& overlay, const ReaderSettings& settings) const {
-        uint32_t value = ui::Context::signature(before.c_str());
-        value = ui::Context::signature(word.c_str(), value);
-        value = ui::Context::signature(after.c_str(), value);
-        value = ui::Context::signature(overlay.c_str(), value);
+    uint32_t ReaderScreen::frameSignature(std::string_view before, std::string_view word, std::string_view after,
+                                          std::string_view overlay, const ReaderSettings& settings) const {
+        uint32_t value = ui::Context::signature(before);
+        value = ui::Context::signature(word, value);
+        value = ui::Context::signature(after, value);
+        value = ui::Context::signature(overlay, value);
         value = ui::Context::combine(value, static_cast<uint8_t>(settings.typography.tracking));
         value = ui::Context::combine(value, settings.typography.anchor);
         value = ui::Context::combine(value, settings.typography.guideWidth);

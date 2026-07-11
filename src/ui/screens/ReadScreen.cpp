@@ -11,9 +11,7 @@ namespace screens {
         const bool wide = ui.width() >= 620 && ui.height() >= 150 && ui.height() <= 240;
         ui::Column column{area, static_cast<int16_t>(wide ? 12 : 10)};
         const ui::Rect resume = column.next(64);
-        const std::string_view author = model.author.isEmpty()
-                                          ? std::string_view{"Unknown"}
-                                          : std::string_view{model.author.c_str(), model.author.length()};
+        const std::string_view author = model.author.empty() ? std::string_view{"Unknown"} : model.author;
         char progress[4];
         size_t progressLength = 0;
         if (model.progress >= 100) {
@@ -27,7 +25,7 @@ namespace screens {
         }
         progress[progressLength++] = '%';
         const std::string_view progressText{progress, progressLength};
-        if (ui.button(resume, model.title.c_str(), ui::Icon::Bookmark, 2, author, progressText)) {
+        if (ui.button(resume, model.title, ui::Icon::Bookmark, 2, author, progressText)) {
             return Action::Resume;
         }
 

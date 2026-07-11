@@ -1,6 +1,8 @@
 #pragma once
 
-#include <Arduino.h>
+#include <cstddef>
+#include <string>
+#include <string_view>
 
 #include "storage/fs/SdDiagnostics.h"
 #include "storage/library/BookLibrary.h"
@@ -21,7 +23,7 @@ public:
                 allowIndexBuild(true),
                 allowEpubConversion(true) {}
 
-        String* loadedPath;
+        std::string* loadedPath;
         size_t* loadedIndex;
         bool allowIndexBuild;
         bool allowEpubConversion;
@@ -38,11 +40,11 @@ public:
     bool loadIndexedBook(size_t index, IndexedBookStore& store, BookMetadata& metadata,
                          const IndexedBookLoadOptions& options = IndexedBookLoadOptions());
     size_t bookCount() const;
-    int bookIndex(const String& path) const;
-    String bookPath(size_t index) const;
+    int bookIndex(std::string_view path) const;
+    std::string bookPath(size_t index) const;
     bool bookIsArticle(size_t index) const;
-    String bookDisplayName(size_t index) const;
-    String bookAuthorName(size_t index) const;
+    std::string bookDisplayName(size_t index) const;
+    std::string bookAuthorName(size_t index) const;
     DiagnosticResult diagnoseSdCard();
     bool repairSdCardFolders();
 

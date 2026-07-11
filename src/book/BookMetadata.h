@@ -1,16 +1,17 @@
 #pragma once
 
-#include <Arduino.h>
+#include <cstddef>
+#include <string>
 #include <vector>
 
 struct ChapterMarker {
-    String title;
+    std::string title;
     size_t wordIndex = 0;
 };
 
 struct BookMetadata {
-    String title;
-    String author;
+    std::string title;
+    std::string author;
     size_t wordCount = 0;
     std::vector<ChapterMarker> chapters;
     std::vector<size_t> paragraphStarts;
@@ -26,8 +27,8 @@ struct BookMetadata {
     }
 
     void clear() {
-        title = "";
-        author = "";
+        title.clear();
+        author.clear();
         wordCount = 0;
         chapters.clear();
         paragraphStarts.clear();

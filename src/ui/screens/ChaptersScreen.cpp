@@ -10,8 +10,8 @@ namespace screens {
         }
         const size_t visible = std::min<size_t>(chapters.size(), std::max<int16_t>(0, (column.bounds.h - 26) / 22));
         for (size_t index = 0; index < visible; ++index) {
-            const String& title = chapters[index].title;
-            if (ui.button(column.next(18), title.isEmpty() ? "Chapter" : title.c_str())) {
+            const std::string& title = chapters[index].title;
+            if (ui.button(column.next(18), title.empty() ? "Chapter" : std::string_view{title})) {
                 reader.seekTo(chapters[index].wordIndex);
                 return Action::Resume;
             }

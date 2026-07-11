@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include <Preferences.h>
@@ -13,12 +15,12 @@
 namespace screens {
 
     struct LibraryItem {
-        String title;
-        String author;
-        String chapter;
-        String detail;
-        String progressLabel;
-        String spineLabel;
+        std::string title;
+        std::string author;
+        std::string chapter;
+        std::string detail;
+        std::string progressLabel;
+        std::string spineLabel;
         uint8_t progress = 0;
         bool article = false;
     };
@@ -52,9 +54,9 @@ namespace screens {
         uint8_t storedProgress(size_t index, StorageManager& storage, const IndexedBookStore& bookStore,
                                const ReadingLoop& reader, const ReadingProgress::Session& book,
                                Preferences& preferences) const;
-        static String spineLabel(const String& title);
-        static String detailLine(const String& author, const String& chapter);
-        static String progressLabel(uint8_t progress);
+        static std::string spineLabel(std::string_view title);
+        static std::string detailLine(std::string_view author, std::string_view chapter);
+        static std::string progressLabel(uint8_t progress);
 
         bool dragging_ = false;
         bool moved_ = false;

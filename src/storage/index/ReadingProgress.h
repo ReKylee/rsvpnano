@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <cstdint>
+#include <string>
 
 #include "book/BookMetadata.h"
 
@@ -22,7 +23,7 @@ namespace ReadingProgress {
 
     struct Session {
         BookMetadata metadata;
-        String path;
+        std::string path;
         size_t index = 0;
         size_t lastSavedWordIndex = static_cast<size_t>(-1);
         uint32_t lastSaveMs = 0;
@@ -36,7 +37,7 @@ namespace ReadingProgress {
         uint32_t restore(Preferences& preferences, const IndexedBookStore& store, const ReadingLoop& reader);
         bool saveChapterTransition(Preferences& preferences, const IndexedBookStore& store, ReadingLoop& reader,
                                    size_t previousWordIndex, size_t currentWordIndex, uint32_t nowMs);
-        String title(const StorageManager& storage) const;
+        std::string title(const StorageManager& storage) const;
     };
 
     bool readPositionSidecar(const String& bookPath, const BookIdentity& identity, uint32_t& wordIndex);

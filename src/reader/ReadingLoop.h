@@ -1,6 +1,9 @@
 #pragma once
 
-#include <Arduino.h>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include "reader/BookWordSource.h"
@@ -20,7 +23,7 @@ public:
     void start(uint32_t nowMs);
     void pause();
     bool update(uint32_t nowMs, bool allowCatchUp = true);
-    void setWords(std::vector<String> words, uint32_t nowMs);
+    void setWords(std::vector<std::string> words, uint32_t nowMs);
     void setWordSource(BookWordSource* source, uint32_t nowMs);
     void clearLoadedBook(uint32_t nowMs);
     void scrub(int steps);
@@ -32,8 +35,8 @@ public:
     void setPacingConfig(const PacingConfig& config);
     const PacingConfig& pacingConfig() const;
 
-    const String& currentWord() const;
-    String wordAt(size_t index) const;
+    const std::string& currentWord() const;
+    std::string wordAt(size_t index) const;
     size_t currentIndex() const;
     size_t wordCount() const;
     uint16_t wpm() const;
@@ -57,8 +60,8 @@ private:
     uint32_t lastAdvanceMs_ = 0;
     uint16_t wpm_ = 300;
     PacingConfig pacingConfig_;
-    String currentWord_;
-    std::vector<String> loadedWords_;
+    std::string currentWord_;
+    std::vector<std::string> loadedWords_;
     BookWordSource* wordSource_ = nullptr;
     bool playing_ = false;
 };

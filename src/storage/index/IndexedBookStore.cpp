@@ -53,7 +53,7 @@ namespace {
 
 } // namespace
 
-bool IndexedBookStore::open(const String& indexPath, const String& dataPath, const Header& header) {
+bool IndexedBookStore::open(const char* indexPath, const char* dataPath, const Header& header) {
     File nextIndexFile = Board::Storage::filesystem().open(indexPath, FILE_READ);
     if (!nextIndexFile || nextIndexFile.isDirectory()) {
         if (nextIndexFile) {
@@ -72,7 +72,7 @@ bool IndexedBookStore::open(const String& indexPath, const String& dataPath, con
     }
 
     if (!validateLayout(header, nextIndexFile.size(), nextDataFile.size())) {
-        Serial.printf("[storage-index] invalid store layout index=%s data=%s\n", indexPath.c_str(), dataPath.c_str());
+        Serial.printf("[storage-index] invalid store layout index=%s data=%s\n", indexPath, dataPath);
         nextIndexFile.close();
         nextDataFile.close();
         return false;
@@ -113,7 +113,7 @@ size_t IndexedBookStore::wordCount() const {
     return isOpen() ? static_cast<size_t>(header_.wordCount) : 0;
 }
 
-String IndexedBookStore::wordAt(size_t index) const {
+std::string IndexedBookStore::wordAt(size_t index) const {
     if (!isOpen() || index >= wordCount()) {
         return "";
     }
@@ -216,12 +216,7 @@ bool IndexedBookStore::loadWordWindow(size_t index) const {
         }
 
         const size_t localOffset = record.offset - dataStart;
-        String word;
-        word.reserve(record.length);
-        for (uint16_t i = 0; i < record.length; ++i) {
-            word += buffer[localOffset + i];
-        }
-        cachedWords_.push_back(word);
+        cachedWords_.emplace_back(buffer.data() + localOffset, record.length);
     }
 
     cachedStart_ = start;

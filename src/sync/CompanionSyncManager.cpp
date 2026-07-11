@@ -890,7 +890,7 @@ void CompanionSyncManager::handleBooksList() {
                             if (i > 0) {
                                 body += ",";
                             }
-                            body += "{\"title\":\"" + jsonEscape(indexedMetadata.chapters[i].title)
+                            body += "{\"title\":\"" + jsonEscape(indexedMetadata.chapters[i].title.c_str())
                                   + "\",\"wordIndex\":"
                                   + String(static_cast<uint32_t>(indexedMetadata.chapters[i].wordIndex)) + "}";
                         }

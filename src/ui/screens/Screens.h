@@ -4,6 +4,7 @@
 #include <Preferences.h>
 
 #include <span>
+#include <string>
 
 #include "book/BookMetadata.h"
 #include "display/DisplaySettings.h"
@@ -50,8 +51,8 @@ namespace screens {
     };
 
     struct ReadModel {
-        String title;
-        String author;
+        std::string title;
+        std::string author;
         uint8_t progress = 0;
     };
 

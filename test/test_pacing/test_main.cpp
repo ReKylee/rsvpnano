@@ -11,7 +11,7 @@ void tearDown() {}
 // Helpers
 // ---------------------------------------------------------------------------
 
-static ReadingLoop makeReader(uint16_t wpm, std::vector<String> words) {
+static ReadingLoop makeReader(uint16_t wpm, std::vector<std::string> words) {
   ReadingLoop r;
   r.setWpm(wpm);
   r.setWords(std::move(words), 0);
@@ -20,11 +20,11 @@ static ReadingLoop makeReader(uint16_t wpm, std::vector<String> words) {
 
 class FakeWordSource : public BookWordSource {
  public:
-  explicit FakeWordSource(std::vector<String> words) : words_(std::move(words)) {}
+  explicit FakeWordSource(std::vector<std::string> words) : words_(std::move(words)) {}
 
   size_t wordCount() const override { return words_.size(); }
 
-  String wordAt(size_t index) const override {
+  std::string wordAt(size_t index) const override {
     if (index >= words_.size()) {
       return "";
     }
@@ -40,12 +40,12 @@ class FakeWordSource : public BookWordSource {
   mutable size_t prefetchCalls = 0;
 
  private:
-  std::vector<String> words_;
+  std::vector<std::string> words_;
 };
 
 // Duration of the first word when the second word is the contextual next.
 static uint32_t duration(uint16_t wpm, const char *word, const char *next) {
-  ReadingLoop r = makeReader(wpm, {String(word), String(next)});
+  ReadingLoop r = makeReader(wpm, {word, next});
   return r.currentWordDurationMs();
 }
 

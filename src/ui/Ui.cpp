@@ -359,9 +359,11 @@ namespace ui {
         const size_t slot = nextSlot_;
         const Touch* event = touch();
         const bool labeled = !label.empty();
-        const Rect track{static_cast<int16_t>(rect.x + (labeled ? 8 : 0)),
-                         static_cast<int16_t>(rect.y + (labeled ? rect.h - 12 : rect.h / 2 - 2)),
-                         static_cast<int16_t>(rect.w - (labeled ? 16 : 0)), 4};
+        const int16_t visualHeight = labeled ? std::min<int16_t>(34, rect.h) : rect.h;
+        const Rect visual{rect.x, static_cast<int16_t>(rect.y + (rect.h - visualHeight) / 2), rect.w, visualHeight};
+        const Rect track{static_cast<int16_t>(visual.x + (labeled ? 8 : 0)),
+                         static_cast<int16_t>(visual.y + (labeled ? visual.h - 8 : visual.h / 2 - 1)),
+                         static_cast<int16_t>(visual.w - (labeled ? 16 : 0)), 3};
         const bool started = event != nullptr && hasTouch(*event, TouchStart) && contains(rect, event->x, event->y);
         if (started && slot < kSlotCapacity) {
             capturedSlot_ = slot;
@@ -389,15 +391,29 @@ namespace ui {
         if (claim(Kind::Slider, rect, state).changed) {
             if (labeled) {
                 const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
-                gfx_.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
-                gfx_.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
+                gfx_.fillRoundRect(visual.x, visual.y, visual.w, visual.h, 5, surface);
+                gfx_.drawRoundRect(visual.x, visual.y, visual.w, visual.h, 5,
+                                   color(ui::themes::ColorRole::Outline));
                 char valueText[24];
                 std::snprintf(valueText, sizeof(valueText), "%d%.*s", result.value, static_cast<int>(suffix.size()),
                               suffix.data());
-                drawText({static_cast<int16_t>(rect.x + 7), rect.y, static_cast<int16_t>(rect.w - 14), 16}, label, 1,
+                const std::string_view valueView{valueText};
+                const int16_t headerWidth = static_cast<int16_t>(visual.w - 14);
+                uint8_t labelSize = visual.h >= 32 ? 2 : 1;
+                uint8_t valueSize = labelSize;
+                int16_t valueWidth = static_cast<int16_t>(valueView.size() * 6U * valueSize);
+                if (static_cast<size_t>(headerWidth) < label.size() * 6U * labelSize + valueWidth + 8U) {
+                    valueSize = 1;
+                    valueWidth = static_cast<int16_t>(valueView.size() * 6U);
+                }
+                if (static_cast<size_t>(headerWidth) < label.size() * 6U * labelSize + valueWidth + 8U)
+                    labelSize = 1;
+                const int16_t labelWidth = std::max<int16_t>(0, static_cast<int16_t>(headerWidth - valueWidth - 8));
+                const int16_t textY = static_cast<int16_t>(visual.y + 2);
+                drawText({static_cast<int16_t>(visual.x + 7), textY, labelWidth, 16}, label, labelSize,
                          color(ui::themes::ColorRole::Foreground));
-                drawText({static_cast<int16_t>(rect.x + 7), rect.y, static_cast<int16_t>(rect.w - 14), 16}, valueText,
-                         1, color(ui::themes::ColorRole::Accent), TextAlign::Right);
+                drawText({static_cast<int16_t>(visual.x + visual.w - valueWidth - 7), textY, valueWidth, 16},
+                         valueView, valueSize, color(ui::themes::ColorRole::Accent), TextAlign::Right);
             }
             gfx_.fillRect(track.x, track.y, track.w, track.h, color(ui::themes::ColorRole::ProgressTrack));
             const int16_t knobX =
@@ -406,7 +422,25 @@ namespace ui {
                     : static_cast<int16_t>(track.x
                                            + (static_cast<int32_t>(track.w - 1) * (result.value - minimum))
                                                  / (maximum - minimum));
-            gfx_.fillCircle(knobX, static_cast<int16_t>(track.y + 2), 7, color(ui::themes::ColorRole::Accent));
+            const int16_t trackCenterY = static_cast<int16_t>(track.y + track.h / 2);
+            if (step > 0 && maximum > minimum) {
+                const int intervalCount = (maximum - minimum + step - 1) / step;
+                const int tickStride = std::max(1, (intervalCount + 9) / 10);
+                for (int interval = 0;; interval = std::min(interval + tickStride, intervalCount)) {
+                    const int tickValue = std::min(minimum + interval * step, maximum);
+                    const int16_t tickX = static_cast<int16_t>(
+                        track.x + (static_cast<int32_t>(track.w - 1) * (tickValue - minimum)) / (maximum - minimum));
+                    gfx_.drawFastVLine(tickX, static_cast<int16_t>(trackCenterY - 3), 7,
+                                       color(ui::themes::ColorRole::Outline));
+                    if (interval == intervalCount)
+                        break;
+                }
+            }
+            gfx_.fillRect(track.x, track.y, static_cast<int16_t>(knobX - track.x + 1), track.h,
+                          color(ui::themes::ColorRole::Accent));
+            const int16_t knobRadius = labeled ? 5 : 7;
+            gfx_.fillCircle(knobX, trackCenterY, knobRadius, color(ui::themes::ColorRole::Accent));
+            gfx_.drawCircle(knobX, trackCenterY, knobRadius, color(ui::themes::ColorRole::OnAccent));
         }
 
         if (capturedSlot_ == slot && event != nullptr && hasTouch(*event, TouchRelease)) {

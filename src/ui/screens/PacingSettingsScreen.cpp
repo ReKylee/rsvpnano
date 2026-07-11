@@ -14,8 +14,9 @@ namespace screens {
 
         const int16_t gap = 6;
         const int16_t cardWidth = static_cast<int16_t>((content.w - gap * 2) / 3);
-        const int16_t sliderY = static_cast<int16_t>(content.y + 34);
-        if (const auto value = ui.slider({content.x, sliderY, cardWidth, 50}, "Long words",
+        ui.separator({content.x, static_cast<int16_t>(content.y + 30), content.w, 10}, "ADDITIONAL DELAY");
+        const int16_t sliderY = static_cast<int16_t>(content.y + 44);
+        if (const auto value = ui.slider({content.x, sliderY, cardWidth, 34}, "Long words",
                                          reader.pacingConfig().longWordDelayMs, 0, 600, 50, " ms");
             value.changed) {
             auto pacing = reader.pacingConfig();
@@ -25,7 +26,7 @@ namespace screens {
         }
 
         if (const auto value =
-                ui.slider({static_cast<int16_t>(content.x + cardWidth + gap), sliderY, cardWidth, 50},
+                ui.slider({static_cast<int16_t>(content.x + cardWidth + gap), sliderY, cardWidth, 34},
                           ui.text(UiText::Complexity),
                           reader.pacingConfig().complexWordDelayMs, 0, 600, 50, " ms");
             value.changed) {
@@ -36,7 +37,7 @@ namespace screens {
         }
 
         if (const auto value =
-                ui.slider({static_cast<int16_t>(content.x + (cardWidth + gap) * 2), sliderY, cardWidth, 50},
+                ui.slider({static_cast<int16_t>(content.x + (cardWidth + gap) * 2), sliderY, cardWidth, 34},
                           ui.text(UiText::Punctuation), reader.pacingConfig().punctuationDelayMs, 0, 600, 50, " ms");
             value.changed) {
             auto pacing = reader.pacingConfig();
@@ -45,7 +46,7 @@ namespace screens {
             reader.setPacingConfig(pacing);
         }
 
-        if (ui.button({content.x, static_cast<int16_t>(sliderY + 58), content.w, 30},
+        if (ui.button({content.x, static_cast<int16_t>(sliderY + 42), content.w, 34},
                       ui.text(UiText::ResetPacing))) {
             const ReadingLoop::PacingConfig pacing{pref::PacingLongWordDelay::defaultValue(),
                                                    pref::PacingComplexWordDelay::defaultValue(),

@@ -11,9 +11,11 @@ namespace screens {
         ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
                  "Reader screen", 2);
 
-        const int16_t gap = 5;
-        ui::Grid grid{{content.x, static_cast<int16_t>(content.y + 32), content.w,
-                       static_cast<int16_t>(content.h - 32)}, 2, 27, gap};
+        constexpr int16_t gap = 5;
+        const int16_t sectionsY = static_cast<int16_t>(content.y + 30);
+        ui.separator({content.x, sectionsY, content.w, 10}, "BEHAVIOR & METRICS");
+        ui::Grid grid{{content.x, static_cast<int16_t>(sectionsY + 14), content.w,
+                       static_cast<int16_t>(content.h - 44)}, 2, 32, gap};
         if (ui.setting(grid.next(), "Reader hand", config.leftHanded ? "Left" : "Right")) {
             config.leftHanded = !config.leftHanded;
             settings::save<settings::prefs::Handedness>(preferences, static_cast<uint8_t>(config.leftHanded));
@@ -42,13 +44,17 @@ namespace screens {
                                                                static_cast<uint8_t>(config.batteryLabel));
         }
 
-        if (ui.toggle(grid.next(), "Show battery", config.batteryVisibleWhileReading))
+        const int16_t visibilityY = static_cast<int16_t>(sectionsY + 83);
+        ui.separator({content.x, visibilityY, content.w, 10}, "VISIBLE WHILE READING");
+        ui::Grid visibility{{content.x, static_cast<int16_t>(visibilityY + 14), content.w,
+                             static_cast<int16_t>(content.h - 107)}, 3, 28, gap};
+        if (ui.toggle(visibility.next(), "Show battery", config.batteryVisibleWhileReading))
             config.batteryVisibleWhileReading =
                 settings::toggle<settings::prefs::ReaderBatteryVisible>(preferences);
-        if (ui.toggle(grid.next(), "Show chapter", config.chapterVisibleWhileReading))
+        if (ui.toggle(visibility.next(), "Show chapter", config.chapterVisibleWhileReading))
             config.chapterVisibleWhileReading =
                 settings::toggle<settings::prefs::ReaderChapterVisible>(preferences);
-        if (ui.toggle(grid.next(), "Show progress", config.progressVisibleWhileReading))
+        if (ui.toggle(visibility.next(), "Show progress", config.progressVisibleWhileReading))
             config.progressVisibleWhileReading =
                 settings::toggle<settings::prefs::ReaderProgressVisible>(preferences);
     }

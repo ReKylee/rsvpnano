@@ -22,9 +22,11 @@ namespace screens {
         ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
                  "Network & updates", 2);
 
-        const int16_t gap = 6;
-        ui::Grid grid{{content.x, static_cast<int16_t>(content.y + 32), content.w,
-                       static_cast<int16_t>(content.h - 32)}, 3, 34, gap};
+        constexpr int16_t gap = 6;
+        const int16_t sectionY = static_cast<int16_t>(content.y + 30);
+        ui.separator({content.x, sectionY, content.w, 10}, "CONNECTION & RELEASE");
+        ui::Grid grid{{content.x, static_cast<int16_t>(sectionY + 14), content.w,
+                       static_cast<int16_t>(content.h - 44)}, 2, 32, gap};
         if (ui.setting(grid.next(), "Network", ssid.empty() ? "Not set" : std::string_view{ssid}))
             screen = Screen::Sync;
         if (ui.toggle(grid.next(), "Automatic checks", automatic)) {
@@ -36,11 +38,14 @@ namespace screens {
             screen = Screen::Sync;
         if (ui.setting(grid.next(), "Release tag", tag.empty() ? "Latest" : std::string_view{tag}))
             screen = Screen::Sync;
-        if (ui.button(grid.next(), "Companion setup"))
+
+        ui::Grid actions{{content.x, static_cast<int16_t>(sectionY + 88), content.w,
+                          static_cast<int16_t>(content.h - 88)}, static_cast<uint8_t>(ssidStored ? 3 : 2), 36, gap};
+        if (ui.button(actions.next(), "Companion setup"))
             screen = Screen::Sync;
-        if (ui.button(grid.next(), "Firmware updates"))
+        if (ui.button(actions.next(), "Firmware updates"))
             screen = Screen::Ota;
-        if (ssidStored && ui.button(grid.next(), "Forget network")) {
+        if (ssidStored && ui.button(actions.next(), "Forget network")) {
             preferences.remove(settings::prefs::WifiSsid::key());
             preferences.remove(settings::prefs::WifiPassword::key());
             ssid.clear();

@@ -18,7 +18,6 @@ namespace screens {
         std::string title;
         std::string author;
         std::string chapter;
-        std::string detail;
         std::string progressLabel;
         std::string spineLabel;
         uint8_t progress = 0;
@@ -55,7 +54,6 @@ namespace screens {
                                const ReadingLoop& reader, const ReadingProgress::Session& book,
                                Preferences& preferences) const;
         static std::string spineLabel(std::string_view title);
-        static std::string detailLine(std::string_view author, std::string_view chapter);
         static std::string progressLabel(uint8_t progress);
 
         bool dragging_ = false;

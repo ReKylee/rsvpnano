@@ -9,7 +9,7 @@ namespace screens {
 
         const ui::Rect area = detail::content(ui);
         const bool wide = ui.width() >= 620 && ui.height() >= 150 && ui.height() <= 240;
-        ui::Column column{area, static_cast<int16_t>(wide ? 12 : 10)};
+        ui::Column column{area, static_cast<int16_t>(wide ? 18 : 10)};
         const ui::Rect resume = column.next(64);
         const std::string_view author = model.author.empty() ? std::string_view{"Unknown"} : model.author;
         char progress[4];

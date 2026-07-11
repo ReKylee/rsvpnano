@@ -10,8 +10,8 @@
 namespace screens {
     namespace {
 
-        constexpr int16_t kShelfHeight = 120;
-        constexpr int16_t kDetailGap = 8;
+        constexpr int16_t kShelfHeight = 118;
+        constexpr int16_t kDetailGap = 2;
         constexpr int16_t kGap = 5;
 
         uint16_t spineColor(size_t index, bool article) {
@@ -66,6 +66,8 @@ namespace screens {
             moved_ = moved_ || std::abs(dx) > 5 || std::abs(dy) > 5;
             if (lastDrawMs_ == 0 || nowMs - lastDrawMs_ >= 33) {
                 offset_ = clampOffset(items, static_cast<int16_t>(startOffset_ + dx), viewport.w);
+                selectedIndex_ =
+                    nearest(items, offset_, static_cast<int16_t>(viewport.x + viewport.w / 2), viewport.x);
                 lastDrawMs_ = nowMs;
             }
         }
@@ -124,9 +126,14 @@ namespace screens {
                 if (active)
                     gfx.fillRect(x, static_cast<int16_t>(y - 2), width, 2, accent);
                 if (items[index].progress > 0) {
-                    gfx.fillRect(static_cast<int16_t>(x + width - 9), y, 5,
-                                 std::max<int16_t>(8, static_cast<int16_t>(height * items[index].progress / 100)),
-                                 0xDACA);
+                    const int16_t ribbonX = static_cast<int16_t>(x + width - 9);
+                    const int16_t ribbonHeight =
+                        std::max<int16_t>(8, static_cast<int16_t>(height * items[index].progress / 100));
+                    gfx.fillRect(ribbonX, y, 5, ribbonHeight, 0xDACA);
+                    for (int16_t row = 0; row < 3; ++row)
+                        gfx.drawFastHLine(static_cast<int16_t>(ribbonX + 2 - row),
+                                          static_cast<int16_t>(y + ribbonHeight - 3 + row),
+                                          static_cast<int16_t>(row * 2 + 1), fill);
                 }
                 gfx.setTextSize(1);
                 gfx.setTextColor(0xFF9C);
@@ -145,11 +152,14 @@ namespace screens {
         constexpr int16_t detailGap = 12;
         const int16_t textWidth = static_cast<int16_t>(detailRect.w - progressWidth - detailGap);
         const LibraryItem& item = items[selectedIndex_];
+        const std::string_view author = item.author.empty() ? std::string_view{"Unknown"} : item.author;
         ui.label({detailRect.x, detailRect.y, textWidth, 16}, item.title, 2);
-        ui.label({detailRect.x, static_cast<int16_t>(detailRect.y + 18), textWidth, 8}, item.detail, 1,
+        ui.label({detailRect.x, static_cast<int16_t>(detailRect.y + 18), detailRect.w, 8}, author, 1,
+                 ui::themes::ColorRole::Muted);
+        ui.label({detailRect.x, static_cast<int16_t>(detailRect.y + 28), detailRect.w, 8}, item.chapter, 1,
                  ui::themes::ColorRole::Muted);
         ui.label({static_cast<int16_t>(detailRect.x + detailRect.w - progressWidth),
-                  static_cast<int16_t>(detailRect.y + 7), progressWidth, 16},
+                  detailRect.y, progressWidth, 16},
                  item.progressLabel, 2, ui::themes::ColorRole::Accent, ui::TextAlign::Right);
         return result;
     }
@@ -179,7 +189,6 @@ namespace screens {
                 if (const ChapterMarker* chapter = book.metadata.chapterAt(reader.currentIndex())) {
                     current.chapter = chapter->title;
                 }
-                current.detail = detailLine(current.author, current.chapter);
                 current.progressLabel = progressLabel(current.progress);
             }
             return items_;
@@ -237,7 +246,6 @@ namespace screens {
                 item.progress = storedProgress(index, storage, bookStore, reader, book, preferences);
             }
 
-            item.detail = detailLine(item.author, item.chapter);
             item.progressLabel = progressLabel(item.progress);
             items_.push_back(item);
         }
@@ -300,18 +308,9 @@ namespace screens {
         return result.empty() ? std::string{"BOOK"} : result;
     }
 
-    std::string LibraryScreen::detailLine(std::string_view author, std::string_view chapter) {
-        std::string result{author.empty() ? std::string_view{"Unknown"} : author};
-        if (!chapter.empty()) {
-            result += " | ";
-            result += chapter;
-        }
-        return result;
-    }
-
     std::string LibraryScreen::progressLabel(uint8_t progress) {
         if (progress == 0)
-            return "new";
+            return "0%";
         if (progress >= 100)
             return "done";
         std::string result;
@@ -391,7 +390,7 @@ namespace screens {
     }
 
     int16_t LibraryScreen::spineHeight(const LibraryItem& item, size_t index) const {
-        return std::min<int16_t>(112, static_cast<int16_t>((item.article ? 78 : 84)
+        return std::min<int16_t>(110, static_cast<int16_t>((item.article ? 78 : 84)
                                                            + std::min<size_t>(item.title.length(), 24) / 2
                                                            + (index * 5) % 17));
     }

@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <algorithm>
 #include <cstdio>
+#include <string>
 #include <vector>
 #include "board/BoardStorage.h"
 
@@ -16,6 +17,7 @@
 #include "storage/index/IndexedBook.h"
 #include "storage/index/ReadingProgress.h"
 #include "text/AsciiText.h"
+#include "ui/Localization.h"
 
 namespace {
 
@@ -34,7 +36,7 @@ namespace {
     constexpr uint16_t kMaxWpm = 1000;
     constexpr uint8_t kDefaultBrightness = 13;
     constexpr uint8_t kMaxBrightness = 19;
-    constexpr uint8_t kMaxUiLanguage = 5;
+    constexpr uint8_t kMaxUiLanguage = static_cast<uint8_t>(UiLanguage::Count) - 1;
     constexpr uint8_t kMaxHandedness = 1;
     constexpr uint8_t kMaxFooterMetric = 2;
     constexpr uint8_t kMaxBatteryLabel = 2;
@@ -608,7 +610,7 @@ bool CompanionSyncManager::begin() {
     }
 
     instance_ = this;
-    pairingCode_ = String(static_cast<uint32_t>(esp_random()) % 900000UL + 100000UL);
+    pairingCode_ = std::to_string(static_cast<uint32_t>(esp_random()) % 900000UL + 100000UL);
     statusLine1_ = "Starting sync";
     statusLine2_ = "Preparing Wi-Fi";
     preferences_.begin(settings::kPrefsNamespace, false);
@@ -631,7 +633,7 @@ bool CompanionSyncManager::begin() {
     active_ = true;
     statusLine1_ = networkSsid_;
     statusLine2_ = baseUrl();
-    Serial.printf("[sync] ready ssid=%s url=%s pairing=%s\n", networkSsid_.c_str(), baseUrl().c_str(),
+    Serial.printf("[sync] ready ssid=%s url=%s pairing=%s\n", networkSsid_.c_str(), statusLine2_.c_str(),
                   pairingCode_.c_str());
     return true;
 }
@@ -665,20 +667,20 @@ bool CompanionSyncManager::active() const {
     return active_;
 }
 
-String CompanionSyncManager::statusLine1() const {
+std::string_view CompanionSyncManager::statusLine1() const {
     return statusLine1_;
 }
 
-String CompanionSyncManager::statusLine2() const {
+std::string_view CompanionSyncManager::statusLine2() const {
     return statusLine2_;
 }
 
-String CompanionSyncManager::baseUrl() const {
+std::string CompanionSyncManager::baseUrl() const {
     if (networkMode_ == NetworkMode::Station) {
-        return "http://" + ipToString(WiFi.localIP());
+        return std::string{"http://"} + ipToString(WiFi.localIP()).c_str();
     }
     if (networkMode_ == NetworkMode::AccessPoint) {
-        return "http://" + ipToString(WiFi.softAPIP());
+        return std::string{"http://"} + ipToString(WiFi.softAPIP()).c_str();
     }
     return "";
 }
@@ -774,7 +776,7 @@ void CompanionSyncManager::handleNotFoundStatic() {
 }
 
 bool CompanionSyncManager::startAccessPoint() {
-    const String ssid = "RSVP-Nano-" + deviceSuffix();
+    const std::string ssid = std::string{"RSVP-Nano-"} + deviceSuffix().c_str();
     statusLine1_ = "Sync Wi-Fi";
     statusLine2_ = ssid;
     networkSsid_ = ssid;
@@ -828,8 +830,9 @@ void CompanionSyncManager::stopServer() {
 void CompanionSyncManager::handleInfo() {
     const String mode = networkMode_ == NetworkMode::Station ? "station" : "access_point";
     const String body = String("{") + "\"name\":\"RSVP Nano\"," + "\"mode\":\"" + mode + "\"," + "\"baseUrl\":\""
-                      + jsonEscape(baseUrl()) + "\"," + "\"networkSsid\":\"" + jsonEscape(networkSsid_) + "\","
-                      + "\"pairingCode\":\"" + pairingCode_ + "\"," + "\"uploadPath\":\"/api/books\"" + "}";
+                      + jsonEscape(String(baseUrl().c_str())) + "\"," + "\"networkSsid\":\""
+                      + jsonEscape(String(networkSsid_.c_str())) + "\"," + "\"pairingCode\":\""
+                      + pairingCode_.c_str() + "\"," + "\"uploadPath\":\"/api/books\"" + "}";
     server_.send(200, "application/json", body);
 }
 
@@ -958,7 +961,7 @@ void CompanionSyncManager::handleWifi() {
     }
 
     statusLine1_ = "Wi-Fi saved";
-    statusLine2_ = preferences_.getString(pref::WifiSsid::key(), "");
+    statusLine2_ = preferences_.getString(pref::WifiSsid::key(), "").c_str();
     server_.send(200, "application/json", wifiJson());
 }
 
@@ -1055,7 +1058,7 @@ void CompanionSyncManager::handleThemes() {
     }
 
     statusLine1_ = "Theme received";
-    statusLine2_ = uploadFinalPath_;
+    statusLine2_ = uploadFinalPath_.c_str();
     Serial.printf("[sync] theme ready %s\n", uploadFinalPath_.c_str());
     server_.send(201, "application/json",
                  String("{\"ok\":true,\"path\":\"") + jsonEscape(uploadFinalPath_) + "\",\"id\":\""
@@ -1124,7 +1127,7 @@ void CompanionSyncManager::handleFonts() {
     }
 
     statusLine1_ = "Font received";
-    statusLine2_ = uploadFinalPath_;
+    statusLine2_ = uploadFinalPath_.c_str();
     Serial.printf("[sync] font ready %s\n", uploadFinalPath_.c_str());
     server_.send(201, "application/json", String("{\"ok\":true,\"path\":\"") + jsonEscape(uploadFinalPath_) + "\"}");
     uploadTmpPath_ = "";
@@ -1183,7 +1186,7 @@ void CompanionSyncManager::handleFontUpload() {
         }
         uploadError_ = "";
         statusLine1_ = "Receiving font";
-        statusLine2_ = family + " " + RFont4::sizeId(static_cast<uint8_t>(sizeIndex));
+        statusLine2_ = (family + " " + RFont4::sizeId(static_cast<uint8_t>(sizeIndex))).c_str();
         Serial.printf("[sync] font upload start %s\n", uploadFinalPath_.c_str());
         return;
     }
@@ -1253,7 +1256,7 @@ void CompanionSyncManager::handleBookDelete() {
     }
 
     statusLine1_ = "Book deleted";
-    statusLine2_ = relativeLibraryName(path);
+    statusLine2_ = relativeLibraryName(path).c_str();
     Serial.printf("[sync] deleted %s\n", path.c_str());
     server_.send(200, "application/json", String("{\"ok\":true,\"path\":\"") + jsonEscape(path) + "\"}");
 }
@@ -1309,7 +1312,7 @@ void CompanionSyncManager::handleBookPosition() {
 
     cacheBookPosition(path, wordIndex, header.sourceSize, header.sourceFingerprint, header.wordCount);
     statusLine1_ = "Position saved";
-    statusLine2_ = relativeLibraryName(path);
+    statusLine2_ = relativeLibraryName(path).c_str();
     server_.send(200, "application/json",
                  String("{\"ok\":true,\"id\":\"") + jsonEscape(id) + "\",\"wordIndex\":" + String(wordIndex) + "}");
 }
@@ -1352,7 +1355,7 @@ void CompanionSyncManager::handleBookUpload() {
         }
         uploadError_ = "";
         statusLine1_ = "Receiving book";
-        statusLine2_ = filename;
+        statusLine2_ = filename.c_str();
         Serial.printf("[sync] upload start %s\n", uploadFinalPath_.c_str());
         return;
     }
@@ -1413,7 +1416,7 @@ void CompanionSyncManager::handleThemeUpload() {
         }
         uploadError_ = "";
         statusLine1_ = "Receiving theme";
-        statusLine2_ = filename;
+        statusLine2_ = filename.c_str();
         Serial.printf("[sync] theme upload start %s\n", uploadFinalPath_.c_str());
         return;
     }
@@ -2203,7 +2206,7 @@ void CompanionSyncManager::finishUpload(bool success) {
             Board::Storage::filesystem().remove(uploadTmpPath_);
         } else {
             statusLine1_ = "Book received";
-            statusLine2_ = uploadFinalPath_;
+            statusLine2_ = uploadFinalPath_.c_str();
             Serial.printf("[sync] upload ready %s\n", uploadFinalPath_.c_str());
         }
     } else {

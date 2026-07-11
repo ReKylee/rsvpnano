@@ -20,32 +20,35 @@ namespace screens {
         if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
             screen = Screen::Settings;
         ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
-                 "Network & updates", 2);
+                 ui.text(UiText::NetworkUpdates), 2);
 
         constexpr int16_t gap = 6;
         const int16_t sectionY = static_cast<int16_t>(content.y + 30);
-        ui.separator({content.x, sectionY, content.w, 10}, "CONNECTION & RELEASE");
+        ui.separator({content.x, sectionY, content.w, 10}, ui.text(UiText::ConnectionReleaseSection));
         ui::Grid grid{{content.x, static_cast<int16_t>(sectionY + 14), content.w,
                        static_cast<int16_t>(content.h - 44)}, 2, 32, gap};
-        if (ui.setting(grid.next(), "Network", ssid.empty() ? "Not set" : std::string_view{ssid}))
+        if (ui.setting(grid.next(), ui.text(UiText::Network),
+                       ssid.empty() ? ui.text(UiText::NotSet) : std::string_view{ssid}))
             screen = Screen::Sync;
-        if (ui.toggle(grid.next(), "Automatic checks", automatic)) {
+        if (ui.toggle(grid.next(), ui.text(UiText::AutomaticChecks), automatic)) {
             automatic = !automatic;
             settings::save<settings::prefs::OtaAuto>(preferences, automatic);
             autoCheckPending = automatic && !ssid.empty();
         }
-        if (ui.setting(grid.next(), "OTA owner", owner.empty() ? "Default" : std::string_view{owner}))
+        if (ui.setting(grid.next(), ui.text(UiText::OtaOwner),
+                       owner.empty() ? ui.text(UiText::Default) : std::string_view{owner}))
             screen = Screen::Sync;
-        if (ui.setting(grid.next(), "Release tag", tag.empty() ? "Latest" : std::string_view{tag}))
+        if (ui.setting(grid.next(), ui.text(UiText::ReleaseTag),
+                       tag.empty() ? ui.text(UiText::Latest) : std::string_view{tag}))
             screen = Screen::Sync;
 
         ui::Grid actions{{content.x, static_cast<int16_t>(sectionY + 88), content.w,
                           static_cast<int16_t>(content.h - 88)}, static_cast<uint8_t>(ssidStored ? 3 : 2), 36, gap};
-        if (ui.button(actions.next(), "Companion setup"))
+        if (ui.button(actions.next(), ui.text(UiText::CompanionSetup)))
             screen = Screen::Sync;
-        if (ui.button(actions.next(), "Firmware updates"))
+        if (ui.button(actions.next(), ui.text(UiText::FirmwareUpdates)))
             screen = Screen::Ota;
-        if (ssidStored && ui.button(actions.next(), "Forget network")) {
+        if (ssidStored && ui.button(actions.next(), ui.text(UiText::ForgetNetwork))) {
             preferences.remove(settings::prefs::WifiSsid::key());
             preferences.remove(settings::prefs::WifiPassword::key());
             ssid.clear();

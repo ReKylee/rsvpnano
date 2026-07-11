@@ -6,11 +6,11 @@ namespace screens {
         if (const Action action = detail::navigation(ui, Screen::Ota, screen); action != Action::None)
             return action;
         ui::Column column{detail::tabContent(ui), 8};
-        if (ui.button(column.next(28), "Back"))
+        if (ui.button(column.next(28), ui.text(UiText::Back)))
             screen = Screen::Device;
-        if (ui.button(column.next(40), "Check only"))
+        if (ui.button(column.next(40), ui.text(UiText::CheckOnly)))
             return Action::OtaCheck;
-        if (ui.button(column.next(40), "Install update"))
+        if (ui.button(column.next(40), ui.text(UiText::InstallUpdate)))
             return Action::OtaInstall;
         return Action::None;
     }

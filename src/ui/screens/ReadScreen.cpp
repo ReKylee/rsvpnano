@@ -11,7 +11,7 @@ namespace screens {
         const bool wide = ui.width() >= 620 && ui.height() >= 150 && ui.height() <= 240;
         ui::Column column{area, static_cast<int16_t>(wide ? 18 : 10)};
         const ui::Rect resume = column.next(64);
-        const std::string_view author = model.author.empty() ? std::string_view{"Unknown"} : model.author;
+        const std::string_view author = model.author.empty() ? ui.text(UiText::Unknown) : model.author;
         char progress[4];
         size_t progressLength = 0;
         if (model.progress >= 100) {

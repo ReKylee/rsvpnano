@@ -138,7 +138,7 @@ namespace screens {
                                 uint32_t nowMs) {
         if (!storage.mounted() || index >= storage.bookCount())
             return false;
-        status(ui, "Opening book", storage.bookDisplayName(index).c_str(), {}, 5);
+        status(ui, ui.text(UiText::OpeningBook), storage.bookDisplayName(index), {}, 5);
         store.close();
         book.metadata.clear();
         StorageManager::IndexedBookLoadOptions options;
@@ -147,7 +147,7 @@ namespace screens {
         options.loadedPath = &loadedPath;
         options.loadedIndex = &loadedIndex;
         if (!storage.loadIndexedBook(index, store, book.metadata, options)) {
-            status(ui, "Book failed", storage.bookDisplayName(index).c_str(), "Check SD card");
+            status(ui, ui.text(UiText::BookFailed), storage.bookDisplayName(index), ui.text(UiText::CheckSdCard));
             delay(1200);
             return false;
         }
@@ -217,7 +217,9 @@ namespace screens {
             const uint32_t minutes = reader.wpm() == 0 ? 0
                                                        : static_cast<uint32_t>((remainingWords + reader.wpm() - 1)
                                                                                / reader.wpm());
-            footer = settings.footerMetric == FooterMetric::ChapterTime ? "CH " : "BOOK ";
+            footer = ui.text(settings.footerMetric == FooterMetric::ChapterTime ? UiText::ChapterShort
+                                                                                : UiText::BookShort);
+            footer += ' ';
             footer += minutes >= 60 ? std::to_string(minutes / 60) + "h" : std::to_string(minutes) + "m";
         }
         const std::string overlay = session.wpmFeedbackUntilMs > nowMs ? std::to_string(reader.wpm()) + " WPM" : "";
@@ -305,7 +307,7 @@ namespace screens {
                                        ? static_cast<int16_t>(ui.width() - 60 - footerWidth)
                                        : static_cast<int16_t>(ui.width() - 36);
         ui.label({chapterX, static_cast<int16_t>(ui.height() - 26), chapterWidth, 16},
-                 showChapter ? chapterLabel.empty() ? std::string_view{"START"} : chapterLabel : std::string_view{},
+                 showChapter ? chapterLabel.empty() ? ui.text(UiText::Start) : chapterLabel : std::string_view{},
                  2, ui::themes::ColorRole::Muted,
                  settings.leftHanded ? ui::TextAlign::Right : ui::TextAlign::Left);
         ui.label({footerX, static_cast<int16_t>(ui.height() - 26), footerWidth, 16}, footer, 2,

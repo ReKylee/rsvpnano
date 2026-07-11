@@ -1,9 +1,8 @@
 # RSVP Nano localization source.
-# Edit this file, then run tools/generate_localization.py.
-# Keep ascii_only=true until the firmware font/rendering path supports accented glyphs reliably.
+# Edit this file, then run localization/generate_localization.py.
 schema_version = 1
 default_language = "English"
-ascii_only = true
+ascii_only = false
 language_order = [
 	"English",
 	"Spanish",
@@ -11,6 +10,7 @@ language_order = [
 	"German",
 	"Romanian",
 	"Polish",
+	"Russian",
 ]
 
 [languages.English]
@@ -37,6 +37,10 @@ name = "Romana"
 code = "pl"
 name = "Polski"
 
+[languages.Russian]
+code = "ru"
+name = "Русский"
+
 # Main menu
 [[strings]]
 key = "Resume"
@@ -47,6 +51,7 @@ French = "Reprendre"
 German = "Weiter"
 Romanian = "Continua"
 Polish = "Wznow"
+Russian = "Возобновить"
 
 [[strings]]
 key = "Chapters"
@@ -57,6 +62,7 @@ French = "Chapitres"
 German = "Kapitel"
 Romanian = "Capitole"
 Polish = "Rozdzialy"
+Russian = "Главы"
 
 [[strings]]
 key = "Library"
@@ -67,6 +73,7 @@ French = "Bibliotheque"
 German = "Bibliothek"
 Romanian = "Biblioteca"
 Polish = "Biblioteka"
+Russian = "Библиотека"
 
 [[strings]]
 key = "Settings"
@@ -77,6 +84,7 @@ French = "Reglages"
 German = "Optionen"
 Romanian = "Setari"
 Polish = "Ustawienia"
+Russian = "Настройки"
 
 [[strings]]
 key = "UsbTransfer"
@@ -87,6 +95,7 @@ French = "USB"
 German = "USB"
 Romanian = "USB"
 Polish = "USB"
+Russian = "USB-передача"
 
 [[strings]]
 key = "PowerOff"
@@ -97,6 +106,7 @@ French = "Eteindre"
 German = "Ausschalten"
 Romanian = "Oprire"
 Polish = "Wylacz"
+Russian = "Выключить"
 
 
 # Shared navigation and settings categories
@@ -109,6 +119,7 @@ French = "Retour"
 German = "Zuruck"
 Romanian = "Inapoi"
 Polish = "Wroc"
+Russian = "Назад"
 
 [[strings]]
 key = "Display"
@@ -119,6 +130,7 @@ French = "Affichage"
 German = "Anzeige"
 Romanian = "Afisaj"
 Polish = "Ekran"
+Russian = "Экран"
 
 [[strings]]
 key = "TypographyTune"
@@ -129,6 +141,7 @@ French = "Typographie"
 German = "Typografie"
 Romanian = "Tipografie"
 Polish = "Typografia"
+Russian = "Настройка шрифта"
 
 [[strings]]
 key = "WordPacing"
@@ -139,6 +152,7 @@ French = "Rythme mots"
 German = "Lesetempo"
 Romanian = "Ritm cuvinte"
 Polish = "Tempo slow"
+Russian = "Темп чтения"
 
 
 # Display and reading settings
@@ -151,6 +165,7 @@ French = "Theme"
 German = "Thema"
 Romanian = "Tema"
 Polish = "Motyw"
+Russian = "Тема"
 
 [[strings]]
 key = "Brightness"
@@ -161,6 +176,7 @@ French = "Luminosite"
 German = "Helligkeit"
 Romanian = "Luminoz."
 Polish = "Jasnosc"
+Russian = "Яркость"
 
 [[strings]]
 key = "Language"
@@ -171,6 +187,7 @@ French = "Langue"
 German = "Sprache"
 Romanian = "Limba"
 Polish = "Jezyk"
+Russian = "Язык"
 
 [[strings]]
 key = "ReadingMode"
@@ -181,6 +198,7 @@ French = "Mode lecture"
 German = "Lesemodus"
 Romanian = "Mod citire"
 Polish = "Tryb czyt."
+Russian = "Режим чтения"
 
 
 # Word pacing settings
@@ -193,6 +211,7 @@ French = "Mots longs"
 German = "Lange Worter"
 Romanian = "Cuvinte lungi"
 Polish = "Dlugie slowa"
+Russian = "Длинные слова"
 
 [[strings]]
 key = "Complexity"
@@ -203,6 +222,7 @@ French = "Complexite"
 German = "Komplexitat"
 Romanian = "Complexitate"
 Polish = "Zlozonosc"
+Russian = "Сложность"
 
 [[strings]]
 key = "Punctuation"
@@ -213,6 +233,7 @@ French = "Ponctuation"
 German = "Zeichen"
 Romanian = "Punctuatie"
 Polish = "Interpunk."
+Russian = "Пунктуация"
 
 [[strings]]
 key = "ResetPacing"
@@ -223,6 +244,7 @@ French = "Reinit. rythme"
 German = "Tempo zuruck"
 Romanian = "Reset ritm"
 Polish = "Reset tempa"
+Russian = "Сбросить темп"
 
 
 # Theme and toggle values
@@ -235,6 +257,7 @@ French = "Nuit"
 German = "Nacht"
 Romanian = "Noapte"
 Polish = "Noc"
+Russian = "Ночная"
 
 [[strings]]
 key = "Dark"
@@ -245,6 +268,7 @@ French = "Sombre"
 German = "Dunkel"
 Romanian = "Inchis"
 Polish = "Ciemny"
+Russian = "Тёмная"
 
 [[strings]]
 key = "Light"
@@ -255,6 +279,7 @@ French = "Clair"
 German = "Hell"
 Romanian = "Deschis"
 Polish = "Jasny"
+Russian = "Светлая"
 
 [[strings]]
 key = "On"
@@ -265,6 +290,7 @@ French = "Oui"
 German = "Ein"
 Romanian = "Pornit"
 Polish = "Tak"
+Russian = "Вкл."
 
 [[strings]]
 key = "Off"
@@ -275,6 +301,7 @@ French = "Non"
 German = "Aus"
 Romanian = "Oprit"
 Polish = "Nie"
+Russian = "Выкл."
 
 
 # Typography settings
@@ -287,6 +314,7 @@ French = "Taille"
 German = "Schriftgrad"
 Romanian = "Marime"
 Polish = "Rozmiar"
+Russian = "Размер шрифта"
 
 [[strings]]
 key = "Typeface"
@@ -297,6 +325,7 @@ French = "Police"
 German = "Schriftart"
 Romanian = "Font"
 Polish = "Kroj"
+Russian = "Шрифт"
 
 [[strings]]
 key = "PhantomWords"
@@ -307,6 +336,7 @@ French = "Mots fantomes"
 German = "Phantomworter"
 Romanian = "Cuvinte fantoma"
 Polish = "Slowa widma"
+Russian = "Слова-призраки"
 
 [[strings]]
 key = "RedHighlight"
@@ -317,6 +347,7 @@ French = "Accent rouge"
 German = "Rotfokus"
 Romanian = "Accent rosu"
 Polish = "Czerwony"
+Russian = "Красное выделение"
 
 [[strings]]
 key = "Tracking"
@@ -327,6 +358,7 @@ French = "Espacement"
 German = "Laufweite"
 Romanian = "Spatiere"
 Polish = "Odstepy"
+Russian = "Интервал"
 
 [[strings]]
 key = "Anchor"
@@ -337,6 +369,7 @@ French = "Ancre"
 German = "Anker"
 Romanian = "Ancora"
 Polish = "Kotwica"
+Russian = "Якорь"
 
 [[strings]]
 key = "GuideWidth"
@@ -347,6 +380,7 @@ French = "Largeur guide"
 German = "Guidebreite"
 Romanian = "Latime ghid"
 Polish = "Szer. guide"
+Russian = "Ширина метки"
 
 [[strings]]
 key = "GuideGap"
@@ -357,6 +391,7 @@ French = "Ecart guide"
 German = "Guidespalt"
 Romanian = "Spatiu ghid"
 Polish = "Przerwa guide"
+Russian = "Зазор метки"
 
 [[strings]]
 key = "Reset"
@@ -367,6 +402,7 @@ French = "Reinit."
 German = "Zurucksetzen"
 Romanian = "Resetare"
 Polish = "Reset"
+Russian = "Сбросить"
 
 [[strings]]
 key = "Typography"
@@ -377,6 +413,7 @@ French = "Typographie"
 German = "Typografie"
 Romanian = "Tipografie"
 Polish = "Typografia"
+Russian = "Типографика"
 
 
 # Sample screen hints
@@ -389,6 +426,7 @@ French = "toucher sortie"
 German = "tippen zum Ende"
 Romanian = "atinge iesire"
 Polish = "dotknij wyjscie"
+Russian = "Коснитесь для выхода"
 
 [[strings]]
 key = "TapToReset"
@@ -399,6 +437,7 @@ French = "toucher reinit."
 German = "tippen zum Reset"
 Romanian = "atinge reset"
 Polish = "dotknij reset"
+Russian = "Коснитесь для сброса"
 
 [[strings]]
 key = "TapChangeSample"
@@ -409,6 +448,7 @@ French = "Touchez change  G/D echant."
 German = "Tippen aendern  L/R Probe"
 Romanian = "Atinge schimba  S/D proba"
 Polish = "Dotknij zmien  L/R probka"
+Russian = "Касание: изменить  Л/П: пример"
 
 [[strings]]
 key = "TapExitSample"
@@ -419,6 +459,7 @@ French = "Touchez sortie  G/D echant."
 German = "Tippen zuruck  L/R Probe"
 Romanian = "Atinge iesi  S/D proba"
 Polish = "Dotknij wyjdz  L/R probka"
+Russian = "Касание: выход  Л/П: пример"
 
 [[strings]]
 key = "TapToggleSample"
@@ -429,6 +470,7 @@ French = "Touchez option  G/D echant."
 German = "Tippen schalten  L/R Probe"
 Romanian = "Atinge comuta  S/D proba"
 Polish = "Dotknij przel.  L/R probka"
+Russian = "Касание: вкл/выкл  Л/П: пример"
 
 [[strings]]
 key = "TapCycleSample"
@@ -439,6 +481,7 @@ French = "Touchez cycle  G/D echant."
 German = "Tippen wechseln  L/R Probe"
 Romanian = "Atinge ciclu  S/D proba"
 Polish = "Dotknij cykl  L/R probka"
+Russian = "Касание: далее  Л/П: пример"
 
 
 # Book and restart flow
@@ -451,6 +494,7 @@ French = "Debut"
 German = "Start"
 Romanian = "Inceput"
 Polish = "Start"
+Russian = "Начать"
 
 [[strings]]
 key = "StartOfBook"
@@ -461,6 +505,7 @@ French = "Debut du livre"
 German = "Buchanfang"
 Romanian = "Inceputul cartii"
 Polish = "Poczatek ksiazki"
+Russian = "Начало книги"
 
 [[strings]]
 key = "RestartBook"
@@ -471,6 +516,7 @@ French = "Relancer livre"
 German = "Buch neu"
 Romanian = "Reporneste cartea"
 Polish = "Restart ksiazki"
+Russian = "Начать заново"
 
 [[strings]]
 key = "AreYouSure"
@@ -481,6 +527,7 @@ French = "Confirmer ?"
 German = "Sicher?"
 Romanian = "Sigur?"
 Polish = "Na pewno?"
+Russian = "Вы уверены?"
 
 [[strings]]
 key = "NoKeepPlace"
@@ -491,6 +538,7 @@ French = "Non, garder"
 German = "Nein, merken"
 Romanian = "Nu, pastreaza"
 Polish = "Nie, zostaw"
+Russian = "Нет, сохранить"
 
 [[strings]]
 key = "YesRestart"
@@ -501,6 +549,7 @@ French = "Oui, relancer"
 German = "Ja, neu"
 Romanian = "Da, reporneste"
 Polish = "Tak, restart"
+Russian = "Да, заново"
 
 [[strings]]
 key = "NoSamples"
@@ -511,6 +560,7 @@ French = "Aucun exemple"
 German = "Keine Proben"
 Romanian = "Fara probe"
 Polish = "Brak probek"
+Russian = "Нет примеров"
 
 
 # Common option labels
@@ -523,6 +573,7 @@ French = "Grand"
 German = "Gross"
 Romanian = "Mare"
 Polish = "Duzy"
+Russian = "Большой"
 
 [[strings]]
 key = "Medium"
@@ -533,6 +584,7 @@ French = "Moyen"
 German = "Mittel"
 Romanian = "Mediu"
 Polish = "Sredni"
+Russian = "Средний"
 
 [[strings]]
 key = "Small"
@@ -543,6 +595,7 @@ French = "Petit"
 German = "Klein"
 Romanian = "Mic"
 Polish = "Maly"
+Russian = "Маленький"
 
 [[strings]]
 key = "Standard"
@@ -553,6 +606,7 @@ French = "Standard"
 German = "Standard"
 Romanian = "Standard"
 Polish = "Standard"
+Russian = "Стандартный"
 
 
 # Reading mode and time estimate options
@@ -565,6 +619,7 @@ French = "RSVP"
 German = "RSVP"
 Romanian = "RSVP"
 Polish = "RSVP"
+Russian = "RSVP"
 
 [[strings]]
 key = "ScrollMode"
@@ -575,6 +630,7 @@ French = "Defilement page"
 German = "Seiten-Scroll"
 Romanian = "Derulare pagina"
 Polish = "Scroll strony"
+Russian = "Прокрутка страниц"
 
 [[strings]]
 key = "TimeEstimate"
@@ -585,6 +641,7 @@ French = "Temps restant"
 German = "Restzeit"
 Romanian = "Timp ramas"
 Polish = "Pozostaly czas"
+Russian = "Оценка времени"
 
 [[strings]]
 key = "TimeEstimateAccurate"
@@ -595,6 +652,7 @@ French = "Precis"
 German = "Genau"
 Romanian = "Exact"
 Polish = "Dokladny"
+Russian = "Точно"
 
 [[strings]]
 key = "TimeEstimateFast"
@@ -605,3 +663,1043 @@ French = "Rapide"
 German = "Schnell"
 Romanian = "Rapid"
 Polish = "Szybki"
+Russian = "Быстро"
+
+
+# Navigation and settings screens
+[[strings]]
+key = "Read"
+context = "Primary navigation tab for the current book."
+English = "Read"
+Spanish = "Leer"
+French = "Lire"
+German = "Lesen"
+Romanian = "Citește"
+Polish = "Czytaj"
+Russian = "Читать"
+
+[[strings]]
+key = "Device"
+context = "Primary navigation tab for device tools and information."
+English = "Device"
+Spanish = "Dispositivo"
+French = "Appareil"
+German = "Gerät"
+Romanian = "Dispozitiv"
+Polish = "Urządzenie"
+Russian = "Устройство"
+
+[[strings]]
+key = "Focus"
+context = "Primary navigation tab for the focus timer."
+English = "Focus"
+Spanish = "Enfoque"
+French = "Focus"
+German = "Fokus"
+Romanian = "Concentrare"
+Polish = "Skupienie"
+Russian = "Фокус"
+
+[[strings]]
+key = "Reading"
+context = "Reading settings title and focus genre label."
+English = "Reading"
+Spanish = "Lectura"
+French = "Lecture"
+German = "Lesen"
+Romanian = "Citire"
+Polish = "Czytanie"
+Russian = "Чтение"
+
+[[strings]]
+key = "ReaderScreen"
+context = "Settings category and title for reader-screen controls."
+English = "Reader screen"
+Spanish = "Pantalla lector"
+French = "Écran lecteur"
+German = "Leseansicht"
+Romanian = "Ecran citire"
+Polish = "Ekran czytnika"
+Russian = "Экран чтения"
+
+[[strings]]
+key = "NetworkUpdates"
+context = "Settings category and title for networking and firmware updates."
+English = "Network & updates"
+Spanish = "Red y actualizaciones"
+French = "Réseau et mises à jour"
+German = "Netzwerk & Updates"
+Romanian = "Rețea și actualizări"
+Polish = "Sieć i aktualizacje"
+Russian = "Сеть и обновления"
+
+[[strings]]
+key = "Interface"
+context = "Settings screen title for display and interface preferences."
+English = "Interface"
+Spanish = "Interfaz"
+French = "Interface"
+German = "Oberfläche"
+Romanian = "Interfață"
+Polish = "Interfejs"
+Russian = "Интерфейс"
+
+[[strings]]
+key = "ReadingSection"
+context = "Uppercase section heading for reading-related settings."
+English = "READING"
+Spanish = "LECTURA"
+French = "LECTURE"
+German = "LESEN"
+Romanian = "CITIRE"
+Polish = "CZYTANIE"
+Russian = "ЧТЕНИЕ"
+
+[[strings]]
+key = "SystemSection"
+context = "Uppercase section heading for system-related settings."
+English = "SYSTEM"
+Spanish = "SISTEMA"
+French = "SYSTÈME"
+German = "SYSTEM"
+Romanian = "SISTEM"
+Polish = "SYSTEM"
+Russian = "СИСТЕМА"
+
+
+# Reading and interface preferences
+[[strings]]
+key = "WordsPerMinute"
+context = "Slider label for RSVP reading speed."
+English = "Words per minute"
+Spanish = "Palabras por minuto"
+French = "Mots par minute"
+German = "Wörter pro Minute"
+Romanian = "Cuvinte pe minut"
+Polish = "Słów na minutę"
+Russian = "Слов в минуту"
+
+[[strings]]
+key = "BehaviorSection"
+context = "Uppercase section heading for reading behavior."
+English = "BEHAVIOR"
+Spanish = "COMPORTAMIENTO"
+French = "COMPORTEMENT"
+German = "VERHALTEN"
+Romanian = "COMPORTAMENT"
+Polish = "ZACHOWANIE"
+Russian = "ПОВЕДЕНИЕ"
+
+[[strings]]
+key = "Pause"
+context = "Setting label for pause behavior."
+English = "Pause"
+Spanish = "Pausa"
+French = "Pause"
+German = "Pause"
+Romanian = "Pauză"
+Polish = "Pauza"
+Russian = "Пауза"
+
+[[strings]]
+key = "SentenceEnd"
+context = "Pause behavior that waits for the end of a sentence."
+English = "Sentence end"
+Spanish = "Fin de frase"
+French = "Fin de phrase"
+German = "Satzende"
+Romanian = "Sfârșit propoziție"
+Polish = "Koniec zdania"
+Russian = "Конец предложения"
+
+[[strings]]
+key = "Instant"
+context = "Pause behavior that stops immediately."
+English = "Instant"
+Spanish = "Inmediata"
+French = "Immédiat"
+German = "Sofort"
+Romanian = "Imediat"
+Polish = "Natychmiast"
+Russian = "Сразу"
+
+[[strings]]
+key = "AppearanceSection"
+context = "Uppercase section heading for theme and language settings."
+English = "APPEARANCE"
+Spanish = "APARIENCIA"
+French = "APPARENCE"
+German = "DARSTELLUNG"
+Romanian = "ASPECT"
+Polish = "WYGLĄD"
+Russian = "ВИД"
+
+[[strings]]
+key = "StandbySection"
+context = "Uppercase section heading for standby settings."
+English = "STANDBY"
+Spanish = "ESPERA"
+French = "VEILLE"
+German = "STANDBY"
+Romanian = "REPAUS"
+Polish = "CZUWANIE"
+Russian = "ОЖИДАНИЕ"
+
+[[strings]]
+key = "Standby"
+context = "Setting label for the automatic standby timer."
+English = "Standby"
+Spanish = "Espera"
+French = "Veille"
+German = "Standby"
+Romanian = "Repaus"
+Polish = "Czuwanie"
+Russian = "Ожидание"
+
+[[strings]]
+key = "Screensaver"
+context = "Setting label for the standby screensaver."
+English = "Screensaver"
+Spanish = "Salvapantallas"
+French = "Économiseur"
+German = "Bildschirmschoner"
+Romanian = "Protector ecran"
+Polish = "Wygaszacz"
+Russian = "Заставка"
+
+[[strings]]
+key = "Maze"
+context = "Maze screensaver option."
+English = "Maze"
+Spanish = "Laberinto"
+French = "Labyrinthe"
+German = "Labyrinth"
+Romanian = "Labirint"
+Polish = "Labirynt"
+Russian = "Лабиринт"
+
+[[strings]]
+key = "Voronoi"
+context = "Voronoi screensaver option."
+English = "Voronoi"
+Spanish = "Voronoi"
+French = "Voronoï"
+German = "Voronoi"
+Romanian = "Voronoi"
+Polish = "Voronoi"
+Russian = "Вороной"
+
+[[strings]]
+key = "ScreenOff"
+context = "Standby option that turns the display off."
+English = "Screen off"
+Spanish = "Pantalla apagada"
+French = "Écran éteint"
+German = "Bildschirm aus"
+Romanian = "Ecran oprit"
+Polish = "Ekran wyłączony"
+Russian = "Экран выключен"
+
+[[strings]]
+key = "Life"
+context = "Conway's Game of Life screensaver option."
+English = "Life"
+Spanish = "Vida"
+French = "Vie"
+German = "Leben"
+Romanian = "Viață"
+Polish = "Życie"
+Russian = "Жизнь"
+
+
+# Pacing and typography preferences
+[[strings]]
+key = "AdditionalDelaySection"
+context = "Uppercase section heading for additional pacing delays."
+English = "ADDITIONAL DELAY"
+Spanish = "RETRASO ADICIONAL"
+French = "DÉLAI SUPPLÉMENTAIRE"
+German = "ZUSATZPAUSE"
+Romanian = "ÎNTÂRZIERE SUPLIMENTARĂ"
+Polish = "DODATKOWE OPÓŹNIENIE"
+Russian = "ДОПОЛНИТЕЛЬНАЯ ЗАДЕРЖКА"
+
+[[strings]]
+key = "ResetTypography"
+context = "Action that resets typography settings."
+English = "Reset typography"
+Spanish = "Restablecer tipografía"
+French = "Réinitialiser typo"
+German = "Typografie zurücksetzen"
+Romanian = "Resetează tipografia"
+Polish = "Resetuj typografię"
+Russian = "Сбросить типографику"
+
+[[strings]]
+key = "FontSection"
+context = "Uppercase typography section heading for font controls."
+English = "FONT"
+Spanish = "FUENTE"
+French = "POLICE"
+German = "SCHRIFT"
+Romanian = "FONT"
+Polish = "CZCIONKA"
+Russian = "ШРИФТ"
+
+[[strings]]
+key = "GeometrySection"
+context = "Uppercase typography section heading for text geometry controls."
+English = "GEOMETRY"
+Spanish = "GEOMETRÍA"
+French = "GÉOMÉTRIE"
+German = "GEOMETRIE"
+Romanian = "GEOMETRIE"
+Polish = "GEOMETRIA"
+Russian = "ГЕОМЕТРИЯ"
+
+[[strings]]
+key = "FocusLetter"
+context = "Toggle label for highlighting the RSVP focus letter."
+English = "Focus letter"
+Spanish = "Letra de enfoque"
+French = "Lettre focale"
+German = "Fokusbuchstabe"
+Romanian = "Literă focală"
+Polish = "Litera fokusowa"
+Russian = "Фокусная буква"
+
+
+# Reader-screen preferences
+[[strings]]
+key = "BehaviorMetricsSection"
+context = "Uppercase section heading for reader behavior and metrics."
+English = "BEHAVIOR & METRICS"
+Spanish = "COMPORTAMIENTO Y MÉTRICAS"
+French = "COMPORTEMENT ET MESURES"
+German = "VERHALTEN & WERTE"
+Romanian = "COMPORTAMENT ȘI METRICI"
+Polish = "ZACHOWANIE I WSKAŹNIKI"
+Russian = "ПОВЕДЕНИЕ И ПОКАЗАТЕЛИ"
+
+[[strings]]
+key = "ReaderHand"
+context = "Setting label for left- or right-handed reader controls."
+English = "Reader hand"
+Spanish = "Mano del lector"
+French = "Main du lecteur"
+German = "Leserhand"
+Romanian = "Mâna cititorului"
+Polish = "Ręka czytelnika"
+Russian = "Рабочая рука"
+
+[[strings]]
+key = "Left"
+context = "Left-handed option."
+English = "Left"
+Spanish = "Izquierda"
+French = "Gauche"
+German = "Links"
+Romanian = "Stânga"
+Polish = "Lewa"
+Russian = "Левая"
+
+[[strings]]
+key = "Right"
+context = "Right-handed option."
+English = "Right"
+Spanish = "Derecha"
+French = "Droite"
+German = "Rechts"
+Romanian = "Dreapta"
+Polish = "Prawa"
+Russian = "Правая"
+
+[[strings]]
+key = "ChapterScroll"
+context = "Setting label for chapter-list scroll direction."
+English = "Chapter scroll"
+Spanish = "Desplazamiento capítulos"
+French = "Défilement chapitres"
+German = "Kapitel scrollen"
+Romanian = "Derulare capitole"
+Polish = "Przewijanie rozdziałów"
+Russian = "Прокрутка глав"
+
+[[strings]]
+key = "Reversed"
+context = "Reversed direction option."
+English = "Reversed"
+Spanish = "Invertido"
+French = "Inversé"
+German = "Umgekehrt"
+Romanian = "Inversat"
+Polish = "Odwrócone"
+Russian = "Обратная"
+
+[[strings]]
+key = "Normal"
+context = "Normal or default direction option."
+English = "Normal"
+Spanish = "Normal"
+French = "Normal"
+German = "Normal"
+Romanian = "Normal"
+Polish = "Normalne"
+Russian = "Обычная"
+
+[[strings]]
+key = "Footer"
+context = "Setting label for the reader footer metric."
+English = "Footer"
+Spanish = "Pie"
+French = "Pied de page"
+German = "Fußzeile"
+Romanian = "Subsol"
+Polish = "Stopka"
+Russian = "Нижняя строка"
+
+[[strings]]
+key = "ChapterTime"
+context = "Reader footer option showing chapter time."
+English = "Chapter time"
+Spanish = "Tiempo de capítulo"
+French = "Temps du chapitre"
+German = "Kapitelzeit"
+Romanian = "Timp capitol"
+Polish = "Czas rozdziału"
+Russian = "Время главы"
+
+[[strings]]
+key = "BookTime"
+context = "Reader footer option showing book time."
+English = "Book time"
+Spanish = "Tiempo del libro"
+French = "Temps du livre"
+German = "Buchzeit"
+Romanian = "Timp carte"
+Polish = "Czas książki"
+Russian = "Время книги"
+
+[[strings]]
+key = "Percentage"
+context = "Option showing progress as a percentage."
+English = "Percentage"
+Spanish = "Porcentaje"
+French = "Pourcentage"
+German = "Prozent"
+Romanian = "Procent"
+Polish = "Procent"
+Russian = "Процент"
+
+[[strings]]
+key = "BatteryLabel"
+context = "Setting label for the battery readout format."
+English = "Battery label"
+Spanish = "Indicador de batería"
+French = "Libellé batterie"
+German = "Batterieanzeige"
+Romanian = "Etichetă baterie"
+Polish = "Etykieta baterii"
+Russian = "Подпись батареи"
+
+[[strings]]
+key = "TimeLeft"
+context = "Battery option showing estimated time remaining."
+English = "Time left"
+Spanish = "Tiempo restante"
+French = "Temps restant"
+German = "Restzeit"
+Romanian = "Timp rămas"
+Polish = "Pozostały czas"
+Russian = "Осталось времени"
+
+[[strings]]
+key = "Voltage"
+context = "Battery option showing voltage."
+English = "Voltage"
+Spanish = "Voltaje"
+French = "Tension"
+German = "Spannung"
+Romanian = "Tensiune"
+Polish = "Napięcie"
+Russian = "Напряжение"
+
+[[strings]]
+key = "VisibleWhileReadingSection"
+context = "Uppercase section heading for reader elements shown while reading."
+English = "VISIBLE WHILE READING"
+Spanish = "VISIBLE DURANTE LECTURA"
+French = "VISIBLE PENDANT LA LECTURE"
+German = "BEIM LESEN SICHTBAR"
+Romanian = "VIZIBIL ÎN TIMPUL CITIRII"
+Polish = "WIDOCZNE PODCZAS CZYTANIA"
+Russian = "ВИДИМО ПРИ ЧТЕНИИ"
+
+[[strings]]
+key = "ShowBattery"
+context = "Toggle label for showing the battery while reading."
+English = "Show battery"
+Spanish = "Mostrar batería"
+French = "Afficher batterie"
+German = "Batterie zeigen"
+Romanian = "Arată bateria"
+Polish = "Pokaż baterię"
+Russian = "Показывать батарею"
+
+[[strings]]
+key = "ShowChapter"
+context = "Toggle label for showing the chapter while reading."
+English = "Show chapter"
+Spanish = "Mostrar capítulo"
+French = "Afficher chapitre"
+German = "Kapitel zeigen"
+Romanian = "Arată capitolul"
+Polish = "Pokaż rozdział"
+Russian = "Показывать главу"
+
+[[strings]]
+key = "ShowProgress"
+context = "Toggle label for showing reading progress."
+English = "Show progress"
+Spanish = "Mostrar progreso"
+French = "Afficher progression"
+German = "Fortschritt zeigen"
+Romanian = "Arată progresul"
+Polish = "Pokaż postęp"
+Russian = "Показывать прогресс"
+
+
+# Network and update preferences
+[[strings]]
+key = "ConnectionReleaseSection"
+context = "Uppercase section heading for network and release settings."
+English = "CONNECTION & RELEASE"
+Spanish = "CONEXIÓN Y VERSIÓN"
+French = "CONNEXION ET VERSION"
+German = "VERBINDUNG & VERSION"
+Romanian = "CONEXIUNE ȘI VERSIUNE"
+Polish = "POŁĄCZENIE I WYDANIE"
+Russian = "СЕТЬ И ВЕРСИЯ"
+
+[[strings]]
+key = "Network"
+context = "Setting label for the configured wireless network."
+English = "Network"
+Spanish = "Red"
+French = "Réseau"
+German = "Netzwerk"
+Romanian = "Rețea"
+Polish = "Sieć"
+Russian = "Сеть"
+
+[[strings]]
+key = "NotSet"
+context = "Value indicating that a preference has not been configured."
+English = "Not set"
+Spanish = "Sin configurar"
+French = "Non défini"
+German = "Nicht gesetzt"
+Romanian = "Nesetat"
+Polish = "Nie ustawiono"
+Russian = "Не задано"
+
+[[strings]]
+key = "AutomaticChecks"
+context = "Toggle label for automatic update checks."
+English = "Automatic checks"
+Spanish = "Comprobación automática"
+French = "Vérification auto"
+German = "Automatisch prüfen"
+Romanian = "Verificări automate"
+Polish = "Automatyczne sprawdzanie"
+Russian = "Автопроверка"
+
+[[strings]]
+key = "OtaOwner"
+context = "Setting label for the OTA repository owner."
+English = "OTA owner"
+Spanish = "Propietario OTA"
+French = "Propriétaire OTA"
+German = "OTA-Eigentümer"
+Romanian = "Proprietar OTA"
+Polish = "Właściciel OTA"
+Russian = "Владелец OTA"
+
+[[strings]]
+key = "Default"
+context = "Generic value indicating the default option."
+English = "Default"
+Spanish = "Predeterminado"
+French = "Par défaut"
+German = "Standard"
+Romanian = "Implicit"
+Polish = "Domyślne"
+Russian = "По умолчанию"
+
+[[strings]]
+key = "ReleaseTag"
+context = "Setting label for the firmware release tag."
+English = "Release tag"
+Spanish = "Etiqueta de versión"
+French = "Tag de version"
+German = "Release-Tag"
+Romanian = "Etichetă versiune"
+Polish = "Tag wydania"
+Russian = "Тег версии"
+
+[[strings]]
+key = "Latest"
+context = "Value indicating the latest available release."
+English = "Latest"
+Spanish = "Última"
+French = "Dernière"
+German = "Neueste"
+Romanian = "Cea mai nouă"
+Polish = "Najnowsza"
+Russian = "Последняя"
+
+[[strings]]
+key = "CompanionSetup"
+context = "Action opening companion application setup."
+English = "Companion setup"
+Spanish = "Configurar companion"
+French = "Configurer companion"
+German = "Companion einrichten"
+Romanian = "Configurare companion"
+Polish = "Konfiguruj companion"
+Russian = "Настроить companion"
+
+[[strings]]
+key = "FirmwareUpdates"
+context = "Action opening firmware update controls."
+English = "Firmware updates"
+Spanish = "Actualizaciones"
+French = "Mises à jour"
+German = "Firmware-Updates"
+Romanian = "Actualizări firmware"
+Polish = "Aktualizacje firmware"
+Russian = "Обновления прошивки"
+
+[[strings]]
+key = "ForgetNetwork"
+context = "Action removing saved wireless network credentials."
+English = "Forget network"
+Spanish = "Olvidar red"
+French = "Oublier le réseau"
+German = "Netzwerk vergessen"
+Romanian = "Uită rețeaua"
+Polish = "Zapomnij sieć"
+Russian = "Забыть сеть"
+
+
+# Device, sync, and OTA screens
+[[strings]]
+key = "StorageReady"
+context = "Status indicating that storage is available."
+English = "Storage ready"
+Spanish = "Almacenamiento listo"
+French = "Stockage prêt"
+German = "Speicher bereit"
+Romanian = "Stocare pregătită"
+Polish = "Pamięć gotowa"
+Russian = "Хранилище готово"
+
+[[strings]]
+key = "StorageUnavailable"
+context = "Status indicating that storage is unavailable."
+English = "Storage unavailable"
+Spanish = "Almacenamiento no disponible"
+French = "Stockage indisponible"
+German = "Speicher nicht verfügbar"
+Romanian = "Stocare indisponibilă"
+Polish = "Pamięć niedostępna"
+Russian = "Хранилище недоступно"
+
+[[strings]]
+key = "Items"
+context = "Noun following an item count."
+English = "items"
+Spanish = "elementos"
+French = "éléments"
+German = "Elemente"
+Romanian = "elemente"
+Polish = "elementów"
+Russian = "элементов"
+
+[[strings]]
+key = "SyncImport"
+context = "Device action opening synchronization and import tools."
+English = "Sync / Import"
+Spanish = "Sincronizar / Importar"
+French = "Sync / Importer"
+German = "Sync / Import"
+Romanian = "Sincronizare / Import"
+Polish = "Synchronizuj / Importuj"
+Russian = "Синхронизация / Импорт"
+
+[[strings]]
+key = "OtaUpdate"
+context = "Device action opening OTA update tools."
+English = "OTA update"
+Spanish = "Actualización OTA"
+French = "Mise à jour OTA"
+German = "OTA-Update"
+Romanian = "Actualizare OTA"
+Polish = "Aktualizacja OTA"
+Russian = "Обновление OTA"
+
+[[strings]]
+key = "CompanionSync"
+context = "Action starting companion synchronization."
+English = "Companion sync"
+Spanish = "Sincronizar companion"
+French = "Synchroniser companion"
+German = "Companion-Sync"
+Romanian = "Sincronizare companion"
+Polish = "Synchronizacja companion"
+Russian = "Синхронизация companion"
+
+[[strings]]
+key = "RefreshRss"
+context = "Action refreshing RSS feeds."
+English = "Refresh RSS"
+Spanish = "Actualizar RSS"
+French = "Actualiser RSS"
+German = "RSS aktualisieren"
+Romanian = "Actualizează RSS"
+Polish = "Odśwież RSS"
+Russian = "Обновить RSS"
+
+[[strings]]
+key = "CheckOnly"
+context = "OTA action that checks for updates without installing."
+English = "Check only"
+Spanish = "Solo comprobar"
+French = "Vérifier seulement"
+German = "Nur prüfen"
+Romanian = "Doar verifică"
+Polish = "Tylko sprawdź"
+Russian = "Только проверить"
+
+[[strings]]
+key = "InstallUpdate"
+context = "OTA action that installs an available update."
+English = "Install update"
+Spanish = "Instalar actualización"
+French = "Installer la mise à jour"
+German = "Update installieren"
+Romanian = "Instalează actualizarea"
+Polish = "Zainstaluj aktualizację"
+Russian = "Установить обновление"
+
+
+# Focus, chapters, library, and reader statuses
+[[strings]]
+key = "DeepWork"
+context = "Focus timer genre for deep work."
+English = "Deep work"
+Spanish = "Trabajo profundo"
+French = "Travail profond"
+German = "Tiefenarbeit"
+Romanian = "Lucru profund"
+Polish = "Głęboka praca"
+Russian = "Глубокая работа"
+
+[[strings]]
+key = "Study"
+context = "Focus timer genre for studying."
+English = "Study"
+Spanish = "Estudio"
+French = "Étude"
+German = "Lernen"
+Romanian = "Studiu"
+Polish = "Nauka"
+Russian = "Учёба"
+
+[[strings]]
+key = "Creative"
+context = "Focus timer genre for creative work."
+English = "Creative"
+Spanish = "Creativo"
+French = "Créatif"
+German = "Kreativ"
+Romanian = "Creativ"
+Polish = "Twórczość"
+Russian = "Творчество"
+
+[[strings]]
+key = "FocusTimer"
+context = "Focus timer screen title."
+English = "Focus timer"
+Spanish = "Temporizador de enfoque"
+French = "Minuteur de focus"
+German = "Fokus-Timer"
+Romanian = "Temporizator focus"
+Polish = "Minutnik skupienia"
+Russian = "Таймер фокуса"
+
+[[strings]]
+key = "ImuUnavailable"
+context = "Status indicating that the motion sensor is unavailable."
+English = "IMU unavailable"
+Spanish = "IMU no disponible"
+French = "IMU indisponible"
+German = "IMU nicht verfügbar"
+Romanian = "IMU indisponibil"
+Polish = "IMU niedostępne"
+Russian = "IMU недоступен"
+
+[[strings]]
+key = "Exit"
+context = "Action exiting the current screen or mode."
+English = "Exit"
+Spanish = "Salir"
+French = "Quitter"
+German = "Beenden"
+Romanian = "Ieșire"
+Polish = "Wyjdź"
+Russian = "Выйти"
+
+[[strings]]
+key = "StartReading"
+context = "Action starting reading from the selected chapter."
+English = "Start reading"
+Spanish = "Empezar a leer"
+French = "Commencer la lecture"
+German = "Lesen starten"
+Romanian = "Începe citirea"
+Polish = "Zacznij czytać"
+Russian = "Начать чтение"
+
+[[strings]]
+key = "Chapter"
+context = "Fallback chapter label placed before a chapter number."
+English = "Chapter"
+Spanish = "Capítulo"
+French = "Chapitre"
+German = "Kapitel"
+Romanian = "Capitol"
+Polish = "Rozdział"
+Russian = "Глава"
+
+[[strings]]
+key = "Unknown"
+context = "Fallback value for unknown book metadata."
+English = "Unknown"
+Spanish = "Desconocido"
+French = "Inconnu"
+German = "Unbekannt"
+Romanian = "Necunoscut"
+Polish = "Nieznany"
+Russian = "Неизвестно"
+
+[[strings]]
+key = "NoLibraryItems"
+context = "Message shown when the library contains no books."
+English = "No library items"
+Spanish = "Biblioteca vacía"
+French = "Bibliothèque vide"
+German = "Bibliothek leer"
+Romanian = "Bibliotecă goală"
+Polish = "Biblioteka jest pusta"
+Russian = "Библиотека пуста"
+
+[[strings]]
+key = "Done"
+context = "Short progress value indicating completion."
+English = "done"
+Spanish = "listo"
+French = "terminé"
+German = "fertig"
+Romanian = "gata"
+Polish = "gotowe"
+Russian = "готово"
+
+[[strings]]
+key = "OpeningBook"
+context = "Status shown while opening a book."
+English = "Opening book"
+Spanish = "Abriendo libro"
+French = "Ouverture du livre"
+German = "Buch wird geöffnet"
+Romanian = "Se deschide cartea"
+Polish = "Otwieranie książki"
+Russian = "Открытие книги"
+
+[[strings]]
+key = "BookFailed"
+context = "Status title shown when a book cannot be opened."
+English = "Book failed"
+Spanish = "Error del libro"
+French = "Échec du livre"
+German = "Buchfehler"
+Romanian = "Eroare carte"
+Polish = "Błąd książki"
+Russian = "Ошибка книги"
+
+[[strings]]
+key = "CheckSdCard"
+context = "Instruction to check the SD card after a storage failure."
+English = "Check SD card"
+Spanish = "Comprueba la tarjeta SD"
+French = "Vérifiez la carte SD"
+German = "SD-Karte prüfen"
+Romanian = "Verifică cardul SD"
+Polish = "Sprawdź kartę SD"
+Russian = "Проверьте SD-карту"
+
+
+# Shared status messages
+[[strings]]
+key = "Ready"
+context = "Short status indicating that the device is ready."
+English = "READY"
+Spanish = "LISTO"
+French = "PRÊT"
+German = "BEREIT"
+Romanian = "GATA"
+Polish = "GOTOWE"
+Russian = "ГОТОВО"
+
+[[strings]]
+key = "HoldPowerToExit"
+context = "Instruction for leaving USB mode with the power control."
+English = "hold PWR to exit"
+Spanish = "mantén PWR para salir"
+French = "maintenez PWR pour quitter"
+German = "PWR halten zum Beenden"
+Romanian = "ține PWR pentru ieșire"
+Polish = "przytrzymaj PWR, aby wyjść"
+Russian = "удерживайте PWR для выхода"
+
+[[strings]]
+key = "SdReady"
+context = "Status indicating that the SD card is ready."
+English = "SD ready"
+Spanish = "SD lista"
+French = "SD prête"
+German = "SD bereit"
+Romanian = "SD pregătit"
+Polish = "SD gotowa"
+Russian = "SD готова"
+
+[[strings]]
+key = "SdUnavailable"
+context = "Status indicating that the SD card is unavailable."
+English = "SD unavailable"
+Spanish = "SD no disponible"
+French = "SD indisponible"
+German = "SD nicht verfügbar"
+Romanian = "SD indisponibil"
+Polish = "SD niedostępna"
+Russian = "SD недоступна"
+
+[[strings]]
+key = "LibraryEntries"
+context = "Noun phrase following the number of indexed library entries."
+English = "library entries"
+Spanish = "entradas de biblioteca"
+French = "entrées de bibliothèque"
+German = "Bibliothekseinträge"
+Romanian = "intrări în bibliotecă"
+Polish = "wpisów biblioteki"
+Russian = "записей библиотеки"
+
+[[strings]]
+key = "CheckingFeeds"
+context = "Status shown while refreshing RSS feeds."
+English = "Checking feeds"
+Spanish = "Comprobando fuentes"
+French = "Vérification des flux"
+German = "Feeds werden geprüft"
+Romanian = "Se verifică fluxurile"
+Polish = "Sprawdzanie kanałów"
+Russian = "Проверка лент"
+
+[[strings]]
+key = "CouldNotStart"
+context = "Status indicating that a mode or operation could not start."
+English = "Could not start"
+Spanish = "No se pudo iniciar"
+French = "Démarrage impossible"
+German = "Start fehlgeschlagen"
+Romanian = "Nu a putut porni"
+Polish = "Nie można uruchomić"
+Russian = "Не удалось запустить"
+
+[[strings]]
+key = "Unavailable"
+context = "Generic status indicating that a feature is unavailable."
+English = "Unavailable"
+Spanish = "No disponible"
+French = "Indisponible"
+German = "Nicht verfügbar"
+Romanian = "Indisponibil"
+Polish = "Niedostępne"
+Russian = "Недоступно"
+
+[[strings]]
+key = "Checking"
+context = "Generic status shown while checking for updates."
+English = "Checking"
+Spanish = "Comprobando"
+French = "Vérification"
+German = "Prüfung"
+Romanian = "Se verifică"
+Polish = "Sprawdzanie"
+Russian = "Проверка"
+
+[[strings]]
+key = "ReleasePower"
+context = "Instruction to release the power control before shutdown."
+English = "Release PWR"
+Spanish = "Suelta PWR"
+French = "Relâchez PWR"
+German = "PWR loslassen"
+Romanian = "Eliberează PWR"
+Polish = "Puść PWR"
+Russian = "Отпустите PWR"
+
+[[strings]]
+key = "Storage"
+context = "Title for storage information and status."
+English = "Storage"
+Spanish = "Almacenamiento"
+French = "Stockage"
+German = "Speicher"
+Romanian = "Stocare"
+Polish = "Pamięć"
+Russian = "Хранилище"
+
+[[strings]]
+key = "Sync"
+context = "Short title for an active synchronization operation."
+English = "Sync"
+Spanish = "Sincronización"
+French = "Synchronisation"
+German = "Synchronisierung"
+Romanian = "Sincronizare"
+Polish = "Synchronizacja"
+Russian = "Синхронизация"
+
+[[strings]]
+key = "ChapterShort"
+context = "Very short chapter abbreviation used before a time estimate."
+English = "CH"
+Spanish = "CAP"
+French = "CH"
+German = "KAP"
+Romanian = "CAP"
+Polish = "ROZDZ"
+Russian = "ГЛ"
+
+[[strings]]
+key = "BookShort"
+context = "Very short book label used before a time estimate."
+English = "BOOK"
+Spanish = "LIBRO"
+French = "LIVRE"
+German = "BUCH"
+Romanian = "CARTE"
+Polish = "KSIĄŻKA"
+Russian = "КНИГА"

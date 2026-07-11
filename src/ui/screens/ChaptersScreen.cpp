@@ -25,7 +25,7 @@ namespace screens {
             return action;
 
         const ui::Rect content = detail::tabContent(ui);
-        if (ui.button({content.x, content.y, 64, kHeaderHeight}, "Back")) {
+        if (ui.button({content.x, content.y, 64, kHeaderHeight}, ui.text(UiText::Back))) {
             screen = Screen::Read;
             dragging_ = false;
             return Action::None;
@@ -52,14 +52,14 @@ namespace screens {
         const int16_t positionWidth = std::min<int16_t>(84, content.w / 4);
         ui.label({static_cast<int16_t>(content.x + 68), content.y,
                   static_cast<int16_t>(std::max<int16_t>(0, content.w - positionWidth - 72)), kHeaderHeight},
-                 "Chapters", 2, ui::themes::ColorRole::Foreground, ui::TextAlign::Center);
+                 ui.text(UiText::Chapters), 2, ui::themes::ColorRole::Foreground, ui::TextAlign::Center);
         ui.label({static_cast<int16_t>(content.x + content.w - positionWidth), content.y, positionWidth, kHeaderHeight},
                  position, 1, ui::themes::ColorRole::Muted, ui::TextAlign::Right);
 
         const ui::Rect viewport{content.x, static_cast<int16_t>(content.y + kHeaderHeight + 4), content.w,
                                 static_cast<int16_t>(content.h - kHeaderHeight - 4)};
         if (chapters.empty()) {
-            if (ui.button(viewport, "Start reading")) {
+            if (ui.button(viewport, ui.text(UiText::StartReading))) {
                 reader.seekTo(0);
                 return Action::Resume;
             }
@@ -216,7 +216,9 @@ namespace screens {
                                  static_cast<int16_t>(height - 6), ui.color(ui::themes::ColorRole::Accent));
 
                 char fallback[24];
-                std::snprintf(fallback, sizeof(fallback), "Chapter %u", static_cast<unsigned>(index + 1));
+                const std::string_view chapter = ui.text(UiText::Chapter);
+                std::snprintf(fallback, sizeof(fallback), "%.*s %u", static_cast<int>(chapter.size()), chapter.data(),
+                              static_cast<unsigned>(index + 1));
                 const std::string_view title = chapters[index].title.empty() ? std::string_view{fallback}
                                                                              : std::string_view{chapters[index].title};
                 ui.drawText({static_cast<int16_t>(x + 10), top, static_cast<int16_t>(width - notch - 24), height},

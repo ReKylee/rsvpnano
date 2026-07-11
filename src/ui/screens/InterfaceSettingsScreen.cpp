@@ -31,7 +31,7 @@ namespace screens {
         if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
             screen = Screen::Settings;
         ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
-                 "Interface", 2);
+                 ui.text(UiText::Interface), 2);
 
         const int brightnessPercent = (static_cast<int>(config.brightnessIndex) + 1) * 5;
         const int16_t controlsY = static_cast<int16_t>(content.y + 32);
@@ -50,8 +50,9 @@ namespace screens {
         const int16_t gap = 6;
         const int16_t halfWidth = static_cast<int16_t>((content.w - gap) / 2);
         const int16_t sectionsY = static_cast<int16_t>(controlsY + 40);
-        ui.separator({content.x, sectionsY, halfWidth, 10}, "APPEARANCE");
-        ui.separator({static_cast<int16_t>(content.x + halfWidth + gap), sectionsY, halfWidth, 10}, "STANDBY");
+        ui.separator({content.x, sectionsY, halfWidth, 10}, ui.text(UiText::AppearanceSection));
+        ui.separator({static_cast<int16_t>(content.x + halfWidth + gap), sectionsY, halfWidth, 10},
+                     ui.text(UiText::StandbySection));
 
         const int16_t firstRowY = static_cast<int16_t>(sectionsY + 14);
         const int16_t secondRowY = static_cast<int16_t>(firstRowY + 37);
@@ -68,21 +69,21 @@ namespace screens {
             ui.setLanguage(config.language);
         }
 
-        std::string standby = "Off";
+        std::string standby{ui.text(UiText::Off)};
         if (config.standbyIndex < standbyDurations.size() && standbyDurations[config.standbyIndex] != 0) {
             standby = std::to_string(standbyDurations[config.standbyIndex] / 60000UL) + "m";
         }
-        if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), firstRowY, halfWidth, 32}, "Standby",
-                       standby)) {
+        if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), firstRowY, halfWidth, 32},
+                       ui.text(UiText::Standby), standby)) {
             config.standbyIndex = settings::cycle<pref::StandbyTimerIndex>(preferences, standbyDurations.size());
         }
 
-        const char* screensaver = config.screensaver == standby::Kind::Maze      ? "Maze"
-                                : config.screensaver == standby::Kind::Voronoi   ? "Voronoi"
-                                : config.screensaver == standby::Kind::ScreenOff ? "Screen off"
-                                                                                : "Life";
-        if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), secondRowY, halfWidth, 32}, "Screensaver",
-                       screensaver)) {
+        const UiText screensaver = config.screensaver == standby::Kind::Maze      ? UiText::Maze
+                                  : config.screensaver == standby::Kind::Voronoi   ? UiText::Voronoi
+                                  : config.screensaver == standby::Kind::ScreenOff ? UiText::ScreenOff
+                                                                                  : UiText::Life;
+        if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), secondRowY, halfWidth, 32},
+                       ui.text(UiText::Screensaver), ui.text(screensaver))) {
             config.screensaver = static_cast<standby::Kind>((static_cast<uint8_t>(config.screensaver) + 1U) % 4U);
             settings::save<pref::ScreensaverMode>(preferences, static_cast<uint8_t>(config.screensaver));
         }

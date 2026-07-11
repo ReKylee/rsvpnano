@@ -10,13 +10,14 @@ namespace screens {
         if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
             screen = Screen::Settings;
         ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
-                 "Word pacing", 2);
+                 ui.text(UiText::WordPacing), 2);
 
         const int16_t gap = 6;
         const int16_t cardWidth = static_cast<int16_t>((content.w - gap * 2) / 3);
-        ui.separator({content.x, static_cast<int16_t>(content.y + 30), content.w, 10}, "ADDITIONAL DELAY");
+        ui.separator({content.x, static_cast<int16_t>(content.y + 30), content.w, 10},
+                     ui.text(UiText::AdditionalDelaySection));
         const int16_t sliderY = static_cast<int16_t>(content.y + 44);
-        if (const auto value = ui.slider({content.x, sliderY, cardWidth, 34}, "Long words",
+        if (const auto value = ui.slider({content.x, sliderY, cardWidth, 34}, ui.text(UiText::LongWords),
                                          reader.pacingConfig().longWordDelayMs, 0, 600, 50, " ms");
             value.changed) {
             auto pacing = reader.pacingConfig();

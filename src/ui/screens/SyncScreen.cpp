@@ -6,13 +6,13 @@ namespace screens {
         if (const Action action = detail::navigation(ui, Screen::Sync, screen); action != Action::None)
             return action;
         ui::Column column{detail::tabContent(ui), 6};
-        if (ui.button(column.next(26), "Back"))
+        if (ui.button(column.next(26), ui.text(UiText::Back)))
             screen = Screen::Device;
-        if (ui.button(column.next(32), "Companion Sync"))
+        if (ui.button(column.next(32), ui.text(UiText::CompanionSync)))
             return Action::CompanionSync;
-        if (ui.button(column.next(32), "Refresh RSS"))
+        if (ui.button(column.next(32), ui.text(UiText::RefreshRss)))
             return Action::RssRefresh;
-        if (ui.button(column.next(32), "USB Transfer"))
+        if (ui.button(column.next(32), ui.text(UiText::UsbTransfer)))
             return Action::UsbTransfer;
         return Action::None;
     }

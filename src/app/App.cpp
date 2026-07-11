@@ -1,6 +1,7 @@
 #include "app/App.h"
 
 #include <array>
+#include <string>
 
 #include "board/BoardAudio.h"
 #include "board/BoardImu.h"
@@ -33,7 +34,7 @@ void App::begin() {
     if (!Board::Display::begin()) {
         Serial.println("[app] display init failed");
     }
-    screens::status(immediateUi_, "READY");
+    screens::status(immediateUi_, immediateUi_.text(UiText::Ready));
 
     storage_.begin();
     readerScreen_.begin(prefs_, bootMs_);
@@ -95,7 +96,7 @@ void App::renderScreen(uint32_t nowMs) {
     screens::Action action = screens::Action::None;
     switch (screen_) {
     case screens::Screen::Status:
-        screens::status(immediateUi_, "READY");
+        screens::status(immediateUi_, immediateUi_.text(UiText::Ready));
         return;
     case screens::Screen::Reader:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
@@ -122,7 +123,7 @@ void App::renderScreen(uint32_t nowMs) {
         return;
     }
     case screens::Screen::Usb:
-        screens::status(immediateUi_, "USB", usbTransfer_.statusMessage(), "hold PWR to exit");
+        screens::status(immediateUi_, "USB", usbTransfer_.statusMessage(), immediateUi_.text(UiText::HoldPowerToExit));
         return;
     case screens::Screen::FocusSession:
         focusScreen_.session(immediateUi_, nowMs);
@@ -183,7 +184,7 @@ void App::renderScreen(uint32_t nowMs) {
         break;
     case screens::Screen::Sync:
         if (sync_.active()) {
-            screens::status(immediateUi_, "Sync", sync_.statusLine1().c_str(), sync_.statusLine2().c_str());
+            screens::status(immediateUi_, immediateUi_.text(UiText::Sync), sync_.statusLine1(), sync_.statusLine2());
             return;
         }
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
@@ -235,12 +236,15 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
     case screens::Action::UsbTransfer:
         enterUsbTransfer(nowMs);
         return;
-    case screens::Action::StorageStatus:
-        screens::status(immediateUi_, "Storage", storage_.mounted() ? "SD ready" : "SD unavailable",
-                        (String(static_cast<unsigned int>(storage_.bookCount())) + " library entries").c_str());
+    case screens::Action::StorageStatus: {
+        const std::string entries = std::to_string(storage_.bookCount()) + " "
+                                  + std::string(immediateUi_.text(UiText::LibraryEntries));
+        screens::status(immediateUi_, immediateUi_.text(UiText::Storage),
+                        immediateUi_.text(storage_.mounted() ? UiText::SdReady : UiText::SdUnavailable), entries);
         delay(1200);
         renderScreen(nowMs);
         break;
+    }
     case screens::Action::OtaCheck:
         runOtaCheck(false);
         return;
@@ -345,7 +349,7 @@ void App::handleTouch(uint32_t nowMs) {
 
 void App::runRss() {
     readerScreen_.reader.pause();
-    screens::status(immediateUi_, "RSS", "Checking feeds");
+    screens::status(immediateUi_, "RSS", immediateUi_.text(UiText::CheckingFeeds));
     OtaUpdater ota;
     RssFeedManager rss;
     const RssFeedManager::Result result = rss.checkFeeds(ota.config(prefs_), prefs_, &App::renderStorageStatus, this);
@@ -361,7 +365,7 @@ void App::enterUsbTransfer(uint32_t nowMs) {
 #if RSVP_USB_TRANSFER_ENABLED
     readerScreen_.book.save(prefs_, readerScreen_.store, readerScreen_.reader, true, nowMs);
     if (!usbTransfer_.begin(true)) {
-        screens::status(immediateUi_, "USB", "Could not start", usbTransfer_.statusMessage());
+        screens::status(immediateUi_, "USB", immediateUi_.text(UiText::CouldNotStart), usbTransfer_.statusMessage());
         delay(1200);
         screen_ = screens::Screen::Reader;
         renderScreen(nowMs);
@@ -371,7 +375,7 @@ void App::enterUsbTransfer(uint32_t nowMs) {
     screen_ = screens::Screen::Usb;
     renderScreen(nowMs);
 #else
-    screens::status(immediateUi_, "USB", "Unavailable");
+    screens::status(immediateUi_, "USB", immediateUi_.text(UiText::Unavailable));
     delay(1000);
     screen_ = screens::Screen::Reader;
     renderScreen(nowMs);
@@ -388,7 +392,7 @@ void App::exitUsbTransfer() {
 
 void App::runOtaCheck(bool install) {
     readerScreen_.reader.pause();
-    screens::status(immediateUi_, "OTA", "Checking");
+    screens::status(immediateUi_, "OTA", immediateUi_.text(UiText::Checking));
     OtaUpdater ota;
     const OtaUpdater::Config config = ota.config(prefs_);
     const OtaUpdater::Result result = install ? ota.checkAndInstall(config, &App::renderStorageStatus, this)
@@ -427,7 +431,7 @@ void App::powerOff(uint32_t nowMs) {
     readerScreen_.book.save(prefs_, readerScreen_.store, readerScreen_.reader, true, nowMs);
     readerScreen_.book.mirror(readerScreen_.store, readerScreen_.reader);
     readerScreen_.reader.pause();
-    screens::status(immediateUi_, "OFF", "Release PWR");
+    screens::status(immediateUi_, immediateUi_.text(UiText::Off), immediateUi_.text(UiText::ReleasePower));
     delay(250);
     Board::Display::sleep();
     readerScreen_.store.close();

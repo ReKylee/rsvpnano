@@ -14,8 +14,8 @@ namespace screens {
         const int16_t resetX = static_cast<int16_t>(content.x + content.w - resetWidth);
         ui.label({static_cast<int16_t>(content.x + 74), content.y,
                   static_cast<int16_t>(resetX - content.x - 80), 24},
-                 "Typography", 2);
-        if (ui.button({resetX, content.y, resetWidth, 24}, "Reset typography")) {
+                 ui.text(UiText::Typography), 2);
+        if (ui.button({resetX, content.y, resetWidth, 24}, ui.text(UiText::ResetTypography))) {
             config.fontSizeIndex = pref::ReaderFontSizeIndex::defaultValue();
             config.typefaceIndex = 0;
             config.typography = {};
@@ -33,8 +33,9 @@ namespace screens {
         const int16_t gap = 6;
         const int16_t columnWidth = static_cast<int16_t>((content.w - gap) / 2);
         const int16_t sectionsY = static_cast<int16_t>(content.y + 30);
-        ui.separator({content.x, sectionsY, columnWidth, 10}, "FONT");
-        ui.separator({static_cast<int16_t>(content.x + columnWidth + gap), sectionsY, columnWidth, 10}, "GEOMETRY");
+        ui.separator({content.x, sectionsY, columnWidth, 10}, ui.text(UiText::FontSection));
+        ui.separator({static_cast<int16_t>(content.x + columnWidth + gap), sectionsY, columnWidth, 10},
+                     ui.text(UiText::GeometrySection));
         ui::Column font{{content.x, static_cast<int16_t>(sectionsY + 14), columnWidth,
                          static_cast<int16_t>(content.h - 44)}, 5};
         ui::Column geometry{{static_cast<int16_t>(content.x + columnWidth + gap),
@@ -54,27 +55,31 @@ namespace screens {
             config.font = fonts.loadFont(config.typefaceIndex, config.fontSizeIndex);
         }
 
-        if (ui.toggle(font.next(32), "Focus letter", config.typography.focusHighlight)) {
+        if (ui.toggle(font.next(32), ui.text(UiText::FocusLetter), config.typography.focusHighlight)) {
             config.typography.focusHighlight = settings::toggle<pref::TypographyFocusHighlight>(preferences);
         }
 
-        if (const auto value = ui.slider(geometry.next(25), "Tracking", config.typography.tracking, -2, 3, 1, " px");
+        if (const auto value = ui.slider(geometry.next(25), ui.text(UiText::Tracking), config.typography.tracking,
+                                         -2, 3, 1, " px");
             value.changed) {
             config.typography.tracking = static_cast<int8_t>(value.value);
             settings::save<pref::TypographyTracking>(preferences, config.typography.tracking);
         }
-        if (const auto value = ui.slider(geometry.next(25), "Anchor", config.typography.anchor, 30, 40, 1, "%");
+        if (const auto value = ui.slider(geometry.next(25), ui.text(UiText::Anchor), config.typography.anchor, 30, 40,
+                                         1, "%");
             value.changed) {
             config.typography.anchor = static_cast<uint8_t>(value.value);
             settings::save<pref::TypographyAnchor>(preferences, config.typography.anchor);
         }
         if (const auto value =
-                ui.slider(geometry.next(25), "Guide width", config.typography.guideWidth, 12, 30, 2, " px");
+                ui.slider(geometry.next(25), ui.text(UiText::GuideWidth), config.typography.guideWidth, 12, 30, 2,
+                          " px");
             value.changed) {
             config.typography.guideWidth = static_cast<uint8_t>(value.value);
             settings::save<pref::TypographyGuideWidth>(preferences, config.typography.guideWidth);
         }
-        if (const auto value = ui.slider(geometry.next(25), "Guide gap", config.typography.guideGap, 2, 8, 1, " px");
+        if (const auto value = ui.slider(geometry.next(25), ui.text(UiText::GuideGap), config.typography.guideGap, 2,
+                                         8, 1, " px");
             value.changed) {
             config.typography.guideGap = static_cast<uint8_t>(value.value);
             settings::save<pref::TypographyGuideGap>(preferences, config.typography.guideGap);

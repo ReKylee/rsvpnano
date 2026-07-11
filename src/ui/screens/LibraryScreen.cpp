@@ -95,7 +95,8 @@ namespace screens {
         }
 
         if (items.empty()) {
-            ui.label(viewport, "No Library Items", 2, ui::themes::ColorRole::Muted, ui::TextAlign::Center);
+            ui.label(viewport, ui.text(UiText::NoLibraryItems), 2, ui::themes::ColorRole::Muted,
+                     ui::TextAlign::Center);
             return result;
         }
 
@@ -152,7 +153,7 @@ namespace screens {
         constexpr int16_t detailGap = 12;
         const int16_t textWidth = static_cast<int16_t>(detailRect.w - progressWidth - detailGap);
         const LibraryItem& item = items[selectedIndex_];
-        const std::string_view author = item.author.empty() ? std::string_view{"Unknown"} : item.author;
+        const std::string_view author = item.author.empty() ? ui.text(UiText::Unknown) : item.author;
         ui.label({detailRect.x, detailRect.y, textWidth, 16}, item.title, 2);
         ui.label({detailRect.x, static_cast<int16_t>(detailRect.y + 18), detailRect.w, 8}, author, 1,
                  ui::themes::ColorRole::Muted);
@@ -312,7 +313,7 @@ namespace screens {
         if (progress == 0)
             return "0%";
         if (progress >= 100)
-            return "done";
+            return "100%";
         std::string result;
         result.reserve(3);
         if (progress >= 10)

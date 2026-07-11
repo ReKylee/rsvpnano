@@ -5,15 +5,18 @@
 #include <Preferences.h>
 #include <WebServer.h>
 
+#include <string>
+#include <string_view>
+
 class CompanionSyncManager {
 public:
     bool begin();
     void update();
     void end();
     bool active() const;
-    String statusLine1() const;
-    String statusLine2() const;
-    String baseUrl() const;
+    std::string_view statusLine1() const;
+    std::string_view statusLine2() const;
+    std::string baseUrl() const;
 
 private:
     enum class NetworkMode : uint8_t {
@@ -87,11 +90,11 @@ private:
     String uploadFinalPath_;
     String uploadTmpPath_;
     String uploadError_;
-    String pairingCode_;
-    String networkSsid_;
+    std::string pairingCode_;
+    std::string networkSsid_;
     Preferences preferences_;
-    String statusLine1_ = "Idle";
-    String statusLine2_;
+    std::string statusLine1_ = "Idle";
+    std::string statusLine2_;
     NetworkMode networkMode_ = NetworkMode::None;
     bool active_ = false;
     bool serverStarted_ = false;

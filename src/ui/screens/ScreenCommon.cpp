@@ -13,7 +13,7 @@ namespace screens::detail {
             return Action::None;
         }
 
-        if (ui.tab({0, 0, kRailWidth, 53}, "Read",
+        if (ui.tab({0, 0, kRailWidth, 53}, ui.text(UiText::Read),
                    active == Screen::Read || active == Screen::Library || active == Screen::Chapters,
                    ui::Icon::Books)) {
             screen = Screen::Read;
@@ -25,11 +25,11 @@ namespace screens::detail {
                    ui::Icon::Edit)) {
             screen = Screen::Settings;
         }
-        if (ui.tab({0, 106, kRailWidth, 34}, "Device",
+        if (ui.tab({0, 106, kRailWidth, 34}, ui.text(UiText::Device),
                    active == Screen::Device || active == Screen::Sync || active == Screen::Ota, ui::Icon::Device)) {
             screen = Screen::Device;
         }
-        if (ui.tab({0, 140, kRailWidth, static_cast<int16_t>(ui.height() - 140)}, "Focus",
+        if (ui.tab({0, 140, kRailWidth, static_cast<int16_t>(ui.height() - 140)}, ui.text(UiText::Focus),
                    active == Screen::FocusGenres || active == Screen::FocusSession, ui::Icon::Hourglass)) {
             screen = Screen::FocusGenres;
         }

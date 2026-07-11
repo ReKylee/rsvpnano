@@ -4,7 +4,7 @@
 
 namespace screens {
 
-    Action readerSettings(ui::Context& ui, ReaderSettings& config, Preferences& preferences, Screen& screen) {
+    void readerSettings(ui::Context& ui, ReaderSettings& config, Preferences& preferences, Screen& screen) {
         const ui::Rect content = detail::content(ui);
         if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
             screen = Screen::Settings;
@@ -17,7 +17,6 @@ namespace screens {
         if (ui.setting(grid.next(), "Reader hand", config.leftHanded ? "Left" : "Right")) {
             config.leftHanded = !config.leftHanded;
             settings::save<settings::prefs::Handedness>(preferences, static_cast<uint8_t>(config.leftHanded));
-            return Action::ApplyReaderOrientation;
         }
         if (ui.setting(grid.next(), "Chapter scroll", config.chapterScrollReversed ? "Reversed" : "Normal"))
             config.chapterScrollReversed =
@@ -52,7 +51,6 @@ namespace screens {
         if (ui.toggle(grid.next(), "Show progress", config.progressVisibleWhileReading))
             config.progressVisibleWhileReading =
                 settings::toggle<settings::prefs::ReaderProgressVisible>(preferences);
-        return Action::None;
     }
 
 } // namespace screens

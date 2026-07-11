@@ -13,7 +13,7 @@ namespace screens {
     namespace {
 
         constexpr ui::Rect batteryRect(int16_t width) {
-            return {static_cast<int16_t>(std::max<int16_t>(0, width - 126)), 0, 126, 36};
+            return {static_cast<int16_t>(std::max<int16_t>(0, width - 126)), 0, 116, 36};
         }
 
         constexpr uint16_t kPreviousSentenceTapWidth = 112;
@@ -198,8 +198,11 @@ namespace screens {
                                                   ? std::string_view{chapter->title}
                                                   : std::string_view{bookTitle};
         const uint8_t progress = ReadingProgress::percent(reader.currentIndex(), reader.wordCount());
-        std::string footer = "PAUSED";
-        if (reading) {
+        std::string footer;
+        if (reading || settings.footerMetric == FooterMetric::Percentage) {
+            footer = std::to_string(progress) + "%";
+        }
+        else {
             size_t remainingWords = reader.wordCount() > reader.currentIndex()
                                       ? reader.wordCount() - reader.currentIndex()
                                       : 0;
@@ -211,14 +214,11 @@ namespace screens {
                     }
                 }
             }
-            if (settings.footerMetric == FooterMetric::Percentage) {
-                footer = std::to_string(progress) + "%";
-            } else {
-                const uint32_t minutes = reader.wpm() == 0 ? 0
-                                                           : static_cast<uint32_t>((remainingWords + reader.wpm() - 1)
-                                                                                   / reader.wpm());
-                footer = minutes >= 60 ? std::to_string(minutes / 60) + "h" : std::to_string(minutes) + "m";
-            }
+            const uint32_t minutes = reader.wpm() == 0 ? 0
+                                                       : static_cast<uint32_t>((remainingWords + reader.wpm() - 1)
+                                                                               / reader.wpm());
+            footer = settings.footerMetric == FooterMetric::ChapterTime ? "CH " : "BOOK ";
+            footer += minutes >= 60 ? std::to_string(minutes / 60) + "h" : std::to_string(minutes) + "m";
         }
         const std::string overlay = session.wpmFeedbackUntilMs > nowMs ? std::to_string(reader.wpm()) + " WPM" : "";
         BatteryModel batteryModel = battery.view();
@@ -283,7 +283,8 @@ namespace screens {
             gfx.setTextWrap(false);
             gfx.setTextSize(2);
             gfx.setTextColor(ui.color(ui::themes::ColorRole::Muted));
-            gfx.setCursor(18, static_cast<int16_t>(ui.height() / 2 - 8));
+            gfx.setCursor(settings.leftHanded ? 18 : static_cast<int16_t>(ui.width() - 42),
+                          static_cast<int16_t>(ui.height() / 2 - 8));
             gfx.print("<<");
             if (!overlay.empty()) {
                 gfx.setTextColor(ui.color(ui::themes::ColorRole::Accent));
@@ -297,12 +298,19 @@ namespace screens {
         const bool showProgress = !reading || settings.progressVisibleWhileReading;
         const bool showBattery = !reading || settings.batteryVisibleWhileReading;
         const int16_t footerWidth = showProgress ? static_cast<int16_t>(footer.size() * 12) : 0;
-        const int16_t footerX = static_cast<int16_t>(ui.width() - 18 - footerWidth);
-        ui.label({18, static_cast<int16_t>(ui.height() - 26), static_cast<int16_t>(footerX - 42), 16},
+        const int16_t footerX = settings.leftHanded ? 18 : static_cast<int16_t>(ui.width() - 18 - footerWidth);
+        const int16_t chapterX = settings.leftHanded && showProgress ? static_cast<int16_t>(footerX + footerWidth + 24)
+                                                                     : 18;
+        const int16_t chapterWidth = showProgress
+                                       ? static_cast<int16_t>(ui.width() - 60 - footerWidth)
+                                       : static_cast<int16_t>(ui.width() - 36);
+        ui.label({chapterX, static_cast<int16_t>(ui.height() - 26), chapterWidth, 16},
                  showChapter ? chapterLabel.empty() ? std::string_view{"START"} : chapterLabel : std::string_view{},
-                 2, ui::themes::ColorRole::Muted);
+                 2, ui::themes::ColorRole::Muted,
+                 settings.leftHanded ? ui::TextAlign::Right : ui::TextAlign::Left);
         ui.label({footerX, static_cast<int16_t>(ui.height() - 26), footerWidth, 16}, footer, 2,
-                 ui::themes::ColorRole::Muted, ui::TextAlign::Right);
+                 ui::themes::ColorRole::Muted,
+                 settings.leftHanded ? ui::TextAlign::Left : ui::TextAlign::Right);
 
         char batteryText[12];
         if (batteryModel.label == BatteryLabel::Voltage && batteryModel.voltage > 0)
@@ -319,17 +327,20 @@ namespace screens {
             std::snprintf(batteryText, sizeof(batteryText), "%u%%", static_cast<unsigned int>(batteryModel.percent));
         const std::string_view batteryLabel{batteryText};
         const ui::Rect batteryArea = batteryRect(ui.width());
-        ui.battery({batteryArea.x, batteryArea.y, static_cast<int16_t>(batteryArea.w - 10), batteryArea.h},
+        ui.battery(batteryArea,
                    showBattery ? batteryModel.percent : 0, showBattery && batteryModel.charging,
                    showBattery ? batteryLabel : std::string_view{});
     }
 
     bool ReaderScreen::batteryTapped(const ui::Touch& touch) const {
-        return ui::hasTouch(touch, ui::TouchTap) && ui::contains(batteryRect(gfx_.width()), touch.x, touch.y);
+        return ui::hasTouch(touch, ui::TouchTap)
+            && ui::contains(batteryRect(gfx_.width()), touch.x, touch.y);
     }
 
     bool ReaderScreen::previousSentenceTapped(uint16_t x) const {
-        return x <= kPreviousSentenceTapWidth;
+        return session.settings.leftHanded
+                 ? x <= kPreviousSentenceTapWidth
+                 : x >= static_cast<uint16_t>(std::max<int16_t>(0, gfx_.width() - kPreviousSentenceTapWidth));
     }
 
     void ReaderScreen::handleTouch(ui::Context& ui, uint32_t nowMs, Preferences& preferences) {
@@ -442,6 +453,17 @@ namespace screens {
             battery.label = static_cast<BatteryLabel>((static_cast<uint8_t>(battery.label) + 1U) % 3U);
             session.settings.batteryLabel = battery.label;
             settings::save<settings::prefs::BatteryLabelMode>(preferences, static_cast<uint8_t>(battery.label));
+            lastTapValid_ = false;
+            return;
+        }
+        const uint16_t footerTapWidth = std::min<uint16_t>(220, static_cast<uint16_t>(gfx_.width() / 2));
+        if (touch.y >= static_cast<uint16_t>(std::max<int16_t>(0, gfx_.height() - 40))
+            && (session.settings.leftHanded ? touch.x <= footerTapWidth
+                                            : touch.x >= static_cast<uint16_t>(gfx_.width() - footerTapWidth))) {
+            session.settings.footerMetric = static_cast<FooterMetric>(
+                (static_cast<uint8_t>(session.settings.footerMetric) + 1U) % 3U);
+            settings::save<settings::prefs::FooterMetricMode>(preferences,
+                                                               static_cast<uint8_t>(session.settings.footerMetric));
             lastTapValid_ = false;
             return;
         }
@@ -660,6 +682,7 @@ namespace screens {
         value = ui::Context::combine(value, settings.typography.guideWidth);
         value = ui::Context::combine(value, settings.typography.guideGap);
         value = ui::Context::combine(value, settings.typography.focusHighlight);
+        value = ui::Context::combine(value, settings.leftHanded);
         value = ui::Context::combine(value, static_cast<uint8_t>(settings.font.kind));
         value = ui::Context::combine(value, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(settings.font.alpha4)));
         value = ui::Context::combine(value, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(settings.font.gfx)));

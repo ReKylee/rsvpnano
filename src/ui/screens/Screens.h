@@ -50,7 +50,6 @@ namespace screens {
         StorageStatus,
         OtaCheck,
         OtaInstall,
-        ApplyReaderOrientation,
     };
 
     struct ReadModel {
@@ -76,7 +75,7 @@ namespace screens {
     void pacingSettings(ui::Context& ui, ReadingLoop& reader, Preferences& preferences, Screen& screen);
     void typographySettings(ui::Context& ui, ReaderSettings& settings, FontCatalog& fonts, Preferences& preferences,
                             Screen& screen);
-    Action readerSettings(ui::Context& ui, ReaderSettings& settings, Preferences& preferences, Screen& screen);
+    void readerSettings(ui::Context& ui, ReaderSettings& settings, Preferences& preferences, Screen& screen);
     class NetworkScreen {
     public:
         std::string ssid;

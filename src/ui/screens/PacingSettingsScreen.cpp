@@ -6,12 +6,17 @@ namespace screens {
     namespace pref = settings::prefs;
 
     void pacingSettings(ui::Context& ui, ReadingLoop& reader, Preferences& preferences, Screen& screen) {
-        ui::Column column{detail::content(ui), 3};
-        if (ui.button(column.next(22), "Back"))
+        const ui::Rect content = detail::content(ui);
+        if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
             screen = Screen::Settings;
+        ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
+                 "Word pacing", 2);
 
-        ui.label(column.next(12), "Long words", 1, ui::themes::ColorRole::Muted);
-        if (const auto value = ui.slider(column.next(22), reader.pacingConfig().longWordDelayMs, 0, 600, 50);
+        const int16_t gap = 6;
+        const int16_t cardWidth = static_cast<int16_t>((content.w - gap * 2) / 3);
+        const int16_t sliderY = static_cast<int16_t>(content.y + 34);
+        if (const auto value = ui.slider({content.x, sliderY, cardWidth, 50}, "Long words",
+                                         reader.pacingConfig().longWordDelayMs, 0, 600, 50, " ms");
             value.changed) {
             auto pacing = reader.pacingConfig();
             pacing.longWordDelayMs = static_cast<uint16_t>(value.value);
@@ -19,8 +24,10 @@ namespace screens {
             reader.setPacingConfig(pacing);
         }
 
-        ui.label(column.next(12), "Complexity", 1, ui::themes::ColorRole::Muted);
-        if (const auto value = ui.slider(column.next(22), reader.pacingConfig().complexWordDelayMs, 0, 600, 50);
+        if (const auto value =
+                ui.slider({static_cast<int16_t>(content.x + cardWidth + gap), sliderY, cardWidth, 50},
+                          ui.text(UiText::Complexity),
+                          reader.pacingConfig().complexWordDelayMs, 0, 600, 50, " ms");
             value.changed) {
             auto pacing = reader.pacingConfig();
             pacing.complexWordDelayMs = static_cast<uint16_t>(value.value);
@@ -28,13 +35,25 @@ namespace screens {
             reader.setPacingConfig(pacing);
         }
 
-        ui.label(column.next(12), "Punctuation", 1, ui::themes::ColorRole::Muted);
-        if (const auto value = ui.slider(column.next(22), reader.pacingConfig().punctuationDelayMs, 0, 600, 50);
+        if (const auto value =
+                ui.slider({static_cast<int16_t>(content.x + (cardWidth + gap) * 2), sliderY, cardWidth, 50},
+                          ui.text(UiText::Punctuation), reader.pacingConfig().punctuationDelayMs, 0, 600, 50, " ms");
             value.changed) {
             auto pacing = reader.pacingConfig();
             pacing.punctuationDelayMs = static_cast<uint16_t>(value.value);
             settings::save<pref::PacingPunctuationDelay>(preferences, pacing.punctuationDelayMs);
             reader.setPacingConfig(pacing);
+        }
+
+        if (ui.button({content.x, static_cast<int16_t>(sliderY + 58), content.w, 30},
+                      ui.text(UiText::ResetPacing))) {
+            const ReadingLoop::PacingConfig pacing{pref::PacingLongWordDelay::defaultValue(),
+                                                   pref::PacingComplexWordDelay::defaultValue(),
+                                                   pref::PacingPunctuationDelay::defaultValue()};
+            reader.setPacingConfig(pacing);
+            settings::save<pref::PacingLongWordDelay>(preferences, pacing.longWordDelayMs);
+            settings::save<pref::PacingComplexWordDelay>(preferences, pacing.complexWordDelayMs);
+            settings::save<pref::PacingPunctuationDelay>(preferences, pacing.punctuationDelayMs);
         }
     }
 

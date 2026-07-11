@@ -10,6 +10,18 @@ enum class PauseMode : uint8_t {
     Instant
 };
 
+enum class FooterMetric : uint8_t {
+    Percentage,
+    ChapterTime,
+    BookTime,
+};
+
+enum class BatteryLabel : uint8_t {
+    Percentage,
+    TimeRemaining,
+    Voltage,
+};
+
 struct ReaderTypography {
     bool focusHighlight = true;
     int8_t tracking = 0;
@@ -24,8 +36,14 @@ struct ReaderSettings {
     uint8_t fontSizeIndex = 0;
     uint8_t typefaceIndex = 0;
     PauseMode pauseMode = PauseMode::SentenceEnd;
+    FooterMetric footerMetric = FooterMetric::Percentage;
+    BatteryLabel batteryLabel = BatteryLabel::Percentage;
     bool phantomWords = true;
     bool chapterScrollReversed = false;
+    bool leftHanded = false;
+    bool batteryVisibleWhileReading = true;
+    bool chapterVisibleWhileReading = false;
+    bool progressVisibleWhileReading = false;
 };
 
 struct ReaderSession {

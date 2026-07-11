@@ -16,12 +16,14 @@ namespace screens {
         }
     } // namespace
 
-    void StandbyScreen::begin(ui::Context& ui, uint32_t nowMs, size_t bookIndex, size_t wordIndex) {
+    void StandbyScreen::begin(ui::Context& ui, uint32_t nowMs, size_t bookIndex, size_t wordIndex,
+                              standby::Kind kind) {
+        kind_ = kind;
         columns_ =
             std::clamp<uint16_t>(ceilDiv(std::max<int16_t>(1, ui.width()), kCellSize), 1, standby::kMaxStandbyColumns);
         rows_ =
             std::clamp<uint16_t>(ceilDiv(std::max<int16_t>(1, ui.height()), kCellSize), 1, standby::kMaxStandbyRows);
-        screensaver_.select(standby::Kind::Life, columns_, rows_);
+        screensaver_.select(kind, columns_, rows_);
         const uint32_t seed =
             nowMs ^ (static_cast<uint32_t>(bookIndex) << 16U) ^ (static_cast<uint32_t>(wordIndex) * 2654435761UL);
         screensaver_.seed(seed == 0 ? 1U : seed);
@@ -34,7 +36,7 @@ namespace screens {
 
     void StandbyScreen::update(ui::Context& ui, uint32_t nowMs) {
         if (!screensaver_)
-            begin(ui, nowMs, 0, 0);
+            begin(ui, nowMs, 0, 0, kind_);
         if (static_cast<int32_t>(nowMs - nextFrameMs_) < 0)
             return;
         uint8_t steps = 0;

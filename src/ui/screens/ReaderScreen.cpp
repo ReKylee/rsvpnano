@@ -113,18 +113,24 @@ namespace screens {
         config.typography.guideWidth = settings::load<settings::prefs::TypographyGuideWidth>(preferences);
         config.typography.guideGap = settings::load<settings::prefs::TypographyGuideGap>(preferences);
         config.pauseMode = static_cast<PauseMode>(settings::load<settings::prefs::PauseMode>(preferences));
+        config.footerMetric =
+            static_cast<FooterMetric>(settings::load<settings::prefs::FooterMetricMode>(preferences));
+        config.batteryLabel =
+            static_cast<BatteryLabel>(settings::load<settings::prefs::BatteryLabelMode>(preferences));
+        config.leftHanded = settings::load<settings::prefs::Handedness>(preferences) != 0;
+        config.batteryVisibleWhileReading = settings::load<settings::prefs::ReaderBatteryVisible>(preferences);
+        config.chapterVisibleWhileReading = settings::load<settings::prefs::ReaderChapterVisible>(preferences);
+        config.progressVisibleWhileReading = settings::load<settings::prefs::ReaderProgressVisible>(preferences);
 
         const std::string savedTypefaceId = settings::load<settings::prefs::ReaderTypefaceId>(preferences);
-        if (savedTypefaceId.empty() || !fonts.indexForId(savedTypefaceId.c_str(), config.typefaceIndex)) {
-            config.typefaceIndex =
-                settings::load<settings::prefs::ReaderTypefaceIndex>(preferences, fonts.typefaceCount());
-        }
+        if (savedTypefaceId.empty() || !fonts.indexForId(savedTypefaceId.c_str(), config.typefaceIndex))
+            config.typefaceIndex = 0;
         config.font = fonts.loadFont(config.typefaceIndex, config.fontSizeIndex);
         reader.setWpm(settings::load<settings::prefs::Wpm>(preferences));
         reader.setPacingConfig({settings::load<settings::prefs::PacingLongWordDelay>(preferences),
                                 settings::load<settings::prefs::PacingComplexWordDelay>(preferences),
                                 settings::load<settings::prefs::PacingPunctuationDelay>(preferences)});
-        battery.labelMode = settings::load<settings::prefs::BatteryLabelMode>(preferences);
+        battery.label = config.batteryLabel;
         battery.update(nowMs, true);
     }
 
@@ -192,9 +198,31 @@ namespace screens {
                                                   ? std::string_view{chapter->title}
                                                   : std::string_view{bookTitle};
         const uint8_t progress = ReadingProgress::percent(reader.currentIndex(), reader.wordCount());
-        const std::string footer = reading ? std::to_string(progress) + "%" : "PAUSED";
+        std::string footer = "PAUSED";
+        if (reading) {
+            size_t remainingWords = reader.wordCount() > reader.currentIndex()
+                                      ? reader.wordCount() - reader.currentIndex()
+                                      : 0;
+            if (settings.footerMetric == FooterMetric::ChapterTime) {
+                for (const ChapterMarker& marker: book.metadata.chapters) {
+                    if (marker.wordIndex > reader.currentIndex()) {
+                        remainingWords = marker.wordIndex - reader.currentIndex();
+                        break;
+                    }
+                }
+            }
+            if (settings.footerMetric == FooterMetric::Percentage) {
+                footer = std::to_string(progress) + "%";
+            } else {
+                const uint32_t minutes = reader.wpm() == 0 ? 0
+                                                           : static_cast<uint32_t>((remainingWords + reader.wpm() - 1)
+                                                                                   / reader.wpm());
+                footer = minutes >= 60 ? std::to_string(minutes / 60) + "h" : std::to_string(minutes) + "m";
+            }
+        }
         const std::string overlay = session.wpmFeedbackUntilMs > nowMs ? std::to_string(reader.wpm()) + " WPM" : "";
-        const BatteryModel batteryModel = battery.view();
+        BatteryModel batteryModel = battery.view();
+        batteryModel.label = settings.batteryLabel;
 
         font_ = settings.font;
         typography_ = settings.typography;
@@ -265,24 +293,35 @@ namespace screens {
             }
         }
 
-        const int16_t footerWidth = static_cast<int16_t>(footer.size() * 12);
+        const bool showChapter = !reading || settings.chapterVisibleWhileReading;
+        const bool showProgress = !reading || settings.progressVisibleWhileReading;
+        const bool showBattery = !reading || settings.batteryVisibleWhileReading;
+        const int16_t footerWidth = showProgress ? static_cast<int16_t>(footer.size() * 12) : 0;
         const int16_t footerX = static_cast<int16_t>(ui.width() - 18 - footerWidth);
         ui.label({18, static_cast<int16_t>(ui.height() - 26), static_cast<int16_t>(footerX - 42), 16},
-                 reading ? std::string_view{} : chapterLabel.empty() ? std::string_view{"START"} : chapterLabel,
+                 showChapter ? chapterLabel.empty() ? std::string_view{"START"} : chapterLabel : std::string_view{},
                  2, ui::themes::ColorRole::Muted);
         ui.label({footerX, static_cast<int16_t>(ui.height() - 26), footerWidth, 16}, footer, 2,
                  ui::themes::ColorRole::Muted, ui::TextAlign::Right);
 
         char batteryText[12];
-        if (batteryModel.showVoltage && batteryModel.voltage > 0)
+        if (batteryModel.label == BatteryLabel::Voltage && batteryModel.voltage > 0)
             std::snprintf(batteryText, sizeof(batteryText), "%.2fV", batteryModel.voltage);
+        else if (batteryModel.label == BatteryLabel::TimeRemaining) {
+            constexpr uint32_t kNominalRuntimeMinutes = 600;
+            const uint32_t minutes = static_cast<uint32_t>(batteryModel.percent) * kNominalRuntimeMinutes / 100;
+            if (minutes >= 60)
+                std::snprintf(batteryText, sizeof(batteryText), "%luh", static_cast<unsigned long>(minutes / 60));
+            else
+                std::snprintf(batteryText, sizeof(batteryText), "%lum", static_cast<unsigned long>(minutes));
+        }
         else
             std::snprintf(batteryText, sizeof(batteryText), "%u%%", static_cast<unsigned int>(batteryModel.percent));
         const std::string_view batteryLabel{batteryText};
         const ui::Rect batteryArea = batteryRect(ui.width());
         ui.battery({batteryArea.x, batteryArea.y, static_cast<int16_t>(batteryArea.w - 10), batteryArea.h},
-                   reading ? 0 : batteryModel.percent, !reading && batteryModel.charging,
-                   reading ? std::string_view{} : batteryLabel);
+                   showBattery ? batteryModel.percent : 0, showBattery && batteryModel.charging,
+                   showBattery ? batteryLabel : std::string_view{});
     }
 
     bool ReaderScreen::batteryTapped(const ui::Touch& touch) const {
@@ -400,8 +439,9 @@ namespace screens {
             return;
         }
         if (batteryTapped({ui::TouchTap, touch.x, touch.y})) {
-            battery.labelMode = static_cast<uint8_t>((battery.labelMode + 1U) & 1U);
-            settings::save<settings::prefs::BatteryLabelMode>(preferences, battery.labelMode);
+            battery.label = static_cast<BatteryLabel>((static_cast<uint8_t>(battery.label) + 1U) % 3U);
+            session.settings.batteryLabel = battery.label;
+            settings::save<settings::prefs::BatteryLabelMode>(preferences, static_cast<uint8_t>(battery.label));
             lastTapValid_ = false;
             return;
         }

@@ -31,10 +31,10 @@ namespace screens {
 
         ui::Row actions{column.next(64), 14};
         const int16_t buttonWidth = static_cast<int16_t>((actions.bounds.w - actions.gap) / 2);
-        if (ui.button(actions.next(buttonWidth), "Chapters")) {
+        if (ui.button(actions.next(buttonWidth), ui.text(UiText::Chapters))) {
             screen = Screen::Chapters;
         }
-        if (ui.button(actions.next(buttonWidth), "Library")) {
+        if (ui.button(actions.next(buttonWidth), ui.text(UiText::Library))) {
             screen = Screen::Library;
         }
         return Action::None;

@@ -11,31 +11,23 @@ namespace settings {
 
         struct BookPath : StringSetting<"book"> {};
 
-        struct RecentSequence : Scalar<"seq", uint32_t, 0> {};
-
         struct Wpm : Bounded<"wpm", uint16_t, 300, 10, 1000> {};
 
         struct BrightnessIndex : CountedIndex<"bright", uint8_t, 13> {};
 
         struct ThemeId : StringSetting<"theme_id"> {};
 
-        struct YellowMode : Scalar<"yellow_md", uint8_t, 0> {};
+        struct UiLanguage : Bounded<"ui_lang", uint8_t, 0, 0, 5> {};
 
-        struct UiLanguage : Scalar<"ui_lang", uint8_t, 0> {};
-
-        struct ReaderMode : Scalar<"read_mode", uint8_t, 0> {};
-
-        struct Handedness : Scalar<"handed", uint8_t, 0> {};
-
-        struct ReaderControlsSwapped : Scalar<"ctrl_swap", bool, false> {};
+        struct Handedness : Bounded<"handed", uint8_t, 0, 0, 1> {};
 
         struct PhantomWords : Scalar<"phantom_on", bool, true> {};
 
         struct ChapterScrollReversed : Scalar<"ch_scroll_rev", bool, false> {};
 
-        struct FooterMetricMode : Scalar<"prog_md", uint8_t, 0> {};
+        struct FooterMetricMode : Bounded<"prog_md", uint8_t, 0, 0, 2> {};
 
-        struct BatteryLabelMode : Scalar<"bat_md", uint8_t, 0> {};
+        struct BatteryLabelMode : Bounded<"bat_md", uint8_t, 0, 0, 2> {};
 
         struct ScreensaverMode : Scalar<"scrn_sv", uint8_t, 0> {};
 
@@ -45,13 +37,7 @@ namespace settings {
 
         struct ReaderProgressVisible : Scalar<"read_pct", bool, false> {};
 
-        struct ChapterLabelRsvp : StringSetting<"ch_lbl_rsvp"> {};
-
-        struct ChapterLabelScroll : StringSetting<"ch_lbl_scroll"> {};
-
         struct ReaderFontSizeIndex : CountedIndex<"font_size", uint8_t, 0> {};
-
-        struct ReaderTypefaceIndex : CountedIndex<"typeface", uint8_t, 0> {};
 
         struct ReaderTypefaceId : StringSetting<"font_id"> {};
 
@@ -73,29 +59,7 @@ namespace settings {
 
         struct PauseMode : Bounded<"pause_md", uint8_t, 0, 0, 1> {};
 
-        struct AccurateTime : Scalar<"time_est_a", bool, true> {};
-
-        struct MenuRepeatMs : Scalar<"menu_rpt", uint16_t, 0> {};
-
         struct StandbyTimerIndex : CountedIndex<"stby_tmr", uint8_t, 1> {};
-
-        struct CpuPlay : Scalar<"cpu_play", uint32_t, 0> {};
-
-        struct CpuScroll : Scalar<"cpu_scroll", uint32_t, 0> {};
-
-        struct CpuPaused : Scalar<"cpu_paused", uint32_t, 0> {};
-
-        struct CpuMenu : Scalar<"cpu_menu", uint32_t, 0> {};
-
-        struct CpuStandby : Scalar<"cpu_stby", uint32_t, 0> {};
-
-        struct AutoDimLevel : Scalar<"dim_lvl", uint8_t, 0> {};
-
-        struct AutoDimDelay : Scalar<"dim_dly", uint32_t, 0> {};
-
-        inline constexpr const char* kTimerDurationByGenreKeys[] = {
-            "tmr_dur_0", "tmr_dur_1", "tmr_dur_2", "tmr_dur_3", "tmr_dur_4",
-        };
 
         struct WifiSsid : StringSetting<"wifi_ssid"> {};
 

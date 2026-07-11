@@ -7,7 +7,7 @@
 #include <string>
 
 #include "book/BookMetadata.h"
-#include "display/DisplaySettings.h"
+#include "display/InterfaceSettings.h"
 #include "display/ThemeStore.h"
 #include "fonts/FontCatalog.h"
 #include "reader/ReaderSettings.h"
@@ -24,9 +24,11 @@ namespace screens {
         Chapters,
         Settings,
         ReadingSettings,
-        DisplaySettings,
+        InterfaceSettings,
         PacingSettings,
         TypographySettings,
+        ReaderSettings,
+        NetworkSettings,
         Device,
         Sync,
         Ota,
@@ -48,6 +50,7 @@ namespace screens {
         StorageStatus,
         OtaCheck,
         OtaInstall,
+        ApplyReaderOrientation,
     };
 
     struct ReadModel {
@@ -60,9 +63,9 @@ namespace screens {
     Action settings(ui::Context& ui, Screen& screen);
     void readingSettings(ui::Context& ui, ReadingLoop& reader, ReaderSettings& settings, Preferences& preferences,
                          Screen& screen);
-    class DisplayScreen {
+    class InterfaceScreen {
     public:
-        DisplaySettings config;
+        InterfaceSettings config;
         ThemeStore themes;
 
         void begin(ui::Context& ui, Preferences& preferences, size_t standbyDurationCount,
@@ -73,6 +76,19 @@ namespace screens {
     void pacingSettings(ui::Context& ui, ReadingLoop& reader, Preferences& preferences, Screen& screen);
     void typographySettings(ui::Context& ui, ReaderSettings& settings, FontCatalog& fonts, Preferences& preferences,
                             Screen& screen);
+    Action readerSettings(ui::Context& ui, ReaderSettings& settings, Preferences& preferences, Screen& screen);
+    class NetworkScreen {
+    public:
+        std::string ssid;
+        std::string owner;
+        std::string tag;
+        bool automatic = false;
+        bool autoCheckPending = false;
+        bool ssidStored = false;
+
+        void begin(Preferences& preferences);
+        void draw(ui::Context& ui, Preferences& preferences, Screen& screen);
+    };
     Action device(ui::Context& ui, bool storageReady, size_t bookCount, Screen& screen);
     Action sync(ui::Context& ui, Screen& screen);
     Action ota(ui::Context& ui, Screen& screen);

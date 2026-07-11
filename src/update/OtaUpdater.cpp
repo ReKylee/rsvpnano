@@ -211,6 +211,8 @@ OtaUpdater::Config OtaUpdater::config(Preferences& preferences) const {
     const std::string githubTag =
         settings::nvs::get(preferences, settings::prefs::OtaTag::key(), std::string{result.githubTag.c_str()});
     result.githubTag = githubTag.c_str();
+    if (preferences.isKey(settings::prefs::OtaAuto::key()))
+        result.autoCheck = settings::load<settings::prefs::OtaAuto>(preferences);
     return result;
 }
 

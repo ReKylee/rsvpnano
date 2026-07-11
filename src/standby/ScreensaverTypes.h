@@ -6,10 +6,11 @@
 
 namespace standby {
 
-    enum class Kind {
-        Life,
+    enum class Kind : uint8_t {
+        Life = 0,
         Maze,
         Voronoi,
+        ScreenOff,
     };
 
     struct Frame {

@@ -16,18 +16,18 @@ namespace screens {
         uint8_t percent = 0;
         float voltage = 0;
         bool charging = false;
-        bool showVoltage = false;
+        BatteryLabel label = BatteryLabel::Percentage;
     };
 
     struct BatteryState {
         uint32_t lastSampleMs = 0;
-        uint8_t labelMode = 0;
+        BatteryLabel label = BatteryLabel::Percentage;
         uint8_t percent = 0;
         float voltage = 0;
         bool charging = false;
 
         BatteryModel view() const {
-            return {percent, voltage, charging, (labelMode & 1U) != 0};
+            return {percent, voltage, charging, label};
         }
         void update(uint32_t nowMs, bool force = false);
     };

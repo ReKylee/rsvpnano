@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "ui/Theme.h"
+#include "ui/Localization.h"
 #include "ui/Touch.h"
 
 namespace ui {
@@ -99,6 +100,8 @@ namespace ui {
         explicit Context(Arduino_GFX& gfx, Flush flush, FlushRegion flushRegion = nullptr);
 
         void setTheme(const ui::themes::Theme& theme);
+        void setLanguage(UiLanguage language);
+        std::string_view text(UiText key) const;
         void setTouchSource(TouchSource source, uint32_t nowMs);
         bool pollTouch(uint32_t nowMs);
         const Touch* touch() const {
@@ -110,6 +113,9 @@ namespace ui {
 
         void label(Rect rect, std::string_view text, uint8_t textSize = 2,
                    ui::themes::ColorRole role = ui::themes::ColorRole::Foreground, TextAlign align = TextAlign::Left);
+        void separator(Rect rect, std::string_view text);
+        bool setting(Rect rect, std::string_view label, std::string_view value);
+        bool toggle(Rect rect, std::string_view label, bool enabled);
         bool button(Rect rect, std::string_view text, Icon icon = Icon::None, uint8_t textLines = 1,
                     std::string_view detailLeft = {}, std::string_view detailRight = {});
         bool iconButton(Rect rect, Icon icon);
@@ -117,6 +123,8 @@ namespace ui {
         void battery(Rect rect, uint8_t percent, bool charging, std::string_view label);
         void progress(Rect rect, int value, int minimum = 0, int maximum = 100);
         SliderResult slider(Rect rect, int value, int minimum, int maximum, int step = 1);
+        SliderResult slider(Rect rect, std::string_view label, int value, int minimum, int maximum, int step = 1,
+                            std::string_view suffix = {});
         void dial(Rect rect, int value, int minimum, int maximum, std::string_view label = {});
         bool redraw(Rect rect, uint32_t signature);
         void drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
@@ -143,6 +151,9 @@ namespace ui {
     private:
         enum class Kind : uint8_t {
             Label,
+            Separator,
+            Setting,
+            Toggle,
             Button,
             Tab,
             Progress,
@@ -185,6 +196,7 @@ namespace ui {
         Flush flush_ = nullptr;
         FlushRegion flushRegion_ = nullptr;
         const ui::themes::Theme* theme_ = nullptr;
+        UiLanguage language_ = UiLanguage::English;
         TouchSource touchSource_{};
         Touch touchEvent_{};
         Orientation touchOrientation_ = Orientation::Portrait;
@@ -206,6 +218,8 @@ namespace ui {
         size_t slotCount_ = 0;
         size_t nextSlot_ = 0;
         size_t capturedSlot_ = kSlotCapacity;
+        int capturedSliderValue_ = 0;
+        int capturedSliderInitialValue_ = 0;
         uint8_t screen_ = 0xFF;
         bool invalid_ = true;
         bool drew_ = false;

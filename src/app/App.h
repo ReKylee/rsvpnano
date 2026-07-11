@@ -39,7 +39,8 @@ private:
     screens::ReaderScreen readerScreen_{Board::Display::gfx()};
     screens::LibraryScreen libraryScreen_;
     screens::ChaptersScreen chaptersScreen_;
-    screens::DisplayScreen displayScreen_;
+    screens::InterfaceScreen interfaceScreen_;
+    screens::NetworkScreen networkScreen_;
     StorageManager storage_;
     CompanionSyncManager sync_;
     UsbMassStorageManager usbTransfer_;

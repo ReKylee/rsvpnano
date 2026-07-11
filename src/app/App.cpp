@@ -18,6 +18,13 @@ namespace {
     constexpr std::array<uint32_t, 5> kStandbyMs = {
         0, 1UL * 60UL * 1000UL, 5UL * 60UL * 1000UL, 15UL * 60UL * 1000UL, 30UL * 60UL * 1000UL,
     };
+
+    void applyReaderOrientation(bool leftHanded) {
+        const ui::Orientation orientation =
+            leftHanded ? Board::Display::rotatedUiOrientation() : Board::Display::defaultUiOrientation();
+        Board::Display::gfx().setRotation(static_cast<uint8_t>(orientation));
+        Board::Imu::setUiOrientation(orientation);
+    }
 } // namespace
 
 void App::begin() {
@@ -37,7 +44,9 @@ void App::begin() {
 
     storage_.begin();
     readerScreen_.begin(prefs_, bootMs_);
-    displayScreen_.begin(immediateUi_, prefs_, kStandbyMs.size(), &Board::Display::setBrightness);
+    applyReaderOrientation(readerScreen_.session.settings.leftHanded);
+    interfaceScreen_.begin(immediateUi_, prefs_, kStandbyMs.size(), &Board::Display::setBrightness);
+    networkScreen_.begin(prefs_);
     focusScreen_.timer.begin();
     readerScreen_.loadInitialBook(immediateUi_, storage_, prefs_, bootMs_);
     libraryScreen_.invalidate();
@@ -61,6 +70,11 @@ void App::update(uint32_t nowMs) {
 
     if (screen_ == screens::Screen::Status && nowMs - bootMs_ >= kBootSplashMs) {
         screen_ = screens::Screen::Reader;
+        if (networkScreen_.autoCheckPending) {
+            networkScreen_.autoCheckPending = false;
+            runOtaCheck(false);
+            return;
+        }
     }
 
     readerScreen_.battery.update(nowMs);
@@ -78,8 +92,8 @@ void App::update(uint32_t nowMs) {
     renderScreen(nowMs);
     if (!readerScreen_.reader.playing() && !sync_.active() && !usbTransfer_.active()
         && screen_ != screens::Screen::FocusSession && screen_ != screens::Screen::Status
-        && kStandbyMs[displayScreen_.config.standbyIndex] > 0
-        && nowMs - lastActivityMs_ >= kStandbyMs[displayScreen_.config.standbyIndex]) {
+        && kStandbyMs[interfaceScreen_.config.standbyIndex] > 0
+        && nowMs - lastActivityMs_ >= kStandbyMs[interfaceScreen_.config.standbyIndex]) {
         enterStandby(nowMs);
     }
 }
@@ -148,9 +162,9 @@ void App::renderScreen(uint32_t nowMs) {
         screens::readingSettings(immediateUi_, readerScreen_.reader, readerScreen_.session.settings, prefs_, screen_);
         break;
     }
-    case screens::Screen::DisplaySettings: {
+    case screens::Screen::InterfaceSettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        displayScreen_.draw(immediateUi_, prefs_, kStandbyMs, &Board::Display::setBrightness, screen_);
+        interfaceScreen_.draw(immediateUi_, prefs_, kStandbyMs, &Board::Display::setBrightness, screen_);
         break;
     }
     case screens::Screen::PacingSettings: {
@@ -163,6 +177,14 @@ void App::renderScreen(uint32_t nowMs) {
         screens::typographySettings(immediateUi_, readerScreen_.session.settings, readerScreen_.fonts, prefs_, screen_);
         break;
     }
+    case screens::Screen::ReaderSettings:
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        action = screens::readerSettings(immediateUi_, readerScreen_.session.settings, prefs_, screen_);
+        break;
+    case screens::Screen::NetworkSettings:
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        networkScreen_.draw(immediateUi_, prefs_, screen_);
+        break;
     case screens::Screen::Device:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         action = screens::device(immediateUi_, storage_.mounted(), storage_.bookCount(), screen_);
@@ -233,6 +255,11 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
     case screens::Action::OtaInstall:
         runOtaCheck(true);
         return;
+    case screens::Action::ApplyReaderOrientation:
+        applyReaderOrientation(readerScreen_.session.settings.leftHanded);
+        immediateUi_.invalidate();
+        renderScreen(nowMs);
+        return;
     }
 }
 
@@ -265,6 +292,11 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
     if (Input::hasAction(event.actions, Input::ActionOpenMenu) || Input::hasAction(event.actions, Input::ActionBack)) {
         if (sync_.active()) {
             sync_.end();
+            readerScreen_.begin(prefs_, nowMs);
+            interfaceScreen_.begin(immediateUi_, prefs_, kStandbyMs.size(), &Board::Display::setBrightness);
+            applyReaderOrientation(readerScreen_.session.settings.leftHanded);
+            networkScreen_.begin(prefs_);
+            networkScreen_.autoCheckPending = false;
             screen_ = screens::Screen::Device;
             renderScreen(nowMs);
         } else if (screen_ != screens::Screen::Reader) {
@@ -273,9 +305,11 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
                 screen_ = screens::Screen::Reader;
             } else if (screen_ == screens::Screen::Sync || screen_ == screens::Screen::Ota) {
                 screen_ = screens::Screen::Device;
-            } else if (screen_ == screens::Screen::ReadingSettings || screen_ == screens::Screen::DisplaySettings
+            } else if (screen_ == screens::Screen::ReadingSettings || screen_ == screens::Screen::InterfaceSettings
                        || screen_ == screens::Screen::PacingSettings
-                       || screen_ == screens::Screen::TypographySettings) {
+                       || screen_ == screens::Screen::TypographySettings
+                       || screen_ == screens::Screen::ReaderSettings
+                       || screen_ == screens::Screen::NetworkSettings) {
                 screen_ = screens::Screen::Settings;
             } else {
                 screen_ = screens::Screen::Read;
@@ -387,7 +421,10 @@ void App::enterStandby(uint32_t nowMs) {
     readerScreen_.reader.pause();
     Board::Display::wake();
     immediateUi_.invalidate();
-    standbyScreen_.begin(immediateUi_, nowMs, readerScreen_.book.index, readerScreen_.reader.currentIndex());
+    standbyScreen_.begin(immediateUi_, nowMs, readerScreen_.book.index, readerScreen_.reader.currentIndex(),
+                         interfaceScreen_.config.screensaver);
+    if (interfaceScreen_.config.screensaver == standby::Kind::ScreenOff)
+        Board::Display::sleep();
     screen_ = screens::Screen::Standby;
     renderScreen(nowMs);
 }

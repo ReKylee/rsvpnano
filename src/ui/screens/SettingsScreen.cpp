@@ -6,15 +6,30 @@ namespace screens {
         if (const Action action = detail::navigation(ui, Screen::Settings, screen); action != Action::None) {
             return action;
         }
-        ui::Grid grid{detail::content(ui), static_cast<uint8_t>(ui.width() >= 400 ? 2 : 1), 48, 10};
+        const ui::Rect content = detail::content(ui);
+        const uint8_t columns = content.w >= 280 ? 2 : 1;
+        const int16_t rowHeight = columns == 2 ? 30 : 26;
+        const int16_t gap = columns == 2 ? 6 : 4;
+        ui.separator({content.x, content.y, content.w, 12}, "READING");
+        ui::Grid grid{{content.x, static_cast<int16_t>(content.y + 18), content.w, content.h}, columns, rowHeight, gap};
         if (ui.button(grid.next(), "Reading"))
             screen = Screen::ReadingSettings;
-        if (ui.button(grid.next(), "Display"))
-            screen = Screen::DisplaySettings;
-        if (ui.button(grid.next(), "Pacing"))
+        if (ui.button(grid.next(), ui.text(UiText::WordPacing)))
             screen = Screen::PacingSettings;
-        if (ui.button(grid.next(), "Typography"))
+        if (ui.button(grid.next(), ui.text(UiText::Typography)))
             screen = Screen::TypographySettings;
+        if (ui.button(grid.next(), "Reader screen"))
+            screen = Screen::ReaderSettings;
+
+        const int16_t readingRows = static_cast<int16_t>((4 + columns - 1) / columns);
+        const int16_t systemY = static_cast<int16_t>(content.y + 24 + readingRows * rowHeight
+                                                     + (readingRows - 1) * gap);
+        ui.separator({content.x, systemY, content.w, 12}, "SYSTEM");
+        ui::Grid system{{content.x, static_cast<int16_t>(systemY + 18), content.w, content.h}, columns, rowHeight, gap};
+        if (ui.button(system.next(), ui.text(UiText::Display)))
+            screen = Screen::InterfaceSettings;
+        if (ui.button(system.next(), "Network & updates"))
+            screen = Screen::NetworkSettings;
         return Action::None;
     }
 

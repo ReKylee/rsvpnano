@@ -35,7 +35,6 @@ namespace {
     constexpr uint8_t kDefaultBrightness = 13;
     constexpr uint8_t kMaxBrightness = 19;
     constexpr uint8_t kMaxUiLanguage = 5;
-    constexpr uint8_t kMaxReaderMode = 1;
     constexpr uint8_t kMaxHandedness = 1;
     constexpr uint8_t kMaxFooterMetric = 2;
     constexpr uint8_t kMaxBatteryLabel = 2;
@@ -181,7 +180,6 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <section id="settings" class="page">
 <div class="grid">
 <div class="card"><h2>Word Pacing</h2>
-<label>Reading mode</label><select id="readerMode"><option value="rsvp">RSVP</option><option value="scroll">Scroll</option></select>
 <label>Pause behaviour</label><select id="pauseMode"><option value="sentence_end">End of sentence</option><option value="instant">Instant</option></select>
 <label>Base speed <span id="wpmValue"></span></label><input id="wpm" type="range" min="10" max="1000" step="5">
 <label>Long words <span id="longWordMsValue"></span></label><input id="longWordMs" type="range" min="0" max="600" step="50">
@@ -204,7 +202,6 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <div class="row"><button id="uploadFontButton">Upload font file</button></div>
 <label>Brightness <span id="brightnessValue"></span></label><input id="brightnessIndex" type="range" min="0" max="19">
 <label>Reader hand</label><select id="handedness"><option value="right">Right</option><option value="left">Left</option></select>
-<label>Reader controls</label><select id="readerControls"><option value="standard">Standard</option><option value="rewind_top_right">Rewind top-right</option></select>
 <label>Footer label</label><select id="footerMetric"><option value="percentage">Percentage</option><option value="chapter_time">Chapter time</option><option value="book_time">Book time</option></select>
 <label>Battery label</label><select id="batteryLabel"><option value="percent">Percentage</option><option value="time_remaining">Time remaining</option><option value="voltage">Voltage</option></select>
 <label><input id="readingBattery" type="checkbox" style="width:auto"> Show battery while reading</label>
@@ -287,8 +284,8 @@ function setThemeOptions(){const themes=(settings&&settings.themes)||[];$('theme
 function setFontOptions(){const fonts=(settings&&settings.fonts)||[];$('typeface').innerHTML=fonts.map(f=>`<option value="${html(f.id)}">${html(f.name)}</option>`).join('')||'<option value="literata">Literata</option>'}
 function snapWpm(v){v=Math.max(10,Math.min(1000,Math.round(+v||300)));return v<=100?Math.max(10,Math.min(100,Math.round(v/10)*10)):Math.min(1000,100+Math.round((v-100)/25)*25)}
 function updateLabels(){['wpm','longWordMs','complexWordMs','punctuationMs','brightnessIndex','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>{const l=$(id+'Value')||$(id.replace('Index','')+'Value');if(l)l.textContent=id==='brightnessIndex'?(5+(+$(id).value*5))+'%':$(id).value+(id==='wpm'?' WPM':id.includes('Ms')?' ms':'')})}
-async function loadSettings(){try{settings=await api('/api/settings');setThemeOptions();setFontOptions();if(!themeCatalog.length)loadThemeCatalog();if(!fontCatalog.length)loadFontCatalog();setVal('readerMode',settings.reading.readerMode);setVal('pauseMode',settings.reading.pauseMode);setVal('wpm',snapWpm(settings.reading.wpm));setVal('longWordMs',settings.reading.pacing.longWordMs);setVal('complexWordMs',settings.reading.pacing.complexWordMs);setVal('punctuationMs',settings.reading.pacing.punctuationMs);setVal('themeId',settings.display.themeId||'default');setVal('brightnessIndex',settings.display.brightnessIndex);setVal('handedness',settings.display.handedness);setVal('readerControls',settings.display.readerControls||'standard');setVal('footerMetric',settings.display.footerMetric);setVal('batteryLabel',settings.display.batteryLabel);setVal('readingBattery',settings.display.readingBattery);setVal('readingChapter',settings.display.readingChapter);setVal('readingProgress',settings.display.readingProgress);setVal('typeface',settings.typography.typeface);setVal('fontSizeIndex',settings.display.fontSizeIndex);setVal('tracking',settings.typography.tracking);setVal('anchorPercent',settings.typography.anchorPercent);setVal('guideWidth',settings.typography.guideWidth);setVal('guideGap',settings.typography.guideGap);setVal('focusHighlight',settings.typography.focusHighlight);setVal('phantomWords',settings.display.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
-async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const payload={reading:{wpm:+val('wpm'),readerMode:val('readerMode'),pauseMode:val('pauseMode'),pacing:{longWordMs:+val('longWordMs'),complexWordMs:+val('complexWordMs'),punctuationMs:+val('punctuationMs')}},display:{themeId:val('themeId'),brightnessIndex:+val('brightnessIndex'),handedness:val('handedness'),readerControls:val('readerControls'),footerMetric:val('footerMetric'),batteryLabel:val('batteryLabel'),readingBattery:val('readingBattery'),readingChapter:val('readingChapter'),readingProgress:val('readingProgress'),phantomWords:val('phantomWords'),fontSizeIndex:+val('fontSizeIndex')},typography:{typeface:val('typeface'),focusHighlight:val('focusHighlight'),tracking:+val('tracking'),anchorPercent:+val('anchorPercent'),guideWidth:+val('guideWidth'),guideGap:+val('guideGap')}};try{settings=await api('/api/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});status('Settings saved. Exit sync mode to apply all reader changes.')}catch(e){status('Settings save failed: '+e.message)}}
+async function loadSettings(){try{settings=await api('/api/settings');setThemeOptions();setFontOptions();if(!themeCatalog.length)loadThemeCatalog();if(!fontCatalog.length)loadFontCatalog();setVal('pauseMode',settings.reading.pauseMode);setVal('wpm',snapWpm(settings.reading.wpm));setVal('longWordMs',settings.reading.pacing.longWordMs);setVal('complexWordMs',settings.reading.pacing.complexWordMs);setVal('punctuationMs',settings.reading.pacing.punctuationMs);setVal('themeId',settings.display.themeId||'default');setVal('brightnessIndex',settings.display.brightnessIndex);setVal('handedness',settings.display.handedness);setVal('footerMetric',settings.display.footerMetric);setVal('batteryLabel',settings.display.batteryLabel);setVal('readingBattery',settings.display.readingBattery);setVal('readingChapter',settings.display.readingChapter);setVal('readingProgress',settings.display.readingProgress);setVal('typeface',settings.typography.typeface);setVal('fontSizeIndex',settings.display.fontSizeIndex);setVal('tracking',settings.typography.tracking);setVal('anchorPercent',settings.typography.anchorPercent);setVal('guideWidth',settings.typography.guideWidth);setVal('guideGap',settings.typography.guideGap);setVal('focusHighlight',settings.typography.focusHighlight);setVal('phantomWords',settings.display.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
+async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const payload={reading:{wpm:+val('wpm'),pauseMode:val('pauseMode'),pacing:{longWordMs:+val('longWordMs'),complexWordMs:+val('complexWordMs'),punctuationMs:+val('punctuationMs')}},display:{themeId:val('themeId'),brightnessIndex:+val('brightnessIndex'),handedness:val('handedness'),footerMetric:val('footerMetric'),batteryLabel:val('batteryLabel'),readingBattery:val('readingBattery'),readingChapter:val('readingChapter'),readingProgress:val('readingProgress'),phantomWords:val('phantomWords'),fontSizeIndex:+val('fontSizeIndex')},typography:{typeface:val('typeface'),focusHighlight:val('focusHighlight'),tracking:+val('tracking'),anchorPercent:+val('anchorPercent'),guideWidth:+val('guideWidth'),guideGap:+val('guideGap')}};try{settings=await api('/api/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});status('Settings saved. Exit sync mode to apply all reader changes.')}catch(e){status('Settings save failed: '+e.message)}}
 async function loadWifi(){try{const w=await api('/api/wifi');$('wifiSsid').value=w.ssid||'';$('wifiPassword').value='';$('wifiCurrent').textContent=w.configured?'Saved network: '+w.ssid:'No home Wi-Fi saved.'}catch(e){status('Wi-Fi load failed: '+e.message)}}
 async function saveWifi(){const ssid=$('wifiSsid').value.trim();if(!ssid){status('Enter a Wi-Fi SSID first.');return}try{const w=await api('/api/wifi',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password:$('wifiPassword').value})});$('wifiPassword').value='';$('wifiCurrent').textContent='Saved network: '+w.ssid;status('Wi-Fi saved for RSS and OTA.')}catch(e){status('Wi-Fi save failed: '+e.message)}}
 async function forgetWifi(){if(!confirm('Forget saved Wi-Fi?'))return;try{await api('/api/wifi',{method:'DELETE'});$('wifiSsid').value='';$('wifiPassword').value='';$('wifiCurrent').textContent='No home Wi-Fi saved.';status('Wi-Fi credentials cleared.')}catch(e){status('Forget Wi-Fi failed: '+e.message)}}
@@ -1447,16 +1444,12 @@ void CompanionSyncManager::handleNotFound() {
 }
 
 String CompanionSyncManager::settingsJson() {
-    static const char* const readerModeLabels[] = {"rsvp", "scroll"};
     static const char* const handednessLabels[] = {"right", "left"};
-    static const char* const readerControlLabels[] = {"standard", "rewind_top_right"};
     static const char* const footerMetricLabels[] = {"percentage", "chapter_time", "book_time"};
     static const char* const batteryLabelLabels[] = {"percent", "time_remaining", "voltage"};
     static const char* const pauseModeLabels[] = {"sentence_end", "instant"};
 
     const uint16_t wpm = clampU16(preferences_.getUShort(pref::Wpm::key(), kDefaultWpm), kMinWpm, kMaxWpm);
-    const uint8_t readerMode =
-        static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::ReaderMode::key(), 0), 0, kMaxReaderMode));
     const uint8_t pauseMode =
         static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::PauseMode::key(), 0), 0, kMaxPauseMode));
     const uint16_t longDelay =
@@ -1472,7 +1465,6 @@ String CompanionSyncManager::settingsJson() {
                                       kMaxBrightness));
     const uint8_t handedness =
         static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::Handedness::key(), 0), 0, kMaxHandedness));
-    const uint8_t readerControls = preferences_.getBool(pref::ReaderControlsSwapped::key(), false) ? 1 : 0;
     const uint8_t footerMetric =
         static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::FooterMetricMode::key(), 0), 0, kMaxFooterMetric));
     const uint8_t batteryLabel =
@@ -1485,10 +1477,8 @@ String CompanionSyncManager::settingsJson() {
     fontCatalog.loadFromSd();
     uint8_t typeface = 0;
     const String savedTypefaceId = preferences_.getString(pref::ReaderTypefaceId::key(), "");
-    if (savedTypefaceId.isEmpty() || !fontCatalog.indexForId(savedTypefaceId, typeface)) {
-        typeface = static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::ReaderTypefaceIndex::key(), 0), 0,
-                                                 std::max<int>(0, fontCatalog.typefaceCount() - 1)));
-    }
+    if (savedTypefaceId.isEmpty() || !fontCatalog.indexForId(savedTypefaceId, typeface))
+        typeface = 0;
     const int tracking = clampInt(preferences_.getChar(pref::TypographyTracking::key(), 0), kMinTypographyTracking,
                                   kMaxTypographyTracking);
     const uint8_t anchor =
@@ -1513,13 +1503,9 @@ String CompanionSyncManager::settingsJson() {
     body += "{\"ok\":true,\"version\":1";
     body += ",\"reading\":{";
     body += "\"wpm\":" + String(wpm);
-    body += ",\"readerMode\":\"";
-    body += enumLabel(readerMode, readerModeLabels, 2);
-    body += "\"";
     body += ",\"pauseMode\":\"";
     body += enumLabel(pauseMode, pauseModeLabels, 2);
     body += "\"";
-    body += ",\"accurateTimeEstimate\":true";
     body += ",\"pacing\":{\"longWordMs\":" + String(longDelay) + ",\"complexWordMs\":" + String(complexDelay)
           + ",\"punctuationMs\":" + String(punctuationDelay) + "}";
     body += "}";
@@ -1528,9 +1514,6 @@ String CompanionSyncManager::settingsJson() {
     body += ",\"brightnessIndex\":" + String(brightness);
     body += ",\"handedness\":\"";
     body += enumLabel(handedness, handednessLabels, 2);
-    body += "\"";
-    body += ",\"readerControls\":\"";
-    body += enumLabel(readerControls, readerControlLabels, 2);
     body += "\"";
     body += ",\"footerMetric\":\"";
     body += enumLabel(footerMetric, footerMetricLabels, 3);
@@ -1623,9 +1606,7 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
         return false;
     }
 
-    static const char* const readerModeLabels[] = {"rsvp", "scroll"};
     static const char* const handednessLabels[] = {"right", "left"};
-    static const char* const readerControlLabels[] = {"standard", "rewind_top_right"};
     static const char* const footerMetricLabels[] = {"percentage", "chapter_time", "book_time"};
     static const char* const batteryLabelLabels[] = {"percent", "time_remaining", "voltage"};
     static const char* const pauseModeLabels[] = {"sentence_end", "instant"};
@@ -1642,14 +1623,6 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
         }
         preferences_.putUShort(pref::Wpm::key(), static_cast<uint16_t>(intValue));
     }
-    if (readJsonString(body, "readerMode", stringValue)) {
-        const int value = enumValue(stringValue, readerModeLabels, 2);
-        if (value < 0) {
-            error = "readerMode must be rsvp or scroll";
-            return false;
-        }
-        preferences_.putUChar(pref::ReaderMode::key(), static_cast<uint8_t>(value));
-    }
     if (readJsonString(body, "pauseMode", stringValue)) {
         const int value = enumValue(stringValue, pauseModeLabels, 2);
         if (value < 0) {
@@ -1658,7 +1631,6 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
         }
         preferences_.putUChar(pref::PauseMode::key(), static_cast<uint8_t>(value));
     }
-    preferences_.putBool(pref::AccurateTime::key(), true);
     if (readJsonInt(body, "longWordMs", intValue)) {
         if (intValue < 0 || intValue > kMaxPacingDelayMs) {
             error = "longWordMs must be between 0 and 600";
@@ -1701,7 +1673,6 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
         uint8_t themeTypeface = 0;
         const std::string_view typefaceName = ui::themes::readerTypefaceName(theme.typeface);
         if (fontCatalog.indexForId(String(typefaceName.data(), typefaceName.size()), themeTypeface)) {
-            preferences_.putUChar(pref::ReaderTypefaceIndex::key(), themeTypeface);
             preferences_.putString(pref::ReaderTypefaceId::key(), fontCatalog.typefaceId(themeTypeface));
             themeTypefaceApplied = true;
         }
@@ -1713,14 +1684,6 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
             return false;
         }
         preferences_.putUChar(pref::Handedness::key(), static_cast<uint8_t>(value));
-    }
-    if (readJsonString(body, "readerControls", stringValue)) {
-        const int value = enumValue(stringValue, readerControlLabels, 2);
-        if (value < 0) {
-            error = "readerControls must be standard or rewind_top_right";
-            return false;
-        }
-        preferences_.putBool(pref::ReaderControlsSwapped::key(), value == 1);
     }
     if (readJsonString(body, "footerMetric", stringValue)) {
         const int value = enumValue(stringValue, footerMetricLabels, 3);
@@ -1772,7 +1735,6 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
             error = "typeface does not match an available font";
             return false;
         }
-        preferences_.putUChar(pref::ReaderTypefaceIndex::key(), value);
         preferences_.putString(pref::ReaderTypefaceId::key(), fontCatalog.typefaceId(value));
     }
     if (readJsonBool(body, "focusHighlight", boolValue)) {

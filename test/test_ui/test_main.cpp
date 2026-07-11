@@ -117,8 +117,15 @@ void test_button_and_slider_consume_touch() {
     context.beginFrame(2);
     const auto value = context.slider({0, 30, 101, 20}, 0, 0, 100, 5);
     context.endFrame();
-    TEST_ASSERT_TRUE(value.changed);
+    TEST_ASSERT_FALSE(value.changed);
     TEST_ASSERT_EQUAL(25, value.value);
+    gContact = {};
+    TEST_ASSERT_TRUE(context.pollTouch(4));
+    context.beginFrame(2);
+    const auto committed = context.slider({0, 30, 101, 20}, 0, 0, 100, 5);
+    context.endFrame();
+    TEST_ASSERT_TRUE(committed.changed);
+    TEST_ASSERT_EQUAL(25, committed.value);
 }
 
 void test_layout_cursors_are_deterministic() {

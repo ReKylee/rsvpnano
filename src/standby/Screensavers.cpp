@@ -35,6 +35,8 @@ namespace standby {
     void ScreensaverSlot::select(Kind kind, uint16_t columns, uint16_t rows) {
         reset();
         kind_ = kind;
+        if (kind == Kind::ScreenOff)
+            return;
         active_ = true;
 
         switch (kind_) {
@@ -45,6 +47,8 @@ namespace standby {
         case Kind::Voronoi:
             new (&storage_) VoronoiScreensaver();
             voronoi().reset(columns, rows);
+            break;
+        case Kind::ScreenOff:
             break;
         case Kind::Life:
         default:
@@ -65,6 +69,8 @@ namespace standby {
             break;
         case Kind::Voronoi:
             voronoi().~VoronoiScreensaver();
+            break;
+        case Kind::ScreenOff:
             break;
         case Kind::Life:
         default:
@@ -88,6 +94,8 @@ namespace standby {
         case Kind::Voronoi:
             voronoi().seed(rngSeed);
             break;
+        case Kind::ScreenOff:
+            break;
         case Kind::Life:
         default:
             life().seed(rngSeed);
@@ -107,6 +115,8 @@ namespace standby {
         case Kind::Voronoi:
             voronoi().step();
             break;
+        case Kind::ScreenOff:
+            break;
         case Kind::Life:
         default:
             life().step();
@@ -124,6 +134,8 @@ namespace standby {
             return maze().frame();
         case Kind::Voronoi:
             return voronoi().frame();
+        case Kind::ScreenOff:
+            return {};
         case Kind::Life:
         default:
             return life().frame();

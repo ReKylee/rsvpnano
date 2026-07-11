@@ -13,14 +13,15 @@ namespace screens::detail {
             return Action::None;
         }
 
-        if (ui.tab({0, 0, kRailWidth, 53}, "Read",
+        if (ui.tab({0, 0, kRailWidth, 53}, ui.text(UiText::CurrentBook),
                    active == Screen::Read || active == Screen::Library || active == Screen::Chapters,
                    ui::Icon::Books)) {
             screen = Screen::Read;
         }
-        if (ui.tab({0, 53, kRailWidth, 53}, "Settings",
-                   active == Screen::Settings || active == Screen::ReadingSettings || active == Screen::DisplaySettings
-                       || active == Screen::PacingSettings || active == Screen::TypographySettings,
+        if (ui.tab({0, 53, kRailWidth, 53}, ui.text(UiText::Settings),
+                   active == Screen::Settings || active == Screen::ReadingSettings || active == Screen::InterfaceSettings
+                       || active == Screen::PacingSettings || active == Screen::TypographySettings
+                       || active == Screen::ReaderSettings || active == Screen::NetworkSettings,
                    ui::Icon::Edit)) {
             screen = Screen::Settings;
         }

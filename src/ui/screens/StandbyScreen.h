@@ -7,7 +7,7 @@ namespace screens {
 
     class StandbyScreen {
     public:
-        void begin(ui::Context& ui, uint32_t nowMs, size_t bookIndex, size_t wordIndex);
+        void begin(ui::Context& ui, uint32_t nowMs, size_t bookIndex, size_t wordIndex, standby::Kind kind);
         void reset();
         void update(ui::Context& ui, uint32_t nowMs);
         void draw(ui::Context& ui);
@@ -17,6 +17,7 @@ namespace screens {
         uint32_t nextFrameMs_ = 0;
         uint16_t columns_ = 0;
         uint16_t rows_ = 0;
+        standby::Kind kind_ = standby::Kind::Life;
     };
 
 } // namespace screens

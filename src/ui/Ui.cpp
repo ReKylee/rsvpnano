@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace ui {
     namespace {
@@ -43,6 +44,18 @@ namespace ui {
             theme_ = &theme;
             invalidate();
         }
+    }
+
+    void Context::setLanguage(UiLanguage language) {
+        language = Localization::sanitizeLanguage(static_cast<uint8_t>(language));
+        if (language_ != language) {
+            language_ = language;
+            invalidate();
+        }
+    }
+
+    std::string_view Context::text(UiText key) const {
+        return Localization::text(language_, key);
     }
 
     void Context::setTouchSource(TouchSource source, uint32_t nowMs) {
@@ -150,6 +163,60 @@ namespace ui {
             return;
         }
         drawText(rect, text, textSize, color(role), align);
+    }
+
+    void Context::separator(Rect rect, std::string_view text) {
+        if (!claim(Kind::Separator, rect, signature(text)).changed)
+            return;
+
+        gfx_.fillRect(rect.x, rect.y, rect.w, rect.h, color(ui::themes::ColorRole::Background));
+        const int16_t textWidth = std::min<int16_t>(rect.w, static_cast<int16_t>(text.size() * 6));
+        drawText({rect.x, rect.y, textWidth, rect.h}, text, 1, color(ui::themes::ColorRole::Muted));
+        const int16_t lineX = static_cast<int16_t>(rect.x + textWidth + 6);
+        if (lineX < rect.x + rect.w)
+            gfx_.drawFastHLine(lineX, static_cast<int16_t>(rect.y + rect.h / 2),
+                               static_cast<int16_t>(rect.x + rect.w - lineX),
+                               blend(ui::themes::ColorRole::Muted, 96));
+        markDirty(rect);
+    }
+
+    bool Context::setting(Rect rect, std::string_view label, std::string_view value) {
+        const size_t slot = nextSlot_;
+        uint32_t state = signature(value, signature(label));
+        if (claim(Kind::Setting, rect, state).changed) {
+            const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
+            gfx_.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
+            gfx_.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
+            const int16_t valueWidth = std::min<int16_t>(rect.w / 2, static_cast<int16_t>(value.size() * 12 + 8));
+            drawText({static_cast<int16_t>(rect.x + 7), rect.y,
+                      static_cast<int16_t>(std::max<int16_t>(0, rect.w - valueWidth - 14)), rect.h},
+                     label, 2, color(ui::themes::ColorRole::Foreground));
+            drawText({static_cast<int16_t>(rect.x + rect.w - valueWidth - 7), rect.y, valueWidth, rect.h}, value, 2,
+                     color(ui::themes::ColorRole::Accent), TextAlign::Right);
+        }
+        return tapped(slot, rect);
+    }
+
+    bool Context::toggle(Rect rect, std::string_view label, bool enabled) {
+        const size_t slot = nextSlot_;
+        uint32_t state = combine(signature(label), enabled);
+        if (claim(Kind::Toggle, rect, state).changed) {
+            const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
+            gfx_.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
+            gfx_.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
+            constexpr int16_t switchWidth = 34;
+            const int16_t switchX = static_cast<int16_t>(rect.x + rect.w - switchWidth - 7);
+            const int16_t switchY = static_cast<int16_t>(rect.y + (rect.h - 16) / 2);
+            gfx_.fillRoundRect(switchX, switchY, switchWidth, 16, 8,
+                               color(enabled ? ui::themes::ColorRole::Accent
+                                             : ui::themes::ColorRole::ProgressTrack));
+            gfx_.fillCircle(static_cast<int16_t>(switchX + (enabled ? switchWidth - 8 : 8)),
+                            static_cast<int16_t>(switchY + 8), 6, color(ui::themes::ColorRole::Foreground));
+            drawText({static_cast<int16_t>(rect.x + 7), rect.y,
+                      static_cast<int16_t>(std::max<int16_t>(0, switchX - rect.x - 14)), rect.h},
+                     label, 2, color(ui::themes::ColorRole::Foreground));
+        }
+        return tapped(slot, rect);
     }
 
     bool Context::button(Rect rect, std::string_view text, Icon icon, uint8_t textLines, std::string_view detailLeft,
@@ -282,11 +349,22 @@ namespace ui {
     }
 
     SliderResult Context::slider(Rect rect, int value, int minimum, int maximum, int step) {
+        return slider(rect, {}, value, minimum, maximum, step, {});
+    }
+
+    SliderResult Context::slider(Rect rect, std::string_view label, int value, int minimum, int maximum, int step,
+                                 std::string_view suffix) {
         const size_t slot = nextSlot_;
         const Touch* event = touch();
+        const bool labeled = !label.empty();
+        const Rect track{static_cast<int16_t>(rect.x + (labeled ? 8 : 0)),
+                         static_cast<int16_t>(rect.y + (labeled ? rect.h - 12 : rect.h / 2 - 2)),
+                         static_cast<int16_t>(rect.w - (labeled ? 16 : 0)), 4};
         const bool started = event != nullptr && hasTouch(*event, TouchStart) && contains(rect, event->x, event->y);
         if (started && slot < kSlotCapacity) {
             capturedSlot_ = slot;
+            capturedSliderInitialValue_ = std::clamp(value, minimum, maximum);
+            capturedSliderValue_ = valueAt(track, event->x, minimum, maximum, step);
         }
 
         SliderResult result{std::clamp(value, minimum, maximum), false};
@@ -294,23 +372,39 @@ namespace ui {
             event != nullptr
             && (hasTouch(*event, TouchStart) || hasTouch(*event, TouchMove) || hasTouch(*event, TouchRelease));
         if (capturedSlot_ == slot && moving) {
-            result.value = valueAt(rect, event->x, minimum, maximum, step);
-            result.changed = result.value != value;
+            capturedSliderValue_ = valueAt(track, event->x, minimum, maximum, step);
         }
+        if (capturedSlot_ == slot)
+            result.value = capturedSliderValue_;
+        if (capturedSlot_ == slot && event != nullptr && hasTouch(*event, TouchRelease))
+            result.changed = result.value != capturedSliderInitialValue_;
 
-        uint32_t state = combine(static_cast<uint32_t>(result.value), static_cast<uint32_t>(minimum));
+        uint32_t state = signature(suffix, signature(label));
+        state = combine(state, static_cast<uint32_t>(result.value));
+        state = combine(state, static_cast<uint32_t>(minimum));
         state = combine(state, static_cast<uint32_t>(maximum));
         state = combine(state, static_cast<uint32_t>(step));
         if (claim(Kind::Slider, rect, state).changed) {
-            const int16_t trackY = static_cast<int16_t>(rect.y + rect.h / 2 - 2);
-            gfx_.fillRect(rect.x, trackY, rect.w, 4, color(ui::themes::ColorRole::ProgressTrack));
+            if (labeled) {
+                const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
+                gfx_.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
+                gfx_.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
+                char valueText[24];
+                std::snprintf(valueText, sizeof(valueText), "%d%.*s", result.value, static_cast<int>(suffix.size()),
+                              suffix.data());
+                drawText({static_cast<int16_t>(rect.x + 7), rect.y, static_cast<int16_t>(rect.w - 14), 16}, label, 1,
+                         color(ui::themes::ColorRole::Foreground));
+                drawText({static_cast<int16_t>(rect.x + 7), rect.y, static_cast<int16_t>(rect.w - 14), 16}, valueText,
+                         1, color(ui::themes::ColorRole::Accent), TextAlign::Right);
+            }
+            gfx_.fillRect(track.x, track.y, track.w, track.h, color(ui::themes::ColorRole::ProgressTrack));
             const int16_t knobX =
                 maximum == minimum
-                    ? rect.x
-                    : static_cast<int16_t>(rect.x
-                                           + (static_cast<int32_t>(rect.w - 1) * (result.value - minimum))
+                    ? track.x
+                    : static_cast<int16_t>(track.x
+                                           + (static_cast<int32_t>(track.w - 1) * (result.value - minimum))
                                                  / (maximum - minimum));
-            gfx_.fillCircle(knobX, static_cast<int16_t>(rect.y + rect.h / 2), 7, color(ui::themes::ColorRole::Accent));
+            gfx_.fillCircle(knobX, static_cast<int16_t>(track.y + 2), 7, color(ui::themes::ColorRole::Accent));
         }
 
         if (capturedSlot_ == slot && event != nullptr && hasTouch(*event, TouchRelease)) {

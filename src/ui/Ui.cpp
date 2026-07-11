@@ -511,6 +511,7 @@ namespace ui {
     void Context::markDirty(Rect rect) {
         if (rect.w <= 0 || rect.h <= 0)
             return;
+        drew_ = true;
         const int16_t left = std::max<int16_t>(0, rect.x);
         const int16_t top = std::max<int16_t>(0, rect.y);
         const int16_t right = std::min<int16_t>(width(), static_cast<int16_t>(rect.x + rect.w));

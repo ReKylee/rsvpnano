@@ -29,7 +29,7 @@ namespace standby {
     }
 
     void VoronoiScreensaver::step() {
-        fullRedraw_ = true;
+        fullRedraw_ = false;
         const int16_t maxX = static_cast<int16_t>((std::max<uint16_t>(1, columns_) - 1U) * 16);
         const int16_t maxY = static_cast<int16_t>((std::max<uint16_t>(1, rows_) - 1U) * 16);
         for (size_t i = 0; i < kSiteCount; ++i) {
@@ -56,38 +56,72 @@ namespace standby {
     }
 
     Frame VoronoiScreensaver::frame() const {
-        return Frame{viewOf(cells_, wordCount_), viewOf(dimCells_, wordCount_), {}, generation_, fullRedraw_};
+        return Frame{viewOf(cells_, wordCount_), viewOf(dimCells_, wordCount_), viewOf(dirtyCells_, wordCount_),
+                     generation_, fullRedraw_};
     }
 
     void VoronoiScreensaver::render() {
-        clearPackedGrid(cells_, wordCount_);
-        clearPackedGrid(dimCells_, wordCount_);
+        const size_t cellCount = static_cast<size_t>(columns_) * rows_;
+        if (cellCount == 0) {
+            clearPackedGrid(cells_, wordCount_);
+            clearPackedGrid(dimCells_, wordCount_);
+            clearPackedGrid(dirtyCells_, wordCount_);
+            return;
+        }
 
+        std::array<int32_t, kSiteCount> initialDx;
+        std::array<int32_t, kSiteCount> initialDxSquared;
+        std::array<int32_t, kSiteCount> dy;
+        std::array<int32_t, kSiteCount> dySquared;
+        for (size_t i = 0; i < kSiteCount; ++i) {
+            initialDx[i] = 8 - vx_[i];
+            initialDxSquared[i] = initialDx[i] * initialDx[i];
+            dy[i] = 8 - vy_[i];
+            dySquared[i] = dy[i] * dy[i];
+        }
+
+        uint32_t brightWord = 0;
+        uint32_t dimWord = 0;
         for (uint16_t y = 0; y < rows_; ++y) {
-            const int32_t cellY = static_cast<int32_t>(y) * 16 + 8;
+            std::array<int32_t, kSiteCount> dx = initialDx;
+            std::array<int32_t, kSiteCount> dxSquared = initialDxSquared;
             for (uint16_t x = 0; x < columns_; ++x) {
-                const int32_t cellX = static_cast<int32_t>(x) * 16 + 8;
                 int32_t nearest = INT_MAX;
                 int32_t secondNearest = INT_MAX;
                 for (size_t i = 0; i < kSiteCount; ++i) {
-                    const int32_t dx = cellX - vx_[i];
-                    const int32_t dy = cellY - vy_[i];
-                    const int32_t distance = dx * dx + dy * dy;
+                    const int32_t distance = dxSquared[i] + dySquared[i];
                     if (distance < nearest) {
                         secondNearest = nearest;
                         nearest = distance;
                     } else if (distance < secondNearest) {
                         secondNearest = distance;
                     }
+                    dxSquared[i] += 32 * dx[i] + 256;
+                    dx[i] += 16;
                 }
 
                 const size_t cellIndex = static_cast<size_t>(y) * columns_ + x;
+                const uint32_t mask = 1UL << (cellIndex % kPackedBitsPerWord);
                 const int32_t gap = secondNearest - nearest;
-                if (nearest < 1200 || gap < 190) {
-                    setCell(cells_, cellIndex, true);
-                } else if (gap < 580 + nearest / 180) {
-                    setCell(dimCells_, cellIndex, true);
+                if (nearest < 1200 || gap < 190)
+                    brightWord |= mask;
+                else if (gap < 580 + nearest / 180)
+                    dimWord |= mask;
+
+                if ((cellIndex % kPackedBitsPerWord) == kPackedBitsPerWord - 1U
+                    || cellIndex + 1U == cellCount) {
+                    const size_t word = cellIndex / kPackedBitsPerWord;
+                    dirtyCells_[word] = (cells_[word] ^ brightWord) | (dimCells_[word] ^ dimWord);
+                    cells_[word] = brightWord;
+                    dimCells_[word] = dimWord;
+                    brightWord = 0;
+                    dimWord = 0;
                 }
+            }
+
+            for (size_t i = 0; i < kSiteCount; ++i) {
+                dySquared[i] += 32 * dy[i] + 256;
+                dy[i] += 16;
             }
         }
     }

@@ -140,6 +140,7 @@ namespace ui {
         KeyboardAction keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state);
         void dial(Rect rect, int value, int minimum, int maximum, std::string_view label = {});
         bool redraw(Rect rect, uint32_t signature);
+        void markDirty(Rect rect);
         void drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
                       TextAlign align = TextAlign::Left, uint8_t maxLines = 1);
 
@@ -190,7 +191,6 @@ namespace ui {
 
         Claim claim(Kind kind, Rect rect, uint32_t signature);
         void clear(Rect rect);
-        void markDirty(Rect rect);
         void drawIcon(Rect rect, Icon icon, uint16_t color, uint16_t surface);
         void drawBookmarkIcon(Rect rect, uint16_t ink, uint16_t surface);
         void drawBooksIcon(Rect rect, uint16_t ink);

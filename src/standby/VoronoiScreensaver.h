@@ -28,6 +28,7 @@ namespace standby {
         size_t wordCount_ = 0;
         PackedGridStorage cells_{};
         PackedGridStorage dimCells_{};
+        PackedGridStorage dirtyCells_{};
         std::array<int16_t, kSiteCount> vx_{};
         std::array<int16_t, kSiteCount> vy_{};
         std::array<int16_t, kSiteCount> vdx_{};

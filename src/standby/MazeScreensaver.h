@@ -29,9 +29,6 @@ namespace standby {
         uint16_t mazeColumns() const;
         uint16_t mazeRows() const;
         size_t mazeCellCount() const;
-        size_t mazeWordCount() const;
-        bool visited(uint16_t index) const;
-        void setVisited(uint16_t index);
         void push(uint16_t index);
         void pop();
         uint16_t top() const;
@@ -43,7 +40,6 @@ namespace standby {
         void carveMazeCell(uint16_t mazeIndex);
         void carveMazeWall(uint16_t from, uint16_t to);
         void updateHead(DisplayPoint previousHead);
-        bool hasDirtyCells() const;
 
         uint16_t columns_ = 0;
         uint16_t rows_ = 0;
@@ -56,7 +52,6 @@ namespace standby {
         PackedGridStorage cells_{}; // bright current DFS head
         PackedGridStorage dimCells_{}; // carved maze corridors
         PackedGridStorage dirtyCells_{}; // changed display cells since last frame
-        PackedGridStorage visited_{}; // packed maze-cell visited map
         std::array<uint16_t, kMaxMazeCells> stack_{};
     };
 

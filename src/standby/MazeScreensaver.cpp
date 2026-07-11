@@ -7,10 +7,9 @@ namespace standby {
     namespace {
         constexpr uint8_t kCarvesPerFrame = 18;
         constexpr uint16_t kFinishedHoldFrames = 240;
+        constexpr int8_t kNeighborDx[] = {1, -1, 0, 0};
+        constexpr int8_t kNeighborDy[] = {0, 0, 1, -1};
 
-        bool packedCell(const PackedGridStorage& cells, size_t wordCount, size_t index) {
-            return cellAlive(viewOf(cells, wordCount), index);
-        }
     } // namespace
 
     void MazeScreensaver::reset(uint16_t columns, uint16_t rows) {
@@ -29,7 +28,6 @@ namespace standby {
         clearPackedGrid(cells_, displayWordCount_);
         clearPackedGrid(dimCells_, displayWordCount_);
         clearPackedGrid(dirtyCells_, displayWordCount_);
-        clearPackedGrid(visited_, mazeWordCount());
 
         const uint16_t mazeCols = mazeColumns();
         const uint16_t mazeRowsValue = mazeRows();
@@ -37,7 +35,6 @@ namespace standby {
         const uint16_t startY = static_cast<uint16_t>((advanceRng(rng_) >> 8) % mazeRowsValue);
         const uint16_t start = static_cast<uint16_t>(startY * mazeCols + startX);
 
-        setVisited(start);
         push(start);
         carveMazeCell(start);
         updateHead({});
@@ -58,29 +55,30 @@ namespace standby {
         }
 
         settledFrames_ = 0;
+        const uint16_t mazeCols = mazeColumns();
+        const uint16_t mazeRowsValue = mazeRows();
 
         for (uint8_t stepIndex = 0; stepIndex < kCarvesPerFrame && stackSize_ > 0; ++stepIndex) {
             const uint16_t current = top();
-            const uint16_t mazeCols = mazeColumns();
             const uint16_t cx = static_cast<uint16_t>(current % mazeCols);
             const uint16_t cy = static_cast<uint16_t>(current / mazeCols);
-            std::array<uint16_t, 4> candidates{};
+            std::array<uint16_t, 4> candidates;
             uint8_t candidateCount = 0;
 
-            auto addCandidate = [&](int nx, int ny) {
-                if (nx < 0 || ny < 0 || nx >= static_cast<int>(mazeCols) || ny >= static_cast<int>(mazeRows())) {
-                    return;
+            for (uint8_t direction = 0; direction < 4; ++direction) {
+                const int nx = static_cast<int>(cx) + kNeighborDx[direction];
+                const int ny = static_cast<int>(cy) + kNeighborDy[direction];
+                if (nx < 0 || ny < 0 || nx >= static_cast<int>(mazeCols)
+                    || ny >= static_cast<int>(mazeRowsValue)) {
+                    continue;
                 }
                 const uint16_t encoded = static_cast<uint16_t>(ny * mazeCols + nx);
-                if (!visited(encoded)) {
+                const size_t displayIndex = static_cast<size_t>(ny * 2 + 1) * columns_ + nx * 2 + 1;
+                const uint32_t mask = 1UL << (displayIndex % kPackedBitsPerWord);
+                if ((dimCells_[displayIndex / kPackedBitsPerWord] & mask) == 0) {
                     candidates[candidateCount++] = encoded;
                 }
-            };
-
-            addCandidate(static_cast<int>(cx) + 1, cy);
-            addCandidate(static_cast<int>(cx) - 1, cy);
-            addCandidate(cx, static_cast<int>(cy) + 1);
-            addCandidate(cx, static_cast<int>(cy) - 1);
+            }
 
             if (candidateCount == 0) {
                 pop();
@@ -88,7 +86,6 @@ namespace standby {
             }
 
             const uint16_t next = candidates[(advanceRng(rng_) >> 16) % candidateCount];
-            setVisited(next);
             push(next);
             carveMazeCell(next);
             carveMazeWall(current, next);
@@ -113,20 +110,6 @@ namespace standby {
 
     size_t MazeScreensaver::mazeCellCount() const {
         return static_cast<size_t>(mazeColumns()) * mazeRows();
-    }
-
-    size_t MazeScreensaver::mazeWordCount() const {
-        return packedWordCount(mazeCellCount());
-    }
-
-    bool MazeScreensaver::visited(uint16_t index) const {
-        return index < mazeCellCount() && packedCell(visited_, mazeWordCount(), index);
-    }
-
-    void MazeScreensaver::setVisited(uint16_t index) {
-        if (index < mazeCellCount()) {
-            setCell(visited_, index, true);
-        }
     }
 
     void MazeScreensaver::push(uint16_t index) {
@@ -161,11 +144,16 @@ namespace standby {
         }
 
         const size_t index = static_cast<size_t>(y) * columns_ + static_cast<uint16_t>(x);
-        if (index >= static_cast<size_t>(columns_) * rows_ || packedCell(cells, displayWordCount_, index) == alive) {
+        const size_t word = index / kPackedBitsPerWord;
+        const uint32_t mask = 1UL << (index % kPackedBitsPerWord);
+        if (((cells[word] & mask) != 0) == alive) {
             return;
         }
 
-        setCell(cells, index, alive);
+        if (alive)
+            cells[word] |= mask;
+        else
+            cells[word] &= ~mask;
         markDirty(x, y);
     }
 
@@ -179,7 +167,8 @@ namespace standby {
         if (x < 0 || y < 0 || x >= static_cast<int16_t>(columns_) || y >= static_cast<int16_t>(rows_)) {
             return;
         }
-        setCell(dirtyCells_, static_cast<size_t>(y) * columns_ + static_cast<uint16_t>(x), true);
+        const size_t index = static_cast<size_t>(y) * columns_ + static_cast<uint16_t>(x);
+        dirtyCells_[index / kPackedBitsPerWord] |= 1UL << (index % kPackedBitsPerWord);
     }
 
     void MazeScreensaver::markDirty(DisplayPoint point) {
@@ -206,10 +195,6 @@ namespace standby {
         if (stackSize_ > 0) {
             setDisplayCell(cells_, displayPoint(top()), true);
         }
-    }
-
-    bool MazeScreensaver::hasDirtyCells() const {
-        return anyCellAlive(viewOf(dirtyCells_, displayWordCount_));
     }
 
 } // namespace standby

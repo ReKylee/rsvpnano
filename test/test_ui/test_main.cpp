@@ -94,11 +94,18 @@ void test_button_and_slider_consume_touch() {
     auto colors = theme();
     context.setTheme(colors);
     enableTouch(context);
+    context.beginFrame(1);
+    context.button({0, 0, 80, 24}, "Tap");
+    context.endFrame();
+    gfx.writes = 0;
+    gRegionFlushes = 0;
     gContact = {true, 20, 10};
     TEST_ASSERT_TRUE(context.pollTouch(1));
     context.beginFrame(1);
     TEST_ASSERT_FALSE(context.button({0, 0, 80, 24}, "Tap"));
     context.endFrame();
+    TEST_ASSERT_EQUAL(0, gfx.writes);
+    TEST_ASSERT_EQUAL(0, gRegionFlushes);
     gContact = {};
     TEST_ASSERT_TRUE(context.pollTouch(2));
     context.beginFrame(1);
@@ -133,6 +140,12 @@ void test_labels_truncate_to_their_rectangles() {
     context.label({0, 0, 30, 8}, "123456789", 1);
     context.endFrame();
     TEST_ASSERT_EQUAL(5, gfx.textWrites);
+
+    gfx.textWrites = 0;
+    context.beginFrame(2);
+    context.button({0, 0, 72, 40}, "Alpha Beta", ui::Icon::None, 2);
+    context.endFrame();
+    TEST_ASSERT_EQUAL(9, gfx.textWrites);
 }
 
 void test_labels_align_and_battery_owns_its_drawing() {

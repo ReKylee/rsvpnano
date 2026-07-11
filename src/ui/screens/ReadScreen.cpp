@@ -9,15 +9,13 @@ namespace screens {
 
         const ui::Rect area = detail::content(ui);
         const bool wide = ui.width() >= 620 && ui.height() >= 150 && ui.height() <= 240;
-        ui::Column column{area, static_cast<int16_t>(wide ? 20 : 10)};
-        const ui::Rect resume = column.next(54);
-        const ui::Rect resumeButton{resume.x, resume.y, resume.w, 44};
-        if (ui.button(resumeButton, model.title.c_str(), ui::Icon::Bookmark)) {
+        ui::Column column{area, static_cast<int16_t>(wide ? 12 : 10)};
+        const ui::Rect resume = column.next(64);
+        const ui::Rect resumeButton{resume.x, resume.y, resume.w, 56};
+        if (ui.button(resumeButton, model.title.c_str(), ui::Icon::Bookmark, 2)) {
             return Action::Resume;
         }
-        ui.progress({static_cast<int16_t>(resume.x + 10), static_cast<int16_t>(resume.y + 49),
-                     static_cast<int16_t>(resume.w - 20), 3},
-                    model.progress);
+        ui.progress({resume.x, static_cast<int16_t>(resume.y + 56), resume.w, 8}, model.progress);
 
         ui::Row actions{column.next(64), 14};
         const int16_t buttonWidth = static_cast<int16_t>((actions.bounds.w - actions.gap) / 2);

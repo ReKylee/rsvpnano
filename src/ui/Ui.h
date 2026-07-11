@@ -77,6 +77,10 @@ namespace ui {
     enum class Icon : uint8_t {
         None,
         Bookmark,
+        Books,
+        Edit,
+        Device,
+        Hourglass,
         Power,
     };
 
@@ -106,9 +110,9 @@ namespace ui {
 
         void label(Rect rect, std::string_view text, uint8_t textSize = 2,
                    ui::themes::ColorRole role = ui::themes::ColorRole::Foreground, TextAlign align = TextAlign::Left);
-        bool button(Rect rect, std::string_view text, Icon icon = Icon::None);
+        bool button(Rect rect, std::string_view text, Icon icon = Icon::None, uint8_t textLines = 1);
         bool iconButton(Rect rect, Icon icon);
-        bool tab(Rect rect, std::string_view text, bool active);
+        bool tab(Rect rect, std::string_view text, bool active, Icon icon = Icon::None);
         void battery(Rect rect, uint8_t percent, bool charging, std::string_view label);
         void progress(Rect rect, int value, int minimum = 0, int maximum = 100);
         SliderResult slider(Rect rect, int value, int minimum, int maximum, int step = 1);
@@ -161,7 +165,7 @@ namespace ui {
         void clear(Rect rect);
         void markDirty(Rect rect);
         void drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
-                      TextAlign align = TextAlign::Left);
+                      TextAlign align = TextAlign::Left, uint8_t maxLines = 1);
         void drawIcon(Rect rect, Icon icon, uint16_t color, uint16_t surface);
         int valueAt(Rect rect, uint16_t x, int minimum, int maximum, int step) const;
         bool tapped(size_t slot, Rect rect);

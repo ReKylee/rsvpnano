@@ -42,12 +42,8 @@ namespace screens {
         if (static_cast<int32_t>(nowMs - nextFrameMs_) < 0)
             return;
         const uint32_t frameMs = kind_ == standby::Kind::Voronoi ? kVoronoiFrameMs : kFrameMs;
-        uint8_t steps = 0;
-        do {
-            screensaver_.step();
-            nextFrameMs_ += frameMs;
-            ++steps;
-        } while (steps < 3 && static_cast<int32_t>(nowMs - nextFrameMs_) >= 0);
+        screensaver_.step();
+        nextFrameMs_ = nowMs + frameMs;
         draw(ui);
     }
 

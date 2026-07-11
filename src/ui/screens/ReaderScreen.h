@@ -58,12 +58,10 @@ namespace screens {
         int16_t textWidth(const String& text) const;
         void drawText(const String& text, int16_t x, int16_t baseline, uint16_t color);
         void drawWord(const String& word, int16_t x, int16_t baseline, int focus, ui::Context& ui);
-        void drawBattery(ui::Context& ui);
         String phantomBefore(const ReadingLoop& reader, uint8_t sizeIndex) const;
         String phantomAfter(const ReadingLoop& reader, uint8_t sizeIndex) const;
-        uint32_t frameSignature(const String& before, const String& word, const String& after, const String& chapter,
-                                const String& footer, const String& overlay, uint8_t progress, bool reading,
-                                const ReaderSettings& settings, const BatteryModel& battery) const;
+        uint32_t frameSignature(const String& before, const String& word, const String& after, const String& overlay,
+                                const ReaderSettings& settings) const;
 
         enum class TouchIntent : uint8_t {
             None,
@@ -83,7 +81,6 @@ namespace screens {
         mutable ui::fonts::TextRenderer<640> text_;
         ui::fonts::Font font_;
         ReaderTypography typography_;
-        BatteryModel battery_;
         uint16_t background_ = 0;
         bool touching_ = false;
         uint16_t touchStartX_ = 0;

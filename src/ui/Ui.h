@@ -80,6 +80,12 @@ namespace ui {
         Power,
     };
 
+    enum class TextAlign : uint8_t {
+        Left,
+        Center,
+        Right,
+    };
+
     class Context {
     public:
         static constexpr size_t kSlotCapacity = 64;
@@ -99,10 +105,11 @@ namespace ui {
         void invalidate();
 
         void label(Rect rect, std::string_view text, uint8_t textSize = 2,
-                   ui::themes::ColorRole role = ui::themes::ColorRole::Foreground);
+                   ui::themes::ColorRole role = ui::themes::ColorRole::Foreground, TextAlign align = TextAlign::Left);
         bool button(Rect rect, std::string_view text, Icon icon = Icon::None);
         bool iconButton(Rect rect, Icon icon);
         bool tab(Rect rect, std::string_view text, bool active);
+        void battery(Rect rect, uint8_t percent, bool charging, std::string_view label);
         void progress(Rect rect, int value, int minimum = 0, int maximum = 100);
         SliderResult slider(Rect rect, int value, int minimum, int maximum, int step = 1);
         void dial(Rect rect, int value, int minimum, int maximum, std::string_view label = {});
@@ -134,6 +141,7 @@ namespace ui {
             Progress,
             Slider,
             Dial,
+            Battery,
             Custom
         };
 
@@ -152,7 +160,8 @@ namespace ui {
         Claim claim(Kind kind, Rect rect, uint32_t signature);
         void clear(Rect rect);
         void markDirty(Rect rect);
-        void drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color, bool centered = false);
+        void drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
+                      TextAlign align = TextAlign::Left);
         void drawIcon(Rect rect, Icon icon, uint16_t color, uint16_t surface);
         int valueAt(Rect rect, uint16_t x, int minimum, int maximum, int step) const;
         bool tapped(size_t slot, Rect rect);

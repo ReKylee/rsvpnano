@@ -25,11 +25,6 @@ namespace screens {
         constexpr uint32_t kWpmFeedbackMs = 900;
         constexpr int kMaxScrubSteps = 96;
         constexpr uint32_t kBatterySampleMs = 120000;
-        constexpr uint16_t kBatteryGoodColor = ui::themes::rgb565(126, 176, 92);
-        constexpr uint16_t kBatteryMediumColor = ui::themes::rgb565(214, 163, 58);
-        constexpr uint16_t kBatteryLowColor = ui::themes::rgb565(200, 82, 82);
-        constexpr uint8_t kBatteryMediumPercent = 35;
-        constexpr uint8_t kBatteryLowPercent = 18;
         constexpr size_t kPhantomBeforeTargets[] = {64, 96, 144};
         constexpr size_t kPhantomAfterTargets[] = {96, 144, 208};
 
@@ -85,31 +80,6 @@ namespace screens {
             if (length <= 13)
                 return 3;
             return 4;
-        }
-
-        uint16_t batteryFillColor(uint8_t percent, bool charging) {
-            if (charging || percent > kBatteryMediumPercent)
-                return kBatteryGoodColor;
-            return percent <= kBatteryLowPercent ? kBatteryLowColor : kBatteryMediumColor;
-        }
-
-        void drawFittedText(Arduino_GFX& gfx, const String& text, int16_t x, int16_t y, uint8_t size,
-                            int16_t maxWidth) {
-            const size_t capacity = static_cast<size_t>(std::max<int16_t>(0, maxWidth) / (6 * size));
-            if (text.length() <= capacity) {
-                gfx.setCursor(x, y);
-                gfx.print(text);
-                return;
-            }
-            const size_t dots = std::min<size_t>(3, capacity);
-            size_t length = capacity > dots ? capacity - dots : 0;
-            while (length > 0 && (static_cast<uint8_t>(text[length]) & 0xC0U) == 0x80U)
-                --length;
-            gfx.setCursor(x, y);
-            for (size_t index = 0; index < length; ++index)
-                gfx.write(static_cast<uint8_t>(text[index]));
-            for (size_t index = 0; index < dots; ++index)
-                gfx.write('.');
         }
 
     } // namespace
@@ -224,84 +194,90 @@ namespace screens {
 
         font_ = settings.font;
         typography_ = settings.typography;
-        battery_ = batteryModel;
-        if (!ui.redraw({0, 0, ui.width(), ui.height()},
-                       frameSignature(before, reader.currentWord(), after, chapterLabel, footer, overlay, progress,
-                                      reading, settings, batteryModel)))
-            return;
-        Arduino_GFX& gfx = ui.gfx();
-        background_ = ui.color(ui::themes::ColorRole::Background);
-        text_.setFont(font_);
-        text_.setColors(ui.color(ui::themes::ColorRole::Foreground), ui.color(ui::themes::ColorRole::Background));
+        const ui::Rect readingArea{0, 36, ui.width(), static_cast<int16_t>(std::max<int16_t>(0, ui.height() - 72))};
+        if (ui.redraw(readingArea, frameSignature(before, reader.currentWord(), after, overlay, settings))) {
+            Arduino_GFX& gfx = ui.gfx();
+            background_ = ui.color(ui::themes::ColorRole::Background);
+            text_.setFont(font_);
+            text_.setColors(ui.color(ui::themes::ColorRole::Foreground), ui.color(ui::themes::ColorRole::Background));
 
-        const String& word = reader.currentWord();
-        const int focus = focusIndex(word);
-        const int16_t wordWidth = textWidth(word);
-        int16_t focusCenter = wordWidth / 2;
-        if (focus >= 0) {
-            int glyph = 0;
-            int16_t cursor = 0;
-            for (size_t index = 0; index < word.length();) {
-                uint16_t codepoint = 0;
-                nextCodepoint(word, index, codepoint);
-                const int16_t advance = text_.glyphAdvance(codepoint);
-                if (glyph++ == focus) {
-                    focusCenter = static_cast<int16_t>(cursor + advance / 2);
-                    break;
+            const String& word = reader.currentWord();
+            const int focus = focusIndex(word);
+            const int16_t wordWidth = textWidth(word);
+            int16_t focusCenter = wordWidth / 2;
+            if (focus >= 0) {
+                int glyph = 0;
+                int16_t cursor = 0;
+                for (size_t index = 0; index < word.length();) {
+                    uint16_t codepoint = 0;
+                    nextCodepoint(word, index, codepoint);
+                    const int16_t advance = text_.glyphAdvance(codepoint);
+                    if (glyph++ == focus) {
+                        focusCenter = static_cast<int16_t>(cursor + advance / 2);
+                        break;
+                    }
+                    cursor = static_cast<int16_t>(cursor + advance + typography_.tracking);
                 }
-                cursor = static_cast<int16_t>(cursor + advance + typography_.tracking);
+            }
+            const int16_t anchor = static_cast<int16_t>((ui.width() * typography_.anchor) / 100);
+            const int16_t x = static_cast<int16_t>(anchor - focusCenter);
+            const int16_t inkTop = font_.inkTop;
+            const int16_t inkBottom = font_.inkBottom;
+            const int16_t baseline = static_cast<int16_t>(((ui.height() - (inkBottom - inkTop + 1)) / 2) - inkTop);
+            const int16_t guideTop = static_cast<int16_t>(baseline + inkTop - 6);
+            const int16_t guideBottom = static_cast<int16_t>(baseline + inkBottom + 6);
+            const uint16_t guide = ui.blend(ui::themes::ColorRole::Foreground, 96);
+            gfx.drawFastHLine(static_cast<int16_t>(anchor - typography_.guideWidth), guideTop,
+                              static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
+            gfx.drawFastHLine(static_cast<int16_t>(anchor + typography_.guideGap), guideTop,
+                              static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
+            gfx.drawFastHLine(static_cast<int16_t>(anchor - typography_.guideWidth), guideBottom,
+                              static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
+            gfx.drawFastHLine(static_cast<int16_t>(anchor + typography_.guideGap), guideBottom,
+                              static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
+            const uint16_t marker = typography_.focusHighlight ? ui.color(ui::themes::ColorRole::Accent) : guide;
+            gfx.drawFastVLine(anchor, guideTop, 5, marker);
+            gfx.drawFastVLine(anchor, static_cast<int16_t>(guideBottom - 4), 5, marker);
+
+            if (!before.isEmpty())
+                drawText(before, static_cast<int16_t>(x - 24 - textWidth(before)), baseline,
+                         ui.blend(ui::themes::ColorRole::Foreground, 62));
+            drawWord(word, x, baseline, focus, ui);
+            if (!after.isEmpty())
+                drawText(after, static_cast<int16_t>(x + wordWidth + 24), baseline,
+                         ui.blend(ui::themes::ColorRole::Foreground, 62));
+
+            gfx.setFont(static_cast<const GFXfont*>(nullptr));
+            gfx.setTextWrap(false);
+            gfx.setTextSize(2);
+            gfx.setTextColor(ui.color(ui::themes::ColorRole::Muted));
+            gfx.setCursor(18, static_cast<int16_t>(ui.height() / 2 - 8));
+            gfx.print("<<");
+            if (!overlay.isEmpty()) {
+                gfx.setTextColor(ui.color(ui::themes::ColorRole::Accent));
+                gfx.setCursor(static_cast<int16_t>((ui.width() - overlay.length() * 12) / 2),
+                              static_cast<int16_t>(ui.height() - 56));
+                gfx.print(overlay);
             }
         }
-        const int16_t anchor = static_cast<int16_t>((ui.width() * typography_.anchor) / 100);
-        const int16_t x = static_cast<int16_t>(anchor - focusCenter);
-        const int16_t inkTop = font_.inkTop;
-        const int16_t inkBottom = font_.inkBottom;
-        const int16_t baseline = static_cast<int16_t>(((ui.height() - (inkBottom - inkTop + 1)) / 2) - inkTop);
-        const int16_t guideTop = static_cast<int16_t>(baseline + inkTop - 6);
-        const int16_t guideBottom = static_cast<int16_t>(baseline + inkBottom + 6);
-        const uint16_t guide = ui.blend(ui::themes::ColorRole::Foreground, 96);
-        gfx.drawFastHLine(static_cast<int16_t>(anchor - typography_.guideWidth), guideTop,
-                          static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
-        gfx.drawFastHLine(static_cast<int16_t>(anchor + typography_.guideGap), guideTop,
-                          static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
-        gfx.drawFastHLine(static_cast<int16_t>(anchor - typography_.guideWidth), guideBottom,
-                          static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
-        gfx.drawFastHLine(static_cast<int16_t>(anchor + typography_.guideGap), guideBottom,
-                          static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
-        const uint16_t marker = typography_.focusHighlight ? ui.color(ui::themes::ColorRole::Accent) : guide;
-        gfx.drawFastVLine(anchor, guideTop, 5, marker);
-        gfx.drawFastVLine(anchor, static_cast<int16_t>(guideBottom - 4), 5, marker);
 
-        if (!before.isEmpty())
-            drawText(before, static_cast<int16_t>(x - 24 - textWidth(before)), baseline,
-                     ui.blend(ui::themes::ColorRole::Foreground, 62));
-        drawWord(word, x, baseline, focus, ui);
-        if (!after.isEmpty())
-            drawText(after, static_cast<int16_t>(x + wordWidth + 24), baseline,
-                     ui.blend(ui::themes::ColorRole::Foreground, 62));
+        const int16_t footerWidth = static_cast<int16_t>(footer.length() * 12);
+        const int16_t footerX = static_cast<int16_t>(ui.width() - 18 - footerWidth);
+        ui.label({18, static_cast<int16_t>(ui.height() - 26), static_cast<int16_t>(footerX - 42), 16},
+                 reading                  ? ""
+                 : chapterLabel.isEmpty() ? "START"
+                                          : chapterLabel.c_str(),
+                 2, ui::themes::ColorRole::Muted);
+        ui.label({footerX, static_cast<int16_t>(ui.height() - 26), footerWidth, 16}, footer.c_str(), 2,
+                 ui::themes::ColorRole::Muted, ui::TextAlign::Right);
 
-        gfx.setFont(static_cast<const GFXfont*>(nullptr));
-        gfx.setTextWrap(false);
-        gfx.setTextSize(2);
-        gfx.setTextColor(ui.color(ui::themes::ColorRole::Muted));
-        gfx.setCursor(18, static_cast<int16_t>(ui.height() / 2 - 8));
-        gfx.print("<<");
-        if (!reading) {
-            const int16_t footerWidth = static_cast<int16_t>(footer.length() * 12);
-            const int16_t footerX = static_cast<int16_t>(ui.width() - 18 - footerWidth);
-            drawFittedText(gfx, chapterLabel.isEmpty() ? String("START") : chapterLabel, 18,
-                           static_cast<int16_t>(ui.height() - 26), 2, static_cast<int16_t>(footerX - 42));
-            drawBattery(ui);
-        }
-        gfx.setCursor(static_cast<int16_t>(ui.width() - 18 - footer.length() * 12),
-                      static_cast<int16_t>(ui.height() - 26));
-        gfx.print(footer);
-        if (!overlay.isEmpty()) {
-            gfx.setTextColor(ui.color(ui::themes::ColorRole::Accent));
-            gfx.setCursor(static_cast<int16_t>((ui.width() - overlay.length() * 12) / 2),
-                          static_cast<int16_t>(ui.height() - 56));
-            gfx.print(overlay);
-        }
+        const String batteryLabel = batteryModel.showVoltage && batteryModel.voltage > 0
+                                      ? String(batteryModel.voltage, 2) + "V"
+                                      : String(batteryModel.percent) + "%";
+        const ui::Rect batteryArea = batteryRect(ui.width());
+        ui.battery({batteryArea.x, batteryArea.y, static_cast<int16_t>(batteryArea.w - 10), batteryArea.h},
+                   reading ? 0 : batteryModel.percent, !reading && batteryModel.charging,
+                   reading ? std::string_view{} : std::string_view{batteryLabel.c_str()});
     }
 
     bool ReaderScreen::batteryTapped(const ui::Touch& touch) const {
@@ -628,58 +604,17 @@ namespace screens {
         }
     }
 
-    void ReaderScreen::drawBattery(ui::Context& ui) {
-        if (battery_.percent == 0 && battery_.voltage <= 0)
-            return;
-        Arduino_GFX& gfx = ui.gfx();
-        const String label = battery_.showVoltage && battery_.voltage > 0 ? String(battery_.voltage, 2) + "V"
-                                                                          : String(battery_.percent) + "%";
-        constexpr int16_t iconWidth = 26;
-        constexpr int16_t capWidth = 3;
-        constexpr int16_t gap = 7;
-        const int16_t labelWidth = static_cast<int16_t>(label.length() * 12);
-        const int16_t totalWidth = static_cast<int16_t>(iconWidth + capWidth + gap + labelWidth);
-        const int16_t x = std::max<int16_t>(4, static_cast<int16_t>(ui.width() - totalWidth - 10));
-        gfx.drawRect(x, 10, 26, 13, ui.color(ui::themes::ColorRole::Muted));
-        gfx.fillRect(static_cast<int16_t>(x + 26), 14, 3, 5, ui.color(ui::themes::ColorRole::Muted));
-        const int16_t fill = battery_.charging ? 22 : static_cast<int16_t>(22 * battery_.percent / 100);
-        if (fill > 0)
-            gfx.fillRect(static_cast<int16_t>(x + 2), 12, fill, 9,
-                         batteryFillColor(battery_.percent, battery_.charging));
-        if (battery_.charging) {
-            const uint16_t background = ui.color(ui::themes::ColorRole::Background);
-            gfx.drawLine(static_cast<int16_t>(x + 15), 12, static_cast<int16_t>(x + 11), 17, background);
-            gfx.drawLine(static_cast<int16_t>(x + 11), 17, static_cast<int16_t>(x + 16), 17, background);
-            gfx.drawLine(static_cast<int16_t>(x + 16), 17, static_cast<int16_t>(x + 12), 22, background);
-        }
-        gfx.setFont(static_cast<const GFXfont*>(nullptr));
-        gfx.setTextSize(2);
-        gfx.setTextColor(ui.color(ui::themes::ColorRole::Muted));
-        gfx.setCursor(static_cast<int16_t>(x + iconWidth + capWidth + gap), 6);
-        gfx.print(label);
-    }
-
     uint32_t ReaderScreen::frameSignature(const String& before, const String& word, const String& after,
-                                          const String& chapter, const String& footer, const String& overlay,
-                                          uint8_t progress, bool reading, const ReaderSettings& settings,
-                                          const BatteryModel& battery) const {
+                                          const String& overlay, const ReaderSettings& settings) const {
         uint32_t value = ui::Context::signature(before.c_str());
         value = ui::Context::signature(word.c_str(), value);
         value = ui::Context::signature(after.c_str(), value);
-        value = ui::Context::signature(chapter.c_str(), value);
-        value = ui::Context::signature(footer.c_str(), value);
         value = ui::Context::signature(overlay.c_str(), value);
-        value = ui::Context::combine(value, progress);
-        value = ui::Context::combine(value, reading);
         value = ui::Context::combine(value, static_cast<uint8_t>(settings.typography.tracking));
         value = ui::Context::combine(value, settings.typography.anchor);
         value = ui::Context::combine(value, settings.typography.guideWidth);
         value = ui::Context::combine(value, settings.typography.guideGap);
         value = ui::Context::combine(value, settings.typography.focusHighlight);
-        value = ui::Context::combine(value, battery.percent);
-        value = ui::Context::combine(value, static_cast<uint32_t>(battery.voltage * 100));
-        value = ui::Context::combine(value, battery.charging);
-        value = ui::Context::combine(value, battery.showVoltage);
         value = ui::Context::combine(value, static_cast<uint8_t>(settings.font.kind));
         value = ui::Context::combine(value, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(settings.font.alpha4)));
         value = ui::Context::combine(value, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(settings.font.gfx)));

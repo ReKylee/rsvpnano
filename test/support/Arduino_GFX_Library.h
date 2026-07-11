@@ -19,8 +19,9 @@ public:
     virtual void fillScreen(uint16_t) {
         ++writes;
     }
-    virtual void fillRect(int16_t, int16_t, int16_t, int16_t, uint16_t) {
+    virtual void fillRect(int16_t, int16_t, int16_t, int16_t, uint16_t color) {
         ++writes;
+        lastFillColor = color;
     }
     virtual void drawRect(int16_t, int16_t, int16_t, int16_t, uint16_t) {
         ++writes;
@@ -50,7 +51,10 @@ public:
     virtual void setTextSize(uint8_t) {}
     virtual void setTextWrap(bool) {}
     virtual void setTextColor(uint16_t) {}
-    virtual void setCursor(int16_t, int16_t) {}
+    virtual void setCursor(int16_t x, int16_t y) {
+        cursorX = x;
+        cursorY = y;
+    }
     virtual size_t write(uint8_t) {
         ++writes;
         ++textWrites;
@@ -63,6 +67,9 @@ public:
     int writes = 0;
     int textWrites = 0;
     int flushes = 0;
+    int16_t cursorX = 0;
+    int16_t cursorY = 0;
+    uint16_t lastFillColor = 0;
 
 private:
     int16_t width_;

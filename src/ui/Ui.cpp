@@ -8,6 +8,9 @@ namespace ui {
 
         constexpr uint16_t kFallbackBlack = 0x0000;
         constexpr uint16_t kFallbackWhite = 0xFFFF;
+        constexpr uint16_t kBatteryGood = ui::themes::rgb565(126, 176, 92);
+        constexpr uint16_t kBatteryMedium = ui::themes::rgb565(214, 163, 58);
+        constexpr uint16_t kBatteryLow = ui::themes::rgb565(200, 82, 82);
 
         int16_t textWidth(std::string_view text, uint8_t size) {
             return static_cast<int16_t>(text.size() * 6U * std::max<uint8_t>(1, size));
@@ -138,13 +141,15 @@ namespace ui {
         invalid_ = true;
     }
 
-    void Context::label(Rect rect, std::string_view text, uint8_t textSize, ui::themes::ColorRole role) {
+    void Context::label(Rect rect, std::string_view text, uint8_t textSize, ui::themes::ColorRole role,
+                        TextAlign align) {
         uint32_t state = combine(signature(text), textSize);
         state = combine(state, static_cast<uint8_t>(role));
+        state = combine(state, static_cast<uint8_t>(align));
         if (!claim(Kind::Label, rect, state).changed) {
             return;
         }
-        drawText(rect, text, textSize, color(role));
+        drawText(rect, text, textSize, color(role), align);
     }
 
     bool Context::button(Rect rect, std::string_view text, Icon icon) {
@@ -166,7 +171,7 @@ namespace ui {
             drawText({static_cast<int16_t>(rect.x + 6), rect.y,
                       static_cast<int16_t>(std::max<int16_t>(0, rect.w - iconWidth - 12)), rect.h},
                      text, 2, color(pressed ? ui::themes::ColorRole::OnAccent : ui::themes::ColorRole::Foreground),
-                     true);
+                     TextAlign::Center);
             if (icon != Icon::None)
                 drawIcon({static_cast<int16_t>(rect.x + rect.w - iconWidth), rect.y, iconWidth, rect.h}, icon,
                          color(ui::themes::ColorRole::Accent), surface);
@@ -203,9 +208,48 @@ namespace ui {
                               color(ui::themes::ColorRole::Accent));
             }
             drawText(rect, text, 1, color(active ? ui::themes::ColorRole::Foreground : ui::themes::ColorRole::Muted),
-                     true);
+                     TextAlign::Center);
         }
         return tapped(widget.index, rect);
+    }
+
+    void Context::battery(Rect rect, uint8_t percent, bool charging, std::string_view labelText) {
+        percent = std::min<uint8_t>(percent, 100);
+        uint32_t state = combine(signature(labelText), percent);
+        state = combine(state, charging);
+        if (!claim(Kind::Battery, rect, state).changed || (labelText.empty() && percent == 0))
+            return;
+
+        constexpr int16_t iconWidth = 26;
+        constexpr int16_t iconHeight = 13;
+        constexpr int16_t capWidth = 3;
+        constexpr int16_t gap = 7;
+        const int16_t labelWidth = textWidth(labelText, 2);
+        const int16_t totalWidth = static_cast<int16_t>(iconWidth + capWidth + gap + labelWidth);
+        const int16_t x = std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + rect.w - totalWidth));
+        const int16_t iconY = static_cast<int16_t>(rect.y + std::max<int16_t>(0, (rect.h - iconHeight) / 2));
+        const uint16_t outline = color(ui::themes::ColorRole::Muted);
+        const uint16_t fillColor = charging || percent > 35 ? kBatteryGood
+                                 : percent <= 18            ? kBatteryLow
+                                                            : kBatteryMedium;
+
+        gfx_.drawRect(x, iconY, iconWidth, iconHeight, outline);
+        gfx_.fillRect(static_cast<int16_t>(x + iconWidth), static_cast<int16_t>(iconY + 4), capWidth, 5, outline);
+        const int16_t fill = charging ? iconWidth - 4 : static_cast<int16_t>((iconWidth - 4) * percent / 100);
+        if (fill > 0)
+            gfx_.fillRect(static_cast<int16_t>(x + 2), static_cast<int16_t>(iconY + 2), fill, iconHeight - 4,
+                          fillColor);
+        if (charging) {
+            const uint16_t background = color(ui::themes::ColorRole::Background);
+            gfx_.drawLine(static_cast<int16_t>(x + 15), static_cast<int16_t>(iconY + 2), static_cast<int16_t>(x + 11),
+                          static_cast<int16_t>(iconY + 7), background);
+            gfx_.drawLine(static_cast<int16_t>(x + 11), static_cast<int16_t>(iconY + 7), static_cast<int16_t>(x + 16),
+                          static_cast<int16_t>(iconY + 7), background);
+            gfx_.drawLine(static_cast<int16_t>(x + 16), static_cast<int16_t>(iconY + 7), static_cast<int16_t>(x + 12),
+                          static_cast<int16_t>(iconY + 12), background);
+        }
+        drawText({static_cast<int16_t>(x + iconWidth + capWidth + gap), rect.y, labelWidth, rect.h}, labelText, 2,
+                 outline);
     }
 
     void Context::progress(Rect rect, int value, int minimum, int maximum) {
@@ -283,7 +327,7 @@ namespace ui {
         }
         if (!labelText.empty()) {
             drawText({rect.x, static_cast<int16_t>(cy + radius / 2), rect.w, textHeight(1)}, labelText, 1,
-                     color(ui::themes::ColorRole::Muted), true);
+                     color(ui::themes::ColorRole::Muted), TextAlign::Center);
         }
     }
 
@@ -379,7 +423,7 @@ namespace ui {
         dirty_.h = static_cast<int16_t>(std::max(oldBottom, bottom) - dirty_.y);
     }
 
-    void Context::drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t textColor, bool centered) {
+    void Context::drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t textColor, TextAlign align) {
         if (rect.w <= 0 || rect.h <= 0)
             return;
         const uint8_t size = std::max<uint8_t>(1, textSize);
@@ -392,8 +436,11 @@ namespace ui {
         gfx_.setTextSize(size);
         gfx_.setTextWrap(false);
         gfx_.setTextColor(textColor);
-        const int16_t x =
-            centered ? std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + (rect.w - renderedWidth) / 2)) : rect.x;
+        const int16_t x = align == TextAlign::Center
+                            ? std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + (rect.w - renderedWidth) / 2))
+                        : align == TextAlign::Right
+                            ? std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + rect.w - renderedWidth))
+                            : rect.x;
         const int16_t y = static_cast<int16_t>(rect.y + std::max<int16_t>(0, (rect.h - textHeight(size)) / 2));
         gfx_.setCursor(x, y);
         for (size_t index = 0; index < length; ++index)

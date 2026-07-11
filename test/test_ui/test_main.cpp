@@ -135,6 +135,26 @@ void test_labels_truncate_to_their_rectangles() {
     TEST_ASSERT_EQUAL(5, gfx.textWrites);
 }
 
+void test_labels_align_and_battery_owns_its_drawing() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx, &flush, &flushRegion);
+    auto colors = theme();
+    context.setTheme(colors);
+    context.beginFrame(1);
+    context.label({10, 0, 60, 8}, "AB", 1, ui::themes::ColorRole::Foreground, ui::TextAlign::Right);
+    TEST_ASSERT_EQUAL(58, gfx.cursorX);
+    context.battery({100, 0, 120, 36}, 100, false, "100%");
+    context.endFrame();
+    TEST_ASSERT_EQUAL(ui::themes::rgb565(126, 176, 92), gfx.lastFillColor);
+
+    gfx.writes = 0;
+    context.beginFrame(1);
+    context.label({10, 0, 60, 8}, "AB", 1, ui::themes::ColorRole::Foreground, ui::TextAlign::Right);
+    context.battery({100, 0, 120, 36}, 100, false, "100%");
+    context.endFrame();
+    TEST_ASSERT_EQUAL(0, gfx.writes);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_unchanged_widget_does_not_draw_or_flush);
@@ -142,5 +162,6 @@ int main(int, char**) {
     RUN_TEST(test_button_and_slider_consume_touch);
     RUN_TEST(test_layout_cursors_are_deterministic);
     RUN_TEST(test_labels_truncate_to_their_rectangles);
+    RUN_TEST(test_labels_align_and_battery_owns_its_drawing);
     return UNITY_END();
 }

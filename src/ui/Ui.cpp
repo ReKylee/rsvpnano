@@ -152,11 +152,14 @@ namespace ui {
         drawText(rect, text, textSize, color(role), align);
     }
 
-    bool Context::button(Rect rect, std::string_view text, Icon icon, uint8_t textLines) {
+    bool Context::button(Rect rect, std::string_view text, Icon icon, uint8_t textLines, std::string_view detailLeft,
+                         std::string_view detailRight) {
         const size_t slot = nextSlot_;
         const bool activated = tapped(slot, rect);
         uint32_t state = combine(signature(text), static_cast<uint8_t>(icon));
         state = combine(state, textLines);
+        state = signature(detailLeft, state);
+        state = signature(detailRight, state);
         const Claim widget = claim(Kind::Button, rect, state);
         if (widget.changed) {
             const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
@@ -166,9 +169,18 @@ namespace ui {
                 gfx_.fillRect(static_cast<int16_t>(rect.x + 8), static_cast<int16_t>(rect.y + rect.h - 3),
                               static_cast<int16_t>(rect.w - 16), 2, color(ui::themes::ColorRole::Accent));
             const int16_t iconWidth = icon == Icon::None ? 0 : std::min<int16_t>(34, rect.w / 3);
-            drawText({static_cast<int16_t>(rect.x + 6), rect.y,
-                      static_cast<int16_t>(std::max<int16_t>(0, rect.w - iconWidth - 12)), rect.h},
-                     text, 2, color(ui::themes::ColorRole::Foreground), TextAlign::Center, textLines);
+            const bool hasDetail = !detailLeft.empty() || !detailRight.empty();
+            const int16_t textHeight = hasDetail ? static_cast<int16_t>(rect.h - 18) : rect.h;
+            const ui::Rect textRect{static_cast<int16_t>(rect.x + 6), rect.y,
+                                    static_cast<int16_t>(std::max<int16_t>(0, rect.w - iconWidth - 12)), textHeight};
+            drawText(textRect, text, 2, color(ui::themes::ColorRole::Foreground), TextAlign::Center, textLines);
+            if (hasDetail) {
+                const int16_t detailWidth = static_cast<int16_t>((textRect.w - 8) / 2);
+                const int16_t detailY = static_cast<int16_t>(rect.y + rect.h - 20);
+                drawText({textRect.x, detailY, detailWidth, 16}, detailLeft, 1, color(ui::themes::ColorRole::Muted));
+                drawText({static_cast<int16_t>(textRect.x + textRect.w - detailWidth), detailY, detailWidth, 16},
+                         detailRight, 1, color(ui::themes::ColorRole::Muted), TextAlign::Right);
+            }
             if (icon != Icon::None)
                 drawIcon({static_cast<int16_t>(rect.x + rect.w - iconWidth), rect.y, iconWidth, rect.h}, icon,
                          color(ui::themes::ColorRole::Accent), surface);

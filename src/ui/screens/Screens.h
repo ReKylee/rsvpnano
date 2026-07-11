@@ -51,6 +51,7 @@ namespace screens {
 
     struct ReadModel {
         String title;
+        String author;
         uint8_t progress = 0;
     };
 

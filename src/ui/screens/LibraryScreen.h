@@ -41,9 +41,11 @@ namespace screens {
         }
 
     private:
-        int16_t centeredOffset(const std::vector<LibraryItem>& items, size_t index) const;
-        int16_t clampOffset(const std::vector<LibraryItem>& items, int16_t offset) const;
-        size_t nearest(const std::vector<LibraryItem>& items, int16_t offset, int16_t x) const;
+        int16_t centeredOffset(const std::vector<LibraryItem>& items, size_t index, int16_t viewportWidth) const;
+        int16_t clampOffset(const std::vector<LibraryItem>& items, int16_t offset, int16_t viewportWidth) const;
+        size_t nearest(const std::vector<LibraryItem>& items, int16_t offset, int16_t x, int16_t viewportX) const;
+        size_t spineAt(const std::vector<LibraryItem>& items, int16_t offset, const ui::Rect& viewport, uint16_t x,
+                       uint16_t y) const;
         int16_t spineWidth(const LibraryItem& item, size_t index) const;
         int16_t spineHeight(const LibraryItem& item, size_t index) const;
         uint32_t signature(const std::vector<LibraryItem>& items, size_t current) const;

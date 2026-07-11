@@ -10,13 +10,8 @@
 namespace screens {
     namespace {
 
-        constexpr int16_t kNavWidth = 82;
-        constexpr int16_t kViewportX = 94;
-        constexpr int16_t kViewportY = 8;
-        constexpr int16_t kViewportWidth = 498;
-        constexpr int16_t kViewportHeight = 120;
-        constexpr int16_t kDetailY = 136;
-        constexpr int16_t kDetailHeight = 30;
+        constexpr int16_t kShelfHeight = 120;
+        constexpr int16_t kDetailGap = 8;
         constexpr int16_t kGap = 5;
 
         uint16_t spineColor(size_t index, bool article) {
@@ -48,10 +43,14 @@ namespace screens {
             return result;
         }
 
-        const ui::Rect viewport{kViewportX, kViewportY, kViewportWidth, kViewportHeight};
-        const ui::Rect detailRect{kViewportX, kDetailY, kViewportWidth, kDetailHeight};
+        const ui::Rect content = detail::content(ui);
+        const ui::Rect viewport{content.x, content.y, content.w,
+                                std::min<int16_t>(kShelfHeight, static_cast<int16_t>(content.h - 36))};
+        const int16_t detailY = static_cast<int16_t>(viewport.y + viewport.h + kDetailGap);
+        const ui::Rect detailRect{content.x, detailY, content.w,
+                                  std::max<int16_t>(0, static_cast<int16_t>(content.y + content.h - detailY))};
         if (!dragging_)
-            offset_ = centeredOffset(items, selectedIndex_);
+            offset_ = centeredOffset(items, selectedIndex_, viewport.w);
 
         if (touch != nullptr && ui::hasTouch(*touch, ui::TouchStart) && ui::contains(viewport, touch->x, touch->y)) {
             dragging_ = true;
@@ -66,19 +65,26 @@ namespace screens {
             const int dy = static_cast<int>(touch->y) - startY_;
             moved_ = moved_ || std::abs(dx) > 5 || std::abs(dy) > 5;
             if (lastDrawMs_ == 0 || nowMs - lastDrawMs_ >= 33) {
-                offset_ = clampOffset(items, static_cast<int16_t>(startOffset_ + dx));
+                offset_ = clampOffset(items, static_cast<int16_t>(startOffset_ + dx), viewport.w);
                 lastDrawMs_ = nowMs;
             }
         }
         if (dragging_ && touch != nullptr && ui::hasTouch(*touch, ui::TouchRelease)) {
-            const size_t target = nearest(items, offset_, static_cast<int16_t>(kViewportX + kViewportWidth / 2));
+            const size_t target =
+                nearest(items, offset_, static_cast<int16_t>(viewport.x + viewport.w / 2), viewport.x);
             if (moved_) {
                 selectedIndex_ = target;
-                offset_ = centeredOffset(items, target);
-            } else if (ui::hasTouch(*touch, ui::TouchTap)) {
-                const size_t tapped = nearest(items, offset_, touch->x);
-                result.open = tapped == selectedIndex_;
-                selectedIndex_ = tapped;
+                offset_ = centeredOffset(items, target, viewport.w);
+            } else if (!items.empty() && ui::hasTouch(*touch, ui::TouchTap)
+                       && ui::contains(viewport, touch->x, touch->y)) {
+                const size_t tapped = spineAt(items, offset_, viewport, touch->x, touch->y);
+                if (tapped == items.size()) {
+                    result.open = true;
+                } else {
+                    result.open = tapped == selectedIndex_;
+                    selectedIndex_ = tapped;
+                    offset_ = centeredOffset(items, tapped, viewport.w);
+                }
             }
             dragging_ = false;
         }
@@ -91,27 +97,27 @@ namespace screens {
             return result;
         }
 
-        const bool redrawShelf = ui.redraw({kViewportX, static_cast<int16_t>(kViewportY - 2), kViewportWidth,
-                                            static_cast<int16_t>(kViewportHeight + 4)},
+        const bool redrawShelf = ui.redraw({viewport.x, static_cast<int16_t>(viewport.y - 2), viewport.w,
+                                            static_cast<int16_t>(viewport.h + 4)},
                                            signature(items, selectedIndex_));
         if (redrawShelf) {
             Arduino_GFX& gfx = ui.gfx();
             const uint16_t foreground = ui.color(ui::themes::ColorRole::Foreground);
             const uint16_t accent = ui.color(ui::themes::ColorRole::Accent);
             const uint16_t outline = ui.color(ui::themes::ColorRole::Outline);
-            const int16_t marker = static_cast<int16_t>(kViewportX + kViewportWidth / 2);
-            gfx.drawFastVLine(marker, kViewportY, kViewportHeight, ui.color(ui::themes::ColorRole::ProgressTrack));
+            const int16_t marker = static_cast<int16_t>(viewport.x + viewport.w / 2);
+            gfx.drawFastVLine(marker, viewport.y, viewport.h, ui.color(ui::themes::ColorRole::ProgressTrack));
 
             int16_t left = 0;
             for (size_t index = 0; index < items.size(); ++index) {
                 const int16_t width = spineWidth(items[index], index);
                 const int16_t height = spineHeight(items[index], index);
-                const int16_t x = static_cast<int16_t>(kViewportX + left + offset_);
+                const int16_t x = static_cast<int16_t>(viewport.x + left + offset_);
                 left = static_cast<int16_t>(left + width + kGap);
-                if (x + width < kViewportX || x > kViewportX + kViewportWidth)
+                if (x + width < viewport.x || x > viewport.x + viewport.w)
                     continue;
                 const bool active = index == selectedIndex_;
-                const int16_t y = static_cast<int16_t>(kViewportY + kViewportHeight - height - (active ? 8 : 0));
+                const int16_t y = static_cast<int16_t>(viewport.y + viewport.h - height - (active ? 8 : 0));
                 const uint16_t fill = spineColor(index, items[index].article);
                 gfx.fillRect(x, y, width, height, fill);
                 gfx.drawRect(x, y, width, height, foreground);
@@ -131,19 +137,19 @@ namespace screens {
                     gfx.write(static_cast<uint8_t>(items[index].spineLabel[character]));
                 }
             }
-            gfx.drawFastHLine(kViewportX, 128, kViewportWidth, outline);
-            gfx.drawFastHLine(kViewportX, 129, kViewportWidth, outline);
+            gfx.drawFastHLine(viewport.x, static_cast<int16_t>(viewport.y + viewport.h), viewport.w, outline);
+            gfx.drawFastHLine(viewport.x, static_cast<int16_t>(viewport.y + viewport.h + 1), viewport.w, outline);
         }
 
         constexpr int16_t progressWidth = 62;
         constexpr int16_t detailGap = 12;
-        const int16_t textWidth = static_cast<int16_t>(kViewportWidth - progressWidth - detailGap);
+        const int16_t textWidth = static_cast<int16_t>(detailRect.w - progressWidth - detailGap);
         const LibraryItem& item = items[selectedIndex_];
-        ui.label({kViewportX, kDetailY, textWidth, 16}, item.title.c_str(), 2);
-        ui.label({kViewportX, static_cast<int16_t>(kDetailY + 18), textWidth, 8}, item.detail.c_str(), 1,
+        ui.label({detailRect.x, detailRect.y, textWidth, 16}, item.title.c_str(), 2);
+        ui.label({detailRect.x, static_cast<int16_t>(detailRect.y + 18), textWidth, 8}, item.detail.c_str(), 1,
                  ui::themes::ColorRole::Muted);
-        ui.label({static_cast<int16_t>(kViewportX + kViewportWidth - progressWidth), static_cast<int16_t>(kDetailY + 7),
-                  progressWidth, 16},
+        ui.label({static_cast<int16_t>(detailRect.x + detailRect.w - progressWidth),
+                  static_cast<int16_t>(detailRect.y + 7), progressWidth, 16},
                  item.progressLabel.c_str(), 2, ui::themes::ColorRole::Accent, ui::TextAlign::Right);
         return result;
     }
@@ -294,18 +300,20 @@ namespace screens {
         return String(progress) + "%";
     }
 
-    int16_t LibraryScreen::centeredOffset(const std::vector<LibraryItem>& items, size_t index) const {
+    int16_t LibraryScreen::centeredOffset(const std::vector<LibraryItem>& items, size_t index,
+                                          int16_t viewportWidth) const {
         if (items.empty())
             return 0;
         index = std::min(index, items.size() - 1);
         int16_t left = 0;
         for (size_t item = 0; item < index; ++item)
             left = static_cast<int16_t>(left + spineWidth(items[item], item) + kGap);
-        return clampOffset(items,
-                           static_cast<int16_t>(kViewportWidth / 2 - left - spineWidth(items[index], index) / 2));
+        return clampOffset(items, static_cast<int16_t>(viewportWidth / 2 - left - spineWidth(items[index], index) / 2),
+                           viewportWidth);
     }
 
-    int16_t LibraryScreen::clampOffset(const std::vector<LibraryItem>& items, int16_t offset) const {
+    int16_t LibraryScreen::clampOffset(const std::vector<LibraryItem>& items, int16_t offset,
+                                       int16_t viewportWidth) const {
         if (items.empty())
             return 0;
         int16_t left = 0, lastCenter = 0;
@@ -315,11 +323,12 @@ namespace screens {
             left = static_cast<int16_t>(left + width + kGap);
         }
         const int16_t firstCenter = spineWidth(items[0], 0) / 2;
-        return std::clamp<int16_t>(offset, static_cast<int16_t>(kViewportWidth / 2 - lastCenter),
-                                   static_cast<int16_t>(kViewportWidth / 2 - firstCenter));
+        return std::clamp<int16_t>(offset, static_cast<int16_t>(viewportWidth / 2 - lastCenter),
+                                   static_cast<int16_t>(viewportWidth / 2 - firstCenter));
     }
 
-    size_t LibraryScreen::nearest(const std::vector<LibraryItem>& items, int16_t offset, int16_t x) const {
+    size_t LibraryScreen::nearest(const std::vector<LibraryItem>& items, int16_t offset, int16_t x,
+                                  int16_t viewportX) const {
         if (items.empty())
             return 0;
         size_t result = 0;
@@ -327,7 +336,7 @@ namespace screens {
         int16_t left = 0;
         for (size_t index = 0; index < items.size(); ++index) {
             const int16_t width = spineWidth(items[index], index);
-            const int center = kViewportX + left + width / 2 + offset;
+            const int center = viewportX + left + width / 2 + offset;
             if (std::abs(center - x) < distance) {
                 distance = std::abs(center - x);
                 result = index;
@@ -335,6 +344,22 @@ namespace screens {
             left = static_cast<int16_t>(left + width + kGap);
         }
         return result;
+    }
+
+    size_t LibraryScreen::spineAt(const std::vector<LibraryItem>& items, int16_t offset, const ui::Rect& viewport,
+                                  uint16_t x, uint16_t y) const {
+        int16_t left = 0;
+        for (size_t index = 0; index < items.size(); ++index) {
+            const int16_t width = spineWidth(items[index], index);
+            const int16_t height = spineHeight(items[index], index);
+            const int16_t spineX = static_cast<int16_t>(viewport.x + left + offset);
+            const int16_t spineY =
+                static_cast<int16_t>(viewport.y + viewport.h - height - (index == selectedIndex_ ? 8 : 0));
+            if (ui::contains({spineX, spineY, width, height}, x, y))
+                return index;
+            left = static_cast<int16_t>(left + width + kGap);
+        }
+        return items.size();
     }
 
     int16_t LibraryScreen::spineWidth(const LibraryItem& item, size_t index) const {

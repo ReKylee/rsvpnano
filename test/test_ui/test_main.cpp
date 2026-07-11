@@ -143,9 +143,9 @@ void test_labels_truncate_to_their_rectangles() {
 
     gfx.textWrites = 0;
     context.beginFrame(2);
-    context.button({0, 0, 72, 40}, "Alpha Beta", ui::Icon::None, 2);
+    context.button({0, 0, 72, 40}, "Alpha Beta", ui::Icon::None, 2, "By", "42%");
     context.endFrame();
-    TEST_ASSERT_EQUAL(9, gfx.textWrites);
+    TEST_ASSERT_EQUAL(14, gfx.textWrites);
 }
 
 void test_labels_align_and_battery_owns_its_drawing() {

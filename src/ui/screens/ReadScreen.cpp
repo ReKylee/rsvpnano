@@ -11,11 +11,25 @@ namespace screens {
         const bool wide = ui.width() >= 620 && ui.height() >= 150 && ui.height() <= 240;
         ui::Column column{area, static_cast<int16_t>(wide ? 12 : 10)};
         const ui::Rect resume = column.next(64);
-        const ui::Rect resumeButton{resume.x, resume.y, resume.w, 56};
-        if (ui.button(resumeButton, model.title.c_str(), ui::Icon::Bookmark, 2)) {
+        const std::string_view author = model.author.isEmpty()
+                                          ? std::string_view{"Unknown"}
+                                          : std::string_view{model.author.c_str(), model.author.length()};
+        char progress[4];
+        size_t progressLength = 0;
+        if (model.progress >= 100) {
+            progress[progressLength++] = '1';
+            progress[progressLength++] = '0';
+            progress[progressLength++] = '0';
+        } else {
+            if (model.progress >= 10)
+                progress[progressLength++] = static_cast<char>('0' + model.progress / 10);
+            progress[progressLength++] = static_cast<char>('0' + model.progress % 10);
+        }
+        progress[progressLength++] = '%';
+        const std::string_view progressText{progress, progressLength};
+        if (ui.button(resume, model.title.c_str(), ui::Icon::Bookmark, 2, author, progressText)) {
             return Action::Resume;
         }
-        ui.progress({resume.x, static_cast<int16_t>(resume.y + 56), resume.w, 8}, model.progress);
 
         ui::Row actions{column.next(64), 14};
         const int16_t buttonWidth = static_cast<int16_t>((actions.bounds.w - actions.gap) / 2);

@@ -110,7 +110,8 @@ namespace ui {
 
         void label(Rect rect, std::string_view text, uint8_t textSize = 2,
                    ui::themes::ColorRole role = ui::themes::ColorRole::Foreground, TextAlign align = TextAlign::Left);
-        bool button(Rect rect, std::string_view text, Icon icon = Icon::None, uint8_t textLines = 1);
+        bool button(Rect rect, std::string_view text, Icon icon = Icon::None, uint8_t textLines = 1,
+                    std::string_view detailLeft = {}, std::string_view detailRight = {});
         bool iconButton(Rect rect, Icon icon);
         bool tab(Rect rect, std::string_view text, bool active, Icon icon = Icon::None);
         void battery(Rect rect, uint8_t percent, bool charging, std::string_view label);

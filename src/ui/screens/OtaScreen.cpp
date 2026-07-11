@@ -5,7 +5,7 @@ namespace screens {
     Action ota(ui::Context& ui, Screen& screen) {
         if (const Action action = detail::navigation(ui, Screen::Ota, screen); action != Action::None)
             return action;
-        ui::Column column{detail::content(ui), 8};
+        ui::Column column{detail::tabContent(ui), 8};
         if (ui.button(column.next(28), "Back"))
             screen = Screen::Device;
         if (ui.button(column.next(40), "Check only"))

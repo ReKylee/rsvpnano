@@ -6,7 +6,7 @@ namespace screens {
         if (const Action action = detail::navigation(ui, Screen::Settings, screen); action != Action::None) {
             return action;
         }
-        const ui::Rect content = detail::content(ui);
+        const ui::Rect content = detail::tabContent(ui);
         const uint8_t columns = content.w >= 280 ? 2 : 1;
         const int16_t rowHeight = columns == 2 ? 30 : 26;
         const int16_t gap = columns == 2 ? 6 : 4;

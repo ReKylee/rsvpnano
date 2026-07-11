@@ -6,7 +6,7 @@ namespace screens {
 
     bool FocusScreen::genres(ui::Context& ui, uint32_t nowMs, Screen& screen) {
         detail::navigation(ui, Screen::FocusGenres, screen);
-        ui::Grid grid{detail::content(ui), static_cast<uint8_t>(ui.width() >= 400 ? 2 : 1), 48, 8};
+        ui::Grid grid{detail::tabContent(ui), static_cast<uint8_t>(ui.width() >= 400 ? 2 : 1), 48, 8};
         struct Option {
             const char* label;
             FocusTimer::Genre genre;

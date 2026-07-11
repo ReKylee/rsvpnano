@@ -13,7 +13,7 @@ namespace screens::detail {
             return Action::None;
         }
 
-        if (ui.tab({0, 0, kRailWidth, 53}, ui.text(UiText::CurrentBook),
+        if (ui.tab({0, 0, kRailWidth, 53}, "Read",
                    active == Screen::Read || active == Screen::Library || active == Screen::Chapters,
                    ui::Icon::Books)) {
             screen = Screen::Read;
@@ -40,11 +40,15 @@ namespace screens::detail {
     }
 
     ui::Rect content(ui::Context& ui) {
+        return {8, 8, static_cast<int16_t>(ui.width() - 16), static_cast<int16_t>(ui.height() - 16)};
+    }
+
+    ui::Rect tabContent(ui::Context& ui) {
         if (ui.width() >= 620 && ui.height() >= 150 && ui.height() <= 240) {
             const int16_t x = static_cast<int16_t>(kRailWidth + kContentGap);
             return {x, 8, static_cast<int16_t>(ui.width() - x - kRightInset), static_cast<int16_t>(ui.height() - 16)};
         }
-        return {8, 8, static_cast<int16_t>(ui.width() - 16), static_cast<int16_t>(ui.height() - 16)};
+        return content(ui);
     }
 
 } // namespace screens::detail

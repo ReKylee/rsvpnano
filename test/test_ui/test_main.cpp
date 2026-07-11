@@ -175,6 +175,17 @@ void test_labels_align_and_battery_owns_its_drawing() {
     TEST_ASSERT_EQUAL(0, gfx.writes);
 }
 
+void test_setting_gives_long_values_the_full_card_width() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx, &flush, &flushRegion);
+    auto colors = theme();
+    context.setTheme(colors);
+    context.beginFrame(1);
+    context.setting({0, 0, 120, 34}, "Typeface", "Atkinson Hyperlegible");
+    context.endFrame();
+    TEST_ASSERT_EQUAL(27, gfx.textWrites);
+}
+
 void test_keyboard_edits_and_submits() {
     Arduino_GFX gfx;
     ui::Context context(gfx, &flush, &flushRegion);
@@ -220,6 +231,7 @@ int main(int, char**) {
     RUN_TEST(test_layout_cursors_are_deterministic);
     RUN_TEST(test_labels_truncate_to_their_rectangles);
     RUN_TEST(test_labels_align_and_battery_owns_its_drawing);
+    RUN_TEST(test_setting_gives_long_values_the_full_card_width);
     RUN_TEST(test_keyboard_edits_and_submits);
     return UNITY_END();
 }

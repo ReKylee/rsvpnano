@@ -24,7 +24,7 @@ namespace screens {
         if (const Action action = detail::navigation(ui, Screen::Chapters, screen); action != Action::None)
             return action;
 
-        const ui::Rect content = detail::content(ui);
+        const ui::Rect content = detail::tabContent(ui);
         if (ui.button({content.x, content.y, 64, kHeaderHeight}, "Back")) {
             screen = Screen::Read;
             dragging_ = false;

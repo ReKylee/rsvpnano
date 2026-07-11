@@ -443,16 +443,6 @@ Polish = "Dotknij cykl  L/R probka"
 
 # Book and restart flow
 [[strings]]
-key = "CurrentBook"
-context = "Label for the currently selected or currently open book."
-English = "Current book"
-Spanish = "Libro actual"
-French = "Livre actuel"
-German = "Aktuelles Buch"
-Romanian = "Cartea curenta"
-Polish = "Biezaca ksiazka"
-
-[[strings]]
 key = "Start"
 context = "Short action label for starting reading."
 English = "Start"

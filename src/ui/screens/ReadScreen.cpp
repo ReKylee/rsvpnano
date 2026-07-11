@@ -7,7 +7,7 @@ namespace screens {
             return action;
         }
 
-        const ui::Rect area = detail::content(ui);
+        const ui::Rect area = detail::tabContent(ui);
         const bool wide = ui.width() >= 620 && ui.height() >= 150 && ui.height() <= 240;
         ui::Column column{area, static_cast<int16_t>(wide ? 18 : 10)};
         const ui::Rect resume = column.next(64);

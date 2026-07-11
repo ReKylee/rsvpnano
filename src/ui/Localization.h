@@ -55,7 +55,6 @@ enum class UiText : uint8_t {
 	TapExitSample,
 	TapToggleSample,
 	TapCycleSample,
-	CurrentBook,
 	Start,
 	StartOfBook,
 	RestartBook,

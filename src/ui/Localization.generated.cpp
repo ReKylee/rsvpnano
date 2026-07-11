@@ -11,7 +11,7 @@ constexpr size_t kLanguageCount = static_cast<size_t>(UiLanguage::Count);
 constexpr size_t kTextCount = static_cast<size_t>(UiText::Count);
 constexpr size_t kDefaultLanguageIndex = 0;
 static_assert(kLanguageCount == 6, "UiLanguage count mismatch");
-static_assert(kTextCount == 56, "UiText count mismatch");
+static_assert(kTextCount == 55, "UiText count mismatch");
 
 constexpr std::array<std::string_view, kLanguageCount> kLanguageNames = {{
 	/* English  */ "English",
@@ -67,7 +67,6 @@ constexpr TextTable kTexts = {{
 		/* TapExitSample            */ "Tap exit  L/R sample",
 		/* TapToggleSample          */ "Tap toggle  L/R sample",
 		/* TapCycleSample           */ "Tap cycle  L/R sample",
-		/* CurrentBook              */ "Current book",
 		/* Start                    */ "Start",
 		/* StartOfBook              */ "Start of book",
 		/* RestartBook              */ "Restart book",
@@ -126,7 +125,6 @@ constexpr TextTable kTexts = {{
 		/* TapExitSample            */ "Toca salir L/R muestra",
 		/* TapToggleSample          */ "Toca alternar L/R muestra",
 		/* TapCycleSample           */ "Toca ciclo L/R muestra",
-		/* CurrentBook              */ "Libro actual",
 		/* Start                    */ "Inicio",
 		/* StartOfBook              */ "Inicio del libro",
 		/* RestartBook              */ "Reiniciar libro",
@@ -185,7 +183,6 @@ constexpr TextTable kTexts = {{
 		/* TapExitSample            */ "Touchez sortie  G/D echant.",
 		/* TapToggleSample          */ "Touchez option  G/D echant.",
 		/* TapCycleSample           */ "Touchez cycle  G/D echant.",
-		/* CurrentBook              */ "Livre actuel",
 		/* Start                    */ "Debut",
 		/* StartOfBook              */ "Debut du livre",
 		/* RestartBook              */ "Relancer livre",
@@ -244,7 +241,6 @@ constexpr TextTable kTexts = {{
 		/* TapExitSample            */ "Tippen zuruck  L/R Probe",
 		/* TapToggleSample          */ "Tippen schalten  L/R Probe",
 		/* TapCycleSample           */ "Tippen wechseln  L/R Probe",
-		/* CurrentBook              */ "Aktuelles Buch",
 		/* Start                    */ "Start",
 		/* StartOfBook              */ "Buchanfang",
 		/* RestartBook              */ "Buch neu",
@@ -303,7 +299,6 @@ constexpr TextTable kTexts = {{
 		/* TapExitSample            */ "Atinge iesi  S/D proba",
 		/* TapToggleSample          */ "Atinge comuta  S/D proba",
 		/* TapCycleSample           */ "Atinge ciclu  S/D proba",
-		/* CurrentBook              */ "Cartea curenta",
 		/* Start                    */ "Inceput",
 		/* StartOfBook              */ "Inceputul cartii",
 		/* RestartBook              */ "Reporneste cartea",
@@ -362,7 +357,6 @@ constexpr TextTable kTexts = {{
 		/* TapExitSample            */ "Dotknij wyjdz  L/R probka",
 		/* TapToggleSample          */ "Dotknij przel.  L/R probka",
 		/* TapCycleSample           */ "Dotknij cykl  L/R probka",
-		/* CurrentBook              */ "Biezaca ksiazka",
 		/* Start                    */ "Start",
 		/* StartOfBook              */ "Poczatek ksiazki",
 		/* RestartBook              */ "Restart ksiazki",

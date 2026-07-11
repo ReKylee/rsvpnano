@@ -32,7 +32,7 @@ namespace screens {
         }
 
         if (ui.width() < 620 || ui.height() < 150 || ui.height() > 240) {
-            ui::Column column{detail::content(ui), 4};
+            ui::Column column{detail::tabContent(ui), 4};
             const size_t visible = std::min<size_t>(items.size(), std::max<int16_t>(1, column.bounds.h / 24));
             for (size_t index = 0; index < visible; ++index) {
                 if (ui.button(column.next(20), items[index].title)) {
@@ -43,7 +43,7 @@ namespace screens {
             return result;
         }
 
-        const ui::Rect content = detail::content(ui);
+        const ui::Rect content = detail::tabContent(ui);
         const ui::Rect viewport{content.x, content.y, content.w,
                                 std::min<int16_t>(kShelfHeight, static_cast<int16_t>(content.h - 36))};
         const int16_t detailY = static_cast<int16_t>(viewport.y + viewport.h + kDetailGap);

@@ -1029,13 +1029,15 @@ void CompanionSyncManager::handleThemes() {
     }
 
     ui::themes::Theme theme;
-    String error;
-    const String id = ui::themes::themeIdFromPath(uploadFinalPath_);
-    if (!ui::themes::parseThemeText(readSmallTextFile(uploadTmpPath_), id, theme, error)) {
+    std::string error;
+    const std::string id = ui::themes::themeIdFromPath({uploadFinalPath_.c_str(), uploadFinalPath_.length()});
+    const String themeText = readSmallTextFile(uploadTmpPath_);
+    if (!ui::themes::parseThemeText({themeText.c_str(), themeText.length()}, id, theme, error)) {
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
-        server_.send(400, "application/json", String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
+        server_.send(400, "application/json",
+                     String("{\"ok\":false,\"error\":\"") + jsonEscape(String(error.c_str())) + "\"}");
         return;
     }
 
@@ -1059,8 +1061,8 @@ void CompanionSyncManager::handleThemes() {
     statusLine2_ = uploadFinalPath_;
     Serial.printf("[sync] theme ready %s\n", uploadFinalPath_.c_str());
     server_.send(201, "application/json",
-                 String("{\"ok\":true,\"path\":\"") + jsonEscape(uploadFinalPath_) + "\",\"id\":\"" + jsonEscape(id)
-                     + "\"}");
+                 String("{\"ok\":true,\"path\":\"") + jsonEscape(uploadFinalPath_) + "\",\"id\":\""
+                     + jsonEscape(String(id.c_str())) + "\"}");
     uploadTmpPath_ = "";
     uploadFinalPath_ = "";
 }
@@ -1392,8 +1394,8 @@ void CompanionSyncManager::handleThemeUpload() {
             uploadError_ = "Missing filename";
             return;
         }
-        if (!ui::themes::hasThemeExtension(filename)) {
-            filename += ui::themes::kThemeExtension;
+        if (!ui::themes::hasThemeExtension({filename.c_str(), filename.length()})) {
+            filename += ui::themes::kThemeExtension.data();
         }
         if (!ensureThemeDirectory()) {
             uploadError_ = "Themes folder unavailable";
@@ -1502,7 +1504,7 @@ String CompanionSyncManager::settingsJson() {
     themeStore.loadFromSd();
     const String savedThemeId = preferences_.getString(pref::ThemeId::key(), "");
     if (!savedThemeId.isEmpty()) {
-        themeStore.selectById(savedThemeId.c_str());
+        themeStore.selectById({savedThemeId.c_str(), savedThemeId.length()});
     }
     const ui::themes::Theme& selectedTheme = themeStore.selected();
 
@@ -1522,7 +1524,7 @@ String CompanionSyncManager::settingsJson() {
           + ",\"punctuationMs\":" + String(punctuationDelay) + "}";
     body += "}";
     body += ",\"display\":{";
-    body += "\"themeId\":\"" + jsonEscape(selectedTheme.id) + "\"";
+    body += "\"themeId\":\"" + jsonEscape(String(selectedTheme.id.c_str())) + "\"";
     body += ",\"brightnessIndex\":" + String(brightness);
     body += ",\"handedness\":\"";
     body += enumLabel(handedness, handednessLabels, 2);
@@ -1564,11 +1566,12 @@ String CompanionSyncManager::settingsJson() {
         if (i > 0) {
             body += ",";
         }
-        body += "{\"id\":\"" + jsonEscape(themes[i].id) + "\"";
-        body += ",\"name\":\"" + jsonEscape(themes[i].name) + "\"";
+        body += "{\"id\":\"" + jsonEscape(String(themes[i].id.c_str())) + "\"";
+        body += ",\"name\":\"" + jsonEscape(String(themes[i].name.c_str())) + "\"";
         body += ",\"builtIn\":" + String(themes[i].builtIn ? "true" : "false");
         body += ",\"typeface\":\"";
-        body += ui::themes::readerTypefaceName(themes[i].typeface);
+        const std::string_view typefaceName = ui::themes::readerTypefaceName(themes[i].typeface);
+        body.concat(typefaceName.data(), typefaceName.size());
         body += "\"}";
     }
     body += "]";
@@ -1687,16 +1690,17 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
     if (readJsonString(body, "themeId", stringValue)) {
         ThemeStore themeStore;
         themeStore.loadFromSd();
-        if (!themeStore.selectById(stringValue.c_str())) {
+        if (!themeStore.selectById({stringValue.c_str(), stringValue.length()})) {
             error = "themeId does not match an available theme";
             return false;
         }
         const ui::themes::Theme& theme = themeStore.selected();
-        preferences_.putString(pref::ThemeId::key(), theme.id);
+        preferences_.putString(pref::ThemeId::key(), theme.id.c_str());
         FontCatalog fontCatalog;
         fontCatalog.loadFromSd();
         uint8_t themeTypeface = 0;
-        if (fontCatalog.indexForId(ui::themes::readerTypefaceName(theme.typeface), themeTypeface)) {
+        const std::string_view typefaceName = ui::themes::readerTypefaceName(theme.typeface);
+        if (fontCatalog.indexForId(String(typefaceName.data(), typefaceName.size()), themeTypeface)) {
             preferences_.putUChar(pref::ReaderTypefaceIndex::key(), themeTypeface);
             preferences_.putString(pref::ReaderTypefaceId::key(), fontCatalog.typefaceId(themeTypeface));
             themeTypefaceApplied = true;

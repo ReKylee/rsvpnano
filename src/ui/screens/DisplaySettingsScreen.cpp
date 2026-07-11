@@ -15,7 +15,7 @@ namespace screens {
         themes.loadFromSd();
         const String savedThemeId = settings::load<pref::ThemeId>(preferences);
         if (!savedThemeId.isEmpty())
-            themes.selectById(savedThemeId);
+            themes.selectById({savedThemeId.c_str(), savedThemeId.length()});
         ui.setTheme(themes.selected());
     }
 
@@ -34,10 +34,11 @@ namespace screens {
                 setBrightness(static_cast<uint8_t>(brightness.value));
         }
 
-        const String theme = "Theme: " + themes.selected().name;
+        String theme = "Theme: ";
+        theme += themes.selected().name.c_str();
         if (ui.button(column.next(28), theme.c_str())) {
             themes.selectNext();
-            settings::save<pref::ThemeId>(preferences, themes.selected().id);
+            settings::save<pref::ThemeId>(preferences, String(themes.selected().id.c_str()));
             ui.setTheme(themes.selected());
         }
 

@@ -1,7 +1,7 @@
 #include "display/ThemeStore.h"
 
 #include <algorithm>
-#include <cstring>
+#include <string>
 
 #include "board/BoardStorage.h"
 #include "storage/fs/StoragePaths.h"
@@ -10,12 +10,11 @@ namespace {
 
     constexpr size_t kMaxThemeBytes = 4096;
 
-    String readSmallFile(File& file) {
-        String text;
+    std::string readSmallFile(File& file) {
+        std::string text;
         text.reserve(std::min(static_cast<size_t>(file.size()), kMaxThemeBytes));
-        while (file.available() && text.length() < kMaxThemeBytes) {
-            text += static_cast<char>(file.read());
-        }
+        while (file.available() && text.size() < kMaxThemeBytes)
+            text.push_back(static_cast<char>(file.read()));
         return text;
     }
 
@@ -32,7 +31,7 @@ void ThemeStore::reset() {
 }
 
 void ThemeStore::loadFromSd() {
-    const String selectedId = selected().id;
+    const std::string selectedId = selected().id;
     reset();
 
     File dir = Board::Storage::filesystem().open(StoragePaths::kThemesPath);
@@ -56,14 +55,15 @@ void ThemeStore::loadFromSd() {
         }
 
         const String path = entry.path();
-        if (!ui::themes::hasThemeExtension(path)) {
+        const std::string_view pathView{path.c_str(), path.length()};
+        if (!ui::themes::hasThemeExtension(pathView)) {
             entry.close();
             continue;
         }
 
         ui::themes::Theme theme;
-        String error;
-        if (ui::themes::parseThemeText(readSmallFile(entry), ui::themes::themeIdFromPath(path), theme, error)) {
+        std::string error;
+        if (ui::themes::parseThemeText(readSmallFile(entry), ui::themes::themeIdFromPath(pathView), theme, error)) {
             loaded.push_back(theme);
         } else {
             Serial.printf("[theme] skipped %s: %s\n", path.c_str(), error.c_str());
@@ -73,7 +73,7 @@ void ThemeStore::loadFromSd() {
     dir.close();
 
     std::sort(loaded.begin(), loaded.end(), [](const ui::themes::Theme& a, const ui::themes::Theme& b) {
-        return std::strcmp(a.id.c_str(), b.id.c_str()) < 0;
+        return a.id < b.id;
     });
     for (const ui::themes::Theme& theme: loaded) {
         if (!contains(theme.id)) {
@@ -83,7 +83,7 @@ void ThemeStore::loadFromSd() {
     selectById(selectedId);
 }
 
-bool ThemeStore::selectById(const String& id) {
+bool ThemeStore::selectById(std::string_view id) {
     const size_t index = indexOf(id);
     if (index >= themes_.size()) {
         return false;
@@ -112,11 +112,11 @@ size_t ThemeStore::selectedIndex() const {
     return selectedIndex_;
 }
 
-bool ThemeStore::contains(const String& id) const {
+bool ThemeStore::contains(std::string_view id) const {
     return indexOf(id) < themes_.size();
 }
 
-size_t ThemeStore::indexOf(const String& id) const {
+size_t ThemeStore::indexOf(std::string_view id) const {
     const auto found = std::find_if(themes_.begin(), themes_.end(), [&id](const ui::themes::Theme& theme) {
         return theme.id == id;
     });

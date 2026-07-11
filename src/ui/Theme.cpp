@@ -1,13 +1,11 @@
 #include "ui/Theme.h"
 
 #include <algorithm>
-#include <cstring>
-#include <iterator>
 
 namespace ui::themes {
     namespace {
 
-        constexpr const char* kColorRoleNames[kColorRoleCount] = {
+        constexpr std::array<std::string_view, kColorRoleCount> kColorRoleNames = {
             "background",   "foreground",  "muted",   "subtle",         "accent",         "accent_bar",
             "break_accent", "on_accent",   "surface", "surface_muted",  "surface_active", "outline",
             "guide",        "guide_focus", "phantom", "progress_track",
@@ -17,118 +15,107 @@ namespace ui::themes {
             0x0000, 0xFFFF, 0x8410, 0x528A, 0xF800, 0xF800, rgb565(68, 132, 88), 0xFFFF, 0x0000, 0x2104,
             0x4208, 0x8410, 0x8410, 0xF800, 0x8410, 0x8410,
         };
-        constexpr ReaderTypeface kDefaultThemeTypeface = ReaderTypeface::Standard;
-        constexpr bool kDefaultThemeLowBrightness = false;
 
-        bool isHex(char c) {
-            return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+        constexpr char lower(char value) {
+            return value >= 'A' && value <= 'Z' ? static_cast<char>(value - 'A' + 'a') : value;
         }
 
-        uint8_t hexValue(char c) {
-            if (c >= '0' && c <= '9') {
-                return static_cast<uint8_t>(c - '0');
-            }
-            if (c >= 'a' && c <= 'f') {
-                return static_cast<uint8_t>(10 + c - 'a');
-            }
-            if (c >= 'A' && c <= 'F') {
-                return static_cast<uint8_t>(10 + c - 'A');
-            }
-            return 0;
+        constexpr bool whitespace(char value) {
+            return value == ' ' || value == '\t' || value == '\r' || value == '\n';
         }
 
-        bool parseHexByte(const String& value, size_t offset, uint8_t& out) {
-            if (offset + 1 >= value.length() || !isHex(value[offset]) || !isHex(value[offset + 1])) {
+        std::string_view trim(std::string_view value) {
+            while (!value.empty() && whitespace(value.front()))
+                value.remove_prefix(1);
+            while (!value.empty() && whitespace(value.back()))
+                value.remove_suffix(1);
+            return value;
+        }
+
+        bool equalIgnoreCase(std::string_view left, std::string_view right) {
+            return left.size() == right.size()
+                && std::equal(left.begin(), left.end(), right.begin(), [](char a, char b) {
+                       return lower(a) == lower(b);
+                   });
+        }
+
+        bool endsWithIgnoreCase(std::string_view value, std::string_view suffix) {
+            return value.size() >= suffix.size() && equalIgnoreCase(value.substr(value.size() - suffix.size()), suffix);
+        }
+
+        bool hex(char value) {
+            return (value >= '0' && value <= '9') || (lower(value) >= 'a' && lower(value) <= 'f');
+        }
+
+        uint8_t hexValue(char value) {
+            return value >= '0' && value <= '9' ? static_cast<uint8_t>(value - '0')
+                                                : static_cast<uint8_t>(10 + lower(value) - 'a');
+        }
+
+        bool parseHexByte(std::string_view value, size_t offset, uint8_t& out) {
+            if (offset + 1 >= value.size() || !hex(value[offset]) || !hex(value[offset + 1]))
                 return false;
-            }
-            out = static_cast<uint8_t>((hexValue(value[offset]) << 4) | hexValue(value[offset + 1]));
+            out = static_cast<uint8_t>((hexValue(value[offset]) << 4U) | hexValue(value[offset + 1]));
             return true;
         }
 
-        bool parseRgb565(const String& value, uint16_t& out) {
-            if (value.length() != 6 || value[0] != '0' || (value[1] != 'x' && value[1] != 'X')) {
-                return false;
-            }
-
-            uint16_t parsed = 0;
-            for (size_t i = 2; i < value.length(); ++i) {
-                if (!isHex(value[i])) {
+        bool parseColor(std::string_view value, uint16_t& out) {
+            if (value.size() == 7 && value.front() == '#') {
+                uint8_t red = 0, green = 0, blue = 0;
+                if (!parseHexByte(value, 1, red) || !parseHexByte(value, 3, green) || !parseHexByte(value, 5, blue))
                     return false;
-                }
-                parsed = static_cast<uint16_t>((parsed << 4) | hexValue(value[i]));
+                out = rgb565(red, green, blue);
+                return true;
+            }
+            if (value.size() != 6 || value[0] != '0' || lower(value[1]) != 'x')
+                return false;
+            uint16_t parsed = 0;
+            for (const char digit: value.substr(2)) {
+                if (!hex(digit))
+                    return false;
+                parsed = static_cast<uint16_t>((parsed << 4U) | hexValue(digit));
             }
             out = parsed;
             return true;
         }
 
-        bool parseColor(const String& value, uint16_t& out) {
-            if (value.length() == 7 && value[0] == '#') {
-                uint8_t red = 0;
-                uint8_t green = 0;
-                uint8_t blue = 0;
-                if (!parseHexByte(value, 1, red) || !parseHexByte(value, 3, green) || !parseHexByte(value, 5, blue)) {
-                    return false;
-                }
-                out = rgb565(red, green, blue);
-                return true;
-            }
-
-            return parseRgb565(value, out);
-        }
-
-        String stripBom(String line) {
-            if (line.length() >= 3 && static_cast<uint8_t>(line[0]) == 0xEF && static_cast<uint8_t>(line[1]) == 0xBB
-                && static_cast<uint8_t>(line[2]) == 0xBF) {
-                line.remove(0, 3);
-            }
-            return line;
-        }
-
-        String nextLine(const String& text, size_t& offset) {
-            if (offset >= text.length()) {
-                return "";
-            }
-            int end = text.indexOf('\n', static_cast<unsigned int>(offset));
-            if (end < 0) {
-                String line = text.substring(static_cast<unsigned int>(offset));
-                offset = text.length();
-                return line;
-            }
-            String line = text.substring(static_cast<unsigned int>(offset), static_cast<unsigned int>(end));
-            offset = static_cast<size_t>(end) + 1;
-            return line;
-        }
-
-        String lowerTrimmed(String value) {
-            value.trim();
-            value.toLowerCase();
-            return value;
-        }
-
-        bool parseBool(const String& value, bool& out) {
-            const String key = lowerTrimmed(value);
-            if (key == "true" || key == "yes" || key == "1" || key == "on") {
+        bool parseBool(std::string_view value, bool& out) {
+            value = trim(value);
+            if (equalIgnoreCase(value, "true") || equalIgnoreCase(value, "yes") || value == "1"
+                || equalIgnoreCase(value, "on")) {
                 out = true;
                 return true;
             }
-            if (key == "false" || key == "no" || key == "0" || key == "off") {
+            if (equalIgnoreCase(value, "false") || equalIgnoreCase(value, "no") || value == "0"
+                || equalIgnoreCase(value, "off")) {
                 out = false;
                 return true;
             }
             return false;
         }
 
-        bool firstContentLineIsMagic(const String& text, size_t& offset, String& error) {
-            offset = 0;
-            while (offset < text.length()) {
-                String line = stripBom(nextLine(text, offset));
-                line.trim();
-                if (line.isEmpty() || line.startsWith("#")) {
+        std::string_view nextLine(std::string_view& text) {
+            const size_t end = text.find('\n');
+            if (end == std::string_view::npos) {
+                const std::string_view line = text;
+                text = {};
+                return line;
+            }
+            const std::string_view line = text.substr(0, end);
+            text.remove_prefix(end + 1);
+            return line;
+        }
+
+        bool consumeMagic(std::string_view& text, std::string& error) {
+            while (!text.empty()) {
+                std::string_view line = nextLine(text);
+                if (line.starts_with("\xEF\xBB\xBF"))
+                    line.remove_prefix(3);
+                line = trim(line);
+                if (line.empty() || line.front() == '#')
                     continue;
-                }
-                if (line == kThemeMagic) {
+                if (line == kThemeMagic)
                     return true;
-                }
                 error = "first content line must be @rtheme";
                 return false;
             }
@@ -138,48 +125,43 @@ namespace ui::themes {
 
     } // namespace
 
-    const char* colorRoleName(ColorRole role) {
-        const auto index = static_cast<size_t>(role);
-        return index < kColorRoleCount ? kColorRoleNames[index] : "";
+    std::string_view colorRoleName(ColorRole role) {
+        const size_t index = static_cast<size_t>(role);
+        return index < kColorRoleNames.size() ? kColorRoleNames[index] : std::string_view{};
     }
 
-    int colorRoleIndexForName(const String& name) {
-        const String key = lowerTrimmed(name);
-        const auto begin = std::begin(kColorRoleNames);
-        const auto end = std::end(kColorRoleNames);
-        const auto found = std::find_if(begin, end, [&key](const char* roleName) {
-            return key == roleName;
+    int colorRoleIndexForName(std::string_view name) {
+        name = trim(name);
+        const auto found = std::find_if(kColorRoleNames.begin(), kColorRoleNames.end(), [name](std::string_view role) {
+            return equalIgnoreCase(name, role);
         });
-        if (found == end) {
-            return -1;
-        }
-        return static_cast<int>(found - begin);
+        return found == kColorRoleNames.end() ? -1 : static_cast<int>(found - kColorRoleNames.begin());
     }
 
-    const char* readerTypefaceName(ReaderTypeface typeface) {
+    std::string_view readerTypefaceName(ReaderTypeface typeface) {
         switch (typeface) {
-        case ReaderTypeface::Standard:
-            return "standard";
-        case ReaderTypeface::AtkinsonHyperlegible:
-            return "atkinson";
         case ReaderTypeface::OpenDyslexic:
             return "open_dyslexic";
+        case ReaderTypeface::AtkinsonHyperlegible:
+            return "atkinson";
         default:
             return "standard";
         }
     }
 
-    bool readerTypefaceForName(const String& name, ReaderTypeface& typeface) {
-        const String key = lowerTrimmed(name);
-        if (key == "standard") {
+    bool readerTypefaceForName(std::string_view name, ReaderTypeface& typeface) {
+        name = trim(name);
+        if (equalIgnoreCase(name, "standard")) {
             typeface = ReaderTypeface::Standard;
             return true;
         }
-        if (key == "atkinson" || key == "atkinson_hyperlegible" || key == "atkinson-hyperlegible") {
+        if (equalIgnoreCase(name, "atkinson") || equalIgnoreCase(name, "atkinson_hyperlegible")
+            || equalIgnoreCase(name, "atkinson-hyperlegible")) {
             typeface = ReaderTypeface::AtkinsonHyperlegible;
             return true;
         }
-        if (key == "opendyslexic" || key == "open_dyslexic" || key == "open-dyslexic") {
+        if (equalIgnoreCase(name, "opendyslexic") || equalIgnoreCase(name, "open_dyslexic")
+            || equalIgnoreCase(name, "open-dyslexic")) {
             typeface = ReaderTypeface::OpenDyslexic;
             return true;
         }
@@ -187,66 +169,47 @@ namespace ui::themes {
     }
 
     Theme defaultTheme() {
-        Theme theme;
-        theme.id = kDefaultThemeId;
-        theme.name = "Default";
-        theme.builtIn = true;
-        theme.colors = kDefaultThemeColors;
-        theme.typeface = kDefaultThemeTypeface;
-        theme.lowBrightness = kDefaultThemeLowBrightness;
-        return theme;
+        return {std::string{kDefaultThemeId}, "Default", kDefaultThemeColors, ReaderTypeface::Standard, true, false};
     }
 
-    bool hasThemeExtension(const String& path) {
-        String lowered = path;
-        lowered.toLowerCase();
-        return lowered.endsWith(kThemeExtension);
+    bool hasThemeExtension(std::string_view path) {
+        return endsWithIgnoreCase(path, kThemeExtension);
     }
 
-    String themeIdFromPath(const String& path) {
-        const int separator = path.lastIndexOf('/');
-        String id = separator >= 0 ? path.substring(static_cast<unsigned int>(separator + 1)) : path;
-        String lowered = id;
-        lowered.toLowerCase();
-        if (lowered.endsWith(kThemeExtension)) {
-            id.remove(id.length() - std::strlen(kThemeExtension));
-        }
-        id.toLowerCase();
+    std::string themeIdFromPath(std::string_view path) {
+        const size_t separator = path.find_last_of("/\\");
+        if (separator != std::string_view::npos)
+            path.remove_prefix(separator + 1);
+        if (endsWithIgnoreCase(path, kThemeExtension))
+            path.remove_suffix(kThemeExtension.size());
+        std::string id{path};
+        std::transform(id.begin(), id.end(), id.begin(), lower);
         return id;
     }
 
-    bool parseThemeText(const String& text, const String& id, Theme& theme, String& error) {
-        size_t offset = 0;
-        if (!firstContentLineIsMagic(text, offset, error)) {
+    bool parseThemeText(std::string_view text, std::string_view id, Theme& theme, std::string& error) {
+        if (!consumeMagic(text, error))
             return false;
-        }
 
         Theme parsed;
         parsed.id = id;
         parsed.name = id;
-        std::array<bool, kColorRoleCount> seen = {};
+        std::array<bool, kColorRoleCount> seen{};
         bool hasName = false;
         bool hasTypeface = false;
 
-        while (offset < text.length()) {
-            String line = nextLine(text, offset);
-            line.trim();
-            if (line.isEmpty() || line.startsWith("#")) {
+        while (!text.empty()) {
+            std::string_view line = trim(nextLine(text));
+            if (line.empty() || line.front() == '#')
                 continue;
-            }
-
-            const int equals = line.indexOf('=');
-            if (equals <= 0) {
+            const size_t equals = line.find('=');
+            if (equals == std::string_view::npos || equals == 0)
                 continue;
-            }
+            const std::string_view key = trim(line.substr(0, equals));
+            const std::string_view value = trim(line.substr(equals + 1));
 
-            String key = line.substring(0, static_cast<unsigned int>(equals));
-            String value = line.substring(static_cast<unsigned int>(equals + 1));
-            key = lowerTrimmed(key);
-            value.trim();
-
-            if (key == "name") {
-                if (value.isEmpty()) {
+            if (equalIgnoreCase(key, "name")) {
+                if (value.empty()) {
                     error = "missing name";
                     return false;
                 }
@@ -254,7 +217,7 @@ namespace ui::themes {
                 hasName = true;
                 continue;
             }
-            if (key == "typeface") {
+            if (equalIgnoreCase(key, "typeface")) {
                 if (!readerTypefaceForName(value, parsed.typeface)) {
                     error = "typeface must be standard, open_dyslexic, or atkinson";
                     return false;
@@ -262,7 +225,7 @@ namespace ui::themes {
                 hasTypeface = true;
                 continue;
             }
-            if (key == "low_brightness") {
+            if (equalIgnoreCase(key, "low_brightness")) {
                 if (!parseBool(value, parsed.lowBrightness)) {
                     error = "low_brightness must be true or false";
                     return false;
@@ -271,13 +234,12 @@ namespace ui::themes {
             }
 
             const int roleIndex = colorRoleIndexForName(key);
-            if (roleIndex < 0) {
+            if (roleIndex < 0)
                 continue;
-            }
-
             uint16_t color = 0;
             if (!parseColor(value, color)) {
-                error = String("invalid color for ") + key;
+                error = "invalid color for ";
+                error.append(key);
                 return false;
             }
             parsed.colors[static_cast<size_t>(roleIndex)] = color;
@@ -292,14 +254,13 @@ namespace ui::themes {
             error = "missing typeface";
             return false;
         }
-
         const auto missing = std::find(seen.begin(), seen.end(), false);
         if (missing != seen.end()) {
-            error = String("missing color ") + kColorRoleNames[missing - seen.begin()];
+            error = "missing color ";
+            error.append(kColorRoleNames[missing - seen.begin()]);
             return false;
         }
-
-        theme = parsed;
+        theme = std::move(parsed);
         return true;
     }
 

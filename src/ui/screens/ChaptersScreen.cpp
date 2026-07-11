@@ -1,24 +1,228 @@
+#include "ui/screens/ChaptersScreen.h"
+
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+
 #include "ui/screens/ScreenCommon.h"
 
 namespace screens {
 
-    Action chapters(ui::Context& ui, std::span<const ChapterMarker> chapters, ReadingLoop& reader, Screen& screen) {
-        ui::Column column{detail::content(ui), 4};
-        if (ui.button(column.next(22), "Back")) {
+    namespace {
+
+        constexpr int16_t kHeaderHeight = 24;
+        constexpr int16_t kRowStep = 30;
+        constexpr int16_t kDragThreshold = 5;
+        constexpr int32_t kMaximumVelocity = 400'000;
+        constexpr uint32_t kAccelerationMs = 450;
+        constexpr int32_t kScrollScale = 1'000'000;
+
+    } // namespace
+
+    Action ChaptersScreen::draw(ui::Context& ui, std::span<const ChapterMarker> chapters, ReadingLoop& reader,
+                                const ReaderSettings& settings, uint32_t nowMs, Screen& screen) {
+        if (const Action action = detail::navigation(ui, Screen::Chapters, screen); action != Action::None)
+            return action;
+
+        const ui::Rect content = detail::content(ui);
+        if (ui.button({content.x, content.y, 64, kHeaderHeight}, "Back")) {
             screen = Screen::Read;
+            dragging_ = false;
             return Action::None;
         }
-        const size_t visible = std::min<size_t>(chapters.size(), std::max<int16_t>(0, (column.bounds.h - 26) / 22));
-        for (size_t index = 0; index < visible; ++index) {
-            const std::string& title = chapters[index].title;
-            if (ui.button(column.next(18), title.empty() ? "Chapter" : std::string_view{title})) {
-                reader.seekTo(chapters[index].wordIndex);
+
+        size_t readingIndex = 0;
+        while (readingIndex + 1 < chapters.size()
+               && chapters[readingIndex + 1].wordIndex <= reader.currentIndex()) {
+            ++readingIndex;
+        }
+
+        if (source_ != chapters.data() || sourceCount_ != chapters.size()) {
+            source_ = chapters.data();
+            sourceCount_ = chapters.size();
+            centeredIndex_ = readingIndex;
+            offset_ = 0;
+            dragging_ = false;
+        }
+
+        char position[24];
+        std::snprintf(position, sizeof(position), "%u / %u",
+                      static_cast<unsigned>(chapters.empty() ? 0 : centeredIndex_ + 1),
+                      static_cast<unsigned>(chapters.size()));
+        const int16_t positionWidth = std::min<int16_t>(84, content.w / 4);
+        ui.label({static_cast<int16_t>(content.x + 68), content.y,
+                  static_cast<int16_t>(std::max<int16_t>(0, content.w - positionWidth - 72)), kHeaderHeight},
+                 "Chapters", 2, ui::themes::ColorRole::Foreground, ui::TextAlign::Center);
+        ui.label({static_cast<int16_t>(content.x + content.w - positionWidth), content.y, positionWidth, kHeaderHeight},
+                 position, 1, ui::themes::ColorRole::Muted, ui::TextAlign::Right);
+
+        const ui::Rect viewport{content.x, static_cast<int16_t>(content.y + kHeaderHeight + 4), content.w,
+                                static_cast<int16_t>(content.h - kHeaderHeight - 4)};
+        if (chapters.empty()) {
+            if (ui.button(viewport, "Start reading")) {
+                reader.seekTo(0);
+                return Action::Resume;
+            }
+            return Action::None;
+        }
+
+        const ui::Touch* touch = ui.touch();
+        if (touch != nullptr && ui::hasTouch(*touch, ui::TouchStart) && ui::contains(viewport, touch->x, touch->y)) {
+            dragging_ = true;
+            dragStartIndex_ = centeredIndex_;
+            lastY_ = touch->y;
+            dragDistance_ = 0;
+            lastTickMs_ = nowMs;
+            velocity_ = 0;
+            scrollRemainder_ = 0;
+        }
+        if (dragging_ && touch != nullptr && ui::hasTouch(*touch, ui::TouchMove)) {
+            const int16_t delta = static_cast<int16_t>(touch->y) - static_cast<int16_t>(lastY_);
+            dragDistance_ = static_cast<uint16_t>(std::min<int>(UINT16_MAX, dragDistance_ + std::abs(delta)));
+            lastY_ = touch->y;
+        }
+
+        const int16_t centerY = static_cast<int16_t>(viewport.y + viewport.h / 2);
+        if (dragging_ && touch != nullptr && ui::hasTouch(*touch, ui::TouchRelease)
+            && ui::hasTouch(*touch, ui::TouchTap) && ui::contains(viewport, touch->x, touch->y)) {
+            dragging_ = false;
+            offset_ = 0;
+            velocity_ = 0;
+            scrollRemainder_ = 0;
+            centeredIndex_ = dragStartIndex_;
+            if (touch->y < centerY - kRowStep / 2) {
+                if (centeredIndex_ > 0)
+                    --centeredIndex_;
+            } else if (touch->y >= centerY + kRowStep / 2) {
+                if (centeredIndex_ + 1 < chapters.size())
+                    ++centeredIndex_;
+            } else {
+                reader.seekTo(chapters[centeredIndex_].wordIndex);
                 return Action::Resume;
             }
         }
-        if (chapters.empty() && ui.button(column.next(22), "Start")) {
-            reader.seekTo(0);
-            return Action::Resume;
+
+        if (dragging_) {
+            const uint32_t elapsed = std::min<uint32_t>(nowMs - lastTickMs_, 100);
+            lastTickMs_ = nowMs;
+            const int32_t halfHeight = std::max<int16_t>(1, viewport.h / 2);
+            const int32_t center = viewport.y + halfHeight;
+            const int32_t distance = std::clamp<int32_t>(static_cast<int32_t>(lastY_) - center, -halfHeight,
+                                                         halfHeight);
+            const int32_t deadzone = std::min<int32_t>(kRowStep / 2, halfHeight - 1);
+            const int32_t magnitude = std::abs(distance);
+            if (dragDistance_ > kDragThreshold && magnitude > deadzone) {
+                const int32_t activeDistance = (distance < 0 ? -1 : 1) * (magnitude - deadzone);
+                const int32_t activeRange = halfHeight - deadzone;
+                const int32_t direction = settings.chapterScrollReversed ? 1 : -1;
+                const int32_t target =
+                    direction * static_cast<int32_t>(static_cast<int64_t>(kMaximumVelocity) * activeDistance
+                                                     * std::abs(activeDistance) / (activeRange * activeRange));
+                velocity_ +=
+                    static_cast<int32_t>(static_cast<int64_t>(target - velocity_) * elapsed / kAccelerationMs);
+                scrollRemainder_ += static_cast<int32_t>(static_cast<int64_t>(velocity_) * elapsed);
+                const int16_t pixels = static_cast<int16_t>(scrollRemainder_ / kScrollScale);
+                scrollRemainder_ %= kScrollScale;
+                offset_ = static_cast<int16_t>(offset_ + pixels);
+            } else {
+                velocity_ = 0;
+                scrollRemainder_ = 0;
+                if (dragDistance_ > kDragThreshold)
+                    offset_ = 0;
+            }
+        }
+
+        while (offset_ <= -kRowStep / 2 && centeredIndex_ + 1 < chapters.size()) {
+            ++centeredIndex_;
+            offset_ = static_cast<int16_t>(offset_ + kRowStep);
+        }
+        while (offset_ >= kRowStep / 2 && centeredIndex_ > 0) {
+            --centeredIndex_;
+            offset_ = static_cast<int16_t>(offset_ - kRowStep);
+        }
+        if (centeredIndex_ == 0) {
+            offset_ = std::min<int16_t>(offset_, 0);
+            if (velocity_ > 0)
+                velocity_ = scrollRemainder_ = 0;
+        }
+        if (centeredIndex_ + 1 == chapters.size()) {
+            offset_ = std::max<int16_t>(offset_, 0);
+            if (velocity_ < 0)
+                velocity_ = scrollRemainder_ = 0;
+        }
+
+        if (dragging_ && touch != nullptr && ui::hasTouch(*touch, ui::TouchRelease)) {
+            dragging_ = false;
+            offset_ = 0;
+            velocity_ = 0;
+            scrollRemainder_ = 0;
+        }
+
+        uint32_t state = ui::Context::combine(static_cast<uint32_t>(chapters.size()), centeredIndex_);
+        state = ui::Context::combine(state, static_cast<uint16_t>(offset_));
+        state = ui::Context::combine(state, static_cast<uint32_t>(readingIndex));
+        const size_t first = centeredIndex_ > 4 ? centeredIndex_ - 4 : 0;
+        const size_t last = std::min(chapters.size(), centeredIndex_ + 5);
+        for (size_t index = first; index < last; ++index)
+            state = ui::Context::signature(
+                chapters[index].title,
+                ui::Context::combine(state, static_cast<uint32_t>(chapters[index].wordIndex)));
+
+        if (ui.redraw(viewport, state)) {
+            Arduino_GFX& gfx = ui.gfx();
+            const int16_t halfHeight = std::max<int16_t>(1, viewport.h / 2);
+            const int16_t maximumWidth = std::max<int16_t>(40, static_cast<int16_t>(viewport.w - 20));
+            const uint16_t background = ui.color(ui::themes::ColorRole::Background);
+            for (size_t index = first; index < last; ++index) {
+                const int raw = (static_cast<int>(index) - static_cast<int>(centeredIndex_)) * kRowStep + offset_;
+                const int magnitude = std::min<int>(std::abs(raw), viewport.h);
+                const int curved = raw * (2 * viewport.h - magnitude) / (2 * viewport.h);
+                const int16_t y = static_cast<int16_t>(centerY + curved);
+                const bool centered = index == centeredIndex_;
+                const uint8_t alpha = centered
+                                        ? 255
+                                        : static_cast<uint8_t>(std::max(48, 220 - std::abs(curved) * 172 / halfHeight));
+                const int16_t height = centered ? 28 : 18;
+                const int16_t width = centered
+                                        ? maximumWidth
+                                        : static_cast<int16_t>(maximumWidth
+                                                               - std::min<int>(std::abs(curved), halfHeight)
+                                                                     * (maximumWidth / 3) / halfHeight);
+                const int16_t x = static_cast<int16_t>(viewport.x + (viewport.w - width) / 2);
+                const int16_t top = static_cast<int16_t>(y - height / 2);
+                if (top < viewport.y || top + height > viewport.y + viewport.h)
+                    continue;
+                const int16_t right = static_cast<int16_t>(x + width - 1);
+                const int16_t notch = std::min<int16_t>(10, height / 2);
+                const uint16_t surface = centered ? ui.color(ui::themes::ColorRole::SurfaceActive)
+                                                  : ui.blend(ui::themes::ColorRole::SurfaceMuted, alpha);
+                const uint16_t outline = centered ? ui.color(ui::themes::ColorRole::Outline)
+                                                  : ui.blend(ui::themes::ColorRole::Outline, alpha);
+                gfx.fillRoundRect(x, top, width, height, 5, surface);
+                if (index == readingIndex) {
+                    const int16_t tailLeft = static_cast<int16_t>(right - notch - 6);
+                    gfx.fillRect(tailLeft, top, static_cast<int16_t>(right - tailLeft + 1), height,
+                                 centered ? ui.color(ui::themes::ColorRole::Accent)
+                                          : ui.blend(ui::themes::ColorRole::Accent, alpha));
+                }
+                gfx.drawRoundRect(x, top, width, height, 5, outline);
+                gfx.fillTriangle(static_cast<int16_t>(right - notch), y, right, top, right,
+                                 static_cast<int16_t>(top + height - 1), background);
+                gfx.drawLine(static_cast<int16_t>(right - notch), y, right, top, outline);
+                gfx.drawLine(static_cast<int16_t>(right - notch), y, right,
+                             static_cast<int16_t>(top + height - 1), outline);
+                if (centered)
+                    gfx.fillRect(static_cast<int16_t>(x + 4), static_cast<int16_t>(top + 3), 3,
+                                 static_cast<int16_t>(height - 6), ui.color(ui::themes::ColorRole::Accent));
+
+                char fallback[24];
+                std::snprintf(fallback, sizeof(fallback), "Chapter %u", static_cast<unsigned>(index + 1));
+                const std::string_view title = chapters[index].title.empty() ? std::string_view{fallback}
+                                                                             : std::string_view{chapters[index].title};
+                ui.drawText({static_cast<int16_t>(x + 10), top, static_cast<int16_t>(width - notch - 24), height},
+                            title, centered ? 2 : 1, ui.blend(ui::themes::ColorRole::Foreground, alpha),
+                            ui::TextAlign::Center);
+            }
         }
         return Action::None;
     }

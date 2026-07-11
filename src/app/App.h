@@ -8,6 +8,7 @@
 #include "storage/StorageManager.h"
 #include "sync/CompanionSyncManager.h"
 #include "ui/Ui.h"
+#include "ui/screens/ChaptersScreen.h"
 #include "ui/screens/LibraryScreen.h"
 #include "ui/screens/ReaderScreen.h"
 #include "ui/screens/Screens.h"
@@ -37,6 +38,7 @@ private:
     ui::Context immediateUi_{Board::Display::gfx(), &Board::Display::flush, &Board::Display::flushRegion};
     screens::ReaderScreen readerScreen_{Board::Display::gfx()};
     screens::LibraryScreen libraryScreen_;
+    screens::ChaptersScreen chaptersScreen_;
     screens::DisplayScreen displayScreen_;
     StorageManager storage_;
     CompanionSyncManager sync_;

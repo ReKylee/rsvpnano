@@ -25,6 +25,7 @@ struct ReaderSettings {
     uint8_t typefaceIndex = 0;
     PauseMode pauseMode = PauseMode::SentenceEnd;
     bool phantomWords = true;
+    bool chapterScrollReversed = false;
 };
 
 struct ReaderSession {

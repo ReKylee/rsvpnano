@@ -136,7 +136,8 @@ void App::renderScreen(uint32_t nowMs) {
         break;
     case screens::Screen::Chapters:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        action = screens::chapters(immediateUi_, readerScreen_.book.metadata.chapters, readerScreen_.reader, screen_);
+        action = chaptersScreen_.draw(immediateUi_, readerScreen_.book.metadata.chapters, readerScreen_.reader,
+                                      readerScreen_.session.settings, nowMs, screen_);
         break;
     case screens::Screen::Settings:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));

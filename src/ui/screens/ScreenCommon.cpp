@@ -13,7 +13,8 @@ namespace screens::detail {
             return Action::None;
         }
 
-        if (ui.tab({0, 0, kRailWidth, 53}, "Read", active == Screen::Read || active == Screen::Library,
+        if (ui.tab({0, 0, kRailWidth, 53}, "Read",
+                   active == Screen::Read || active == Screen::Library || active == Screen::Chapters,
                    ui::Icon::Books)) {
             screen = Screen::Read;
         }

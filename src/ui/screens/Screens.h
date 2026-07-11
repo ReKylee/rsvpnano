@@ -57,7 +57,6 @@ namespace screens {
     };
 
     Action read(ui::Context& ui, const ReadModel& model, Screen& screen);
-    Action chapters(ui::Context& ui, std::span<const ChapterMarker> chapters, ReadingLoop& reader, Screen& screen);
     Action settings(ui::Context& ui, Screen& screen);
     void readingSettings(ui::Context& ui, ReadingLoop& reader, ReaderSettings& settings, Preferences& preferences,
                          Screen& screen);

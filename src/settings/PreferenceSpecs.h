@@ -31,6 +31,8 @@ namespace settings {
 
         struct PhantomWords : Scalar<"phantom_on", bool, true> {};
 
+        struct ChapterScrollReversed : Scalar<"ch_scroll_rev", bool, false> {};
+
         struct FooterMetricMode : Scalar<"prog_md", uint8_t, 0> {};
 
         struct BatteryLabelMode : Scalar<"bat_md", uint8_t, 0> {};

@@ -593,7 +593,8 @@ namespace EpubContent {
 
         const bool skipTag = isSkipTag(tagInfo.name);
 
-        // Skip ignored tag subtrees without letting their text reach the output buffer.
+        // Skip ignored tag subtrees without letting their text reach the output
+        // buffer.
         {
             if (skipDepth_ > 0) {
                 if (!tagInfo.closing && skipTag && !tagInfo.selfClosing) {
@@ -652,9 +653,10 @@ namespace EpubContent {
         if (c == ';') {
             mode_ = Mode::Text;
             const String decoded = decodedEntityText(entity_);
-            const bool processed = std::all_of(decoded.c_str(), decoded.c_str() + decoded.length(), [&](char decodedChar) {
-                return processDecodedText(decodedChar);
-            });
+            const bool processed =
+                std::all_of(decoded.c_str(), decoded.c_str() + decoded.length(), [&](char decodedChar) {
+                    return processDecodedText(decodedChar);
+                });
             if (!processed) {
                 return false;
             }

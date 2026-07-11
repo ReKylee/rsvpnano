@@ -28,8 +28,8 @@ namespace ReadingProgress {
         uint32_t lastSaveMs = 0;
         bool fromStorage = false;
 
-        void save(Preferences& preferences, const IndexedBookStore& store, const ReadingLoop& reader,
-                  bool force, uint32_t nowMs);
+        void save(Preferences& preferences, const IndexedBookStore& store, const ReadingLoop& reader, bool force,
+                  uint32_t nowMs);
         void cache(Preferences& preferences, const IndexedBookStore& store, const ReadingLoop& reader,
                    uint32_t wordIndex);
         void mirror(const IndexedBookStore& store, const ReadingLoop& reader) const;

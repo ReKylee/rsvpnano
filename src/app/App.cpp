@@ -26,9 +26,9 @@ void App::begin() {
     Input::begin();
     bootMs_ = millis();
     lastActivityMs_ = bootMs_;
-    immediateUi_.setTouchSource({Board::Input::touchSurface(), Board::Input::touchTiming(),
-                                 &Board::Input::beginTouch, &Board::Input::touchReady,
-                                 &Board::Input::readTouch, &Board::Imu::uiOrientation}, bootMs_);
+    immediateUi_.setTouchSource({Board::Input::touchSurface(), Board::Input::touchTiming(), &Board::Input::beginTouch,
+                                 &Board::Input::touchReady, &Board::Input::readTouch, &Board::Imu::uiOrientation},
+                                bootMs_);
 
     if (!Board::Display::begin()) {
         Serial.println("[app] display init failed");
@@ -70,7 +70,8 @@ void App::update(uint32_t nowMs) {
     }
     if (screen_ == screens::Screen::FocusSession) {
         focusScreen_.timer.update(nowMs);
-        if (focusScreen_.timer.consumeCompletionCue()) Board::Audio::beep();
+        if (focusScreen_.timer.consumeCompletionCue())
+            Board::Audio::beep();
     }
     readerScreen_.book.save(prefs_, readerScreen_.store, readerScreen_.reader, false, nowMs);
 
@@ -96,8 +97,8 @@ void App::renderScreen(uint32_t nowMs) {
         immediateUi_.endFrame();
         return;
     case screens::Screen::Library: {
-        const auto& items = libraryScreen_.items(storage_, readerScreen_.store, readerScreen_.reader,
-                                                 readerScreen_.book, prefs_);
+        const auto& items =
+            libraryScreen_.items(storage_, readerScreen_.store, readerScreen_.reader, readerScreen_.book, prefs_);
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         const screens::LibraryResult result = libraryScreen_.draw(immediateUi_, items, nowMs, screen_);
         immediateUi_.endFrame();
@@ -125,10 +126,11 @@ void App::renderScreen(uint32_t nowMs) {
         return;
     case screens::Screen::Read:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        action = screens::read(
-            immediateUi_, {readerScreen_.book.title(storage_), ReadingProgress::percent(
-                readerScreen_.reader.currentIndex(), readerScreen_.reader.wordCount())},
-            screen_);
+        action = screens::read(immediateUi_,
+                               {readerScreen_.book.title(storage_),
+                                ReadingProgress::percent(readerScreen_.reader.currentIndex(),
+                                                         readerScreen_.reader.wordCount())},
+                               screen_);
         break;
     case screens::Screen::Chapters:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
@@ -186,15 +188,18 @@ void App::renderScreen(uint32_t nowMs) {
     }
     immediateUi_.endFrame();
     if (screen_ != renderedScreen) {
-        if (screen_ == screens::Screen::Library) libraryScreen_.reset();
-        if (screen_ == screens::Screen::FocusGenres) focusScreen_.timer.open();
+        if (screen_ == screens::Screen::Library)
+            libraryScreen_.reset();
+        if (screen_ == screens::Screen::FocusGenres)
+            focusScreen_.timer.open();
     }
     handleScreenAction(action, nowMs);
 }
 
 void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
     switch (action) {
-    case screens::Action::None: return;
+    case screens::Action::None:
+        return;
     case screens::Action::Resume:
         readerScreen_.reader.pause();
         screen_ = screens::Screen::Reader;
@@ -207,16 +212,24 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
         sync_.begin();
         renderScreen(nowMs);
         return;
-    case screens::Action::RssRefresh: runRss(); return;
-    case screens::Action::UsbTransfer: enterUsbTransfer(nowMs); return;
+    case screens::Action::RssRefresh:
+        runRss();
+        return;
+    case screens::Action::UsbTransfer:
+        enterUsbTransfer(nowMs);
+        return;
     case screens::Action::StorageStatus:
         screens::status(immediateUi_, "Storage", storage_.mounted() ? "SD ready" : "SD unavailable",
                         (String(static_cast<unsigned int>(storage_.bookCount())) + " library entries").c_str());
         delay(1200);
         renderScreen(nowMs);
         break;
-    case screens::Action::OtaCheck: runOtaCheck(false); return;
-    case screens::Action::OtaInstall: runOtaCheck(true); return;
+    case screens::Action::OtaCheck:
+        runOtaCheck(false);
+        return;
+    case screens::Action::OtaInstall:
+        runOtaCheck(true);
+        return;
     }
 }
 
@@ -257,8 +270,7 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
                 screen_ = screens::Screen::Reader;
             } else if (screen_ == screens::Screen::Sync || screen_ == screens::Screen::Ota) {
                 screen_ = screens::Screen::Device;
-            } else if (screen_ == screens::Screen::ReadingSettings
-                       || screen_ == screens::Screen::DisplaySettings
+            } else if (screen_ == screens::Screen::ReadingSettings || screen_ == screens::Screen::DisplaySettings
                        || screen_ == screens::Screen::PacingSettings
                        || screen_ == screens::Screen::TypographySettings) {
                 screen_ = screens::Screen::Settings;
@@ -285,7 +297,8 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
 
 void App::handleTouch(uint32_t nowMs) {
     const ui::Touch* touch = immediateUi_.touch();
-    if (touch == nullptr) return;
+    if (touch == nullptr)
+        return;
     if (screen_ == screens::Screen::Standby) {
         exitStandby(nowMs);
         return;
@@ -298,7 +311,8 @@ void App::handleTouch(uint32_t nowMs) {
         return;
     }
     if (sync_.active() || usbTransfer_.active() || screen_ == screens::Screen::Status
-        || screen_ == screens::Screen::FocusSession) return;
+        || screen_ == screens::Screen::FocusSession)
+        return;
     if (screen_ == screens::Screen::Reader) {
         readerScreen_.handleTouch(immediateUi_, nowMs, prefs_);
     } else {

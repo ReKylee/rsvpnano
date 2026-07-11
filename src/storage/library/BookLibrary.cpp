@@ -1,8 +1,8 @@
 #include "storage/library/BookLibrary.h"
 
-#include "board/BoardStorage.h"
 #include <algorithm>
 #include <vector>
+#include "board/BoardStorage.h"
 
 #include "storage/fs/StoragePaths.h"
 #include "storage/library/EpubCache.h"

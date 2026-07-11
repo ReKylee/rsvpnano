@@ -7,41 +7,52 @@
 
 namespace Board::Imu {
 
-namespace {
+    namespace {
 
-ui::Orientation gUiOrientation = WaveshareLcd349::DisplayWiring::kDefaultUiOrientation;
+        ui::Orientation gUiOrientation = WaveshareLcd349::DisplayWiring::kDefaultUiOrientation;
 
-TwoWire &imuWire() { return Wire1; }
+        TwoWire& imuWire() {
+            return Wire1;
+        }
 
-}  // namespace
+    } // namespace
 
-bool available() { return true; }
+    bool available() {
+        return true;
+    }
 
-const char *wireName() { return "Wire1"; }
+    const char* wireName() {
+        return "Wire1";
+    }
 
-uint8_t address() { return WaveshareLcd349::ImuWiring::kAddress; }
+    uint8_t address() {
+        return WaveshareLcd349::ImuWiring::kAddress;
+    }
 
-ui::Orientation uiOrientation() { return gUiOrientation; }
+    ui::Orientation uiOrientation() {
+        return gUiOrientation;
+    }
 
-void setUiOrientation(ui::Orientation orientation) { gUiOrientation = orientation; }
+    void setUiOrientation(ui::Orientation orientation) {
+        gUiOrientation = orientation;
+    }
 
-bool probeAddress(uint8_t candidateAddress) {
-  return BoardDrivers::Qmi8658::probeAddress(imuWire(), candidateAddress);
-}
+    bool probeAddress(uint8_t candidateAddress) {
+        return BoardDrivers::Qmi8658::probeAddress(imuWire(), candidateAddress);
+    }
 
-bool readRegister(uint8_t deviceAddress, uint8_t reg, uint8_t &value) {
-  return BoardDrivers::Qmi8658::readRegister(
-      imuWire(), deviceAddress, reg, value, WaveshareLcd349::ImuWiring::kReleaseBusBeforeRead);
-}
+    bool readRegister(uint8_t deviceAddress, uint8_t reg, uint8_t& value) {
+        return BoardDrivers::Qmi8658::readRegister(imuWire(), deviceAddress, reg, value,
+                                                   WaveshareLcd349::ImuWiring::kReleaseBusBeforeRead);
+    }
 
-bool writeRegister(uint8_t deviceAddress, uint8_t reg, uint8_t value) {
-  return BoardDrivers::Qmi8658::writeRegister(imuWire(), deviceAddress, reg, value);
-}
+    bool writeRegister(uint8_t deviceAddress, uint8_t reg, uint8_t value) {
+        return BoardDrivers::Qmi8658::writeRegister(imuWire(), deviceAddress, reg, value);
+    }
 
-bool readRegisters(uint8_t deviceAddress, uint8_t startReg, uint8_t *buffer, size_t len) {
-  return BoardDrivers::Qmi8658::readRegisters(
-      imuWire(), deviceAddress, startReg, buffer, len,
-      WaveshareLcd349::ImuWiring::kReleaseBusBeforeRead);
-}
+    bool readRegisters(uint8_t deviceAddress, uint8_t startReg, uint8_t* buffer, size_t len) {
+        return BoardDrivers::Qmi8658::readRegisters(imuWire(), deviceAddress, startReg, buffer, len,
+                                                    WaveshareLcd349::ImuWiring::kReleaseBusBeforeRead);
+    }
 
-}  // namespace Board::Imu
+} // namespace Board::Imu

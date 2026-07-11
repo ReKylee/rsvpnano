@@ -3,15 +3,15 @@
 #include "board/BacklightBrightness.h"
 
 #include <Arduino.h>
-#include <algorithm>
 #include <Wire.h>
+#include <algorithm>
 #include <driver/gpio.h>
 #include <esp_heap_caps.h>
 #include <esp_memory_utils.h>
 
+#include "display/RowPrefixCanvas.h"
 #include "drivers/gpio/tca9554/Tca9554.h"
 #include "platforms/waveshare_lcd_349/WaveshareLcd349.h"
-#include "display/RowPrefixCanvas.h"
 
 namespace {
 
@@ -21,13 +21,12 @@ namespace {
                            WaveshareLcd349::DisplayWiring::kData0Pin, WaveshareLcd349::DisplayWiring::kData1Pin,
                            WaveshareLcd349::DisplayWiring::kData2Pin, WaveshareLcd349::DisplayWiring::kData3Pin, false);
 
-
     Arduino_AXS15231B gPanel(&gBus, WaveshareLcd349::DisplayWiring::kResetPin, 0, false,
                              WaveshareLcd349::DisplayWiring::kPanelWidth, WaveshareLcd349::DisplayWiring::kPanelHeight,
                              0, 0, 0, 0);
 
-    RowPrefixCanvas gCanvas(WaveshareLcd349::DisplayWiring::kPanelWidth,
-                             WaveshareLcd349::DisplayWiring::kPanelHeight, &gPanel, 0, 0, 1);
+    RowPrefixCanvas gCanvas(WaveshareLcd349::DisplayWiring::kPanelWidth, WaveshareLcd349::DisplayWiring::kPanelHeight,
+                            &gPanel, 0, 0, 1);
 
     // This panel's PWM curve has a large dead zone at low duty values.
     // Keep the user-facing brightness scale at 1-100%, but map it onto
@@ -105,7 +104,6 @@ namespace Board::Display {
         logCanvasMemory();
 
         writeBacklight();
-
 
         gCanvas.fillScreen(0x0000);
         gCanvas.flush();

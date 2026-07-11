@@ -1,8 +1,8 @@
 #include "converter/EpubZip.h"
 
-#include "board/BoardStorage.h"
 #include <algorithm>
 #include <array>
+#include "board/BoardStorage.h"
 #if __has_include(<miniz.h>)
 #include <miniz.h>
 #elif __has_include(<esp_rom/miniz.h>)
@@ -32,7 +32,6 @@ namespace EpubZip {
         constexpr uint16_t kMaxZipNameLength = 512;
         constexpr size_t kReadChunkBytes = 4096;
         constexpr size_t kInflateInputChunkBytes = 4096;
-
 
         uint16_t readLe16(const uint8_t* data) {
             return static_cast<uint16_t>(data[0]) | (static_cast<uint16_t>(data[1]) << 8);
@@ -193,7 +192,8 @@ namespace EpubZip {
             tinfl_decompressor* inflator =
                 static_cast<tinfl_decompressor*>(allocateInternalBuffer(sizeof(tinfl_decompressor)));
             if (inputBuffer == nullptr || dictionary == nullptr || inflator == nullptr) {
-                Serial.printf("[epub-zip] No internal inflate buffers for %s: %s input=%s dict=%s inflator=%s\n",
+                Serial.printf("[epub-zip] No internal inflate buffers for %s: %s input=%s "
+                              "dict=%s inflator=%s\n",
                               context, entry.name.c_str(), inputBuffer == nullptr ? "no" : "yes",
                               dictionary == nullptr ? "no" : "yes", inflator == nullptr ? "no" : "yes");
                 freeBuffer(inputBuffer);
@@ -388,7 +388,8 @@ namespace EpubZip {
         uint16_t entryCount = 0;
         uint32_t centralDirectoryOffset = 0;
 
-        // Locate and validate the end-of-central-directory record before parsing entries.
+        // Locate and validate the end-of-central-directory record before parsing
+        // entries.
         {
             const size_t tailSize = fileSize < kZipEocdMaxSearch ? static_cast<size_t>(fileSize) : kZipEocdMaxSearch;
             uint8_t* tail = static_cast<uint8_t*>(allocateBuffer(tailSize));
@@ -669,6 +670,5 @@ namespace EpubZip {
         reportMaybe(true);
         return finishWriter();
     }
-
 
 } // namespace EpubZip

@@ -6,18 +6,18 @@
 
 namespace standby {
 
-enum class Kind {
-  Life,
-  Maze,
-  Voronoi,
-};
+    enum class Kind {
+        Life,
+        Maze,
+        Voronoi,
+    };
 
-struct Frame {
-  PackedGridView cells{};      // bright/live cells, packed bits
-  PackedGridView dimCells{};   // optional dim layer, packed bits
-  PackedGridView dirtyCells{}; // cells that changed; invalid means redraw all
-  uint32_t generation = 0;
-  bool fullRedraw = true;
-};
+    struct Frame {
+        PackedGridView cells{}; // bright/live cells, packed bits
+        PackedGridView dimCells{}; // optional dim layer, packed bits
+        PackedGridView dirtyCells{}; // cells that changed; invalid means redraw all
+        uint32_t generation = 0;
+        bool fullRedraw = true;
+    };
 
-}  // namespace standby
+} // namespace standby

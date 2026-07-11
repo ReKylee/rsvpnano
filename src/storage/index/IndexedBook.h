@@ -8,8 +8,8 @@
 
 namespace IndexedBook {
 
-    using StatusCallback =
-        void (*)(void* context, const char* title, const char* line1, const char* line2, int progressPercent);
+    using StatusCallback = void (*)(void* context, const char* title, const char* line1, const char* line2,
+                                    int progressPercent);
 
     struct OpenRequest {
         String* loadedPath = nullptr;
@@ -20,10 +20,7 @@ namespace IndexedBook {
         void* statusContext = nullptr;
     };
 
-    bool load(size_t index,
-              BookLibrary::Listing& library,
-              IndexedBookStore& store,
-              BookMetadata& metadata,
+    bool load(size_t index, BookLibrary::Listing& library, IndexedBookStore& store, BookMetadata& metadata,
               const OpenRequest& request);
     bool readMetadata(const String& path, BookMetadata& metadata, IndexedBookStore::Header* headerOut = nullptr);
 

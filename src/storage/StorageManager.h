@@ -32,7 +32,9 @@ public:
     void end();
     void listBooks();
     void refreshBooks(bool includeMetadata = true);
-    bool mounted() const { return mounted_; }
+    bool mounted() const {
+        return mounted_;
+    }
     bool loadIndexedBook(size_t index, IndexedBookStore& store, BookMetadata& metadata,
                          const IndexedBookLoadOptions& options = IndexedBookLoadOptions());
     size_t bookCount() const;

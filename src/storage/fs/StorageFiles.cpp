@@ -1,19 +1,15 @@
 #include "storage/fs/StorageFiles.h"
 
-#include "board/BoardStorage.h"
 #include <cerrno>
 #include <cstring>
+#include "board/BoardStorage.h"
 
 namespace StorageFiles {
     namespace {
 
         void logErrorMessage(const char* tag, const char* operation, const String& target, int error) {
             if (error != 0) {
-                Serial.printf("[%s] %s failed %s errno=%d (%s)\n",
-                              tag,
-                              operation,
-                              target.c_str(),
-                              error,
+                Serial.printf("[%s] %s failed %s errno=%d (%s)\n", tag, operation, target.c_str(), error,
                               std::strerror(error));
             } else {
                 Serial.printf("[%s] %s failed %s errno=0\n", tag, operation, target.c_str());
@@ -26,8 +22,8 @@ namespace StorageFiles {
         logErrorMessage(tag, operation, String("path=") + path, error);
     }
 
-    void
-    logError(const char* tag, const char* operation, const String& sourcePath, const String& targetPath, int error) {
+    void logError(const char* tag, const char* operation, const String& sourcePath, const String& targetPath,
+                  int error) {
         logErrorMessage(tag, operation, String("from=") + sourcePath + " to=" + targetPath, error);
     }
 

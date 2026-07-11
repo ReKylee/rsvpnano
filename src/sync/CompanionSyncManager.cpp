@@ -1,11 +1,11 @@
 #include "sync/CompanionSyncManager.h"
 
 #include <ESPmDNS.h>
-#include "board/BoardStorage.h"
 #include <WiFi.h>
 #include <algorithm>
 #include <cstdio>
 #include <vector>
+#include "board/BoardStorage.h"
 
 #include "display/ThemeStore.h"
 #include "fonts/FontCatalog.h"
@@ -19,100 +19,100 @@
 
 namespace {
 
-namespace pref = settings::prefs;
+    namespace pref = settings::prefs;
 
-constexpr const char *kMdnsName = "rsvp-nano";
-constexpr const char *kRssConfigPath = "/config/rss.conf";
-constexpr size_t kMaxMetadataLineChars = 160;
-constexpr size_t kMaxSettingsPatchBytes = 8192;
-constexpr size_t kMaxRssFeedsPatchBytes = 4096;
-constexpr size_t kMaxThemeUploadBytes = 4096;
-constexpr size_t kMaxFontUploadBytes = 2UL * 1024UL * 1024UL;
-constexpr size_t kMaxRssFeeds = 24;
-constexpr uint16_t kDefaultWpm = 300;
-constexpr uint16_t kMinWpm = 10;
-constexpr uint16_t kMaxWpm = 1000;
-constexpr uint8_t kDefaultBrightness = 13;
-constexpr uint8_t kMaxBrightness = 19;
-constexpr uint8_t kMaxUiLanguage = 5;
-constexpr uint8_t kMaxReaderMode = 1;
-constexpr uint8_t kMaxHandedness = 1;
-constexpr uint8_t kMaxFooterMetric = 2;
-constexpr uint8_t kMaxBatteryLabel = 2;
-constexpr uint8_t kMaxReaderFontSize = 2;
-constexpr uint8_t kMaxPauseMode = 1;
-constexpr uint16_t kDefaultPacingDelayMs = 200;
-constexpr uint16_t kMaxPacingDelayMs = 600;
-constexpr int8_t kMinTypographyTracking = -2;
-constexpr int8_t kMaxTypographyTracking = 3;
-constexpr uint8_t kMinTypographyAnchor = 30;
-constexpr uint8_t kMaxTypographyAnchor = 40;
-constexpr uint8_t kDefaultTypographyAnchor = 30;
-constexpr uint8_t kMinTypographyGuideWidth = 12;
-constexpr uint8_t kMaxTypographyGuideWidth = 30;
-constexpr uint8_t kDefaultTypographyGuideWidth = 30;
-constexpr uint8_t kMinTypographyGuideGap = 2;
-constexpr uint8_t kMaxTypographyGuideGap = 8;
-constexpr uint8_t kDefaultTypographyGuideGap = 5;
+    constexpr const char* kMdnsName = "rsvp-nano";
+    constexpr const char* kRssConfigPath = "/config/rss.conf";
+    constexpr size_t kMaxMetadataLineChars = 160;
+    constexpr size_t kMaxSettingsPatchBytes = 8192;
+    constexpr size_t kMaxRssFeedsPatchBytes = 4096;
+    constexpr size_t kMaxThemeUploadBytes = 4096;
+    constexpr size_t kMaxFontUploadBytes = 2UL * 1024UL * 1024UL;
+    constexpr size_t kMaxRssFeeds = 24;
+    constexpr uint16_t kDefaultWpm = 300;
+    constexpr uint16_t kMinWpm = 10;
+    constexpr uint16_t kMaxWpm = 1000;
+    constexpr uint8_t kDefaultBrightness = 13;
+    constexpr uint8_t kMaxBrightness = 19;
+    constexpr uint8_t kMaxUiLanguage = 5;
+    constexpr uint8_t kMaxReaderMode = 1;
+    constexpr uint8_t kMaxHandedness = 1;
+    constexpr uint8_t kMaxFooterMetric = 2;
+    constexpr uint8_t kMaxBatteryLabel = 2;
+    constexpr uint8_t kMaxReaderFontSize = 2;
+    constexpr uint8_t kMaxPauseMode = 1;
+    constexpr uint16_t kDefaultPacingDelayMs = 200;
+    constexpr uint16_t kMaxPacingDelayMs = 600;
+    constexpr int8_t kMinTypographyTracking = -2;
+    constexpr int8_t kMaxTypographyTracking = 3;
+    constexpr uint8_t kMinTypographyAnchor = 30;
+    constexpr uint8_t kMaxTypographyAnchor = 40;
+    constexpr uint8_t kDefaultTypographyAnchor = 30;
+    constexpr uint8_t kMinTypographyGuideWidth = 12;
+    constexpr uint8_t kMaxTypographyGuideWidth = 30;
+    constexpr uint8_t kDefaultTypographyGuideWidth = 30;
+    constexpr uint8_t kMinTypographyGuideGap = 2;
+    constexpr uint8_t kMaxTypographyGuideGap = 8;
+    constexpr uint8_t kDefaultTypographyGuideGap = 5;
 
-bool ensureLibraryDirectories() {
-  return StorageFiles::ensureDirectory(StoragePaths::kBooksPath, "sync") &&
-         StorageFiles::ensureDirectory(StoragePaths::kBookFilesPath, "sync") &&
-         StorageFiles::ensureDirectory(StoragePaths::kArticleFilesPath, "sync");
-}
-
-bool ensureThemeDirectory() {
-  return StorageFiles::ensureDirectory(StoragePaths::kThemesPath, "sync");
-}
-
-bool ensureFontDirectory() {
-  return StorageFiles::ensureDirectory(StoragePaths::kFontsPath, "sync");
-}
-
-bool ensureFontFamilyDirectory(const String &family) {
-  if (!ensureFontDirectory()) {
-    return false;
-  }
-  return StorageFiles::ensureDirectory((String(StoragePaths::kFontsPath) + "/" + family).c_str(), "sync");
-}
-
-String readSmallTextFile(const String &path) {
-  File file = Board::Storage::filesystem().open(path, FILE_READ);
-  String text;
-  if (!file) {
-    return text;
-  }
-  text.reserve(std::min(static_cast<size_t>(file.size()), kMaxThemeUploadBytes));
-  while (file.available() && text.length() < kMaxThemeUploadBytes) {
-    text += static_cast<char>(file.read());
-  }
-  file.close();
-  return text;
-}
-
-bool replaceUploadedFile(const String &tmpPath, const String &finalPath) {
-  const String backupPath = finalPath + ".bak";
-  Board::Storage::filesystem().remove(backupPath);
-
-  const bool hadFinal = StorageFiles::fileExists(finalPath);
-  if (hadFinal && !Board::Storage::filesystem().rename(finalPath, backupPath)) {
-    return false;
-  }
-
-  if (Board::Storage::filesystem().rename(tmpPath, finalPath)) {
-    if (hadFinal) {
-      Board::Storage::filesystem().remove(backupPath);
+    bool ensureLibraryDirectories() {
+        return StorageFiles::ensureDirectory(StoragePaths::kBooksPath, "sync")
+            && StorageFiles::ensureDirectory(StoragePaths::kBookFilesPath, "sync")
+            && StorageFiles::ensureDirectory(StoragePaths::kArticleFilesPath, "sync");
     }
-    return true;
-  }
 
-  if (hadFinal) {
-    Board::Storage::filesystem().rename(backupPath, finalPath);
-  }
-  return false;
-}
+    bool ensureThemeDirectory() {
+        return StorageFiles::ensureDirectory(StoragePaths::kThemesPath, "sync");
+    }
 
-const char kWebCompanionHtml[] PROGMEM = R"HTML(<!doctype html>
+    bool ensureFontDirectory() {
+        return StorageFiles::ensureDirectory(StoragePaths::kFontsPath, "sync");
+    }
+
+    bool ensureFontFamilyDirectory(const String& family) {
+        if (!ensureFontDirectory()) {
+            return false;
+        }
+        return StorageFiles::ensureDirectory((String(StoragePaths::kFontsPath) + "/" + family).c_str(), "sync");
+    }
+
+    String readSmallTextFile(const String& path) {
+        File file = Board::Storage::filesystem().open(path, FILE_READ);
+        String text;
+        if (!file) {
+            return text;
+        }
+        text.reserve(std::min(static_cast<size_t>(file.size()), kMaxThemeUploadBytes));
+        while (file.available() && text.length() < kMaxThemeUploadBytes) {
+            text += static_cast<char>(file.read());
+        }
+        file.close();
+        return text;
+    }
+
+    bool replaceUploadedFile(const String& tmpPath, const String& finalPath) {
+        const String backupPath = finalPath + ".bak";
+        Board::Storage::filesystem().remove(backupPath);
+
+        const bool hadFinal = StorageFiles::fileExists(finalPath);
+        if (hadFinal && !Board::Storage::filesystem().rename(finalPath, backupPath)) {
+            return false;
+        }
+
+        if (Board::Storage::filesystem().rename(tmpPath, finalPath)) {
+            if (hadFinal) {
+                Board::Storage::filesystem().remove(backupPath);
+            }
+            return true;
+        }
+
+        if (hadFinal) {
+            Board::Storage::filesystem().rename(backupPath, finalPath);
+        }
+        return false;
+    }
+
+    const char kWebCompanionHtml[] PROGMEM = R"HTML(<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -303,1973 +303,1946 @@ loadDraft();refresh();
 </body>
 </html>)HTML";
 
-bool isSafeFilenameChar(char c) {
-  return AsciiText::isAlphaNumeric(c) || c == '-' || c == '_' || c == '.' ||
-         c == ' ';
-}
-
-String ipToString(IPAddress ip) {
-  return String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]);
-}
-
-String stripBom(String value) {
-  if (value.length() >= 3 && static_cast<uint8_t>(value[0]) == 0xEF &&
-      static_cast<uint8_t>(value[1]) == 0xBB && static_cast<uint8_t>(value[2]) == 0xBF) {
-    value.remove(0, 3);
-  }
-  return value;
-}
-
-bool directiveMatches(const String &loweredLine, const char *directive) {
-  if (!loweredLine.startsWith(directive)) {
-    return false;
-  }
-  const size_t directiveLength = strlen(directive);
-  return loweredLine.length() == directiveLength ||
-         AsciiText::isWhitespace(loweredLine[directiveLength]);
-}
-
-String directiveValue(const String &line, const char *directive) {
-  String value = line.substring(strlen(directive));
-  value.trim();
-  return value;
-}
-
-bool isSupportedBookName(const String &loweredName) {
-  return loweredName.endsWith(".rsvp") || loweredName.endsWith(".txt") ||
-         loweredName.endsWith(".epub");
-}
-
-String displayNameForPath(const String &path) {
-  const int separator = path.lastIndexOf('/');
-  if (separator < 0) {
-    return path;
-  }
-  return path.substring(separator + 1);
-}
-
-String relativeLibraryName(const String &path) {
-  const String prefix = String(StoragePaths::kBooksPath) + "/";
-  if (path.startsWith(prefix)) {
-    return path.substring(prefix.length());
-  }
-  return displayNameForPath(path);
-}
-
-String libraryCategoryForPath(const String &path) {
-  const String relative = relativeLibraryName(path);
-  if (relative.startsWith("articles/")) {
-    return "article";
-  }
-  if (relative.startsWith("books/")) {
-    return "book";
-  }
-  return "root";
-}
-
-uint16_t clampU16(uint16_t value, uint16_t minValue, uint16_t maxValue) {
-  if (value < minValue) {
-    return minValue;
-  }
-  if (value > maxValue) {
-    return maxValue;
-  }
-  return value;
-}
-
-int clampInt(int value, int minValue, int maxValue) {
-  if (value < minValue) {
-    return minValue;
-  }
-  if (value > maxValue) {
-    return maxValue;
-  }
-  return value;
-}
-
-String enumLabel(uint8_t value, const char *const *labels, size_t count, uint8_t fallback = 0) {
-  if (value >= count) {
-    value = fallback;
-  }
-  return labels[value];
-}
-
-int enumValue(const String &value, const char *const *labels, size_t count) {
-  for (size_t i = 0; i < count; ++i) {
-    if (value == labels[i]) {
-      return static_cast<int>(i);
+    bool isSafeFilenameChar(char c) {
+        return AsciiText::isAlphaNumeric(c) || c == '-' || c == '_' || c == '.' || c == ' ';
     }
-  }
-  return -1;
-}
 
-bool findJsonKey(const String &body, const char *key, int &colonIndex) {
-  const String needle = String("\"") + key + "\"";
-  const int keyIndex = body.indexOf(needle);
-  if (keyIndex < 0) {
-    return false;
-  }
-  colonIndex = body.indexOf(':', keyIndex + needle.length());
-  return colonIndex >= 0;
-}
-
-int skipJsonWhitespace(const String &body, int index) {
-  while (index < static_cast<int>(body.length()) &&
-         AsciiText::isWhitespace(body[index])) {
-    ++index;
-  }
-  return index;
-}
-
-bool readJsonInt(const String &body, const char *key, int &value) {
-  int colonIndex = -1;
-  if (!findJsonKey(body, key, colonIndex)) {
-    return false;
-  }
-  int index = skipJsonWhitespace(body, colonIndex + 1);
-  bool negative = false;
-  if (index < static_cast<int>(body.length()) && body[index] == '-') {
-    negative = true;
-    ++index;
-  }
-  if (index >= static_cast<int>(body.length()) || !AsciiText::isDigit(body[index])) {
-    return false;
-  }
-  int result = 0;
-  while (index < static_cast<int>(body.length()) &&
-         AsciiText::isDigit(body[index])) {
-    result = result * 10 + (body[index] - '0');
-    ++index;
-  }
-  value = negative ? -result : result;
-  return true;
-}
-
-bool readJsonUInt32(const String &body, const char *key, uint32_t &value) {
-  int colonIndex = -1;
-  if (!findJsonKey(body, key, colonIndex)) {
-    return false;
-  }
-  int index = skipJsonWhitespace(body, colonIndex + 1);
-  if (index >= static_cast<int>(body.length()) || !AsciiText::isDigit(body[index])) {
-    return false;
-  }
-
-  uint32_t result = 0;
-  while (index < static_cast<int>(body.length()) && AsciiText::isDigit(body[index])) {
-    const uint32_t digit = static_cast<uint32_t>(body[index] - '0');
-    if (result > (0xFFFFFFFFUL - digit) / 10UL) {
-      return false;
+    String ipToString(IPAddress ip) {
+        return String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]);
     }
-    result = result * 10UL + digit;
-    ++index;
-  }
 
-  value = result;
-  return true;
-}
-
-bool readJsonBool(const String &body, const char *key, bool &value) {
-  int colonIndex = -1;
-  if (!findJsonKey(body, key, colonIndex)) {
-    return false;
-  }
-  const int index = skipJsonWhitespace(body, colonIndex + 1);
-  if (body.substring(index, index + 4) == "true") {
-    value = true;
-    return true;
-  }
-  if (body.substring(index, index + 5) == "false") {
-    value = false;
-    return true;
-  }
-  return false;
-}
-
-bool readJsonString(const String &body, const char *key, String &value) {
-  int colonIndex = -1;
-  if (!findJsonKey(body, key, colonIndex)) {
-    return false;
-  }
-  int index = skipJsonWhitespace(body, colonIndex + 1);
-  if (index >= static_cast<int>(body.length()) || body[index] != '"') {
-    return false;
-  }
-  ++index;
-  String result;
-  while (index < static_cast<int>(body.length())) {
-    const char c = body[index++];
-    if (c == '"') {
-      value = result;
-      return true;
+    String stripBom(String value) {
+        if (value.length() >= 3 && static_cast<uint8_t>(value[0]) == 0xEF && static_cast<uint8_t>(value[1]) == 0xBB
+            && static_cast<uint8_t>(value[2]) == 0xBF) {
+            value.remove(0, 3);
+        }
+        return value;
     }
-    if (c == '\\' && index < static_cast<int>(body.length())) {
-      const char escaped = body[index++];
-      switch (escaped) {
-        case '"':
-        case '\\':
-        case '/':
-          result += escaped;
-          break;
-        case 'n':
-          result += '\n';
-          break;
-        case 'r':
-          result += '\r';
-          break;
-        case 't':
-          result += '\t';
-          break;
-        default:
-          result += escaped;
-          break;
-      }
-    } else {
-      result += c;
+
+    bool directiveMatches(const String& loweredLine, const char* directive) {
+        if (!loweredLine.startsWith(directive)) {
+            return false;
+        }
+        const size_t directiveLength = strlen(directive);
+        return loweredLine.length() == directiveLength || AsciiText::isWhitespace(loweredLine[directiveLength]);
     }
-  }
-  return false;
-}
 
-bool isHttpUrl(String value) {
-  value.trim();
-  value.toLowerCase();
-  return value.startsWith("http://") || value.startsWith("https://");
-}
-
-bool nextJsonArrayString(const String &body, int &index, String &value) {
-  index = skipJsonWhitespace(body, index);
-  if (index >= static_cast<int>(body.length())) {
-    return false;
-  }
-  if (body[index] == ',') {
-    index = skipJsonWhitespace(body, index + 1);
-  }
-  if (index >= static_cast<int>(body.length()) || body[index] == ']') {
-    return false;
-  }
-  if (body[index] != '"') {
-    return false;
-  }
-  ++index;
-  String result;
-  while (index < static_cast<int>(body.length())) {
-    const char c = body[index++];
-    if (c == '"') {
-      value = result;
-      return true;
+    String directiveValue(const String& line, const char* directive) {
+        String value = line.substring(strlen(directive));
+        value.trim();
+        return value;
     }
-    if (c == '\\' && index < static_cast<int>(body.length())) {
-      const char escaped = body[index++];
-      switch (escaped) {
-        case '"':
-        case '\\':
-        case '/':
-          result += escaped;
-          break;
-        case 'n':
-          result += '\n';
-          break;
-        case 'r':
-          result += '\r';
-          break;
-        case 't':
-          result += '\t';
-          break;
-        default:
-          result += escaped;
-          break;
-      }
-    } else {
-      result += c;
+
+    bool isSupportedBookName(const String& loweredName) {
+        return loweredName.endsWith(".rsvp") || loweredName.endsWith(".txt") || loweredName.endsWith(".epub");
     }
-  }
-  return false;
-}
 
-String rsvpMetadataValueFromLine(const String &line, const char *directive, bool &pastDirectives) {
-  String trimmed = stripBom(line);
-  trimmed.trim();
-  if (trimmed.isEmpty()) {
-    return "";
-  }
+    String displayNameForPath(const String& path) {
+        const int separator = path.lastIndexOf('/');
+        if (separator < 0) {
+            return path;
+        }
+        return path.substring(separator + 1);
+    }
 
-  String lowered = trimmed;
-  lowered.toLowerCase();
-  if (directiveMatches(lowered, directive)) {
-    return directiveValue(trimmed, directive);
-  }
+    String relativeLibraryName(const String& path) {
+        const String prefix = String(StoragePaths::kBooksPath) + "/";
+        if (path.startsWith(prefix)) {
+            return path.substring(prefix.length());
+        }
+        return displayNameForPath(path);
+    }
 
-  if (!trimmed.startsWith("@")) {
-    pastDirectives = true;
-  }
-  return "";
-}
+    String libraryCategoryForPath(const String& path) {
+        const String relative = relativeLibraryName(path);
+        if (relative.startsWith("articles/")) {
+            return "article";
+        }
+        if (relative.startsWith("books/")) {
+            return "book";
+        }
+        return "root";
+    }
 
-}  // namespace
+    uint16_t clampU16(uint16_t value, uint16_t minValue, uint16_t maxValue) {
+        if (value < minValue) {
+            return minValue;
+        }
+        if (value > maxValue) {
+            return maxValue;
+        }
+        return value;
+    }
 
-CompanionSyncManager *CompanionSyncManager::instance_ = nullptr;
+    int clampInt(int value, int minValue, int maxValue) {
+        if (value < minValue) {
+            return minValue;
+        }
+        if (value > maxValue) {
+            return maxValue;
+        }
+        return value;
+    }
+
+    String enumLabel(uint8_t value, const char* const* labels, size_t count, uint8_t fallback = 0) {
+        if (value >= count) {
+            value = fallback;
+        }
+        return labels[value];
+    }
+
+    int enumValue(const String& value, const char* const* labels, size_t count) {
+        for (size_t i = 0; i < count; ++i) {
+            if (value == labels[i]) {
+                return static_cast<int>(i);
+            }
+        }
+        return -1;
+    }
+
+    bool findJsonKey(const String& body, const char* key, int& colonIndex) {
+        const String needle = String("\"") + key + "\"";
+        const int keyIndex = body.indexOf(needle);
+        if (keyIndex < 0) {
+            return false;
+        }
+        colonIndex = body.indexOf(':', keyIndex + needle.length());
+        return colonIndex >= 0;
+    }
+
+    int skipJsonWhitespace(const String& body, int index) {
+        while (index < static_cast<int>(body.length()) && AsciiText::isWhitespace(body[index])) {
+            ++index;
+        }
+        return index;
+    }
+
+    bool readJsonInt(const String& body, const char* key, int& value) {
+        int colonIndex = -1;
+        if (!findJsonKey(body, key, colonIndex)) {
+            return false;
+        }
+        int index = skipJsonWhitespace(body, colonIndex + 1);
+        bool negative = false;
+        if (index < static_cast<int>(body.length()) && body[index] == '-') {
+            negative = true;
+            ++index;
+        }
+        if (index >= static_cast<int>(body.length()) || !AsciiText::isDigit(body[index])) {
+            return false;
+        }
+        int result = 0;
+        while (index < static_cast<int>(body.length()) && AsciiText::isDigit(body[index])) {
+            result = result * 10 + (body[index] - '0');
+            ++index;
+        }
+        value = negative ? -result : result;
+        return true;
+    }
+
+    bool readJsonUInt32(const String& body, const char* key, uint32_t& value) {
+        int colonIndex = -1;
+        if (!findJsonKey(body, key, colonIndex)) {
+            return false;
+        }
+        int index = skipJsonWhitespace(body, colonIndex + 1);
+        if (index >= static_cast<int>(body.length()) || !AsciiText::isDigit(body[index])) {
+            return false;
+        }
+
+        uint32_t result = 0;
+        while (index < static_cast<int>(body.length()) && AsciiText::isDigit(body[index])) {
+            const uint32_t digit = static_cast<uint32_t>(body[index] - '0');
+            if (result > (0xFFFFFFFFUL - digit) / 10UL) {
+                return false;
+            }
+            result = result * 10UL + digit;
+            ++index;
+        }
+
+        value = result;
+        return true;
+    }
+
+    bool readJsonBool(const String& body, const char* key, bool& value) {
+        int colonIndex = -1;
+        if (!findJsonKey(body, key, colonIndex)) {
+            return false;
+        }
+        const int index = skipJsonWhitespace(body, colonIndex + 1);
+        if (body.substring(index, index + 4) == "true") {
+            value = true;
+            return true;
+        }
+        if (body.substring(index, index + 5) == "false") {
+            value = false;
+            return true;
+        }
+        return false;
+    }
+
+    bool readJsonString(const String& body, const char* key, String& value) {
+        int colonIndex = -1;
+        if (!findJsonKey(body, key, colonIndex)) {
+            return false;
+        }
+        int index = skipJsonWhitespace(body, colonIndex + 1);
+        if (index >= static_cast<int>(body.length()) || body[index] != '"') {
+            return false;
+        }
+        ++index;
+        String result;
+        while (index < static_cast<int>(body.length())) {
+            const char c = body[index++];
+            if (c == '"') {
+                value = result;
+                return true;
+            }
+            if (c == '\\' && index < static_cast<int>(body.length())) {
+                const char escaped = body[index++];
+                switch (escaped) {
+                case '"':
+                case '\\':
+                case '/':
+                    result += escaped;
+                    break;
+                case 'n':
+                    result += '\n';
+                    break;
+                case 'r':
+                    result += '\r';
+                    break;
+                case 't':
+                    result += '\t';
+                    break;
+                default:
+                    result += escaped;
+                    break;
+                }
+            } else {
+                result += c;
+            }
+        }
+        return false;
+    }
+
+    bool isHttpUrl(String value) {
+        value.trim();
+        value.toLowerCase();
+        return value.startsWith("http://") || value.startsWith("https://");
+    }
+
+    bool nextJsonArrayString(const String& body, int& index, String& value) {
+        index = skipJsonWhitespace(body, index);
+        if (index >= static_cast<int>(body.length())) {
+            return false;
+        }
+        if (body[index] == ',') {
+            index = skipJsonWhitespace(body, index + 1);
+        }
+        if (index >= static_cast<int>(body.length()) || body[index] == ']') {
+            return false;
+        }
+        if (body[index] != '"') {
+            return false;
+        }
+        ++index;
+        String result;
+        while (index < static_cast<int>(body.length())) {
+            const char c = body[index++];
+            if (c == '"') {
+                value = result;
+                return true;
+            }
+            if (c == '\\' && index < static_cast<int>(body.length())) {
+                const char escaped = body[index++];
+                switch (escaped) {
+                case '"':
+                case '\\':
+                case '/':
+                    result += escaped;
+                    break;
+                case 'n':
+                    result += '\n';
+                    break;
+                case 'r':
+                    result += '\r';
+                    break;
+                case 't':
+                    result += '\t';
+                    break;
+                default:
+                    result += escaped;
+                    break;
+                }
+            } else {
+                result += c;
+            }
+        }
+        return false;
+    }
+
+    String rsvpMetadataValueFromLine(const String& line, const char* directive, bool& pastDirectives) {
+        String trimmed = stripBom(line);
+        trimmed.trim();
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+
+        String lowered = trimmed;
+        lowered.toLowerCase();
+        if (directiveMatches(lowered, directive)) {
+            return directiveValue(trimmed, directive);
+        }
+
+        if (!trimmed.startsWith("@")) {
+            pastDirectives = true;
+        }
+        return "";
+    }
+
+} // namespace
+
+CompanionSyncManager* CompanionSyncManager::instance_ = nullptr;
 
 bool CompanionSyncManager::begin() {
-  if (active_) {
+    if (active_) {
+        return true;
+    }
+
+    instance_ = this;
+    pairingCode_ = String(static_cast<uint32_t>(esp_random()) % 900000UL + 100000UL);
+    statusLine1_ = "Starting sync";
+    statusLine2_ = "Preparing Wi-Fi";
+    preferences_.begin(settings::kPrefsNamespace, false);
+
+    const bool networkReady = startAccessPoint();
+    if (!networkReady) {
+        statusLine1_ = "Wi-Fi failed";
+        statusLine2_ = "";
+        end();
+        return false;
+    }
+
+    if (!startServer()) {
+        statusLine1_ = "HTTP failed";
+        statusLine2_ = "";
+        end();
+        return false;
+    }
+
+    active_ = true;
+    statusLine1_ = networkSsid_;
+    statusLine2_ = baseUrl();
+    Serial.printf("[sync] ready ssid=%s url=%s pairing=%s\n", networkSsid_.c_str(), baseUrl().c_str(),
+                  pairingCode_.c_str());
     return true;
-  }
-
-  instance_ = this;
-  pairingCode_ = String(static_cast<uint32_t>(esp_random()) % 900000UL + 100000UL);
-  statusLine1_ = "Starting sync";
-  statusLine2_ = "Preparing Wi-Fi";
-  preferences_.begin(settings::kPrefsNamespace, false);
-
-  const bool networkReady = startAccessPoint();
-  if (!networkReady) {
-    statusLine1_ = "Wi-Fi failed";
-    statusLine2_ = "";
-    end();
-    return false;
-  }
-
-  if (!startServer()) {
-    statusLine1_ = "HTTP failed";
-    statusLine2_ = "";
-    end();
-    return false;
-  }
-
-  active_ = true;
-  statusLine1_ = networkSsid_;
-  statusLine2_ = baseUrl();
-  Serial.printf("[sync] ready ssid=%s url=%s pairing=%s\n", networkSsid_.c_str(), baseUrl().c_str(),
-                pairingCode_.c_str());
-  return true;
 }
 
 void CompanionSyncManager::update() {
-  if (!active_ || !serverStarted_) {
-    return;
-  }
-  server_.handleClient();
+    if (!active_ || !serverStarted_) {
+        return;
+    }
+    server_.handleClient();
 }
 
 void CompanionSyncManager::end() {
-  stopServer();
+    stopServer();
 
-  if (networkMode_ == NetworkMode::Station) {
-    WiFi.disconnect(true, false);
-  } else if (networkMode_ == NetworkMode::AccessPoint) {
-    WiFi.softAPdisconnect(true);
-  }
-  WiFi.mode(WIFI_OFF);
-  preferences_.end();
+    if (networkMode_ == NetworkMode::Station) {
+        WiFi.disconnect(true, false);
+    } else if (networkMode_ == NetworkMode::AccessPoint) {
+        WiFi.softAPdisconnect(true);
+    }
+    WiFi.mode(WIFI_OFF);
+    preferences_.end();
 
-  networkMode_ = NetworkMode::None;
-  active_ = false;
-  statusLine1_ = "Idle";
-  statusLine2_ = "";
-  instance_ = nullptr;
+    networkMode_ = NetworkMode::None;
+    active_ = false;
+    statusLine1_ = "Idle";
+    statusLine2_ = "";
+    instance_ = nullptr;
 }
 
-bool CompanionSyncManager::active() const { return active_; }
+bool CompanionSyncManager::active() const {
+    return active_;
+}
 
-String CompanionSyncManager::statusLine1() const { return statusLine1_; }
+String CompanionSyncManager::statusLine1() const {
+    return statusLine1_;
+}
 
-String CompanionSyncManager::statusLine2() const { return statusLine2_; }
+String CompanionSyncManager::statusLine2() const {
+    return statusLine2_;
+}
 
 String CompanionSyncManager::baseUrl() const {
-  if (networkMode_ == NetworkMode::Station) {
-    return "http://" + ipToString(WiFi.localIP());
-  }
-  if (networkMode_ == NetworkMode::AccessPoint) {
-    return "http://" + ipToString(WiFi.softAPIP());
-  }
-  return "";
+    if (networkMode_ == NetworkMode::Station) {
+        return "http://" + ipToString(WiFi.localIP());
+    }
+    if (networkMode_ == NetworkMode::AccessPoint) {
+        return "http://" + ipToString(WiFi.softAPIP());
+    }
+    return "";
 }
 
 void CompanionSyncManager::handleInfoStatic() {
-  if (instance_ != nullptr) {
-    instance_->handleInfo();
-  }
+    if (instance_ != nullptr) {
+        instance_->handleInfo();
+    }
 }
 
 void CompanionSyncManager::handleRootStatic() {
-  if (instance_ != nullptr) {
-    instance_->handleRoot();
-  }
+    if (instance_ != nullptr) {
+        instance_->handleRoot();
+    }
 }
 
 void CompanionSyncManager::handleBooksListStatic() {
-  if (instance_ != nullptr) {
-    instance_->handleBooksList();
-  }
+    if (instance_ != nullptr) {
+        instance_->handleBooksList();
+    }
 }
 
 void CompanionSyncManager::handleSettingsStatic() {
-  if (instance_ != nullptr) {
-    instance_->handleSettings();
-  }
+    if (instance_ != nullptr) {
+        instance_->handleSettings();
+    }
 }
 
 void CompanionSyncManager::handleWifiStatic() {
-  if (instance_ != nullptr) {
-    instance_->handleWifi();
-  }
+    if (instance_ != nullptr) {
+        instance_->handleWifi();
+    }
 }
 
 void CompanionSyncManager::handleRssFeedsStatic() {
-  if (instance_ != nullptr) {
-    instance_->handleRssFeeds();
-  }
+    if (instance_ != nullptr) {
+        instance_->handleRssFeeds();
+    }
 }
 
 void CompanionSyncManager::handleBookDeleteStatic() {
-  if (instance_ != nullptr) {
-    instance_->handleBookDelete();
-  }
+    if (instance_ != nullptr) {
+        instance_->handleBookDelete();
+    }
 }
 
 void CompanionSyncManager::handleBookPositionStatic() {
-  if (instance_ != nullptr) {
-    instance_->handleBookPosition();
-  }
+    if (instance_ != nullptr) {
+        instance_->handleBookPosition();
+    }
 }
 
 void CompanionSyncManager::handleBooksStatic() {
-  if (instance_ != nullptr) {
-    instance_->handleBooks();
-  }
+    if (instance_ != nullptr) {
+        instance_->handleBooks();
+    }
 }
 
 void CompanionSyncManager::handleBookUploadStatic() {
-  if (instance_ != nullptr) {
-    instance_->handleBookUpload();
-  }
+    if (instance_ != nullptr) {
+        instance_->handleBookUpload();
+    }
 }
 
 void CompanionSyncManager::handleThemesStatic() {
-  if (instance_ != nullptr) {
-    instance_->handleThemes();
-  }
+    if (instance_ != nullptr) {
+        instance_->handleThemes();
+    }
 }
 
 void CompanionSyncManager::handleThemeUploadStatic() {
-  if (instance_ != nullptr) {
-    instance_->handleThemeUpload();
-  }
+    if (instance_ != nullptr) {
+        instance_->handleThemeUpload();
+    }
 }
 
 void CompanionSyncManager::handleFontsStatic() {
-  if (instance_ != nullptr) {
-    instance_->handleFonts();
-  }
+    if (instance_ != nullptr) {
+        instance_->handleFonts();
+    }
 }
 
 void CompanionSyncManager::handleFontUploadStatic() {
-  if (instance_ != nullptr) {
-    instance_->handleFontUpload();
-  }
+    if (instance_ != nullptr) {
+        instance_->handleFontUpload();
+    }
 }
 
 void CompanionSyncManager::handleNotFoundStatic() {
-  if (instance_ != nullptr) {
-    instance_->handleNotFound();
-  }
+    if (instance_ != nullptr) {
+        instance_->handleNotFound();
+    }
 }
 
 bool CompanionSyncManager::startAccessPoint() {
-  const String ssid = "RSVP-Nano-" + deviceSuffix();
-  statusLine1_ = "Sync Wi-Fi";
-  statusLine2_ = ssid;
-  networkSsid_ = ssid;
-  WiFi.mode(WIFI_AP);
-  if (!WiFi.softAP(ssid.c_str())) {
-    Serial.println("[sync] softAP failed");
-    return false;
-  }
+    const String ssid = "RSVP-Nano-" + deviceSuffix();
+    statusLine1_ = "Sync Wi-Fi";
+    statusLine2_ = ssid;
+    networkSsid_ = ssid;
+    WiFi.mode(WIFI_AP);
+    if (!WiFi.softAP(ssid.c_str())) {
+        Serial.println("[sync] softAP failed");
+        return false;
+    }
 
-  networkMode_ = NetworkMode::AccessPoint;
-  Serial.printf("[sync] softAP ssid=%s ip=%s\n", ssid.c_str(), ipToString(WiFi.softAPIP()).c_str());
-  return true;
+    networkMode_ = NetworkMode::AccessPoint;
+    Serial.printf("[sync] softAP ssid=%s ip=%s\n", ssid.c_str(), ipToString(WiFi.softAPIP()).c_str());
+    return true;
 }
 
 bool CompanionSyncManager::startServer() {
-  server_.on("/", HTTP_GET, handleRootStatic);
-  server_.on("/api/info", HTTP_GET, handleInfoStatic);
-  server_.on("/api/books", HTTP_GET, handleBooksListStatic);
-  server_.on("/api/books", HTTP_DELETE, handleBookDeleteStatic);
-  server_.on("/api/books", HTTP_POST, handleBooksStatic, handleBookUploadStatic);
-  server_.on("/api/books/position", HTTP_PATCH, handleBookPositionStatic);
-  server_.on("/api/themes", HTTP_POST, handleThemesStatic, handleThemeUploadStatic);
-  server_.on("/api/fonts", HTTP_POST, handleFontsStatic, handleFontUploadStatic);
-  server_.on("/api/settings", HTTP_GET, handleSettingsStatic);
-  server_.on("/api/settings", HTTP_PATCH, handleSettingsStatic);
-  server_.on("/api/settings", HTTP_PUT, handleSettingsStatic);
-  server_.on("/api/wifi", HTTP_GET, handleWifiStatic);
-  server_.on("/api/wifi", HTTP_PUT, handleWifiStatic);
-  server_.on("/api/wifi", HTTP_DELETE, handleWifiStatic);
-  server_.on("/api/rss-feeds", HTTP_GET, handleRssFeedsStatic);
-  server_.on("/api/rss-feeds", HTTP_PUT, handleRssFeedsStatic);
-  server_.onNotFound(handleNotFoundStatic);
-  server_.begin();
-  serverStarted_ = true;
+    server_.on("/", HTTP_GET, handleRootStatic);
+    server_.on("/api/info", HTTP_GET, handleInfoStatic);
+    server_.on("/api/books", HTTP_GET, handleBooksListStatic);
+    server_.on("/api/books", HTTP_DELETE, handleBookDeleteStatic);
+    server_.on("/api/books", HTTP_POST, handleBooksStatic, handleBookUploadStatic);
+    server_.on("/api/books/position", HTTP_PATCH, handleBookPositionStatic);
+    server_.on("/api/themes", HTTP_POST, handleThemesStatic, handleThemeUploadStatic);
+    server_.on("/api/fonts", HTTP_POST, handleFontsStatic, handleFontUploadStatic);
+    server_.on("/api/settings", HTTP_GET, handleSettingsStatic);
+    server_.on("/api/settings", HTTP_PATCH, handleSettingsStatic);
+    server_.on("/api/settings", HTTP_PUT, handleSettingsStatic);
+    server_.on("/api/wifi", HTTP_GET, handleWifiStatic);
+    server_.on("/api/wifi", HTTP_PUT, handleWifiStatic);
+    server_.on("/api/wifi", HTTP_DELETE, handleWifiStatic);
+    server_.on("/api/rss-feeds", HTTP_GET, handleRssFeedsStatic);
+    server_.on("/api/rss-feeds", HTTP_PUT, handleRssFeedsStatic);
+    server_.onNotFound(handleNotFoundStatic);
+    server_.begin();
+    serverStarted_ = true;
 
-  if (networkMode_ == NetworkMode::Station && MDNS.begin(kMdnsName)) {
-    MDNS.addService("http", "tcp", 80);
-  }
-  return true;
+    if (networkMode_ == NetworkMode::Station && MDNS.begin(kMdnsName)) {
+        MDNS.addService("http", "tcp", 80);
+    }
+    return true;
 }
 
 void CompanionSyncManager::stopServer() {
-  if (serverStarted_) {
-    server_.stop();
-    MDNS.end();
-  }
-  finishUpload(false);
-  serverStarted_ = false;
+    if (serverStarted_) {
+        server_.stop();
+        MDNS.end();
+    }
+    finishUpload(false);
+    serverStarted_ = false;
 }
 
 void CompanionSyncManager::handleInfo() {
-  const String mode = networkMode_ == NetworkMode::Station ? "station" : "access_point";
-  const String body = String("{") + "\"name\":\"RSVP Nano\"," +
-                      "\"mode\":\"" + mode + "\"," +
-                      "\"baseUrl\":\"" + jsonEscape(baseUrl()) + "\"," +
-                      "\"networkSsid\":\"" + jsonEscape(networkSsid_) + "\"," +
-                      "\"pairingCode\":\"" + pairingCode_ + "\"," +
-                      "\"uploadPath\":\"/api/books\"" + "}";
-  server_.send(200, "application/json", body);
+    const String mode = networkMode_ == NetworkMode::Station ? "station" : "access_point";
+    const String body = String("{") + "\"name\":\"RSVP Nano\"," + "\"mode\":\"" + mode + "\"," + "\"baseUrl\":\""
+                      + jsonEscape(baseUrl()) + "\"," + "\"networkSsid\":\"" + jsonEscape(networkSsid_) + "\","
+                      + "\"pairingCode\":\"" + pairingCode_ + "\"," + "\"uploadPath\":\"/api/books\"" + "}";
+    server_.send(200, "application/json", body);
 }
 
 void CompanionSyncManager::handleRoot() {
-  server_.sendHeader("Cache-Control", "no-store, max-age=0");
-  server_.send_P(200, "text/html", kWebCompanionHtml);
+    server_.sendHeader("Cache-Control", "no-store, max-age=0");
+    server_.send_P(200, "text/html", kWebCompanionHtml);
 }
 
 void CompanionSyncManager::handleBooksList() {
-  String body;
-  body.reserve(1024);
-  body += "{\"books\":[";
-  bool first = true;
+    String body;
+    body.reserve(1024);
+    body += "{\"books\":[";
+    bool first = true;
 
-  const auto appendDirectory = [&](const char *directoryPath) {
-    File dir = Board::Storage::filesystem().open(directoryPath);
-    if (!dir || !dir.isDirectory()) {
-      if (dir) {
-        dir.close();
-      }
-      return;
-    }
-
-    File entry = dir.openNextFile();
-    while (entry) {
-      if (!entry.isDirectory()) {
-        const String name = displayNameForPath(String(entry.name()));
-        const String path = String(directoryPath) + "/" + name;
-        String lowered = name;
-        lowered.toLowerCase();
-        if (isSupportedBookName(lowered)) {
-          const RsvpMetadata metadata = readRsvpMetadata(path);
-          BookMetadata indexedMetadata;
-          IndexedBookStore::Header indexHeader;
-          const bool hasIndexedMetadata = IndexedBook::readMetadata(path, indexedMetadata, &indexHeader);
-          uint8_t progressPercent = 0;
-          uint32_t wordIndex = 0;
-          const bool hasProgress = hasIndexedMetadata &&
-              progressForPath(path, indexHeader.sourceSize, indexHeader.sourceFingerprint,
-                              indexHeader.wordCount, wordIndex, progressPercent);
-          if (!first) {
-            body += ",";
-          }
-          first = false;
-          body += "{\"id\":\"" + jsonEscape(bookIdForPath(path)) + "\",\"name\":\"" +
-                  jsonEscape(relativeLibraryName(path)) + "\",\"category\":\"" +
-                  libraryCategoryForPath(path) + "\",\"title\":\"" +
-                  jsonEscape(metadata.title) + "\",\"author\":\"" + jsonEscape(metadata.author) +
-                  "\",\"bytes\":" +
-                  String(static_cast<uint32_t>(entry.size()));
-          if (hasIndexedMetadata) {
-            body += ",\"sourceSize\":" + String(indexHeader.sourceSize) +
-                    ",\"sourceFingerprint\":" + String(indexHeader.sourceFingerprint) +
-                    ",\"wordCount\":" + String(indexHeader.wordCount) +
-                    ",\"chapters\":[";
-            for (size_t i = 0; i < indexedMetadata.chapters.size(); ++i) {
-              if (i > 0) {
-                body += ",";
-              }
-              body += "{\"title\":\"" + jsonEscape(indexedMetadata.chapters[i].title) +
-                      "\",\"wordIndex\":" + String(static_cast<uint32_t>(indexedMetadata.chapters[i].wordIndex)) + "}";
+    const auto appendDirectory = [&](const char* directoryPath) {
+        File dir = Board::Storage::filesystem().open(directoryPath);
+        if (!dir || !dir.isDirectory()) {
+            if (dir) {
+                dir.close();
             }
-            body += "]";
-          }
-          if (hasProgress) {
-            body += ",\"wordIndex\":" + String(wordIndex) +
-                    ",\"progressPercent\":" + String(progressPercent);
-          }
-          body += "}";
+            return;
         }
-      }
-      entry.close();
-      entry = dir.openNextFile();
-    }
 
-    dir.close();
-  };
+        File entry = dir.openNextFile();
+        while (entry) {
+            if (!entry.isDirectory()) {
+                const String name = displayNameForPath(String(entry.name()));
+                const String path = String(directoryPath) + "/" + name;
+                String lowered = name;
+                lowered.toLowerCase();
+                if (isSupportedBookName(lowered)) {
+                    const RsvpMetadata metadata = readRsvpMetadata(path);
+                    BookMetadata indexedMetadata;
+                    IndexedBookStore::Header indexHeader;
+                    const bool hasIndexedMetadata = IndexedBook::readMetadata(path, indexedMetadata, &indexHeader);
+                    uint8_t progressPercent = 0;
+                    uint32_t wordIndex = 0;
+                    const bool hasProgress =
+                        hasIndexedMetadata
+                        && progressForPath(path, indexHeader.sourceSize, indexHeader.sourceFingerprint,
+                                           indexHeader.wordCount, wordIndex, progressPercent);
+                    if (!first) {
+                        body += ",";
+                    }
+                    first = false;
+                    body += "{\"id\":\"" + jsonEscape(bookIdForPath(path)) + "\",\"name\":\""
+                          + jsonEscape(relativeLibraryName(path)) + "\",\"category\":\"" + libraryCategoryForPath(path)
+                          + "\",\"title\":\"" + jsonEscape(metadata.title) + "\",\"author\":\""
+                          + jsonEscape(metadata.author) + "\",\"bytes\":" + String(static_cast<uint32_t>(entry.size()));
+                    if (hasIndexedMetadata) {
+                        body += ",\"sourceSize\":" + String(indexHeader.sourceSize)
+                              + ",\"sourceFingerprint\":" + String(indexHeader.sourceFingerprint)
+                              + ",\"wordCount\":" + String(indexHeader.wordCount) + ",\"chapters\":[";
+                        for (size_t i = 0; i < indexedMetadata.chapters.size(); ++i) {
+                            if (i > 0) {
+                                body += ",";
+                            }
+                            body += "{\"title\":\"" + jsonEscape(indexedMetadata.chapters[i].title)
+                                  + "\",\"wordIndex\":"
+                                  + String(static_cast<uint32_t>(indexedMetadata.chapters[i].wordIndex)) + "}";
+                        }
+                        body += "]";
+                    }
+                    if (hasProgress) {
+                        body +=
+                            ",\"wordIndex\":" + String(wordIndex) + ",\"progressPercent\":" + String(progressPercent);
+                    }
+                    body += "}";
+                }
+            }
+            entry.close();
+            entry = dir.openNextFile();
+        }
 
-  appendDirectory(StoragePaths::kBooksPath);
-  appendDirectory(StoragePaths::kBookFilesPath);
-  appendDirectory(StoragePaths::kArticleFilesPath);
+        dir.close();
+    };
 
-  body += "]}";
-  server_.send(200, "application/json", body);
+    appendDirectory(StoragePaths::kBooksPath);
+    appendDirectory(StoragePaths::kBookFilesPath);
+    appendDirectory(StoragePaths::kArticleFilesPath);
+
+    body += "]}";
+    server_.send(200, "application/json", body);
 }
 
 void CompanionSyncManager::handleSettings() {
-  if (server_.method() == HTTP_GET) {
+    if (server_.method() == HTTP_GET) {
+        server_.send(200, "application/json", settingsJson());
+        return;
+    }
+
+    const String body = server_.arg("plain");
+    if (body.length() > kMaxSettingsPatchBytes) {
+        server_.send(413, "application/json", "{\"ok\":false,\"error\":\"Settings payload too large\"}");
+        return;
+    }
+
+    String error;
+    if (!applySettingsJson(body, error)) {
+        server_.send(400, "application/json", String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
+        return;
+    }
+
     server_.send(200, "application/json", settingsJson());
-    return;
-  }
-
-  const String body = server_.arg("plain");
-  if (body.length() > kMaxSettingsPatchBytes) {
-    server_.send(413, "application/json", "{\"ok\":false,\"error\":\"Settings payload too large\"}");
-    return;
-  }
-
-  String error;
-  if (!applySettingsJson(body, error)) {
-    server_.send(400, "application/json",
-                 String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
-    return;
-  }
-
-  server_.send(200, "application/json", settingsJson());
 }
 
 void CompanionSyncManager::handleWifi() {
-  if (server_.method() == HTTP_GET) {
+    if (server_.method() == HTTP_GET) {
+        server_.send(200, "application/json", wifiJson());
+        return;
+    }
+
+    if (server_.method() == HTTP_DELETE) {
+        preferences_.remove(pref::WifiSsid::key());
+        preferences_.remove(pref::WifiPassword::key());
+        statusLine1_ = "Wi-Fi cleared";
+        statusLine2_ = "";
+        server_.send(200, "application/json", wifiJson());
+        return;
+    }
+
+    String error;
+    if (!applyWifiJson(server_.arg("plain"), error)) {
+        server_.send(400, "application/json", String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
+        return;
+    }
+
+    statusLine1_ = "Wi-Fi saved";
+    statusLine2_ = preferences_.getString(pref::WifiSsid::key(), "");
     server_.send(200, "application/json", wifiJson());
-    return;
-  }
-
-  if (server_.method() == HTTP_DELETE) {
-    preferences_.remove(pref::WifiSsid::key());
-    preferences_.remove(pref::WifiPassword::key());
-    statusLine1_ = "Wi-Fi cleared";
-    statusLine2_ = "";
-    server_.send(200, "application/json", wifiJson());
-    return;
-  }
-
-  String error;
-  if (!applyWifiJson(server_.arg("plain"), error)) {
-    server_.send(400, "application/json",
-                 String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
-    return;
-  }
-
-  statusLine1_ = "Wi-Fi saved";
-  statusLine2_ = preferences_.getString(pref::WifiSsid::key(), "");
-  server_.send(200, "application/json", wifiJson());
 }
 
 void CompanionSyncManager::handleRssFeeds() {
-  if (server_.method() == HTTP_GET) {
+    if (server_.method() == HTTP_GET) {
+        server_.send(200, "application/json", rssFeedsJson());
+        return;
+    }
+
+    String error;
+    if (!writeRssFeedsJson(server_.arg("plain"), error)) {
+        server_.send(400, "application/json", String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
+        return;
+    }
+
+    statusLine1_ = "RSS feeds saved";
+    statusLine2_ = kRssConfigPath;
     server_.send(200, "application/json", rssFeedsJson());
-    return;
-  }
-
-  String error;
-  if (!writeRssFeedsJson(server_.arg("plain"), error)) {
-    server_.send(400, "application/json",
-                 String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
-    return;
-  }
-
-  statusLine1_ = "RSS feeds saved";
-  statusLine2_ = kRssConfigPath;
-  server_.send(200, "application/json", rssFeedsJson());
 }
 
 void CompanionSyncManager::handleBooks() {
-  finishUpload(uploadError_.isEmpty());
-  if (!uploadError_.isEmpty()) {
-    server_.send(400, "application/json",
-                 String("{\"ok\":false,\"error\":\"") + jsonEscape(uploadError_) + "\"}");
-    uploadError_ = "";
-    return;
-  }
+    finishUpload(uploadError_.isEmpty());
+    if (!uploadError_.isEmpty()) {
+        server_.send(400, "application/json", String("{\"ok\":false,\"error\":\"") + jsonEscape(uploadError_) + "\"}");
+        uploadError_ = "";
+        return;
+    }
 
-  server_.send(201, "application/json",
-               String("{\"ok\":true,\"path\":\"") + jsonEscape(uploadFinalPath_) + "\"}");
-  uploadFinalPath_ = "";
+    server_.send(201, "application/json", String("{\"ok\":true,\"path\":\"") + jsonEscape(uploadFinalPath_) + "\"}");
+    uploadFinalPath_ = "";
 }
 
 void CompanionSyncManager::handleThemes() {
-  if (uploadFile_) {
-    uploadFile_.close();
-  }
+    if (uploadFile_) {
+        uploadFile_.close();
+    }
 
-  if (!uploadError_.isEmpty()) {
-    Board::Storage::filesystem().remove(uploadTmpPath_);
-    const int status = uploadError_.indexOf("already exists") >= 0 ? 409 : 400;
-    server_.send(status, "application/json",
-                 String("{\"ok\":false,\"error\":\"") + jsonEscape(uploadError_) + "\"}");
-    uploadError_ = "";
+    if (!uploadError_.isEmpty()) {
+        Board::Storage::filesystem().remove(uploadTmpPath_);
+        const int status = uploadError_.indexOf("already exists") >= 0 ? 409 : 400;
+        server_.send(status, "application/json",
+                     String("{\"ok\":false,\"error\":\"") + jsonEscape(uploadError_) + "\"}");
+        uploadError_ = "";
+        uploadTmpPath_ = "";
+        uploadFinalPath_ = "";
+        return;
+    }
+
+    if (uploadTmpPath_.isEmpty() || uploadFinalPath_.isEmpty()) {
+        server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing theme upload\"}");
+        return;
+    }
+
+    File tmpFile = Board::Storage::filesystem().open(uploadTmpPath_, FILE_READ);
+    const size_t uploadSize = tmpFile ? static_cast<size_t>(tmpFile.size()) : 0;
+    if (tmpFile) {
+        tmpFile.close();
+    }
+    if (uploadSize == 0 || uploadSize > kMaxThemeUploadBytes) {
+        Board::Storage::filesystem().remove(uploadTmpPath_);
+        uploadTmpPath_ = "";
+        uploadFinalPath_ = "";
+        server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid theme size\"}");
+        return;
+    }
+
+    ui::themes::Theme theme;
+    String error;
+    const String id = ui::themes::themeIdFromPath(uploadFinalPath_);
+    if (!ui::themes::parseThemeText(readSmallTextFile(uploadTmpPath_), id, theme, error)) {
+        Board::Storage::filesystem().remove(uploadTmpPath_);
+        uploadTmpPath_ = "";
+        uploadFinalPath_ = "";
+        server_.send(400, "application/json", String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
+        return;
+    }
+
+    if (StorageFiles::fileExists(uploadFinalPath_)) {
+        Board::Storage::filesystem().remove(uploadTmpPath_);
+        uploadTmpPath_ = "";
+        uploadFinalPath_ = "";
+        server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Theme already exists\"}");
+        return;
+    }
+
+    if (!replaceUploadedFile(uploadTmpPath_, uploadFinalPath_)) {
+        Board::Storage::filesystem().remove(uploadTmpPath_);
+        uploadTmpPath_ = "";
+        uploadFinalPath_ = "";
+        server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Theme save failed\"}");
+        return;
+    }
+
+    statusLine1_ = "Theme received";
+    statusLine2_ = uploadFinalPath_;
+    Serial.printf("[sync] theme ready %s\n", uploadFinalPath_.c_str());
+    server_.send(201, "application/json",
+                 String("{\"ok\":true,\"path\":\"") + jsonEscape(uploadFinalPath_) + "\",\"id\":\"" + jsonEscape(id)
+                     + "\"}");
     uploadTmpPath_ = "";
     uploadFinalPath_ = "";
-    return;
-  }
-
-  if (uploadTmpPath_.isEmpty() || uploadFinalPath_.isEmpty()) {
-    server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing theme upload\"}");
-    return;
-  }
-
-  File tmpFile = Board::Storage::filesystem().open(uploadTmpPath_, FILE_READ);
-  const size_t uploadSize = tmpFile ? static_cast<size_t>(tmpFile.size()) : 0;
-  if (tmpFile) {
-    tmpFile.close();
-  }
-  if (uploadSize == 0 || uploadSize > kMaxThemeUploadBytes) {
-    Board::Storage::filesystem().remove(uploadTmpPath_);
-    uploadTmpPath_ = "";
-    uploadFinalPath_ = "";
-    server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid theme size\"}");
-    return;
-  }
-
-  ui::themes::Theme theme;
-  String error;
-  const String id = ui::themes::themeIdFromPath(uploadFinalPath_);
-  if (!ui::themes::parseThemeText(readSmallTextFile(uploadTmpPath_), id, theme, error)) {
-    Board::Storage::filesystem().remove(uploadTmpPath_);
-    uploadTmpPath_ = "";
-    uploadFinalPath_ = "";
-    server_.send(400, "application/json",
-                 String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
-    return;
-  }
-
-  if (StorageFiles::fileExists(uploadFinalPath_)) {
-    Board::Storage::filesystem().remove(uploadTmpPath_);
-    uploadTmpPath_ = "";
-    uploadFinalPath_ = "";
-    server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Theme already exists\"}");
-    return;
-  }
-
-  if (!replaceUploadedFile(uploadTmpPath_, uploadFinalPath_)) {
-    Board::Storage::filesystem().remove(uploadTmpPath_);
-    uploadTmpPath_ = "";
-    uploadFinalPath_ = "";
-    server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Theme save failed\"}");
-    return;
-  }
-
-  statusLine1_ = "Theme received";
-  statusLine2_ = uploadFinalPath_;
-  Serial.printf("[sync] theme ready %s\n", uploadFinalPath_.c_str());
-  server_.send(201, "application/json",
-               String("{\"ok\":true,\"path\":\"") + jsonEscape(uploadFinalPath_) +
-                   "\",\"id\":\"" + jsonEscape(id) + "\"}");
-  uploadTmpPath_ = "";
-  uploadFinalPath_ = "";
 }
 
-
 void CompanionSyncManager::handleFonts() {
-  if (uploadFile_) {
-    uploadFile_.close();
-  }
+    if (uploadFile_) {
+        uploadFile_.close();
+    }
 
-  if (!uploadError_.isEmpty()) {
-    Board::Storage::filesystem().remove(uploadTmpPath_);
-    const int status = uploadError_.indexOf("already exists") >= 0 ? 409 : 400;
-    server_.send(status, "application/json",
-                 String("{\"ok\":false,\"error\":\"") + jsonEscape(uploadError_) + "\"}");
-    uploadError_ = "";
+    if (!uploadError_.isEmpty()) {
+        Board::Storage::filesystem().remove(uploadTmpPath_);
+        const int status = uploadError_.indexOf("already exists") >= 0 ? 409 : 400;
+        server_.send(status, "application/json",
+                     String("{\"ok\":false,\"error\":\"") + jsonEscape(uploadError_) + "\"}");
+        uploadError_ = "";
+        uploadTmpPath_ = "";
+        uploadFinalPath_ = "";
+        return;
+    }
+
+    if (uploadTmpPath_.isEmpty() || uploadFinalPath_.isEmpty()) {
+        server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing font upload\"}");
+        return;
+    }
+
+    File tmpFile = Board::Storage::filesystem().open(uploadTmpPath_, FILE_READ);
+    const size_t uploadSize = tmpFile ? static_cast<size_t>(tmpFile.size()) : 0;
+    if (tmpFile) {
+        tmpFile.close();
+    }
+    if (uploadSize == 0 || uploadSize > kMaxFontUploadBytes) {
+        Board::Storage::filesystem().remove(uploadTmpPath_);
+        uploadTmpPath_ = "";
+        uploadFinalPath_ = "";
+        server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid font size\"}");
+        return;
+    }
+
+    String error;
+    if (!FontCatalog::validateFontFile(uploadTmpPath_, error)) {
+        Board::Storage::filesystem().remove(uploadTmpPath_);
+        uploadTmpPath_ = "";
+        uploadFinalPath_ = "";
+        server_.send(400, "application/json", String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
+        return;
+    }
+
+    if (StorageFiles::fileExists(uploadFinalPath_)) {
+        Board::Storage::filesystem().remove(uploadTmpPath_);
+        uploadTmpPath_ = "";
+        uploadFinalPath_ = "";
+        server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Font size already exists\"}");
+        return;
+    }
+
+    if (!replaceUploadedFile(uploadTmpPath_, uploadFinalPath_)) {
+        Board::Storage::filesystem().remove(uploadTmpPath_);
+        uploadTmpPath_ = "";
+        uploadFinalPath_ = "";
+        server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Font save failed\"}");
+        return;
+    }
+
+    statusLine1_ = "Font received";
+    statusLine2_ = uploadFinalPath_;
+    Serial.printf("[sync] font ready %s\n", uploadFinalPath_.c_str());
+    server_.send(201, "application/json", String("{\"ok\":true,\"path\":\"") + jsonEscape(uploadFinalPath_) + "\"}");
     uploadTmpPath_ = "";
     uploadFinalPath_ = "";
-    return;
-  }
-
-  if (uploadTmpPath_.isEmpty() || uploadFinalPath_.isEmpty()) {
-    server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing font upload\"}");
-    return;
-  }
-
-  File tmpFile = Board::Storage::filesystem().open(uploadTmpPath_, FILE_READ);
-  const size_t uploadSize = tmpFile ? static_cast<size_t>(tmpFile.size()) : 0;
-  if (tmpFile) {
-    tmpFile.close();
-  }
-  if (uploadSize == 0 || uploadSize > kMaxFontUploadBytes) {
-    Board::Storage::filesystem().remove(uploadTmpPath_);
-    uploadTmpPath_ = "";
-    uploadFinalPath_ = "";
-    server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid font size\"}");
-    return;
-  }
-
-  String error;
-  if (!FontCatalog::validateFontFile(uploadTmpPath_, error)) {
-    Board::Storage::filesystem().remove(uploadTmpPath_);
-    uploadTmpPath_ = "";
-    uploadFinalPath_ = "";
-    server_.send(400, "application/json",
-                 String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
-    return;
-  }
-
-  if (StorageFiles::fileExists(uploadFinalPath_)) {
-    Board::Storage::filesystem().remove(uploadTmpPath_);
-    uploadTmpPath_ = "";
-    uploadFinalPath_ = "";
-    server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Font size already exists\"}");
-    return;
-  }
-
-  if (!replaceUploadedFile(uploadTmpPath_, uploadFinalPath_)) {
-    Board::Storage::filesystem().remove(uploadTmpPath_);
-    uploadTmpPath_ = "";
-    uploadFinalPath_ = "";
-    server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Font save failed\"}");
-    return;
-  }
-
-  statusLine1_ = "Font received";
-  statusLine2_ = uploadFinalPath_;
-  Serial.printf("[sync] font ready %s\n", uploadFinalPath_.c_str());
-  server_.send(201, "application/json",
-               String("{\"ok\":true,\"path\":\"") + jsonEscape(uploadFinalPath_) + "\"}");
-  uploadTmpPath_ = "";
-  uploadFinalPath_ = "";
 }
 
 void CompanionSyncManager::handleFontUpload() {
-  HTTPUpload &upload = server_.upload();
+    HTTPUpload& upload = server_.upload();
 
-  if (upload.status == UPLOAD_FILE_START) {
-    String family = sanitizeFilename(server_.arg("family"));
-    if (family.isEmpty()) {
-      family = sanitizeFilename(upload.filename);
-      const int dot = family.lastIndexOf('.');
-      if (dot > 0) {
-        family = family.substring(0, dot);
-      }
-    }
-    if (family.isEmpty()) {
-      uploadError_ = "Missing font family";
-      return;
+    if (upload.status == UPLOAD_FILE_START) {
+        String family = sanitizeFilename(server_.arg("family"));
+        if (family.isEmpty()) {
+            family = sanitizeFilename(upload.filename);
+            const int dot = family.lastIndexOf('.');
+            if (dot > 0) {
+                family = family.substring(0, dot);
+            }
+        }
+        if (family.isEmpty()) {
+            uploadError_ = "Missing font family";
+            return;
+        }
+
+        String sizeId = server_.arg("size");
+        sizeId.toLowerCase();
+        const int sizeIndex = RFont4::sizeIndexForId(sizeId);
+        if (sizeIndex < 0) {
+            uploadError_ = "Font size must be large, medium, or small";
+            return;
+        }
+
+        String filename = sanitizeFilename(server_.arg("name"));
+        if (filename.isEmpty()) {
+            filename = sanitizeFilename(upload.filename);
+        }
+        if (!RFont4::hasFontExtension(filename)) {
+            filename += RFont4::kExtension;
+        }
+        if (!ensureFontFamilyDirectory(family)) {
+            uploadError_ = "Fonts folder unavailable";
+            return;
+        }
+
+        uploadFinalPath_ = String(StoragePaths::kFontsPath) + "/" + family + "/"
+                         + RFont4::sizeFilename(static_cast<uint8_t>(sizeIndex));
+        if (StorageFiles::fileExists(uploadFinalPath_)) {
+            uploadError_ = "Font size already exists";
+            return;
+        }
+        uploadTmpPath_ = uploadFinalPath_ + ".tmp";
+        Board::Storage::filesystem().remove(uploadTmpPath_);
+        uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_, FILE_WRITE);
+        if (!uploadFile_) {
+            uploadError_ = "Could not create file";
+            return;
+        }
+        uploadError_ = "";
+        statusLine1_ = "Receiving font";
+        statusLine2_ = family + " " + RFont4::sizeId(static_cast<uint8_t>(sizeIndex));
+        Serial.printf("[sync] font upload start %s\n", uploadFinalPath_.c_str());
+        return;
     }
 
-    String sizeId = server_.arg("size");
-    sizeId.toLowerCase();
-    const int sizeIndex = RFont4::sizeIndexForId(sizeId);
-    if (sizeIndex < 0) {
-      uploadError_ = "Font size must be large, medium, or small";
-      return;
+    if (upload.status == UPLOAD_FILE_WRITE) {
+        if (!uploadError_.isEmpty() || !uploadFile_) {
+            return;
+        }
+        if (static_cast<size_t>(upload.totalSize) + static_cast<size_t>(upload.currentSize) > kMaxFontUploadBytes) {
+            uploadError_ = "Font file too large";
+            uploadFile_.close();
+            Board::Storage::filesystem().remove(uploadTmpPath_);
+            return;
+        }
+        const size_t written = uploadFile_.write(upload.buf, upload.currentSize);
+        if (written != upload.currentSize) {
+            uploadError_ = "Font write failed";
+            uploadFile_.close();
+            Board::Storage::filesystem().remove(uploadTmpPath_);
+        }
+        return;
     }
 
-    String filename = sanitizeFilename(server_.arg("name"));
-    if (filename.isEmpty()) {
-      filename = sanitizeFilename(upload.filename);
-    }
-    if (!RFont4::hasFontExtension(filename)) {
-      filename += RFont4::kExtension;
-    }
-    if (!ensureFontFamilyDirectory(family)) {
-      uploadError_ = "Fonts folder unavailable";
-      return;
+    if (upload.status == UPLOAD_FILE_END) {
+        if (uploadFile_) {
+            uploadFile_.close();
+        }
+        return;
     }
 
-    uploadFinalPath_ = String(StoragePaths::kFontsPath) + "/" + family + "/" + RFont4::sizeFilename(static_cast<uint8_t>(sizeIndex));
-    if (StorageFiles::fileExists(uploadFinalPath_)) {
-      uploadError_ = "Font size already exists";
-      return;
+    if (upload.status == UPLOAD_FILE_ABORTED) {
+        if (uploadFile_) {
+            uploadFile_.close();
+        }
+        if (!uploadTmpPath_.isEmpty()) {
+            Board::Storage::filesystem().remove(uploadTmpPath_);
+        }
+        uploadError_ = "Upload aborted";
+        finishUpload(false);
     }
-    uploadTmpPath_ = uploadFinalPath_ + ".tmp";
-    Board::Storage::filesystem().remove(uploadTmpPath_);
-    uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_, FILE_WRITE);
-    if (!uploadFile_) {
-      uploadError_ = "Could not create file";
-      return;
-    }
-    uploadError_ = "";
-    statusLine1_ = "Receiving font";
-    statusLine2_ = family + " " + RFont4::sizeId(static_cast<uint8_t>(sizeIndex));
-    Serial.printf("[sync] font upload start %s\n", uploadFinalPath_.c_str());
-    return;
-  }
-
-  if (upload.status == UPLOAD_FILE_WRITE) {
-    if (!uploadError_.isEmpty() || !uploadFile_) {
-      return;
-    }
-    if (static_cast<size_t>(upload.totalSize) + static_cast<size_t>(upload.currentSize) > kMaxFontUploadBytes) {
-      uploadError_ = "Font file too large";
-      uploadFile_.close();
-      Board::Storage::filesystem().remove(uploadTmpPath_);
-      return;
-    }
-    const size_t written = uploadFile_.write(upload.buf, upload.currentSize);
-    if (written != upload.currentSize) {
-      uploadError_ = "Font write failed";
-      uploadFile_.close();
-      Board::Storage::filesystem().remove(uploadTmpPath_);
-    }
-    return;
-  }
-
-  if (upload.status == UPLOAD_FILE_END) {
-    if (uploadFile_) {
-      uploadFile_.close();
-    }
-    return;
-  }
-
-  if (upload.status == UPLOAD_FILE_ABORTED) {
-    if (uploadFile_) {
-      uploadFile_.close();
-    }
-    if (!uploadTmpPath_.isEmpty()) {
-      Board::Storage::filesystem().remove(uploadTmpPath_);
-    }
-    uploadError_ = "Upload aborted";
-    finishUpload(false);
-  }
 }
 
 void CompanionSyncManager::handleBookDelete() {
-  String path;
-  const String id = server_.arg("id");
-  if (!id.isEmpty()) {
-    if (!resolveBookId(id, path)) {
-      server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Book not found\"}");
-      return;
+    String path;
+    const String id = server_.arg("id");
+    if (!id.isEmpty()) {
+        if (!resolveBookId(id, path)) {
+            server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Book not found\"}");
+            return;
+        }
+    } else {
+        String requested = server_.arg("name");
+        requested.trim();
+        if (requested.isEmpty()) {
+            server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing book id\"}");
+            return;
+        }
+        if (!resolveBookName(requested, path)) {
+            server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Book not found\"}");
+            return;
+        }
     }
-  } else {
-    String requested = server_.arg("name");
-    requested.trim();
-    if (requested.isEmpty()) {
-      server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing book id\"}");
-      return;
-    }
-    if (!resolveBookName(requested, path)) {
-      server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Book not found\"}");
-      return;
-    }
-  }
 
-  if (!Board::Storage::filesystem().remove(path)) {
-    server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Delete failed\"}");
-    return;
-  }
+    if (!Board::Storage::filesystem().remove(path)) {
+        server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Delete failed\"}");
+        return;
+    }
 
-  statusLine1_ = "Book deleted";
-  statusLine2_ = relativeLibraryName(path);
-  Serial.printf("[sync] deleted %s\n", path.c_str());
-  server_.send(200, "application/json",
-               String("{\"ok\":true,\"path\":\"") + jsonEscape(path) + "\"}");
+    statusLine1_ = "Book deleted";
+    statusLine2_ = relativeLibraryName(path);
+    Serial.printf("[sync] deleted %s\n", path.c_str());
+    server_.send(200, "application/json", String("{\"ok\":true,\"path\":\"") + jsonEscape(path) + "\"}");
 }
 
 void CompanionSyncManager::handleBookPosition() {
-  const String body = server_.arg("plain");
-  if (body.length() > 512) {
-    server_.send(413, "application/json", "{\"ok\":false,\"error\":\"Position payload too large\"}");
-    return;
-  }
+    const String body = server_.arg("plain");
+    if (body.length() > 512) {
+        server_.send(413, "application/json", "{\"ok\":false,\"error\":\"Position payload too large\"}");
+        return;
+    }
 
-  String id;
-  uint32_t requestedSourceSize = 0;
-  uint32_t requestedSourceFingerprint = 0;
-  uint32_t requestedWordCount = 0;
-  uint32_t requestedWordIndex = 0;
-  if (!readJsonString(body, "id", id) ||
-      !readJsonUInt32(body, "sourceSize", requestedSourceSize) ||
-      !readJsonUInt32(body, "sourceFingerprint", requestedSourceFingerprint) ||
-      !readJsonUInt32(body, "wordCount", requestedWordCount) ||
-      !readJsonUInt32(body, "wordIndex", requestedWordIndex)) {
-    server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing position fields\"}");
-    return;
-  }
+    String id;
+    uint32_t requestedSourceSize = 0;
+    uint32_t requestedSourceFingerprint = 0;
+    uint32_t requestedWordCount = 0;
+    uint32_t requestedWordIndex = 0;
+    if (!readJsonString(body, "id", id) || !readJsonUInt32(body, "sourceSize", requestedSourceSize)
+        || !readJsonUInt32(body, "sourceFingerprint", requestedSourceFingerprint)
+        || !readJsonUInt32(body, "wordCount", requestedWordCount)
+        || !readJsonUInt32(body, "wordIndex", requestedWordIndex)) {
+        server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing position fields\"}");
+        return;
+    }
 
-  String path;
-  if (!resolveBookId(id, path)) {
-    server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Book not found\"}");
-    return;
-  }
+    String path;
+    if (!resolveBookId(id, path)) {
+        server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Book not found\"}");
+        return;
+    }
 
-  BookMetadata metadata;
-  IndexedBookStore::Header header;
-  if (!IndexedBook::readMetadata(path, metadata, &header)) {
-    server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Book index unavailable\"}");
-    return;
-  }
-  if (header.wordCount == 0) {
-    server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Book has no words\"}");
-    return;
-  }
-  if (requestedSourceSize != header.sourceSize ||
-      requestedSourceFingerprint != header.sourceFingerprint ||
-      requestedWordCount != header.wordCount) {
-    server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Book identity changed\"}");
-    return;
-  }
+    BookMetadata metadata;
+    IndexedBookStore::Header header;
+    if (!IndexedBook::readMetadata(path, metadata, &header)) {
+        server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Book index unavailable\"}");
+        return;
+    }
+    if (header.wordCount == 0) {
+        server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Book has no words\"}");
+        return;
+    }
+    if (requestedSourceSize != header.sourceSize || requestedSourceFingerprint != header.sourceFingerprint
+        || requestedWordCount != header.wordCount) {
+        server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Book identity changed\"}");
+        return;
+    }
 
-  const uint32_t wordIndex = std::min<uint32_t>(requestedWordIndex, header.wordCount - 1);
-  if (!ReadingProgress::writePositionSidecar(
-          path, {header.sourceSize, header.sourceFingerprint, header.wordCount}, wordIndex)) {
-    server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Progress save failed\"}");
-    return;
-  }
+    const uint32_t wordIndex = std::min<uint32_t>(requestedWordIndex, header.wordCount - 1);
+    if (!ReadingProgress::writePositionSidecar(path, {header.sourceSize, header.sourceFingerprint, header.wordCount},
+                                               wordIndex)) {
+        server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Progress save failed\"}");
+        return;
+    }
 
-  cacheBookPosition(path, wordIndex, header.sourceSize, header.sourceFingerprint, header.wordCount);
-  statusLine1_ = "Position saved";
-  statusLine2_ = relativeLibraryName(path);
-  server_.send(200, "application/json",
-               String("{\"ok\":true,\"id\":\"") + jsonEscape(id) + "\",\"wordIndex\":" + String(wordIndex) + "}");
+    cacheBookPosition(path, wordIndex, header.sourceSize, header.sourceFingerprint, header.wordCount);
+    statusLine1_ = "Position saved";
+    statusLine2_ = relativeLibraryName(path);
+    server_.send(200, "application/json",
+                 String("{\"ok\":true,\"id\":\"") + jsonEscape(id) + "\",\"wordIndex\":" + String(wordIndex) + "}");
 }
 
 void CompanionSyncManager::handleBookUpload() {
-  HTTPUpload &upload = server_.upload();
+    HTTPUpload& upload = server_.upload();
 
-  if (upload.status == UPLOAD_FILE_START) {
-    String filename = sanitizeFilename(server_.arg("name"));
-    if (filename.isEmpty()) {
-      filename = sanitizeFilename(upload.filename);
+    if (upload.status == UPLOAD_FILE_START) {
+        String filename = sanitizeFilename(server_.arg("name"));
+        if (filename.isEmpty()) {
+            filename = sanitizeFilename(upload.filename);
+        }
+        if (filename.isEmpty()) {
+            uploadError_ = "Missing filename";
+            return;
+        }
+
+        String lowered = filename;
+        lowered.toLowerCase();
+        if (!isSupportedBookName(lowered)) {
+            filename += ".rsvp";
+        }
+
+        String category = server_.arg("category");
+        category.toLowerCase();
+        const char* targetDirectory =
+            category == "article" ? StoragePaths::kArticleFilesPath : StoragePaths::kBookFilesPath;
+
+        if (!ensureLibraryDirectories()) {
+            uploadError_ = "Library folders unavailable";
+            return;
+        }
+        uploadFinalPath_ = String(targetDirectory) + "/" + filename;
+        uploadTmpPath_ = uploadFinalPath_ + ".tmp";
+        Board::Storage::filesystem().remove(uploadTmpPath_);
+        uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_, FILE_WRITE);
+        if (!uploadFile_) {
+            uploadError_ = "Could not create file";
+            return;
+        }
+        uploadError_ = "";
+        statusLine1_ = "Receiving book";
+        statusLine2_ = filename;
+        Serial.printf("[sync] upload start %s\n", uploadFinalPath_.c_str());
+        return;
     }
-    if (filename.isEmpty()) {
-      uploadError_ = "Missing filename";
-      return;
+
+    if (upload.status == UPLOAD_FILE_WRITE) {
+        if (!uploadError_.isEmpty() || !uploadFile_) {
+            return;
+        }
+        const size_t written = uploadFile_.write(upload.buf, upload.currentSize);
+        if (written != upload.currentSize) {
+            uploadError_ = "Write failed";
+        }
+        return;
+    }
+
+    if (upload.status == UPLOAD_FILE_END) {
+        Serial.printf("[sync] upload end bytes=%u error=%s\n", upload.totalSize, uploadError_.c_str());
+        return;
+    }
+
+    if (upload.status == UPLOAD_FILE_ABORTED) {
+        uploadError_ = "Upload aborted";
+        finishUpload(false);
+    }
+}
+
+void CompanionSyncManager::handleThemeUpload() {
+    HTTPUpload& upload = server_.upload();
+
+    if (upload.status == UPLOAD_FILE_START) {
+        String filename = sanitizeFilename(server_.arg("name"));
+        if (filename.isEmpty()) {
+            filename = sanitizeFilename(upload.filename);
+        }
+        if (filename.isEmpty()) {
+            uploadError_ = "Missing filename";
+            return;
+        }
+        if (!ui::themes::hasThemeExtension(filename)) {
+            filename += ui::themes::kThemeExtension;
+        }
+        if (!ensureThemeDirectory()) {
+            uploadError_ = "Themes folder unavailable";
+            return;
+        }
+
+        uploadFinalPath_ = String(StoragePaths::kThemesPath) + "/" + filename;
+        if (StorageFiles::fileExists(uploadFinalPath_)) {
+            uploadError_ = "Theme already exists";
+            return;
+        }
+        uploadTmpPath_ = uploadFinalPath_ + ".tmp";
+        Board::Storage::filesystem().remove(uploadTmpPath_);
+        uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_, FILE_WRITE);
+        if (!uploadFile_) {
+            uploadError_ = "Could not create file";
+            return;
+        }
+        uploadError_ = "";
+        statusLine1_ = "Receiving theme";
+        statusLine2_ = filename;
+        Serial.printf("[sync] theme upload start %s\n", uploadFinalPath_.c_str());
+        return;
+    }
+
+    if (upload.status == UPLOAD_FILE_WRITE) {
+        if (!uploadError_.isEmpty() || !uploadFile_) {
+            return;
+        }
+        if (upload.totalSize + upload.currentSize > kMaxThemeUploadBytes) {
+            uploadError_ = "Theme too large";
+            return;
+        }
+        const size_t written = uploadFile_.write(upload.buf, upload.currentSize);
+        if (written != upload.currentSize) {
+            uploadError_ = "Write failed";
+        }
+        return;
+    }
+
+    if (upload.status == UPLOAD_FILE_ABORTED) {
+        uploadError_ = "Upload aborted";
+        finishUpload(false);
+    }
+}
+
+void CompanionSyncManager::handleNotFound() {
+    server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Not found\"}");
+}
+
+String CompanionSyncManager::settingsJson() {
+    static const char* const readerModeLabels[] = {"rsvp", "scroll"};
+    static const char* const handednessLabels[] = {"right", "left"};
+    static const char* const readerControlLabels[] = {"standard", "rewind_top_right"};
+    static const char* const footerMetricLabels[] = {"percentage", "chapter_time", "book_time"};
+    static const char* const batteryLabelLabels[] = {"percent", "time_remaining", "voltage"};
+    static const char* const pauseModeLabels[] = {"sentence_end", "instant"};
+
+    const uint16_t wpm = clampU16(preferences_.getUShort(pref::Wpm::key(), kDefaultWpm), kMinWpm, kMaxWpm);
+    const uint8_t readerMode =
+        static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::ReaderMode::key(), 0), 0, kMaxReaderMode));
+    const uint8_t pauseMode =
+        static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::PauseMode::key(), 0), 0, kMaxPauseMode));
+    const uint16_t longDelay =
+        clampU16(preferences_.getUShort(pref::PacingLongWordDelay::key(), kDefaultPacingDelayMs), 0, kMaxPacingDelayMs);
+    const uint16_t complexDelay =
+        clampU16(preferences_.getUShort(pref::PacingComplexWordDelay::key(), kDefaultPacingDelayMs), 0,
+                 kMaxPacingDelayMs);
+    const uint16_t punctuationDelay =
+        clampU16(preferences_.getUShort(pref::PacingPunctuationDelay::key(), kDefaultPacingDelayMs), 0,
+                 kMaxPacingDelayMs);
+    const uint8_t brightness =
+        static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::BrightnessIndex::key(), kDefaultBrightness), 0,
+                                      kMaxBrightness));
+    const uint8_t handedness =
+        static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::Handedness::key(), 0), 0, kMaxHandedness));
+    const uint8_t readerControls = preferences_.getBool(pref::ReaderControlsSwapped::key(), false) ? 1 : 0;
+    const uint8_t footerMetric =
+        static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::FooterMetricMode::key(), 0), 0, kMaxFooterMetric));
+    const uint8_t batteryLabel =
+        static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::BatteryLabelMode::key(), 0), 0, kMaxBatteryLabel));
+    const uint8_t language =
+        static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::UiLanguage::key(), 0), 0, kMaxUiLanguage));
+    const uint8_t fontSize = static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::ReaderFontSizeIndex::key(), 0),
+                                                           0, kMaxReaderFontSize));
+    FontCatalog fontCatalog;
+    fontCatalog.loadFromSd();
+    uint8_t typeface = 0;
+    const String savedTypefaceId = preferences_.getString(pref::ReaderTypefaceId::key(), "");
+    if (savedTypefaceId.isEmpty() || !fontCatalog.indexForId(savedTypefaceId, typeface)) {
+        typeface = static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::ReaderTypefaceIndex::key(), 0), 0,
+                                                 std::max<int>(0, fontCatalog.typefaceCount() - 1)));
+    }
+    const int tracking = clampInt(preferences_.getChar(pref::TypographyTracking::key(), 0), kMinTypographyTracking,
+                                  kMaxTypographyTracking);
+    const uint8_t anchor =
+        static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::TypographyAnchor::key(), kDefaultTypographyAnchor),
+                                      kMinTypographyAnchor, kMaxTypographyAnchor));
+    const uint8_t guideWidth = static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::TypographyGuideWidth::key(),
+                                                                                   kDefaultTypographyGuideWidth),
+                                                             kMinTypographyGuideWidth, kMaxTypographyGuideWidth));
+    const uint8_t guideGap = static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::TypographyGuideGap::key(),
+                                                                                 kDefaultTypographyGuideGap),
+                                                           kMinTypographyGuideGap, kMaxTypographyGuideGap));
+    ThemeStore themeStore;
+    themeStore.loadFromSd();
+    const String savedThemeId = preferences_.getString(pref::ThemeId::key(), "");
+    if (!savedThemeId.isEmpty()) {
+        themeStore.selectById(savedThemeId.c_str());
+    }
+    const ui::themes::Theme& selectedTheme = themeStore.selected();
+
+    String body;
+    body.reserve(3600);
+    body += "{\"ok\":true,\"version\":1";
+    body += ",\"reading\":{";
+    body += "\"wpm\":" + String(wpm);
+    body += ",\"readerMode\":\"";
+    body += enumLabel(readerMode, readerModeLabels, 2);
+    body += "\"";
+    body += ",\"pauseMode\":\"";
+    body += enumLabel(pauseMode, pauseModeLabels, 2);
+    body += "\"";
+    body += ",\"accurateTimeEstimate\":true";
+    body += ",\"pacing\":{\"longWordMs\":" + String(longDelay) + ",\"complexWordMs\":" + String(complexDelay)
+          + ",\"punctuationMs\":" + String(punctuationDelay) + "}";
+    body += "}";
+    body += ",\"display\":{";
+    body += "\"themeId\":\"" + jsonEscape(selectedTheme.id) + "\"";
+    body += ",\"brightnessIndex\":" + String(brightness);
+    body += ",\"handedness\":\"";
+    body += enumLabel(handedness, handednessLabels, 2);
+    body += "\"";
+    body += ",\"readerControls\":\"";
+    body += enumLabel(readerControls, readerControlLabels, 2);
+    body += "\"";
+    body += ",\"footerMetric\":\"";
+    body += enumLabel(footerMetric, footerMetricLabels, 3);
+    body += "\"";
+    body += ",\"batteryLabel\":\"";
+    body += enumLabel(batteryLabel, batteryLabelLabels, 3);
+    body += "\"";
+    body += ",\"readingBattery\":"
+          + String(preferences_.getBool(pref::ReaderBatteryVisible::key(), true) ? "true" : "false");
+    body += ",\"readingChapter\":"
+          + String(preferences_.getBool(pref::ReaderChapterVisible::key(), false) ? "true" : "false");
+    body += ",\"readingProgress\":"
+          + String(preferences_.getBool(pref::ReaderProgressVisible::key(), false) ? "true" : "false");
+    body += ",\"language\":" + String(language);
+    body += ",\"phantomWords\":" + String(preferences_.getBool(pref::PhantomWords::key(), true) ? "true" : "false");
+    body += ",\"fontSizeIndex\":" + String(fontSize);
+    body += "}";
+    body += ",\"typography\":{";
+    body += "\"typeface\":\"";
+    body += jsonEscape(fontCatalog.typefaceId(typeface));
+    body += "\"";
+    body += ",\"focusHighlight\":"
+          + String(preferences_.getBool(pref::TypographyFocusHighlight::key(), true) ? "true" : "false");
+    body += ",\"tracking\":" + String(tracking);
+    body += ",\"anchorPercent\":" + String(anchor);
+    body += ",\"guideWidth\":" + String(guideWidth);
+    body += ",\"guideGap\":" + String(guideGap);
+    body += "}";
+    const std::vector<ui::themes::Theme>& themes = themeStore.themes();
+    body += ",\"themeCount\":" + String(themes.size());
+    body += ",\"themes\":[";
+    for (size_t i = 0; i < themes.size(); ++i) {
+        if (i > 0) {
+            body += ",";
+        }
+        body += "{\"id\":\"" + jsonEscape(themes[i].id) + "\"";
+        body += ",\"name\":\"" + jsonEscape(themes[i].name) + "\"";
+        body += ",\"builtIn\":" + String(themes[i].builtIn ? "true" : "false");
+        body += ",\"typeface\":\"";
+        body += ui::themes::readerTypefaceName(themes[i].typeface);
+        body += "\"}";
+    }
+    body += "]";
+    const std::vector<FontCatalog::Family>& fonts = fontCatalog.families();
+    body += ",\"fontCount\":" + String(fonts.size());
+    body += ",\"fonts\":[";
+    for (size_t i = 0; i < fonts.size(); ++i) {
+        if (i > 0) {
+            body += ",";
+        }
+        body += "{\"id\":\"" + jsonEscape(fonts[i].id) + "\"";
+        body += ",\"name\":\"" + jsonEscape(fonts[i].label) + "\"";
+        body += ",\"builtIn\":" + String(fonts[i].builtIn ? "true" : "false");
+        body += ",\"sizes\":[";
+        for (size_t size = 0; size < RFont4::kSizeCount; ++size) {
+            if (size > 0) {
+                body += ",";
+            }
+            body += "{\"id\":\"";
+            body += RFont4::sizeId(static_cast<uint8_t>(size));
+            body += "\",\"name\":\"";
+            body += RFont4::sizeLabel(static_cast<uint8_t>(size));
+            body += "\",\"available\":";
+            body += fontCatalog.hasSize(static_cast<uint8_t>(i), static_cast<uint8_t>(size)) ? "true" : "false";
+            body += "}";
+        }
+        body += "]}";
+    }
+    body += "]";
+    body += ",\"limits\":{";
+    body += "\"wpm\":{\"min\":" + String(kMinWpm) + ",\"max\":" + String(kMaxWpm) + "}";
+    body += ",\"brightnessIndex\":{\"min\":0,\"max\":" + String(kMaxBrightness) + "}";
+    body += ",\"pacingMs\":{\"min\":0,\"max\":" + String(kMaxPacingDelayMs) + "}";
+    body +=
+        ",\"tracking\":{\"min\":" + String(kMinTypographyTracking) + ",\"max\":" + String(kMaxTypographyTracking) + "}";
+    body += ",\"anchorPercent\":{\"min\":" + String(kMinTypographyAnchor) + ",\"max\":" + String(kMaxTypographyAnchor)
+          + "}";
+    body += ",\"guideWidth\":{\"min\":" + String(kMinTypographyGuideWidth)
+          + ",\"max\":" + String(kMaxTypographyGuideWidth) + "}";
+    body +=
+        ",\"guideGap\":{\"min\":" + String(kMinTypographyGuideGap) + ",\"max\":" + String(kMaxTypographyGuideGap) + "}";
+    body += "}}";
+    return body;
+}
+
+bool CompanionSyncManager::applySettingsJson(const String& body, String& error) {
+    if (body.isEmpty()) {
+        error = "Missing settings JSON";
+        return false;
+    }
+
+    static const char* const readerModeLabels[] = {"rsvp", "scroll"};
+    static const char* const handednessLabels[] = {"right", "left"};
+    static const char* const readerControlLabels[] = {"standard", "rewind_top_right"};
+    static const char* const footerMetricLabels[] = {"percentage", "chapter_time", "book_time"};
+    static const char* const batteryLabelLabels[] = {"percent", "time_remaining", "voltage"};
+    static const char* const pauseModeLabels[] = {"sentence_end", "instant"};
+
+    int intValue = 0;
+    bool boolValue = false;
+    String stringValue;
+    bool themeTypefaceApplied = false;
+
+    if (readJsonInt(body, "wpm", intValue)) {
+        if (intValue < kMinWpm || intValue > kMaxWpm) {
+            error = "wpm must be between 10 and 1000";
+            return false;
+        }
+        preferences_.putUShort(pref::Wpm::key(), static_cast<uint16_t>(intValue));
+    }
+    if (readJsonString(body, "readerMode", stringValue)) {
+        const int value = enumValue(stringValue, readerModeLabels, 2);
+        if (value < 0) {
+            error = "readerMode must be rsvp or scroll";
+            return false;
+        }
+        preferences_.putUChar(pref::ReaderMode::key(), static_cast<uint8_t>(value));
+    }
+    if (readJsonString(body, "pauseMode", stringValue)) {
+        const int value = enumValue(stringValue, pauseModeLabels, 2);
+        if (value < 0) {
+            error = "pauseMode must be sentence_end or instant";
+            return false;
+        }
+        preferences_.putUChar(pref::PauseMode::key(), static_cast<uint8_t>(value));
+    }
+    preferences_.putBool(pref::AccurateTime::key(), true);
+    if (readJsonInt(body, "longWordMs", intValue)) {
+        if (intValue < 0 || intValue > kMaxPacingDelayMs) {
+            error = "longWordMs must be between 0 and 600";
+            return false;
+        }
+        preferences_.putUShort(pref::PacingLongWordDelay::key(), static_cast<uint16_t>(intValue));
+    }
+    if (readJsonInt(body, "complexWordMs", intValue)) {
+        if (intValue < 0 || intValue > kMaxPacingDelayMs) {
+            error = "complexWordMs must be between 0 and 600";
+            return false;
+        }
+        preferences_.putUShort(pref::PacingComplexWordDelay::key(), static_cast<uint16_t>(intValue));
+    }
+    if (readJsonInt(body, "punctuationMs", intValue)) {
+        if (intValue < 0 || intValue > kMaxPacingDelayMs) {
+            error = "punctuationMs must be between 0 and 600";
+            return false;
+        }
+        preferences_.putUShort(pref::PacingPunctuationDelay::key(), static_cast<uint16_t>(intValue));
+    }
+    if (readJsonInt(body, "brightnessIndex", intValue)) {
+        if (intValue < 0 || intValue > kMaxBrightness) {
+            error = "brightnessIndex must be between 0 and 19";
+            return false;
+        }
+        preferences_.putUChar(pref::BrightnessIndex::key(), static_cast<uint8_t>(intValue));
+    }
+    if (readJsonString(body, "themeId", stringValue)) {
+        ThemeStore themeStore;
+        themeStore.loadFromSd();
+        if (!themeStore.selectById(stringValue.c_str())) {
+            error = "themeId does not match an available theme";
+            return false;
+        }
+        const ui::themes::Theme& theme = themeStore.selected();
+        preferences_.putString(pref::ThemeId::key(), theme.id);
+        FontCatalog fontCatalog;
+        fontCatalog.loadFromSd();
+        uint8_t themeTypeface = 0;
+        if (fontCatalog.indexForId(ui::themes::readerTypefaceName(theme.typeface), themeTypeface)) {
+            preferences_.putUChar(pref::ReaderTypefaceIndex::key(), themeTypeface);
+            preferences_.putString(pref::ReaderTypefaceId::key(), fontCatalog.typefaceId(themeTypeface));
+            themeTypefaceApplied = true;
+        }
+    }
+    if (readJsonString(body, "handedness", stringValue)) {
+        const int value = enumValue(stringValue, handednessLabels, 2);
+        if (value < 0) {
+            error = "handedness must be right or left";
+            return false;
+        }
+        preferences_.putUChar(pref::Handedness::key(), static_cast<uint8_t>(value));
+    }
+    if (readJsonString(body, "readerControls", stringValue)) {
+        const int value = enumValue(stringValue, readerControlLabels, 2);
+        if (value < 0) {
+            error = "readerControls must be standard or rewind_top_right";
+            return false;
+        }
+        preferences_.putBool(pref::ReaderControlsSwapped::key(), value == 1);
+    }
+    if (readJsonString(body, "footerMetric", stringValue)) {
+        const int value = enumValue(stringValue, footerMetricLabels, 3);
+        if (value < 0) {
+            error = "footerMetric must be percentage, chapter_time, or book_time";
+            return false;
+        }
+        preferences_.putUChar(pref::FooterMetricMode::key(), static_cast<uint8_t>(value));
+    }
+    if (readJsonString(body, "batteryLabel", stringValue)) {
+        const int value = enumValue(stringValue, batteryLabelLabels, 3);
+        if (value < 0) {
+            error = "batteryLabel must be percent, time_remaining, or voltage";
+            return false;
+        }
+        preferences_.putUChar(pref::BatteryLabelMode::key(), static_cast<uint8_t>(value));
+    }
+    if (readJsonBool(body, "readingBattery", boolValue)) {
+        preferences_.putBool(pref::ReaderBatteryVisible::key(), boolValue);
+    }
+    if (readJsonBool(body, "readingChapter", boolValue)) {
+        preferences_.putBool(pref::ReaderChapterVisible::key(), boolValue);
+    }
+    if (readJsonBool(body, "readingProgress", boolValue)) {
+        preferences_.putBool(pref::ReaderProgressVisible::key(), boolValue);
+    }
+    if (readJsonInt(body, "language", intValue)) {
+        if (intValue < 0 || intValue > kMaxUiLanguage) {
+            error = "language is out of range";
+            return false;
+        }
+        preferences_.putUChar(pref::UiLanguage::key(), static_cast<uint8_t>(intValue));
+    }
+    if (readJsonBool(body, "phantomWords", boolValue)) {
+        preferences_.putBool(pref::PhantomWords::key(), boolValue);
+    }
+    if (readJsonInt(body, "fontSizeIndex", intValue)) {
+        if (intValue < 0 || intValue > kMaxReaderFontSize) {
+            error = "fontSizeIndex must be between 0 and 2";
+            return false;
+        }
+        preferences_.putUChar(pref::ReaderFontSizeIndex::key(), static_cast<uint8_t>(intValue));
+    }
+    if (!themeTypefaceApplied && readJsonString(body, "typeface", stringValue)) {
+        FontCatalog fontCatalog;
+        fontCatalog.loadFromSd();
+        uint8_t value = 0;
+        if (!fontCatalog.indexForId(stringValue, value)) {
+            error = "typeface does not match an available font";
+            return false;
+        }
+        preferences_.putUChar(pref::ReaderTypefaceIndex::key(), value);
+        preferences_.putString(pref::ReaderTypefaceId::key(), fontCatalog.typefaceId(value));
+    }
+    if (readJsonBool(body, "focusHighlight", boolValue)) {
+        preferences_.putBool(pref::TypographyFocusHighlight::key(), boolValue);
+    }
+    if (readJsonInt(body, "tracking", intValue)) {
+        if (intValue < kMinTypographyTracking || intValue > kMaxTypographyTracking) {
+            error = "tracking is out of range";
+            return false;
+        }
+        preferences_.putChar(pref::TypographyTracking::key(), static_cast<int8_t>(intValue));
+    }
+    if (readJsonInt(body, "anchorPercent", intValue)) {
+        if (intValue < kMinTypographyAnchor || intValue > kMaxTypographyAnchor) {
+            error = "anchorPercent is out of range";
+            return false;
+        }
+        preferences_.putUChar(pref::TypographyAnchor::key(), static_cast<uint8_t>(intValue));
+    }
+    if (readJsonInt(body, "guideWidth", intValue)) {
+        if (intValue < kMinTypographyGuideWidth || intValue > kMaxTypographyGuideWidth) {
+            error = "guideWidth is out of range";
+            return false;
+        }
+        preferences_.putUChar(pref::TypographyGuideWidth::key(), static_cast<uint8_t>(intValue));
+    }
+    if (readJsonInt(body, "guideGap", intValue)) {
+        if (intValue < kMinTypographyGuideGap || intValue > kMaxTypographyGuideGap) {
+            error = "guideGap is out of range";
+            return false;
+        }
+        preferences_.putUChar(pref::TypographyGuideGap::key(), static_cast<uint8_t>(intValue));
+    }
+
+    return true;
+}
+
+String CompanionSyncManager::wifiJson() {
+    const String ssid = preferences_.getString(pref::WifiSsid::key(), "");
+    return String("{\"ok\":true,\"configured\":") + (ssid.isEmpty() ? "false" : "true") + ",\"ssid\":\""
+         + jsonEscape(ssid) + "\",\"passwordSet\":"
+         + (preferences_.getString(pref::WifiPassword::key(), "").isEmpty() ? "false" : "true") + "}";
+}
+
+bool CompanionSyncManager::applyWifiJson(const String& body, String& error) {
+    if (body.length() > 512) {
+        error = "Wi-Fi payload too large";
+        return false;
+    }
+
+    String ssid;
+    if (!readJsonString(body, "ssid", ssid)) {
+        error = "Missing Wi-Fi SSID";
+        return false;
+    }
+    ssid.trim();
+    if (ssid.isEmpty()) {
+        error = "Wi-Fi SSID is required";
+        return false;
+    }
+    if (ssid.length() > 32) {
+        error = "Wi-Fi SSID is too long";
+        return false;
+    }
+
+    String password;
+    readJsonString(body, "password", password);
+    if (password.length() > 64) {
+        error = "Wi-Fi password is too long";
+        return false;
+    }
+
+    preferences_.putString(pref::WifiSsid::key(), ssid);
+    preferences_.putString(pref::WifiPassword::key(), password);
+    return true;
+}
+
+String CompanionSyncManager::rssFeedsJson() {
+    String body;
+    body.reserve(256);
+    body += "{\"ok\":true,\"feeds\":[";
+    File file = Board::Storage::filesystem().open(kRssConfigPath);
+    bool first = true;
+    if (file && !file.isDirectory()) {
+        while (file.available()) {
+            String line = file.readStringUntil('\n');
+            line.trim();
+            if (line.isEmpty() || line.startsWith("#")) {
+                continue;
+            }
+            if (line.startsWith("feed=")) {
+                line = line.substring(5);
+                line.trim();
+            }
+            if (!isHttpUrl(line)) {
+                continue;
+            }
+            if (!first) {
+                body += ",";
+            }
+            first = false;
+            body += "\"" + jsonEscape(line) + "\"";
+        }
+    }
+    if (file) {
+        file.close();
+    }
+    body += "]}";
+    return body;
+}
+
+bool CompanionSyncManager::writeRssFeedsJson(const String& body, String& error) {
+    if (body.length() > kMaxRssFeedsPatchBytes) {
+        error = "RSS feed payload too large";
+        return false;
+    }
+
+    int colonIndex = -1;
+    if (!findJsonKey(body, "feeds", colonIndex)) {
+        error = "Missing feeds array";
+        return false;
+    }
+    int index = skipJsonWhitespace(body, colonIndex + 1);
+    if (index >= static_cast<int>(body.length()) || body[index] != '[') {
+        error = "feeds must be an array";
+        return false;
+    }
+    ++index;
+
+    std::vector<String> feeds;
+    feeds.reserve(8);
+    while (true) {
+        index = skipJsonWhitespace(body, index);
+        if (index < static_cast<int>(body.length()) && body[index] == ']') {
+            break;
+        }
+
+        String feed;
+        if (!nextJsonArrayString(body, index, feed)) {
+            error = "Invalid feeds array";
+            return false;
+        }
+        feed.trim();
+        if (feed.isEmpty()) {
+            continue;
+        }
+        if (!isHttpUrl(feed)) {
+            error = "Feeds must start with http:// or https://";
+            return false;
+        }
+        if (feeds.size() >= kMaxRssFeeds) {
+            error = "Too many RSS feeds";
+            return false;
+        }
+        bool duplicate = false;
+        for (const String& existing: feeds) {
+            if (existing == feed) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) {
+            feeds.push_back(feed);
+        }
+    }
+
+    Board::Storage::filesystem().mkdir(StoragePaths::kConfigPath);
+    const String tmpPath = String(kRssConfigPath) + ".tmp";
+    Board::Storage::filesystem().remove(tmpPath);
+    File file = Board::Storage::filesystem().open(tmpPath, FILE_WRITE);
+    if (!file) {
+        error = "Could not write RSS config";
+        return false;
+    }
+    file.println("# RSVP Nano RSS feeds");
+    for (const String& feed: feeds) {
+        file.print("feed=");
+        file.println(feed);
+    }
+    file.close();
+
+    Board::Storage::filesystem().remove(kRssConfigPath);
+    if (!Board::Storage::filesystem().rename(tmpPath, kRssConfigPath)) {
+        Board::Storage::filesystem().remove(tmpPath);
+        error = "Could not save RSS config";
+        return false;
+    }
+    return true;
+}
+
+String CompanionSyncManager::deviceSuffix() const {
+    uint64_t mac = ESP.getEfuseMac();
+    char suffix[7];
+    snprintf(suffix, sizeof(suffix), "%06X", static_cast<unsigned int>(mac & 0xFFFFFF));
+    return String(suffix);
+}
+
+String CompanionSyncManager::jsonEscape(const String& value) const {
+    String escaped;
+    escaped.reserve(value.length() + 8);
+    for (size_t i = 0; i < value.length(); ++i) {
+        const uint8_t c = static_cast<uint8_t>(value[i]);
+        switch (c) {
+        case '"':
+            escaped += "\\\"";
+            break;
+        case '\\':
+            escaped += "\\\\";
+            break;
+        case '\b':
+            escaped += "\\b";
+            break;
+        case '\f':
+            escaped += "\\f";
+            break;
+        case '\n':
+            escaped += "\\n";
+            break;
+        case '\r':
+            escaped += "\\r";
+            break;
+        case '\t':
+            escaped += "\\t";
+            break;
+        default:
+            if (c < 0x20) {
+                char code[7];
+                std::snprintf(code, sizeof(code), "\\u%04x", c);
+                escaped += code;
+            } else {
+                escaped += static_cast<char>(c);
+            }
+            break;
+        }
+    }
+    return escaped;
+}
+
+String CompanionSyncManager::sanitizeFilename(const String& name) const {
+    String sanitized;
+    sanitized.reserve(name.length());
+    for (size_t i = 0; i < name.length(); ++i) {
+        const char c = name[i];
+        sanitized += isSafeFilenameChar(c) ? c : '-';
+    }
+    sanitized.trim();
+    while (sanitized.startsWith(".")) {
+        sanitized.remove(0, 1);
+    }
+    return sanitized;
+}
+
+CompanionSyncManager::RsvpMetadata CompanionSyncManager::readRsvpMetadata(const String& path) const {
+    RsvpMetadata metadata;
+    String loweredPath = path;
+    loweredPath.toLowerCase();
+    if (!loweredPath.endsWith(".rsvp")) {
+        return metadata;
+    }
+
+    File file = Board::Storage::filesystem().open(path);
+    if (!file || file.isDirectory()) {
+        if (file) {
+            file.close();
+        }
+        return metadata;
+    }
+
+    String line;
+    line.reserve(kMaxMetadataLineChars);
+    bool pastDirectives = false;
+    while (file.available()) {
+        const char c = static_cast<char>(file.read());
+        if (c == '\r') {
+            continue;
+        }
+
+        if (c != '\n') {
+            line += c;
+            if (line.length() > kMaxMetadataLineChars) {
+                pastDirectives = true;
+                line = "";
+                break;
+            }
+            continue;
+        }
+
+        if (metadata.title.isEmpty()) {
+            metadata.title = rsvpMetadataValueFromLine(line, "@title", pastDirectives);
+        }
+        if (metadata.author.isEmpty() && !pastDirectives) {
+            metadata.author = rsvpMetadataValueFromLine(line, "@author", pastDirectives);
+        }
+        if (!metadata.title.isEmpty() && !metadata.author.isEmpty()) {
+            break;
+        }
+
+        if (pastDirectives) {
+            break;
+        }
+        line = "";
+    }
+
+    if (!line.isEmpty() && !pastDirectives) {
+        if (metadata.title.isEmpty()) {
+            metadata.title = rsvpMetadataValueFromLine(line, "@title", pastDirectives);
+        }
+        if (metadata.author.isEmpty() && !pastDirectives) {
+            metadata.author = rsvpMetadataValueFromLine(line, "@author", pastDirectives);
+        }
+    }
+
+    file.close();
+    return metadata;
+}
+
+bool CompanionSyncManager::progressForPath(const String& path, uint32_t sourceSize, uint32_t sourceFingerprint,
+                                           uint32_t wordCount, uint32_t& wordIndex, uint8_t& percent) {
+    if (wordCount <= 1) {
+        return false;
+    }
+
+    if (ReadingProgress::readPositionSidecar(path, {sourceSize, sourceFingerprint, wordCount}, wordIndex)) {
+        percent = ReadingProgress::percent(wordIndex, wordCount);
+        return true;
+    }
+
+    const String positionKey = ReadingProgress::positionKey(path);
+    const String countKey = ReadingProgress::wordCountKey(path);
+    if (!preferences_.isKey(positionKey.c_str()) || !preferences_.isKey(countKey.c_str())) {
+        return false;
+    }
+    if (preferences_.getUInt(countKey.c_str(), 0) != wordCount) {
+        return false;
+    }
+
+    if (preferences_.isKey(ReadingProgress::sourceSizeKey(path).c_str())
+        && preferences_.getUInt(ReadingProgress::sourceSizeKey(path).c_str(), 0) != sourceSize) {
+        return false;
+    }
+    if (preferences_.isKey(ReadingProgress::sourceFingerprintKey(path).c_str())
+        && preferences_.getUInt(ReadingProgress::sourceFingerprintKey(path).c_str(), 0) != sourceFingerprint) {
+        return false;
+    }
+
+    wordIndex = std::min<uint32_t>(preferences_.getUInt(positionKey.c_str(), 0), wordCount - 1);
+    percent = ReadingProgress::percent(wordIndex, wordCount);
+    return true;
+}
+
+void CompanionSyncManager::cacheBookPosition(const String& path, uint32_t wordIndex, uint32_t sourceSize,
+                                             uint32_t sourceFingerprint, uint32_t wordCount) {
+    if (wordCount == 0) {
+        return;
+    }
+    wordIndex = std::min<uint32_t>(wordIndex, wordCount - 1);
+    preferences_.putUInt(ReadingProgress::positionKey(path).c_str(), wordIndex);
+    preferences_.putUInt(ReadingProgress::wordCountKey(path).c_str(), wordCount);
+    preferences_.putUInt(ReadingProgress::sourceSizeKey(path).c_str(), sourceSize);
+    preferences_.putUInt(ReadingProgress::sourceFingerprintKey(path).c_str(), sourceFingerprint);
+}
+
+String CompanionSyncManager::bookIdForPath(const String& path) const {
+    return ReadingProgress::bookId(path);
+}
+
+bool CompanionSyncManager::resolveBookId(const String& id, String& path) const {
+    const char* directories[] = {
+        StoragePaths::kBooksPath,
+        StoragePaths::kBookFilesPath,
+        StoragePaths::kArticleFilesPath,
+    };
+
+    for (const char* directoryPath: directories) {
+        File dir = Board::Storage::filesystem().open(directoryPath);
+        if (!dir || !dir.isDirectory()) {
+            if (dir) {
+                dir.close();
+            }
+            continue;
+        }
+
+        File entry = dir.openNextFile();
+        while (entry) {
+            if (!entry.isDirectory()) {
+                const String name = displayNameForPath(String(entry.name()));
+                String lowered = name;
+                lowered.toLowerCase();
+                if (isSupportedBookName(lowered)) {
+                    const String candidate = String(directoryPath) + "/" + name;
+                    if (bookIdForPath(candidate) == id) {
+                        path = candidate;
+                        entry.close();
+                        dir.close();
+                        return true;
+                    }
+                }
+            }
+            entry.close();
+            entry = dir.openNextFile();
+        }
+        dir.close();
+    }
+
+    return false;
+}
+
+bool CompanionSyncManager::resolveBookName(const String& requested, String& path) const {
+    String filename = requested;
+    const int separator = requested.indexOf('/');
+    if (separator >= 0) {
+        const String directory = requested.substring(0, separator);
+        filename = sanitizeFilename(requested.substring(separator + 1));
+        if (filename.isEmpty() || requested.indexOf("..") >= 0 || (directory != "books" && directory != "articles")) {
+            return false;
+        }
+        path = String(StoragePaths::kBooksPath) + "/" + directory + "/" + filename;
+    } else {
+        filename = sanitizeFilename(requested);
+        path = String(StoragePaths::kBooksPath) + "/" + filename;
     }
 
     String lowered = filename;
     lowered.toLowerCase();
     if (!isSupportedBookName(lowered)) {
-      filename += ".rsvp";
+        return false;
     }
 
-    String category = server_.arg("category");
-    category.toLowerCase();
-    const char *targetDirectory = category == "article"
-                                      ? StoragePaths::kArticleFilesPath
-                                      : StoragePaths::kBookFilesPath;
-
-    if (!ensureLibraryDirectories()) {
-      uploadError_ = "Library folders unavailable";
-      return;
+    File file = Board::Storage::filesystem().open(path);
+    if ((!file || file.isDirectory()) && separator < 0) {
+        if (file) {
+            file.close();
+        }
+        path = String(StoragePaths::kBookFilesPath) + "/" + filename;
+        file = Board::Storage::filesystem().open(path);
     }
-    uploadFinalPath_ = String(targetDirectory) + "/" + filename;
-    uploadTmpPath_ = uploadFinalPath_ + ".tmp";
-    Board::Storage::filesystem().remove(uploadTmpPath_);
-    uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_, FILE_WRITE);
-    if (!uploadFile_) {
-      uploadError_ = "Could not create file";
-      return;
+    if ((!file || file.isDirectory()) && separator < 0) {
+        if (file) {
+            file.close();
+        }
+        path = String(StoragePaths::kArticleFilesPath) + "/" + filename;
+        file = Board::Storage::filesystem().open(path);
     }
-    uploadError_ = "";
-    statusLine1_ = "Receiving book";
-    statusLine2_ = filename;
-    Serial.printf("[sync] upload start %s\n", uploadFinalPath_.c_str());
-    return;
-  }
-
-  if (upload.status == UPLOAD_FILE_WRITE) {
-    if (!uploadError_.isEmpty() || !uploadFile_) {
-      return;
+    if (!file || file.isDirectory()) {
+        if (file) {
+            file.close();
+        }
+        return false;
     }
-    const size_t written = uploadFile_.write(upload.buf, upload.currentSize);
-    if (written != upload.currentSize) {
-      uploadError_ = "Write failed";
-    }
-    return;
-  }
-
-  if (upload.status == UPLOAD_FILE_END) {
-    Serial.printf("[sync] upload end bytes=%u error=%s\n", upload.totalSize,
-                  uploadError_.c_str());
-    return;
-  }
-
-  if (upload.status == UPLOAD_FILE_ABORTED) {
-    uploadError_ = "Upload aborted";
-    finishUpload(false);
-  }
-}
-
-void CompanionSyncManager::handleThemeUpload() {
-  HTTPUpload &upload = server_.upload();
-
-  if (upload.status == UPLOAD_FILE_START) {
-    String filename = sanitizeFilename(server_.arg("name"));
-    if (filename.isEmpty()) {
-      filename = sanitizeFilename(upload.filename);
-    }
-    if (filename.isEmpty()) {
-      uploadError_ = "Missing filename";
-      return;
-    }
-    if (!ui::themes::hasThemeExtension(filename)) {
-      filename += ui::themes::kThemeExtension;
-    }
-    if (!ensureThemeDirectory()) {
-      uploadError_ = "Themes folder unavailable";
-      return;
-    }
-
-    uploadFinalPath_ = String(StoragePaths::kThemesPath) + "/" + filename;
-    if (StorageFiles::fileExists(uploadFinalPath_)) {
-      uploadError_ = "Theme already exists";
-      return;
-    }
-    uploadTmpPath_ = uploadFinalPath_ + ".tmp";
-    Board::Storage::filesystem().remove(uploadTmpPath_);
-    uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_, FILE_WRITE);
-    if (!uploadFile_) {
-      uploadError_ = "Could not create file";
-      return;
-    }
-    uploadError_ = "";
-    statusLine1_ = "Receiving theme";
-    statusLine2_ = filename;
-    Serial.printf("[sync] theme upload start %s\n", uploadFinalPath_.c_str());
-    return;
-  }
-
-  if (upload.status == UPLOAD_FILE_WRITE) {
-    if (!uploadError_.isEmpty() || !uploadFile_) {
-      return;
-    }
-    if (upload.totalSize + upload.currentSize > kMaxThemeUploadBytes) {
-      uploadError_ = "Theme too large";
-      return;
-    }
-    const size_t written = uploadFile_.write(upload.buf, upload.currentSize);
-    if (written != upload.currentSize) {
-      uploadError_ = "Write failed";
-    }
-    return;
-  }
-
-  if (upload.status == UPLOAD_FILE_ABORTED) {
-    uploadError_ = "Upload aborted";
-    finishUpload(false);
-  }
-}
-
-void CompanionSyncManager::handleNotFound() {
-  server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Not found\"}");
-}
-
-String CompanionSyncManager::settingsJson() {
-  static const char *const readerModeLabels[] = {"rsvp", "scroll"};
-  static const char *const handednessLabels[] = {"right", "left"};
-  static const char *const readerControlLabels[] = {"standard", "rewind_top_right"};
-  static const char *const footerMetricLabels[] = {"percentage", "chapter_time", "book_time"};
-  static const char *const batteryLabelLabels[] = {"percent", "time_remaining", "voltage"};
-  static const char *const pauseModeLabels[] = {"sentence_end", "instant"};
-
-  const uint16_t wpm =
-      clampU16(preferences_.getUShort(pref::Wpm::key(), kDefaultWpm), kMinWpm, kMaxWpm);
-  const uint8_t readerMode =
-      static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::ReaderMode::key(), 0), 0, kMaxReaderMode));
-  const uint8_t pauseMode =
-      static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::PauseMode::key(), 0), 0, kMaxPauseMode));
-  const uint16_t longDelay =
-      clampU16(preferences_.getUShort(pref::PacingLongWordDelay::key(), kDefaultPacingDelayMs), 0,
-               kMaxPacingDelayMs);
-  const uint16_t complexDelay =
-      clampU16(preferences_.getUShort(pref::PacingComplexWordDelay::key(), kDefaultPacingDelayMs), 0,
-               kMaxPacingDelayMs);
-  const uint16_t punctuationDelay =
-      clampU16(preferences_.getUShort(pref::PacingPunctuationDelay::key(), kDefaultPacingDelayMs), 0,
-               kMaxPacingDelayMs);
-  const uint8_t brightness = static_cast<uint8_t>(
-      clampInt(preferences_.getUChar(pref::BrightnessIndex::key(), kDefaultBrightness), 0, kMaxBrightness));
-  const uint8_t handedness =
-      static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::Handedness::key(), 0), 0, kMaxHandedness));
-  const uint8_t readerControls =
-      preferences_.getBool(pref::ReaderControlsSwapped::key(), false) ? 1 : 0;
-  const uint8_t footerMetric = static_cast<uint8_t>(
-      clampInt(preferences_.getUChar(pref::FooterMetricMode::key(), 0), 0, kMaxFooterMetric));
-  const uint8_t batteryLabel = static_cast<uint8_t>(
-      clampInt(preferences_.getUChar(pref::BatteryLabelMode::key(), 0), 0, kMaxBatteryLabel));
-  const uint8_t language =
-      static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::UiLanguage::key(), 0), 0, kMaxUiLanguage));
-  const uint8_t fontSize = static_cast<uint8_t>(
-      clampInt(preferences_.getUChar(pref::ReaderFontSizeIndex::key(), 0), 0, kMaxReaderFontSize));
-  FontCatalog fontCatalog;
-  fontCatalog.loadFromSd();
-  uint8_t typeface = 0;
-  const String savedTypefaceId = preferences_.getString(pref::ReaderTypefaceId::key(), "");
-  if (savedTypefaceId.isEmpty() || !fontCatalog.indexForId(savedTypefaceId, typeface)) {
-    typeface = static_cast<uint8_t>(
-        clampInt(preferences_.getUChar(pref::ReaderTypefaceIndex::key(), 0), 0,
-                 std::max<int>(0, fontCatalog.typefaceCount() - 1)));
-  }
-  const int tracking =
-      clampInt(preferences_.getChar(pref::TypographyTracking::key(), 0), kMinTypographyTracking,
-               kMaxTypographyTracking);
-  const uint8_t anchor = static_cast<uint8_t>(
-      clampInt(preferences_.getUChar(pref::TypographyAnchor::key(), kDefaultTypographyAnchor),
-               kMinTypographyAnchor, kMaxTypographyAnchor));
-  const uint8_t guideWidth = static_cast<uint8_t>(
-      clampInt(preferences_.getUChar(pref::TypographyGuideWidth::key(), kDefaultTypographyGuideWidth),
-               kMinTypographyGuideWidth, kMaxTypographyGuideWidth));
-  const uint8_t guideGap = static_cast<uint8_t>(
-      clampInt(preferences_.getUChar(pref::TypographyGuideGap::key(), kDefaultTypographyGuideGap),
-               kMinTypographyGuideGap, kMaxTypographyGuideGap));
-  ThemeStore themeStore;
-  themeStore.loadFromSd();
-  const String savedThemeId = preferences_.getString(pref::ThemeId::key(), "");
-  if (!savedThemeId.isEmpty()) {
-    themeStore.selectById(savedThemeId.c_str());
-  }
-  const ui::themes::Theme &selectedTheme = themeStore.selected();
-
-  String body;
-  body.reserve(3600);
-  body += "{\"ok\":true,\"version\":1";
-  body += ",\"reading\":{";
-  body += "\"wpm\":" + String(wpm);
-  body += ",\"readerMode\":\"";
-  body += enumLabel(readerMode, readerModeLabels, 2);
-  body += "\"";
-  body += ",\"pauseMode\":\"";
-  body += enumLabel(pauseMode, pauseModeLabels, 2);
-  body += "\"";
-  body += ",\"accurateTimeEstimate\":true";
-  body += ",\"pacing\":{\"longWordMs\":" + String(longDelay) +
-          ",\"complexWordMs\":" + String(complexDelay) +
-          ",\"punctuationMs\":" + String(punctuationDelay) + "}";
-  body += "}";
-  body += ",\"display\":{";
-  body += "\"themeId\":\"" + jsonEscape(selectedTheme.id) + "\"";
-  body += ",\"brightnessIndex\":" + String(brightness);
-  body += ",\"handedness\":\"";
-  body += enumLabel(handedness, handednessLabels, 2);
-  body += "\"";
-  body += ",\"readerControls\":\"";
-  body += enumLabel(readerControls, readerControlLabels, 2);
-  body += "\"";
-  body += ",\"footerMetric\":\"";
-  body += enumLabel(footerMetric, footerMetricLabels, 3);
-  body += "\"";
-  body += ",\"batteryLabel\":\"";
-  body += enumLabel(batteryLabel, batteryLabelLabels, 3);
-  body += "\"";
-  body += ",\"readingBattery\":" +
-          String(preferences_.getBool(pref::ReaderBatteryVisible::key(), true) ? "true" : "false");
-  body += ",\"readingChapter\":" +
-          String(preferences_.getBool(pref::ReaderChapterVisible::key(), false) ? "true" : "false");
-  body += ",\"readingProgress\":" +
-          String(preferences_.getBool(pref::ReaderProgressVisible::key(), false) ? "true" : "false");
-  body += ",\"language\":" + String(language);
-  body += ",\"phantomWords\":" +
-          String(preferences_.getBool(pref::PhantomWords::key(), true) ? "true" : "false");
-  body += ",\"fontSizeIndex\":" + String(fontSize);
-  body += "}";
-  body += ",\"typography\":{";
-  body += "\"typeface\":\"";
-  body += jsonEscape(fontCatalog.typefaceId(typeface));
-  body += "\"";
-  body += ",\"focusHighlight\":" +
-          String(preferences_.getBool(pref::TypographyFocusHighlight::key(), true) ? "true" : "false");
-  body += ",\"tracking\":" + String(tracking);
-  body += ",\"anchorPercent\":" + String(anchor);
-  body += ",\"guideWidth\":" + String(guideWidth);
-  body += ",\"guideGap\":" + String(guideGap);
-  body += "}";
-  const std::vector<ui::themes::Theme> &themes = themeStore.themes();
-  body += ",\"themeCount\":" + String(themes.size());
-  body += ",\"themes\":[";
-  for (size_t i = 0; i < themes.size(); ++i) {
-    if (i > 0) {
-      body += ",";
-    }
-    body += "{\"id\":\"" + jsonEscape(themes[i].id) + "\"";
-    body += ",\"name\":\"" + jsonEscape(themes[i].name) + "\"";
-    body += ",\"builtIn\":" + String(themes[i].builtIn ? "true" : "false");
-    body += ",\"typeface\":\"";
-    body += ui::themes::readerTypefaceName(themes[i].typeface);
-    body += "\"}";
-  }
-  body += "]";
-  const std::vector<FontCatalog::Family>& fonts = fontCatalog.families();
-  body += ",\"fontCount\":" + String(fonts.size());
-  body += ",\"fonts\":[";
-  for (size_t i = 0; i < fonts.size(); ++i) {
-    if (i > 0) {
-      body += ",";
-    }
-    body += "{\"id\":\"" + jsonEscape(fonts[i].id) + "\"";
-    body += ",\"name\":\"" + jsonEscape(fonts[i].label) + "\"";
-    body += ",\"builtIn\":" + String(fonts[i].builtIn ? "true" : "false");
-    body += ",\"sizes\":[";
-    for (size_t size = 0; size < RFont4::kSizeCount; ++size) {
-      if (size > 0) {
-        body += ",";
-      }
-      body += "{\"id\":\"";
-      body += RFont4::sizeId(static_cast<uint8_t>(size));
-      body += "\",\"name\":\"";
-      body += RFont4::sizeLabel(static_cast<uint8_t>(size));
-      body += "\",\"available\":";
-      body += fontCatalog.hasSize(static_cast<uint8_t>(i), static_cast<uint8_t>(size)) ? "true" : "false";
-      body += "}";
-    }
-    body += "]}";
-  }
-  body += "]";
-  body += ",\"limits\":{";
-  body += "\"wpm\":{\"min\":" + String(kMinWpm) + ",\"max\":" + String(kMaxWpm) + "}";
-  body += ",\"brightnessIndex\":{\"min\":0,\"max\":" + String(kMaxBrightness) + "}";
-  body += ",\"pacingMs\":{\"min\":0,\"max\":" + String(kMaxPacingDelayMs) + "}";
-  body += ",\"tracking\":{\"min\":" + String(kMinTypographyTracking) +
-          ",\"max\":" + String(kMaxTypographyTracking) + "}";
-  body += ",\"anchorPercent\":{\"min\":" + String(kMinTypographyAnchor) +
-          ",\"max\":" + String(kMaxTypographyAnchor) + "}";
-  body += ",\"guideWidth\":{\"min\":" + String(kMinTypographyGuideWidth) +
-          ",\"max\":" + String(kMaxTypographyGuideWidth) + "}";
-  body += ",\"guideGap\":{\"min\":" + String(kMinTypographyGuideGap) +
-          ",\"max\":" + String(kMaxTypographyGuideGap) + "}";
-  body += "}}";
-  return body;
-}
-
-bool CompanionSyncManager::applySettingsJson(const String &body, String &error) {
-  if (body.isEmpty()) {
-    error = "Missing settings JSON";
-    return false;
-  }
-
-  static const char *const readerModeLabels[] = {"rsvp", "scroll"};
-  static const char *const handednessLabels[] = {"right", "left"};
-  static const char *const readerControlLabels[] = {"standard", "rewind_top_right"};
-  static const char *const footerMetricLabels[] = {"percentage", "chapter_time", "book_time"};
-  static const char *const batteryLabelLabels[] = {"percent", "time_remaining", "voltage"};
-  static const char *const pauseModeLabels[] = {"sentence_end", "instant"};
-
-  int intValue = 0;
-  bool boolValue = false;
-  String stringValue;
-  bool themeTypefaceApplied = false;
-
-  if (readJsonInt(body, "wpm", intValue)) {
-    if (intValue < kMinWpm || intValue > kMaxWpm) {
-      error = "wpm must be between 10 and 1000";
-      return false;
-    }
-    preferences_.putUShort(pref::Wpm::key(), static_cast<uint16_t>(intValue));
-  }
-  if (readJsonString(body, "readerMode", stringValue)) {
-    const int value = enumValue(stringValue, readerModeLabels, 2);
-    if (value < 0) {
-      error = "readerMode must be rsvp or scroll";
-      return false;
-    }
-    preferences_.putUChar(pref::ReaderMode::key(), static_cast<uint8_t>(value));
-  }
-  if (readJsonString(body, "pauseMode", stringValue)) {
-    const int value = enumValue(stringValue, pauseModeLabels, 2);
-    if (value < 0) {
-      error = "pauseMode must be sentence_end or instant";
-      return false;
-    }
-    preferences_.putUChar(pref::PauseMode::key(), static_cast<uint8_t>(value));
-  }
-  preferences_.putBool(pref::AccurateTime::key(), true);
-  if (readJsonInt(body, "longWordMs", intValue)) {
-    if (intValue < 0 || intValue > kMaxPacingDelayMs) {
-      error = "longWordMs must be between 0 and 600";
-      return false;
-    }
-    preferences_.putUShort(pref::PacingLongWordDelay::key(), static_cast<uint16_t>(intValue));
-  }
-  if (readJsonInt(body, "complexWordMs", intValue)) {
-    if (intValue < 0 || intValue > kMaxPacingDelayMs) {
-      error = "complexWordMs must be between 0 and 600";
-      return false;
-    }
-    preferences_.putUShort(pref::PacingComplexWordDelay::key(), static_cast<uint16_t>(intValue));
-  }
-  if (readJsonInt(body, "punctuationMs", intValue)) {
-    if (intValue < 0 || intValue > kMaxPacingDelayMs) {
-      error = "punctuationMs must be between 0 and 600";
-      return false;
-    }
-    preferences_.putUShort(pref::PacingPunctuationDelay::key(), static_cast<uint16_t>(intValue));
-  }
-  if (readJsonInt(body, "brightnessIndex", intValue)) {
-    if (intValue < 0 || intValue > kMaxBrightness) {
-      error = "brightnessIndex must be between 0 and 19";
-      return false;
-    }
-    preferences_.putUChar(pref::BrightnessIndex::key(), static_cast<uint8_t>(intValue));
-  }
-  if (readJsonString(body, "themeId", stringValue)) {
-    ThemeStore themeStore;
-    themeStore.loadFromSd();
-    if (!themeStore.selectById(stringValue.c_str())) {
-      error = "themeId does not match an available theme";
-      return false;
-    }
-    const ui::themes::Theme &theme = themeStore.selected();
-    preferences_.putString(pref::ThemeId::key(), theme.id);
-    FontCatalog fontCatalog;
-    fontCatalog.loadFromSd();
-    uint8_t themeTypeface = 0;
-    if (fontCatalog.indexForId(ui::themes::readerTypefaceName(theme.typeface), themeTypeface)) {
-      preferences_.putUChar(pref::ReaderTypefaceIndex::key(), themeTypeface);
-      preferences_.putString(pref::ReaderTypefaceId::key(), fontCatalog.typefaceId(themeTypeface));
-      themeTypefaceApplied = true;
-    }
-  }
-  if (readJsonString(body, "handedness", stringValue)) {
-    const int value = enumValue(stringValue, handednessLabels, 2);
-    if (value < 0) {
-      error = "handedness must be right or left";
-      return false;
-    }
-    preferences_.putUChar(pref::Handedness::key(), static_cast<uint8_t>(value));
-  }
-  if (readJsonString(body, "readerControls", stringValue)) {
-    const int value = enumValue(stringValue, readerControlLabels, 2);
-    if (value < 0) {
-      error = "readerControls must be standard or rewind_top_right";
-      return false;
-    }
-    preferences_.putBool(pref::ReaderControlsSwapped::key(), value == 1);
-  }
-  if (readJsonString(body, "footerMetric", stringValue)) {
-    const int value = enumValue(stringValue, footerMetricLabels, 3);
-    if (value < 0) {
-      error = "footerMetric must be percentage, chapter_time, or book_time";
-      return false;
-    }
-    preferences_.putUChar(pref::FooterMetricMode::key(), static_cast<uint8_t>(value));
-  }
-  if (readJsonString(body, "batteryLabel", stringValue)) {
-    const int value = enumValue(stringValue, batteryLabelLabels, 3);
-    if (value < 0) {
-      error = "batteryLabel must be percent, time_remaining, or voltage";
-      return false;
-    }
-    preferences_.putUChar(pref::BatteryLabelMode::key(), static_cast<uint8_t>(value));
-  }
-  if (readJsonBool(body, "readingBattery", boolValue)) {
-    preferences_.putBool(pref::ReaderBatteryVisible::key(), boolValue);
-  }
-  if (readJsonBool(body, "readingChapter", boolValue)) {
-    preferences_.putBool(pref::ReaderChapterVisible::key(), boolValue);
-  }
-  if (readJsonBool(body, "readingProgress", boolValue)) {
-    preferences_.putBool(pref::ReaderProgressVisible::key(), boolValue);
-  }
-  if (readJsonInt(body, "language", intValue)) {
-    if (intValue < 0 || intValue > kMaxUiLanguage) {
-      error = "language is out of range";
-      return false;
-    }
-    preferences_.putUChar(pref::UiLanguage::key(), static_cast<uint8_t>(intValue));
-  }
-  if (readJsonBool(body, "phantomWords", boolValue)) {
-    preferences_.putBool(pref::PhantomWords::key(), boolValue);
-  }
-  if (readJsonInt(body, "fontSizeIndex", intValue)) {
-    if (intValue < 0 || intValue > kMaxReaderFontSize) {
-      error = "fontSizeIndex must be between 0 and 2";
-      return false;
-    }
-    preferences_.putUChar(pref::ReaderFontSizeIndex::key(), static_cast<uint8_t>(intValue));
-  }
-  if (!themeTypefaceApplied && readJsonString(body, "typeface", stringValue)) {
-    FontCatalog fontCatalog;
-    fontCatalog.loadFromSd();
-    uint8_t value = 0;
-    if (!fontCatalog.indexForId(stringValue, value)) {
-      error = "typeface does not match an available font";
-      return false;
-    }
-    preferences_.putUChar(pref::ReaderTypefaceIndex::key(), value);
-    preferences_.putString(pref::ReaderTypefaceId::key(), fontCatalog.typefaceId(value));
-  }
-  if (readJsonBool(body, "focusHighlight", boolValue)) {
-    preferences_.putBool(pref::TypographyFocusHighlight::key(), boolValue);
-  }
-  if (readJsonInt(body, "tracking", intValue)) {
-    if (intValue < kMinTypographyTracking || intValue > kMaxTypographyTracking) {
-      error = "tracking is out of range";
-      return false;
-    }
-    preferences_.putChar(pref::TypographyTracking::key(), static_cast<int8_t>(intValue));
-  }
-  if (readJsonInt(body, "anchorPercent", intValue)) {
-    if (intValue < kMinTypographyAnchor || intValue > kMaxTypographyAnchor) {
-      error = "anchorPercent is out of range";
-      return false;
-    }
-    preferences_.putUChar(pref::TypographyAnchor::key(), static_cast<uint8_t>(intValue));
-  }
-  if (readJsonInt(body, "guideWidth", intValue)) {
-    if (intValue < kMinTypographyGuideWidth || intValue > kMaxTypographyGuideWidth) {
-      error = "guideWidth is out of range";
-      return false;
-    }
-    preferences_.putUChar(pref::TypographyGuideWidth::key(), static_cast<uint8_t>(intValue));
-  }
-  if (readJsonInt(body, "guideGap", intValue)) {
-    if (intValue < kMinTypographyGuideGap || intValue > kMaxTypographyGuideGap) {
-      error = "guideGap is out of range";
-      return false;
-    }
-    preferences_.putUChar(pref::TypographyGuideGap::key(), static_cast<uint8_t>(intValue));
-  }
-
-  return true;
-}
-
-String CompanionSyncManager::wifiJson() {
-  const String ssid = preferences_.getString(pref::WifiSsid::key(), "");
-  return String("{\"ok\":true,\"configured\":") + (ssid.isEmpty() ? "false" : "true") +
-         ",\"ssid\":\"" + jsonEscape(ssid) + "\",\"passwordSet\":" +
-         (preferences_.getString(pref::WifiPassword::key(), "").isEmpty() ? "false" : "true") + "}";
-}
-
-bool CompanionSyncManager::applyWifiJson(const String &body, String &error) {
-  if (body.length() > 512) {
-    error = "Wi-Fi payload too large";
-    return false;
-  }
-
-  String ssid;
-  if (!readJsonString(body, "ssid", ssid)) {
-    error = "Missing Wi-Fi SSID";
-    return false;
-  }
-  ssid.trim();
-  if (ssid.isEmpty()) {
-    error = "Wi-Fi SSID is required";
-    return false;
-  }
-  if (ssid.length() > 32) {
-    error = "Wi-Fi SSID is too long";
-    return false;
-  }
-
-  String password;
-  readJsonString(body, "password", password);
-  if (password.length() > 64) {
-    error = "Wi-Fi password is too long";
-    return false;
-  }
-
-  preferences_.putString(pref::WifiSsid::key(), ssid);
-  preferences_.putString(pref::WifiPassword::key(), password);
-  return true;
-}
-
-String CompanionSyncManager::rssFeedsJson() {
-  String body;
-  body.reserve(256);
-  body += "{\"ok\":true,\"feeds\":[";
-  File file = Board::Storage::filesystem().open(kRssConfigPath);
-  bool first = true;
-  if (file && !file.isDirectory()) {
-    while (file.available()) {
-      String line = file.readStringUntil('\n');
-      line.trim();
-      if (line.isEmpty() || line.startsWith("#")) {
-        continue;
-      }
-      if (line.startsWith("feed=")) {
-        line = line.substring(5);
-        line.trim();
-      }
-      if (!isHttpUrl(line)) {
-        continue;
-      }
-      if (!first) {
-        body += ",";
-      }
-      first = false;
-      body += "\"" + jsonEscape(line) + "\"";
-    }
-  }
-  if (file) {
     file.close();
-  }
-  body += "]}";
-  return body;
-}
-
-bool CompanionSyncManager::writeRssFeedsJson(const String &body, String &error) {
-  if (body.length() > kMaxRssFeedsPatchBytes) {
-    error = "RSS feed payload too large";
-    return false;
-  }
-
-  int colonIndex = -1;
-  if (!findJsonKey(body, "feeds", colonIndex)) {
-    error = "Missing feeds array";
-    return false;
-  }
-  int index = skipJsonWhitespace(body, colonIndex + 1);
-  if (index >= static_cast<int>(body.length()) || body[index] != '[') {
-    error = "feeds must be an array";
-    return false;
-  }
-  ++index;
-
-  std::vector<String> feeds;
-  feeds.reserve(8);
-  while (true) {
-    index = skipJsonWhitespace(body, index);
-    if (index < static_cast<int>(body.length()) && body[index] == ']') {
-      break;
-    }
-
-    String feed;
-    if (!nextJsonArrayString(body, index, feed)) {
-      error = "Invalid feeds array";
-      return false;
-    }
-    feed.trim();
-    if (feed.isEmpty()) {
-      continue;
-    }
-    if (!isHttpUrl(feed)) {
-      error = "Feeds must start with http:// or https://";
-      return false;
-    }
-    if (feeds.size() >= kMaxRssFeeds) {
-      error = "Too many RSS feeds";
-      return false;
-    }
-    bool duplicate = false;
-    for (const String &existing : feeds) {
-      if (existing == feed) {
-        duplicate = true;
-        break;
-      }
-    }
-    if (!duplicate) {
-      feeds.push_back(feed);
-    }
-  }
-
-  Board::Storage::filesystem().mkdir(StoragePaths::kConfigPath);
-  const String tmpPath = String(kRssConfigPath) + ".tmp";
-  Board::Storage::filesystem().remove(tmpPath);
-  File file = Board::Storage::filesystem().open(tmpPath, FILE_WRITE);
-  if (!file) {
-    error = "Could not write RSS config";
-    return false;
-  }
-  file.println("# RSVP Nano RSS feeds");
-  for (const String &feed : feeds) {
-    file.print("feed=");
-    file.println(feed);
-  }
-  file.close();
-
-  Board::Storage::filesystem().remove(kRssConfigPath);
-  if (!Board::Storage::filesystem().rename(tmpPath, kRssConfigPath)) {
-    Board::Storage::filesystem().remove(tmpPath);
-    error = "Could not save RSS config";
-    return false;
-  }
-  return true;
-}
-
-String CompanionSyncManager::deviceSuffix() const {
-  uint64_t mac = ESP.getEfuseMac();
-  char suffix[7];
-  snprintf(suffix, sizeof(suffix), "%06X", static_cast<unsigned int>(mac & 0xFFFFFF));
-  return String(suffix);
-}
-
-String CompanionSyncManager::jsonEscape(const String &value) const {
-  String escaped;
-  escaped.reserve(value.length() + 8);
-  for (size_t i = 0; i < value.length(); ++i) {
-    const uint8_t c = static_cast<uint8_t>(value[i]);
-    switch (c) {
-      case '"':
-        escaped += "\\\"";
-        break;
-      case '\\':
-        escaped += "\\\\";
-        break;
-      case '\b':
-        escaped += "\\b";
-        break;
-      case '\f':
-        escaped += "\\f";
-        break;
-      case '\n':
-        escaped += "\\n";
-        break;
-      case '\r':
-        escaped += "\\r";
-        break;
-      case '\t':
-        escaped += "\\t";
-        break;
-      default:
-        if (c < 0x20) {
-          char code[7];
-          std::snprintf(code, sizeof(code), "\\u%04x", c);
-          escaped += code;
-        } else {
-          escaped += static_cast<char>(c);
-        }
-        break;
-    }
-  }
-  return escaped;
-}
-
-String CompanionSyncManager::sanitizeFilename(const String &name) const {
-  String sanitized;
-  sanitized.reserve(name.length());
-  for (size_t i = 0; i < name.length(); ++i) {
-    const char c = name[i];
-    sanitized += isSafeFilenameChar(c) ? c : '-';
-  }
-  sanitized.trim();
-  while (sanitized.startsWith(".")) {
-    sanitized.remove(0, 1);
-  }
-  return sanitized;
-}
-
-CompanionSyncManager::RsvpMetadata CompanionSyncManager::readRsvpMetadata(
-    const String &path) const {
-  RsvpMetadata metadata;
-  String loweredPath = path;
-  loweredPath.toLowerCase();
-  if (!loweredPath.endsWith(".rsvp")) {
-    return metadata;
-  }
-
-  File file = Board::Storage::filesystem().open(path);
-  if (!file || file.isDirectory()) {
-    if (file) {
-      file.close();
-    }
-    return metadata;
-  }
-
-  String line;
-  line.reserve(kMaxMetadataLineChars);
-  bool pastDirectives = false;
-  while (file.available()) {
-    const char c = static_cast<char>(file.read());
-    if (c == '\r') {
-      continue;
-    }
-
-    if (c != '\n') {
-      line += c;
-      if (line.length() > kMaxMetadataLineChars) {
-        pastDirectives = true;
-        line = "";
-        break;
-      }
-      continue;
-    }
-
-    if (metadata.title.isEmpty()) {
-      metadata.title = rsvpMetadataValueFromLine(line, "@title", pastDirectives);
-    }
-    if (metadata.author.isEmpty() && !pastDirectives) {
-      metadata.author = rsvpMetadataValueFromLine(line, "@author", pastDirectives);
-    }
-    if (!metadata.title.isEmpty() && !metadata.author.isEmpty()) {
-      break;
-    }
-
-    if (pastDirectives) {
-      break;
-    }
-    line = "";
-  }
-
-  if (!line.isEmpty() && !pastDirectives) {
-    if (metadata.title.isEmpty()) {
-      metadata.title = rsvpMetadataValueFromLine(line, "@title", pastDirectives);
-    }
-    if (metadata.author.isEmpty() && !pastDirectives) {
-      metadata.author = rsvpMetadataValueFromLine(line, "@author", pastDirectives);
-    }
-  }
-
-  file.close();
-  return metadata;
-}
-
-bool CompanionSyncManager::progressForPath(const String &path, uint32_t sourceSize,
-                                           uint32_t sourceFingerprint, uint32_t wordCount,
-                                           uint32_t &wordIndex, uint8_t &percent) {
-  if (wordCount <= 1) {
-    return false;
-  }
-
-  if (ReadingProgress::readPositionSidecar(
-          path, {sourceSize, sourceFingerprint, wordCount}, wordIndex)) {
-    percent = ReadingProgress::percent(wordIndex, wordCount);
     return true;
-  }
-
-  const String positionKey = ReadingProgress::positionKey(path);
-  const String countKey = ReadingProgress::wordCountKey(path);
-  if (!preferences_.isKey(positionKey.c_str()) || !preferences_.isKey(countKey.c_str())) {
-    return false;
-  }
-  if (preferences_.getUInt(countKey.c_str(), 0) != wordCount) {
-    return false;
-  }
-
-  if (preferences_.isKey(ReadingProgress::sourceSizeKey(path).c_str()) &&
-      preferences_.getUInt(ReadingProgress::sourceSizeKey(path).c_str(), 0) != sourceSize) {
-    return false;
-  }
-  if (preferences_.isKey(ReadingProgress::sourceFingerprintKey(path).c_str()) &&
-      preferences_.getUInt(ReadingProgress::sourceFingerprintKey(path).c_str(), 0) != sourceFingerprint) {
-    return false;
-  }
-
-  wordIndex = std::min<uint32_t>(preferences_.getUInt(positionKey.c_str(), 0), wordCount - 1);
-  percent = ReadingProgress::percent(wordIndex, wordCount);
-  return true;
-}
-
-void CompanionSyncManager::cacheBookPosition(const String &path, uint32_t wordIndex,
-                                             uint32_t sourceSize, uint32_t sourceFingerprint,
-                                             uint32_t wordCount) {
-  if (wordCount == 0) {
-    return;
-  }
-  wordIndex = std::min<uint32_t>(wordIndex, wordCount - 1);
-  preferences_.putUInt(ReadingProgress::positionKey(path).c_str(), wordIndex);
-  preferences_.putUInt(ReadingProgress::wordCountKey(path).c_str(), wordCount);
-  preferences_.putUInt(ReadingProgress::sourceSizeKey(path).c_str(), sourceSize);
-  preferences_.putUInt(ReadingProgress::sourceFingerprintKey(path).c_str(), sourceFingerprint);
-}
-
-String CompanionSyncManager::bookIdForPath(const String &path) const {
-  return ReadingProgress::bookId(path);
-}
-
-bool CompanionSyncManager::resolveBookId(const String &id, String &path) const {
-  const char *directories[] = {
-      StoragePaths::kBooksPath,
-      StoragePaths::kBookFilesPath,
-      StoragePaths::kArticleFilesPath,
-  };
-
-  for (const char *directoryPath : directories) {
-    File dir = Board::Storage::filesystem().open(directoryPath);
-    if (!dir || !dir.isDirectory()) {
-      if (dir) {
-        dir.close();
-      }
-      continue;
-    }
-
-    File entry = dir.openNextFile();
-    while (entry) {
-      if (!entry.isDirectory()) {
-        const String name = displayNameForPath(String(entry.name()));
-        String lowered = name;
-        lowered.toLowerCase();
-        if (isSupportedBookName(lowered)) {
-          const String candidate = String(directoryPath) + "/" + name;
-          if (bookIdForPath(candidate) == id) {
-            path = candidate;
-            entry.close();
-            dir.close();
-            return true;
-          }
-        }
-      }
-      entry.close();
-      entry = dir.openNextFile();
-    }
-    dir.close();
-  }
-
-  return false;
-}
-
-bool CompanionSyncManager::resolveBookName(const String &requested, String &path) const {
-  String filename = requested;
-  const int separator = requested.indexOf('/');
-  if (separator >= 0) {
-    const String directory = requested.substring(0, separator);
-    filename = sanitizeFilename(requested.substring(separator + 1));
-    if (filename.isEmpty() || requested.indexOf("..") >= 0 ||
-        (directory != "books" && directory != "articles")) {
-      return false;
-    }
-    path = String(StoragePaths::kBooksPath) + "/" + directory + "/" + filename;
-  } else {
-    filename = sanitizeFilename(requested);
-    path = String(StoragePaths::kBooksPath) + "/" + filename;
-  }
-
-  String lowered = filename;
-  lowered.toLowerCase();
-  if (!isSupportedBookName(lowered)) {
-    return false;
-  }
-
-  File file = Board::Storage::filesystem().open(path);
-  if ((!file || file.isDirectory()) && separator < 0) {
-    if (file) {
-      file.close();
-    }
-    path = String(StoragePaths::kBookFilesPath) + "/" + filename;
-    file = Board::Storage::filesystem().open(path);
-  }
-  if ((!file || file.isDirectory()) && separator < 0) {
-    if (file) {
-      file.close();
-    }
-    path = String(StoragePaths::kArticleFilesPath) + "/" + filename;
-    file = Board::Storage::filesystem().open(path);
-  }
-  if (!file || file.isDirectory()) {
-    if (file) {
-      file.close();
-    }
-    return false;
-  }
-  file.close();
-  return true;
 }
 
 void CompanionSyncManager::finishUpload(bool success) {
-  if (uploadFile_) {
-    uploadFile_.close();
-  }
-
-  if (uploadTmpPath_.isEmpty()) {
-    return;
-  }
-
-  if (success && uploadError_.isEmpty()) {
-    if (!replaceUploadedFile(uploadTmpPath_, uploadFinalPath_)) {
-      uploadError_ = "Rename failed";
-      Board::Storage::filesystem().remove(uploadTmpPath_);
-    } else {
-      statusLine1_ = "Book received";
-      statusLine2_ = uploadFinalPath_;
-      Serial.printf("[sync] upload ready %s\n", uploadFinalPath_.c_str());
+    if (uploadFile_) {
+        uploadFile_.close();
     }
-  } else {
-    Board::Storage::filesystem().remove(uploadTmpPath_);
-  }
 
-  uploadTmpPath_ = "";
+    if (uploadTmpPath_.isEmpty()) {
+        return;
+    }
+
+    if (success && uploadError_.isEmpty()) {
+        if (!replaceUploadedFile(uploadTmpPath_, uploadFinalPath_)) {
+            uploadError_ = "Rename failed";
+            Board::Storage::filesystem().remove(uploadTmpPath_);
+        } else {
+            statusLine1_ = "Book received";
+            statusLine2_ = uploadFinalPath_;
+            Serial.printf("[sync] upload ready %s\n", uploadFinalPath_.c_str());
+        }
+    } else {
+        Board::Storage::filesystem().remove(uploadTmpPath_);
+    }
+
+    uploadTmpPath_ = "";
 }

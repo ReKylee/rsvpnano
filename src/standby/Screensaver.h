@@ -10,36 +10,40 @@
 
 namespace standby {
 
-class ScreensaverSlot {
- public:
-  ScreensaverSlot() = default;
-  ~ScreensaverSlot();
+    class ScreensaverSlot {
+    public:
+        ScreensaverSlot() = default;
+        ~ScreensaverSlot();
 
-  ScreensaverSlot(const ScreensaverSlot&) = delete;
-  ScreensaverSlot& operator=(const ScreensaverSlot&) = delete;
+        ScreensaverSlot(const ScreensaverSlot&) = delete;
+        ScreensaverSlot& operator=(const ScreensaverSlot&) = delete;
 
-  void select(Kind kind, uint16_t columns, uint16_t rows);
-  void reset();
-  void seed(uint32_t rngSeed);
-  void step();
-  Frame frame() const;
+        void select(Kind kind, uint16_t columns, uint16_t rows);
+        void reset();
+        void seed(uint32_t rngSeed);
+        void step();
+        Frame frame() const;
 
-  Kind kind() const { return kind_; }
-  explicit operator bool() const { return active_; }
+        Kind kind() const {
+            return kind_;
+        }
+        explicit operator bool() const {
+            return active_;
+        }
 
- private:
-  using Storage = std::aligned_union_t<0, LifeScreensaver, MazeScreensaver, VoronoiScreensaver>;
+    private:
+        using Storage = std::aligned_union_t<0, LifeScreensaver, MazeScreensaver, VoronoiScreensaver>;
 
-  LifeScreensaver& life();
-  const LifeScreensaver& life() const;
-  MazeScreensaver& maze();
-  const MazeScreensaver& maze() const;
-  VoronoiScreensaver& voronoi();
-  const VoronoiScreensaver& voronoi() const;
+        LifeScreensaver& life();
+        const LifeScreensaver& life() const;
+        MazeScreensaver& maze();
+        const MazeScreensaver& maze() const;
+        VoronoiScreensaver& voronoi();
+        const VoronoiScreensaver& voronoi() const;
 
-  Storage storage_{};
-  Kind kind_ = Kind::Life;
-  bool active_ = false;
-};
+        Storage storage_{};
+        Kind kind_ = Kind::Life;
+        bool active_ = false;
+    };
 
-}  // namespace standby
+} // namespace standby

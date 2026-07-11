@@ -131,8 +131,8 @@ bool StorageManager::loadIndexedBook(size_t index, IndexedBookStore& store, Book
 
 StorageManager::DiagnosticResult StorageManager::diagnoseSdCard() {
     DiagnosticResult result = SdDiagnostics::diagnoseCard(mounted_, statusCallback_, statusContext_);
-    if (!result.booksDirectory || !result.bookFilesDirectory || !result.articleFilesDirectory
-        || !result.configDirectory || !result.themesDirectory || !result.fontsDirectory) {
+    if (!result.booksDirectory || !result.bookFilesDirectory || !result.articleFilesDirectory || !result.configDirectory
+        || !result.themesDirectory || !result.fontsDirectory) {
         return result;
     }
 

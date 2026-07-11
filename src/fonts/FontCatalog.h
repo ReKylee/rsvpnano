@@ -8,8 +8,8 @@
 #include <cstdint>
 #include <vector>
 
-#include "ui/fonts/Font.h"
 #include "fonts/RFont4Format.h"
+#include "ui/fonts/Font.h"
 
 class FontCatalog {
 public:
@@ -36,13 +36,19 @@ public:
     ui::fonts::Font loadFont(uint8_t typefaceIndex, uint8_t sizeIndex);
     ui::fonts::Font currentFont() const;
 
-    static constexpr uint8_t sizeCount() { return static_cast<uint8_t>(RFont4::kSizeCount); }
-    static const char* sizeLabel(uint8_t index) { return RFont4::sizeLabel(index); }
+    static constexpr uint8_t sizeCount() {
+        return static_cast<uint8_t>(RFont4::kSizeCount);
+    }
+    static const char* sizeLabel(uint8_t index) {
+        return RFont4::sizeLabel(index);
+    }
     static ui::fonts::Font fallbackFont(uint8_t sizeIndex);
     static String normalizeId(const String& value);
     static bool validateFontFile(const String& path, String& error);
 
-    const std::vector<Family>& families() const { return families_; }
+    const std::vector<Family>& families() const {
+        return families_;
+    }
 
 private:
     class RuntimeFont {

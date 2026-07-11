@@ -10,114 +10,110 @@
 
 namespace {
 
-TwoWire &touchWire() { return Wire; }
+    TwoWire& touchWire() {
+        return Wire;
+    }
 
-bool tcaPinHeld(uint8_t pin) {
-  bool levelHigh = false;
-  return BoardDrivers::Tca9554::readInputPin(
-             Wire1, WaveshareAmoled18::Tca9554Wiring::kAddress, pin, levelHigh,
-             WaveshareAmoled18::Tca9554Wiring::kReleaseBusBeforeRead) &&
-         levelHigh;
-}
+    bool tcaPinHeld(uint8_t pin) {
+        bool levelHigh = false;
+        return BoardDrivers::Tca9554::readInputPin(Wire1, WaveshareAmoled18::Tca9554Wiring::kAddress, pin, levelHigh,
+                                                   WaveshareAmoled18::Tca9554Wiring::kReleaseBusBeforeRead)
+            && levelHigh;
+    }
 
-bool primaryPressedRaw() {
-  if constexpr (WaveshareAmoled18::Buttons::kBootPin < 0) {
-    return false;
-  }
-  return !digitalRead(WaveshareAmoled18::Buttons::kBootPin);
-}
+    bool primaryPressedRaw() {
+        if constexpr (WaveshareAmoled18::Buttons::kBootPin < 0) {
+            return false;
+        }
+        return !digitalRead(WaveshareAmoled18::Buttons::kBootPin);
+    }
 
-bool powerPressedRaw() {
-  return tcaPinHeld(WaveshareAmoled18::Tca9554Wiring::kPowerButtonPin);
-}
+    bool powerPressedRaw() {
+        return tcaPinHeld(WaveshareAmoled18::Tca9554Wiring::kPowerButtonPin);
+    }
 
-void configureButtonPins() {
-  if constexpr (WaveshareAmoled18::Buttons::kBootPin >= 0) {
-    pinMode(WaveshareAmoled18::Buttons::kBootPin, INPUT_PULLUP);
-  }
-}
+    void configureButtonPins() {
+        if constexpr (WaveshareAmoled18::Buttons::kBootPin >= 0) {
+            pinMode(WaveshareAmoled18::Buttons::kBootPin, INPUT_PULLUP);
+        }
+    }
 
-}  // namespace
+} // namespace
 
 namespace Board::Input {
 
-bool begin() {
-  configureButtonPins();
-  return true;
-}
+    bool begin() {
+        configureButtonPins();
+        return true;
+    }
 
-void end() {}
+    void end() {}
 
-void cancel() {}
+    void cancel() {}
 
-::Input::ControlTiming controlTiming() {
-  return {WaveshareAmoled18::Buttons::kDebounceMs,
-          WaveshareAmoled18::Buttons::kShortPressMaxMs,
-          WaveshareAmoled18::Buttons::kLongPressMs};
-}
+    ::Input::ControlTiming controlTiming() {
+        return {WaveshareAmoled18::Buttons::kDebounceMs, WaveshareAmoled18::Buttons::kShortPressMaxMs,
+                WaveshareAmoled18::Buttons::kLongPressMs};
+    }
 
-::Input::PressActions currentActions() {
-  ::Input::PressActions actions = {};
-  const bool primaryPressed = primaryPressedRaw();
-  const bool powerPressed = powerPressedRaw();
-  if (primaryPressed) {
-    actions.shortPress |= ::Input::ActionSelect | ::Input::ActionPlayPause;
-    actions.longPress |= ::Input::ActionStandby;
-  }
-  if (powerPressed) {
-    actions.shortPress |= ::Input::ActionOpenMenu | ::Input::ActionBack;
-    actions.longPress |= ::Input::ActionPowerOff;
-  }
-  return actions;
-}
+    ::Input::PressActions currentActions() {
+        ::Input::PressActions actions = {};
+        const bool primaryPressed = primaryPressedRaw();
+        const bool powerPressed = powerPressedRaw();
+        if (primaryPressed) {
+            actions.shortPress |= ::Input::ActionSelect | ::Input::ActionPlayPause;
+            actions.longPress |= ::Input::ActionStandby;
+        }
+        if (powerPressed) {
+            actions.shortPress |= ::Input::ActionOpenMenu | ::Input::ActionBack;
+            actions.longPress |= ::Input::ActionPowerOff;
+        }
+        return actions;
+    }
 
-ui::TouchSurface touchSurface() {
-  return {WaveshareAmoled18::DisplayWiring::kPanelWidth,
-          WaveshareAmoled18::DisplayWiring::kPanelHeight};
-}
+    ui::TouchSurface touchSurface() {
+        return {WaveshareAmoled18::DisplayWiring::kPanelWidth, WaveshareAmoled18::DisplayWiring::kPanelHeight};
+    }
 
-ui::TouchTiming touchTiming() {
-  ui::TouchTiming timing = {};
-  timing.releaseConfirmSamples = WaveshareAmoled18::TouchWiring::kReleaseConfirmSamples;
-  timing.maxConsecutiveReadFailures =
-      WaveshareAmoled18::TouchWiring::kMaxConsecutiveReadFailures;
-  timing.pollIntervalMs = WaveshareAmoled18::TouchWiring::kPollIntervalMs;
-  timing.failureBackoffMs = WaveshareAmoled18::TouchWiring::kFailureBackoffMs;
-  timing.recoveryRetryMs = WaveshareAmoled18::TouchWiring::kRecoveryRetryMs;
-  timing.recoveryEventIgnoreMs = WaveshareAmoled18::TouchWiring::kRecoveryEventIgnoreMs;
-  return timing;
-}
+    ui::TouchTiming touchTiming() {
+        ui::TouchTiming timing = {};
+        timing.releaseConfirmSamples = WaveshareAmoled18::TouchWiring::kReleaseConfirmSamples;
+        timing.maxConsecutiveReadFailures = WaveshareAmoled18::TouchWiring::kMaxConsecutiveReadFailures;
+        timing.pollIntervalMs = WaveshareAmoled18::TouchWiring::kPollIntervalMs;
+        timing.failureBackoffMs = WaveshareAmoled18::TouchWiring::kFailureBackoffMs;
+        timing.recoveryRetryMs = WaveshareAmoled18::TouchWiring::kRecoveryRetryMs;
+        timing.recoveryEventIgnoreMs = WaveshareAmoled18::TouchWiring::kRecoveryEventIgnoreMs;
+        return timing;
+    }
 
-bool beginTouch() {
-  TwoWire &wire = touchWire();
-  return Cst816Touch::probe(wire, WaveshareAmoled18::TouchWiring::kAddress) &&
-         Cst816Touch::configurePeriodicInterrupt(wire, WaveshareAmoled18::TouchWiring::kAddress);
-}
+    bool beginTouch() {
+        TwoWire& wire = touchWire();
+        return Cst816Touch::probe(wire, WaveshareAmoled18::TouchWiring::kAddress)
+            && Cst816Touch::configurePeriodicInterrupt(wire, WaveshareAmoled18::TouchWiring::kAddress);
+    }
 
-bool touchReady() {
-  if constexpr (WaveshareAmoled18::System::kTouchIrqPin < 0) {
-    return true;
-  }
-  return !digitalRead(WaveshareAmoled18::System::kTouchIrqPin);
-}
+    bool touchReady() {
+        if constexpr (WaveshareAmoled18::System::kTouchIrqPin < 0) {
+            return true;
+        }
+        return !digitalRead(WaveshareAmoled18::System::kTouchIrqPin);
+    }
 
-bool readTouch(ui::TouchContact &contact) {
-  std::array<uint8_t, Cst816Touch::kPacketLength> data = {};
-  if (!Cst816Touch::readPacket(touchWire(), WaveshareAmoled18::TouchWiring::kAddress,
-                               WaveshareAmoled18::TouchWiring::kReleaseBusBeforeRead, data.data(),
-                               data.size())) {
-    return false;
-  }
+    bool readTouch(ui::TouchContact& contact) {
+        std::array<uint8_t, Cst816Touch::kPacketLength> data = {};
+        if (!Cst816Touch::readPacket(touchWire(), WaveshareAmoled18::TouchWiring::kAddress,
+                                     WaveshareAmoled18::TouchWiring::kReleaseBusBeforeRead, data.data(), data.size())) {
+            return false;
+        }
 
-  BoardDrivers::Touch::Sample decoded = {};
-  if (!Cst816Touch::decodePacket(data.data(), data.size(),
-                                 WaveshareAmoled18::DisplayWiring::kPanelWidth,
-                                 WaveshareAmoled18::DisplayWiring::kPanelHeight, decoded)) {
-    return false;
-  }
+        BoardDrivers::Touch::Sample decoded = {};
+        if (!Cst816Touch::decodePacket(data.data(), data.size(), WaveshareAmoled18::DisplayWiring::kPanelWidth,
+                                       WaveshareAmoled18::DisplayWiring::kPanelHeight, decoded)) {
+            return false;
+        }
 
-  contact = {decoded.touched, decoded.physicalX, decoded.physicalY};
-  return true;
-}
+        contact = {decoded.touched, decoded.physicalX, decoded.physicalY};
+        return true;
+    }
 
-}  // namespace Board::Input
+} // namespace Board::Input

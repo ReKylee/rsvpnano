@@ -8,9 +8,9 @@
 #include "storage/StorageManager.h"
 #include "sync/CompanionSyncManager.h"
 #include "ui/Ui.h"
-#include "ui/screens/Screens.h"
-#include "ui/screens/ReaderScreen.h"
 #include "ui/screens/LibraryScreen.h"
+#include "ui/screens/ReaderScreen.h"
+#include "ui/screens/Screens.h"
 #include "ui/screens/StandbyScreen.h"
 #include "usb/UsbMassStorageManager.h"
 

@@ -10,29 +10,29 @@
 App app;
 
 void setup() {
-  Serial.begin(115200);
-  esp_log_level_set("*", ESP_LOG_INFO);
-  delay(50);
-  Board::System::begin();
-  const uint32_t serialWaitStart = millis();
-  while (!Serial && millis() - serialWaitStart < 2000) {
-    delay(10);
-  }
-  Board::System::logStartupDiagnostics();
+    Serial.begin(115200);
+    esp_log_level_set("*", ESP_LOG_INFO);
+    delay(50);
+    Board::System::begin();
+    const uint32_t serialWaitStart = millis();
+    while (!Serial && millis() - serialWaitStart < 2000) {
+        delay(10);
+    }
+    Board::System::logStartupDiagnostics();
 #if RSVP_BENCHMARK_MODE
-  Serial.println("[main] benchmark setup");
-  Benchmark::run();
+    Serial.println("[main] benchmark setup");
+    Benchmark::run();
 #else
-  Serial.println("[main] app setup");
-  app.begin();
+    Serial.println("[main] app setup");
+    app.begin();
 #endif
 }
 
 void loop() {
 #if RSVP_BENCHMARK_MODE
-  delay(1000);
+    delay(1000);
 #else
-  const uint32_t now = millis();
-  app.update(now);
+    const uint32_t now = millis();
+    app.update(now);
 #endif
 }

@@ -1,12 +1,12 @@
 #include "storage/index/IndexedBook.h"
 
-#include "board/BoardStorage.h"
 #include <algorithm>
 #include <array>
 #include <cerrno>
 #include <cstdint>
 #include <esp_heap_caps.h>
 #include <limits>
+#include "board/BoardStorage.h"
 
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
@@ -174,7 +174,8 @@ namespace IndexedBook {
             }
 
             const size_t wordIndex = buildContext.wordCount;
-            if (!buildContext.metadata->paragraphStarts.empty() && buildContext.metadata->paragraphStarts.back() == wordIndex) {
+            if (!buildContext.metadata->paragraphStarts.empty()
+                && buildContext.metadata->paragraphStarts.back() == wordIndex) {
                 return;
             }
 
@@ -195,13 +196,15 @@ namespace IndexedBook {
                 return true;
             }
 
-            if (token.length() > UINT16_MAX || buildContext.dataSize > UINT32_MAX - static_cast<uint32_t>(token.length())) {
+            if (token.length() > UINT16_MAX
+                || buildContext.dataSize > UINT32_MAX - static_cast<uint32_t>(token.length())) {
                 buildContext.failed = true;
                 buildContext.failure = "Index limit reached";
                 return false;
             }
 
-            if ((buildContext.wordCount % kParseMemoryCheckWordInterval) == 0 && buildContext.wordCount > 0 && parseMemoryLow()) {
+            if ((buildContext.wordCount % kParseMemoryCheckWordInterval) == 0 && buildContext.wordCount > 0
+                && parseMemoryLow()) {
                 if (stats != nullptr) {
                     stats->memoryLow = true;
                 }
@@ -246,8 +249,7 @@ namespace IndexedBook {
                 [&](const String& token) {
                     return pushWord(token, buildContext, stats);
                 },
-                buildContext.wordCount,
-                stats);
+                buildContext.wordCount, stats);
         }
 
         bool processBookLine(const String& line, IndexedBuildContext& buildContext, bool& paragraphPending,
@@ -534,8 +536,8 @@ namespace IndexedBook {
 
             // One streaming parser feeds either data sidecar writes or index record
             // writes.
-            auto parseIndexedSource = [&](File& parseSource, IndexedBuildContext& buildContext, RsvpText::ParseStats& stats,
-                                          bool reportProgress) -> bool {
+            auto parseIndexedSource = [&](File& parseSource, IndexedBuildContext& buildContext,
+                                          RsvpText::ParseStats& stats, bool reportProgress) -> bool {
                 String line;
                 line.reserve(256);
                 bool paragraphPending = true;

@@ -4,9 +4,9 @@
 #include <cstring>
 
 #include "board/BoardStorage.h"
-#include "ui/fonts/LiterataFallbackAlpha4.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
+#include "ui/fonts/LiterataFallbackAlpha4.h"
 
 namespace {
 
@@ -37,7 +37,7 @@ namespace {
         return true;
     }
 
-    template <typename T>
+    template<typename T>
     bool readArray(File& file, uint32_t offset, std::vector<T>& out, size_t count, String& error) {
         out.clear();
         if (count == 0) {
@@ -63,10 +63,8 @@ namespace {
             error = "Unsupported font format";
             return false;
         }
-        if (header.headerSize < sizeof(RFont4::Header)
-            || header.glyphRecordSize != sizeof(RFont4::GlyphRecord)
-            || header.rowRecordSize != sizeof(RFont4::RowRecord)
-            || header.spanRecordSize != sizeof(RFont4::SpanRecord)
+        if (header.headerSize < sizeof(RFont4::Header) || header.glyphRecordSize != sizeof(RFont4::GlyphRecord)
+            || header.rowRecordSize != sizeof(RFont4::RowRecord) || header.spanRecordSize != sizeof(RFont4::SpanRecord)
             || header.kerningRecordSize != sizeof(RFont4::KerningRecord)) {
             error = "Font record layout mismatch";
             return false;
@@ -181,7 +179,7 @@ void FontCatalog::loadFromSd() {
     std::sort(loaded.begin(), loaded.end(), [](const Family& a, const Family& b) {
         return std::strcmp(a.label.c_str(), b.label.c_str()) < 0;
     });
-    for (const Family& family : loaded) {
+    for (const Family& family: loaded) {
         uint8_t unused = 0;
         if (!indexForId(family.id, unused)) {
             families_.push_back(family);
@@ -382,7 +380,8 @@ bool FontCatalog::RuntimeFont::readHeader(File& file, RFont4::Header& header, St
     return true;
 }
 
-bool FontCatalog::RuntimeFont::readBytes(File& file, uint32_t offset, uint8_t* target, size_t bytes, String& error) const {
+bool FontCatalog::RuntimeFont::readBytes(File& file, uint32_t offset, uint8_t* target, size_t bytes,
+                                         String& error) const {
     if (bytes == 0) {
         return true;
     }
@@ -425,7 +424,7 @@ bool FontCatalog::RuntimeFont::loadRecords(File& file, const RFont4::Header& hea
     }
 
     glyphs_.reserve(fileGlyphs.size());
-    for (const RFont4::GlyphRecord& item : fileGlyphs) {
+    for (const RFont4::GlyphRecord& item: fileGlyphs) {
         ui::fonts::AlphaGlyph glyph;
         glyph.codepoint = item.codepoint;
         glyph.bitmapOffset = item.bitmapOffset;
@@ -442,17 +441,17 @@ bool FontCatalog::RuntimeFont::loadRecords(File& file, const RFont4::Header& hea
     }
 
     rows_.reserve(fileRows.size());
-    for (const RFont4::RowRecord& item : fileRows) {
+    for (const RFont4::RowRecord& item: fileRows) {
         rows_.push_back(ui::fonts::AlphaRow{item.spanOffset, item.spanCount});
     }
 
     spans_.reserve(fileSpans.size());
-    for (const RFont4::SpanRecord& item : fileSpans) {
+    for (const RFont4::SpanRecord& item: fileSpans) {
         spans_.push_back(ui::fonts::AlphaSpan{item.x, item.width});
     }
 
     kerningPairs_.reserve(fileKerning.size());
-    for (const RFont4::KerningRecord& item : fileKerning) {
+    for (const RFont4::KerningRecord& item: fileKerning) {
         kerningPairs_.push_back(ui::fonts::AlphaKerningPair{item.rightCodepoint, item.xAdjust});
     }
 

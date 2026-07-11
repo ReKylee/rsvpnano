@@ -1,8 +1,8 @@
 #include "storage/index/IndexedBookStore.h"
 
-#include "board/BoardStorage.h"
 #include <algorithm>
 #include <limits>
+#include "board/BoardStorage.h"
 
 using StoreHeader = IndexedBookStore::Header;
 using StoreWordRecord = IndexedBookStore::WordRecord;

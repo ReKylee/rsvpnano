@@ -1,11 +1,14 @@
 #pragma once
 
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 
 #include "ui/fonts/Font.h"
 
-enum class PauseMode : uint8_t { SentenceEnd, Instant };
+enum class PauseMode : uint8_t {
+    SentenceEnd,
+    Instant
+};
 
 struct ReaderTypography {
     bool focusHighlight = true;

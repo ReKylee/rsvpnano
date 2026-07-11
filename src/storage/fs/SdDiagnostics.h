@@ -4,8 +4,8 @@
 
 namespace SdDiagnostics {
 
-    using StatusCallback =
-        void (*)(void* context, const char* title, const char* line1, const char* line2, int progressPercent);
+    using StatusCallback = void (*)(void* context, const char* title, const char* line1, const char* line2,
+                                    int progressPercent);
 
     struct DiagnosticResult {
         bool mounted = false;

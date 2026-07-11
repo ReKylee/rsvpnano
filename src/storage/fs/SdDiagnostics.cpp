@@ -98,12 +98,12 @@ namespace SdDiagnostics {
             }
             FrequencyCache cache;
             cache.frequencyKhz = preferences.getInt(kPreferenceFrequencyKhz, 0);
-            cache.cardType =
-                cardTypeFromByte(preferences.getUChar(kPreferenceCardType, cardTypeByte(Board::Storage::CardType::None)));
+            cache.cardType = cardTypeFromByte(preferences.getUChar(kPreferenceCardType,
+                                                                   cardTypeByte(Board::Storage::CardType::None)));
             cache.sizeMb = preferences.getUInt(kPreferenceCardSizeMb, 0);
             preferences.end();
-            if (!isSupportedFrequency(cache.frequencyKhz) ||
-                cache.cardType == Board::Storage::CardType::None || cache.sizeMb == 0) {
+            if (!isSupportedFrequency(cache.frequencyKhz) || cache.cardType == Board::Storage::CardType::None
+                || cache.sizeMb == 0) {
                 if (cache.frequencyKhz != 0) {
                     Serial.printf("[sd-check] ignoring incomplete cached frequency %d kHz\n", cache.frequencyKhz);
                 }
@@ -328,7 +328,8 @@ namespace SdDiagnostics {
                     return true;
                 }
 
-                Serial.println("[sd-check] cached SD frequency belongs to a different card; rediscovering");
+                Serial.println("[sd-check] cached SD frequency belongs to a different "
+                               "card; rediscovering");
                 unmountCard(mounted);
             }
         }
@@ -456,12 +457,14 @@ namespace SdDiagnostics {
             Serial.println("[sd-check] /books write/delete probe failed");
             return;
         }
-        if (!result.booksWritable || !result.articlesWritable || !result.configWritable || !result.themesWritable || !result.fontsWritable) {
+        if (!result.booksWritable || !result.articlesWritable || !result.configWritable || !result.themesWritable
+            || !result.fontsWritable) {
             result.summary = "Folder write failed";
             result.detail = "Format FAT32 MBR";
-            Serial.printf("[sd-check] folder write failed books=%u articles=%u config=%u themes=%u fonts=%u\n",
-                          result.booksWritable ? 1 : 0, result.articlesWritable ? 1 : 0,
-                          result.configWritable ? 1 : 0, result.themesWritable ? 1 : 0, result.fontsWritable ? 1 : 0);
+            Serial.printf("[sd-check] folder write failed books=%u articles=%u "
+                          "config=%u themes=%u fonts=%u\n",
+                          result.booksWritable ? 1 : 0, result.articlesWritable ? 1 : 0, result.configWritable ? 1 : 0,
+                          result.themesWritable ? 1 : 0, result.fontsWritable ? 1 : 0);
             return;
         }
 

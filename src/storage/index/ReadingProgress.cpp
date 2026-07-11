@@ -81,9 +81,8 @@ namespace ReadingProgress {
         const int parsed = std::sscanf(line.c_str(), "%7s %lu %lu %lu %lu %lu", magic, &version, &sourceSize,
                                        &sourceFingerprint, &wordCount, &savedWordIndex);
 
-        if (parsed != 6 || String(magic) != kMagic || version != kVersion
-            || sourceSize != identity.sourceSize || sourceFingerprint != identity.sourceFingerprint
-            || wordCount != identity.wordCount) {
+        if (parsed != 6 || String(magic) != kMagic || version != kVersion || sourceSize != identity.sourceSize
+            || sourceFingerprint != identity.sourceFingerprint || wordCount != identity.wordCount) {
             Serial.printf("[storage-progress] ignored stale progress sidecar: %s\n", bookPath.c_str());
             return false;
         }
@@ -108,13 +107,11 @@ namespace ReadingProgress {
         }
 
         wordIndex = std::min<uint32_t>(wordIndex, identity.wordCount - 1);
-        const size_t written = sidecar.printf("%s %lu %lu %lu %lu %lu\n",
-                                             kMagic,
-                                             static_cast<unsigned long>(kVersion),
-                                             static_cast<unsigned long>(identity.sourceSize),
-                                             static_cast<unsigned long>(identity.sourceFingerprint),
-                                             static_cast<unsigned long>(identity.wordCount),
-                                             static_cast<unsigned long>(wordIndex));
+        const size_t written =
+            sidecar.printf("%s %lu %lu %lu %lu %lu\n", kMagic, static_cast<unsigned long>(kVersion),
+                           static_cast<unsigned long>(identity.sourceSize),
+                           static_cast<unsigned long>(identity.sourceFingerprint),
+                           static_cast<unsigned long>(identity.wordCount), static_cast<unsigned long>(wordIndex));
         sidecar.close();
 
         if (written == 0) {
@@ -128,33 +125,48 @@ namespace ReadingProgress {
         return true;
     }
 
-    String positionKey(const String& bookPath) { return key('p', bookPath); }
-    String wordCountKey(const String& bookPath) { return key('c', bookPath); }
-    String sourceSizeKey(const String& bookPath) { return key('s', bookPath); }
-    String sourceFingerprintKey(const String& bookPath) { return key('f', bookPath); }
-    String bookId(const String& bookPath) { return key('b', bookPath); }
+    String positionKey(const String& bookPath) {
+        return key('p', bookPath);
+    }
+    String wordCountKey(const String& bookPath) {
+        return key('c', bookPath);
+    }
+    String sourceSizeKey(const String& bookPath) {
+        return key('s', bookPath);
+    }
+    String sourceFingerprintKey(const String& bookPath) {
+        return key('f', bookPath);
+    }
+    String bookId(const String& bookPath) {
+        return key('b', bookPath);
+    }
 
     uint8_t percent(uint32_t wordIndex, uint32_t wordCount) {
-        if (wordCount <= 1) return 0;
+        if (wordCount <= 1)
+            return 0;
         return static_cast<uint8_t>(std::min<uint32_t>((wordIndex * 100UL) / (wordCount - 1), 100));
     }
 
-    void Session::save(Preferences& preferences, const IndexedBookStore& store, const ReadingLoop& reader,
-                       bool force, uint32_t nowMs) {
-        if (!fromStorage || path.isEmpty() || (!force && nowMs - lastSaveMs < kSaveIntervalMs)) return;
+    void Session::save(Preferences& preferences, const IndexedBookStore& store, const ReadingLoop& reader, bool force,
+                       uint32_t nowMs) {
+        if (!fromStorage || path.isEmpty() || (!force && nowMs - lastSaveMs < kSaveIntervalMs))
+            return;
         const size_t wordIndex = reader.currentIndex();
-        if (!force && wordIndex == lastSavedWordIndex) return;
+        if (!force && wordIndex == lastSavedWordIndex)
+            return;
         lastSaveMs = nowMs;
         cache(preferences, store, reader, static_cast<uint32_t>(wordIndex));
-        Serial.printf("[storage-progress] saved position word=%u path=%s\n",
-                      static_cast<unsigned int>(wordIndex), path.c_str());
+        Serial.printf("[storage-progress] saved position word=%u path=%s\n", static_cast<unsigned int>(wordIndex),
+                      path.c_str());
     }
 
     void Session::cache(Preferences& preferences, const IndexedBookStore& store, const ReadingLoop& reader,
                         uint32_t wordIndex) {
-        if (!fromStorage || path.isEmpty()) return;
+        if (!fromStorage || path.isEmpty())
+            return;
         const size_t wordCount = reader.wordCount();
-        if (wordCount > 0) wordIndex = std::min<uint32_t>(wordIndex, static_cast<uint32_t>(wordCount - 1));
+        if (wordCount > 0)
+            wordIndex = std::min<uint32_t>(wordIndex, static_cast<uint32_t>(wordCount - 1));
         settings::save<settings::prefs::BookPath>(preferences, path);
         preferences.putUInt(positionKey(path).c_str(), wordIndex);
         preferences.putUInt(wordCountKey(path).c_str(), static_cast<uint32_t>(wordCount));
@@ -173,10 +185,12 @@ namespace ReadingProgress {
 
     uint32_t Session::restore(Preferences& preferences, const IndexedBookStore& store, const ReadingLoop& reader) {
         uint32_t wordIndex = kNoSavedWordIndex;
-        if (readSessionSidecar(*this, store, reader, wordIndex)) return wordIndex;
+        if (readSessionSidecar(*this, store, reader, wordIndex))
+            return wordIndex;
 
         const String savedPositionKey = positionKey(path);
-        if (!preferences.isKey(savedPositionKey.c_str())) return kNoSavedWordIndex;
+        if (!preferences.isKey(savedPositionKey.c_str()))
+            return kNoSavedWordIndex;
         const String savedCountKey = wordCountKey(path);
         if (preferences.isKey(savedCountKey.c_str())
             && preferences.getUInt(savedCountKey.c_str(), 0) != static_cast<uint32_t>(reader.wordCount())) {
@@ -194,13 +208,14 @@ namespace ReadingProgress {
         return wordIndex;
     }
 
-    bool Session::saveChapterTransition(Preferences& preferences, const IndexedBookStore& store,
-                                        ReadingLoop& reader, size_t previousWordIndex, size_t currentWordIndex,
-                                        uint32_t nowMs) {
-        if (!fromStorage || path.isEmpty()) return false;
-        for (const ChapterMarker& chapter : metadata.chapters) {
+    bool Session::saveChapterTransition(Preferences& preferences, const IndexedBookStore& store, ReadingLoop& reader,
+                                        size_t previousWordIndex, size_t currentWordIndex, uint32_t nowMs) {
+        if (!fromStorage || path.isEmpty())
+            return false;
+        for (const ChapterMarker& chapter: metadata.chapters) {
             if (chapter.wordIndex == 0 || chapter.wordIndex <= previousWordIndex
-                || chapter.wordIndex > currentWordIndex) continue;
+                || chapter.wordIndex > currentWordIndex)
+                continue;
             reader.seekTo(chapter.wordIndex);
             save(preferences, store, reader, true, nowMs);
             mirror(store, reader);
@@ -210,7 +225,8 @@ namespace ReadingProgress {
     }
 
     String Session::title(const StorageManager& storage) const {
-        if (!metadata.title.isEmpty()) return metadata.title;
+        if (!metadata.title.isEmpty())
+            return metadata.title;
         return fromStorage ? storage.bookDisplayName(index) : String("Demo");
     }
 

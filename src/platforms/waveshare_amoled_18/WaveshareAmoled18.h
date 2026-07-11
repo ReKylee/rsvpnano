@@ -3,7 +3,7 @@
 #include <Arduino.h>
 #include <driver/gpio.h>
 
-#include "board/BoardTypes.h"
+#include "ui/Touch.h"
 
 #ifndef RSVP_AMOLED_18_VERSION_HEADER
 #error "AMOLED 1.8 platform env must define RSVP_AMOLED_18_VERSION_HEADER."
@@ -52,7 +52,7 @@ constexpr size_t kTxChunkBytes = 32 * 1024;
 constexpr bool kPanelMemoryRotated180 = Version::kPanelMemoryRotated180;
 constexpr uint16_t kPanelColumnOffset = Version::kPanelColumnOffset;
 constexpr uint16_t kPanelRowOffset = Version::kPanelRowOffset;
-constexpr Board::UiOrientation kDefaultUiOrientation =
+constexpr ui::Orientation kDefaultUiOrientation =
     Version::kDefaultUiOrientation;
 }
 

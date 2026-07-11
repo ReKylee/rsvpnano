@@ -5,13 +5,16 @@
 #include <esp_heap_caps.h>
 
 #include "board/Board.h"
+#include "board/BoardImu.h"
 #include "board/BoardInput.h"
 #include "converter/EpubConverter.h"
-#include "display/UiRenderer.h"
+#include "ui/Theme.h"
 #include "input/Input.h"
 #include "storage/fs/SdDiagnostics.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
+#include "ui/Ui.h"
+#include "ui/screens/Screens.h"
 
 namespace {
 
@@ -25,14 +28,15 @@ constexpr size_t kSdChunkBytes = 4096;
 constexpr uint16_t kDisplayColorA = 0x0000;
 constexpr uint16_t kDisplayColorB = 0xFFFF;
 
-UiRenderer gDisplay;
+ui::Context gDisplay(Board::Display::gfx(), &Board::Display::flush, &Board::Display::flushRegion);
+ui::themes::Theme gTheme = ui::themes::defaultTheme();
 bool gDisplayReady = false;
 
 void showStatus(const String &title, const String &line1 = "", const String &line2 = "") {
   Serial.printf("[bench] screen title=%s line1=%s line2=%s\n", title.c_str(), line1.c_str(),
                 line2.c_str());
   if (gDisplayReady) {
-    gDisplay.renderStatus(title, line1, line2);
+    screens::status(gDisplay, title.c_str(), line1.c_str(), line2.c_str());
   }
 }
 
@@ -182,10 +186,17 @@ void runTimed(const char *name, bool (*operation)(), size_t bytes = 0) {
 }
 
 bool beginDisplay() {
-  gDisplayReady = gDisplay.begin();
+  gDisplayReady = Board::Display::begin();
+  gDisplay.setTheme(gTheme);
   return gDisplayReady;
 }
-bool beginInput() { return Input::begin(); }
+bool beginInput() {
+  const bool started = Input::begin();
+  gDisplay.setTouchSource({Board::Input::touchSurface(), Board::Input::touchTiming(),
+                           &Board::Input::beginTouch, &Board::Input::touchReady,
+                           &Board::Input::readTouch, &Board::Imu::uiOrientation}, millis());
+  return started;
+}
 bool beginAudio() { return Board::Audio::begin(); }
 bool beepAudio() { return Board::Audio::beep(); }
 
@@ -207,10 +218,10 @@ void waitForStartInput() {
   uint32_t lastReminderMs = millis();
   while (true) {
     Input::Event event;
-    if (Input::poll(event, millis()) && Input::isTouchEvent(event) &&
-        Input::hasAction(event.actions, Input::ActionTouchStart)) {
+    if (gDisplay.pollTouch(millis())) {
       break;
     }
+    Input::poll(event, millis());
 
     const bool held = startButtonHeld();
     if (!inputWasHeld && held) {

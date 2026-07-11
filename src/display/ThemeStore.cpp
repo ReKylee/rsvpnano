@@ -25,7 +25,7 @@ ThemeStore::ThemeStore() { reset(); }
 
 void ThemeStore::reset() {
   themes_.clear();
-  themes_.push_back(DisplayTheme::defaultTheme());
+  themes_.push_back(ui::themes::defaultTheme());
   selectedIndex_ = 0;
 }
 
@@ -42,7 +42,7 @@ void ThemeStore::loadFromSd() {
     return;
   }
 
-  std::vector<DisplayTheme::Theme> loaded;
+  std::vector<ui::themes::Theme> loaded;
   while (true) {
     File entry = dir.openNextFile();
     if (!entry) {
@@ -54,14 +54,14 @@ void ThemeStore::loadFromSd() {
     }
 
     const String path = entry.path();
-    if (!DisplayTheme::hasThemeExtension(path)) {
+    if (!ui::themes::hasThemeExtension(path)) {
       entry.close();
       continue;
     }
 
-    DisplayTheme::Theme theme;
+    ui::themes::Theme theme;
     String error;
-    if (DisplayTheme::parseThemeText(readSmallFile(entry), DisplayTheme::themeIdFromPath(path), theme, error)) {
+    if (ui::themes::parseThemeText(readSmallFile(entry), ui::themes::themeIdFromPath(path), theme, error)) {
       loaded.push_back(theme);
     } else {
       Serial.printf("[theme] skipped %s: %s\n", path.c_str(), error.c_str());
@@ -70,10 +70,10 @@ void ThemeStore::loadFromSd() {
   }
   dir.close();
 
-  std::sort(loaded.begin(), loaded.end(), [](const DisplayTheme::Theme &a, const DisplayTheme::Theme &b) {
+  std::sort(loaded.begin(), loaded.end(), [](const ui::themes::Theme &a, const ui::themes::Theme &b) {
     return std::strcmp(a.id.c_str(), b.id.c_str()) < 0;
   });
-  for (const DisplayTheme::Theme &theme : loaded) {
+  for (const ui::themes::Theme &theme : loaded) {
     if (!contains(theme.id)) {
       themes_.push_back(theme);
     }
@@ -98,16 +98,16 @@ void ThemeStore::selectNext() {
   selectedIndex_ = (selectedIndex_ + 1) % themes_.size();
 }
 
-const DisplayTheme::Theme &ThemeStore::selected() const { return themes_[selectedIndex_]; }
+const ui::themes::Theme &ThemeStore::selected() const { return themes_[selectedIndex_]; }
 
-const std::vector<DisplayTheme::Theme> &ThemeStore::themes() const { return themes_; }
+const std::vector<ui::themes::Theme> &ThemeStore::themes() const { return themes_; }
 
 size_t ThemeStore::selectedIndex() const { return selectedIndex_; }
 
 bool ThemeStore::contains(const String &id) const { return indexOf(id) < themes_.size(); }
 
 size_t ThemeStore::indexOf(const String &id) const {
-  const auto found = std::find_if(themes_.begin(), themes_.end(), [&id](const DisplayTheme::Theme &theme) {
+  const auto found = std::find_if(themes_.begin(), themes_.end(), [&id](const ui::themes::Theme &theme) {
     return theme.id == id;
   });
   if (found == themes_.end()) {

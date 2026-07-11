@@ -91,6 +91,10 @@ size_t StorageManager::bookCount() const {
     return library_.paths.size();
 }
 
+int StorageManager::bookIndex(const String& path) const {
+    return BookLibrary::indexOfPath(library_, path);
+}
+
 String StorageManager::bookPath(size_t index) const {
     return BookLibrary::pathAt(library_, index);
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "board/BoardTypes.h"
+#include "ui/Touch.h"
 
 namespace WaveshareAmoled18::Version {
 
@@ -14,7 +14,7 @@ constexpr const char *kOtaAssetName = "rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ot
 constexpr bool kPanelMemoryRotated180 = false;
 constexpr uint16_t kPanelColumnOffset = 16;
 constexpr uint16_t kPanelRowOffset = 0;
-constexpr Board::UiOrientation kDefaultUiOrientation = Board::UiOrientation::LandscapeFlipped;
+constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::LandscapeFlipped;
 
 // Waveshare's v2 samples route TP_INT to GPIO21, but the app polls touch to avoid
 // missing short interrupt pulses between loop samples.

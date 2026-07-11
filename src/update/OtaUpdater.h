@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <Preferences.h>
 
 #include "board/BoardConfig.h"
 
@@ -41,6 +42,7 @@ class OtaUpdater {
   };
 
   bool loadConfig(Config &config) const;
+  Config config(Preferences &preferences) const;
   bool isConfigured(const Config &config) const;
   String currentVersion() const;
   Result checkOnly(const Config &config, StatusCallback callback = nullptr,

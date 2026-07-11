@@ -610,8 +610,7 @@ String rsvpMetadataValueFromLine(const String &line, const char *directive, bool
 
 CompanionSyncManager *CompanionSyncManager::instance_ = nullptr;
 
-bool CompanionSyncManager::begin(const Config &config) {
-  (void)config;
+bool CompanionSyncManager::begin() {
   if (active_) {
     return true;
   }
@@ -1037,10 +1036,10 @@ void CompanionSyncManager::handleThemes() {
     return;
   }
 
-  DisplayTheme::Theme theme;
+  ui::themes::Theme theme;
   String error;
-  const String id = DisplayTheme::themeIdFromPath(uploadFinalPath_);
-  if (!DisplayTheme::parseThemeText(readSmallTextFile(uploadTmpPath_), id, theme, error)) {
+  const String id = ui::themes::themeIdFromPath(uploadFinalPath_);
+  if (!ui::themes::parseThemeText(readSmallTextFile(uploadTmpPath_), id, theme, error)) {
     Board::Storage::filesystem().remove(uploadTmpPath_);
     uploadTmpPath_ = "";
     uploadFinalPath_ = "";
@@ -1409,8 +1408,8 @@ void CompanionSyncManager::handleThemeUpload() {
       uploadError_ = "Missing filename";
       return;
     }
-    if (!DisplayTheme::hasThemeExtension(filename)) {
-      filename += DisplayTheme::kThemeExtension;
+    if (!ui::themes::hasThemeExtension(filename)) {
+      filename += ui::themes::kThemeExtension;
     }
     if (!ensureThemeDirectory()) {
       uploadError_ = "Themes folder unavailable";
@@ -1525,7 +1524,7 @@ String CompanionSyncManager::settingsJson() {
   if (!savedThemeId.isEmpty()) {
     themeStore.selectById(savedThemeId.c_str());
   }
-  const DisplayTheme::Theme &selectedTheme = themeStore.selected();
+  const ui::themes::Theme &selectedTheme = themeStore.selected();
 
   String body;
   body.reserve(3600);
@@ -1580,7 +1579,7 @@ String CompanionSyncManager::settingsJson() {
   body += ",\"guideWidth\":" + String(guideWidth);
   body += ",\"guideGap\":" + String(guideGap);
   body += "}";
-  const std::vector<DisplayTheme::Theme> &themes = themeStore.themes();
+  const std::vector<ui::themes::Theme> &themes = themeStore.themes();
   body += ",\"themeCount\":" + String(themes.size());
   body += ",\"themes\":[";
   for (size_t i = 0; i < themes.size(); ++i) {
@@ -1591,7 +1590,7 @@ String CompanionSyncManager::settingsJson() {
     body += ",\"name\":\"" + jsonEscape(themes[i].name) + "\"";
     body += ",\"builtIn\":" + String(themes[i].builtIn ? "true" : "false");
     body += ",\"typeface\":\"";
-    body += DisplayTheme::readerTypefaceName(themes[i].typeface);
+    body += ui::themes::readerTypefaceName(themes[i].typeface);
     body += "\"}";
   }
   body += "]";
@@ -1714,12 +1713,12 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
       error = "themeId does not match an available theme";
       return false;
     }
-    const DisplayTheme::Theme &theme = themeStore.selected();
+    const ui::themes::Theme &theme = themeStore.selected();
     preferences_.putString(pref::ThemeId::key(), theme.id);
     FontCatalog fontCatalog;
     fontCatalog.loadFromSd();
     uint8_t themeTypeface = 0;
-    if (fontCatalog.indexForId(DisplayTheme::readerTypefaceName(theme.typeface), themeTypeface)) {
+    if (fontCatalog.indexForId(ui::themes::readerTypefaceName(theme.typeface), themeTypeface)) {
       preferences_.putUChar(pref::ReaderTypefaceIndex::key(), themeTypeface);
       preferences_.putString(pref::ReaderTypefaceId::key(), fontCatalog.typefaceId(themeTypeface));
       themeTypefaceApplied = true;
@@ -2118,14 +2117,12 @@ bool CompanionSyncManager::progressForPath(const String &path, uint32_t sourceSi
 
   if (ReadingProgress::readPositionSidecar(
           path, {sourceSize, sourceFingerprint, wordCount}, wordIndex)) {
-    const size_t progress = (static_cast<size_t>(wordIndex) * static_cast<size_t>(100)) /
-                            static_cast<size_t>(wordCount - 1);
-    percent = static_cast<uint8_t>(std::min(static_cast<size_t>(100), progress));
+    percent = ReadingProgress::percent(wordIndex, wordCount);
     return true;
   }
 
-  const String positionKey = bookPositionKey(path);
-  const String countKey = bookWordCountKey(path);
+  const String positionKey = ReadingProgress::positionKey(path);
+  const String countKey = ReadingProgress::wordCountKey(path);
   if (!preferences_.isKey(positionKey.c_str()) || !preferences_.isKey(countKey.c_str())) {
     return false;
   }
@@ -2133,19 +2130,17 @@ bool CompanionSyncManager::progressForPath(const String &path, uint32_t sourceSi
     return false;
   }
 
-  if (preferences_.isKey(bookSourceSizeKey(path).c_str()) &&
-      preferences_.getUInt(bookSourceSizeKey(path).c_str(), 0) != sourceSize) {
+  if (preferences_.isKey(ReadingProgress::sourceSizeKey(path).c_str()) &&
+      preferences_.getUInt(ReadingProgress::sourceSizeKey(path).c_str(), 0) != sourceSize) {
     return false;
   }
-  if (preferences_.isKey(bookSourceFingerprintKey(path).c_str()) &&
-      preferences_.getUInt(bookSourceFingerprintKey(path).c_str(), 0) != sourceFingerprint) {
+  if (preferences_.isKey(ReadingProgress::sourceFingerprintKey(path).c_str()) &&
+      preferences_.getUInt(ReadingProgress::sourceFingerprintKey(path).c_str(), 0) != sourceFingerprint) {
     return false;
   }
 
   wordIndex = std::min<uint32_t>(preferences_.getUInt(positionKey.c_str(), 0), wordCount - 1);
-  const size_t progress = (static_cast<size_t>(wordIndex) * static_cast<size_t>(100)) /
-                          static_cast<size_t>(wordCount - 1);
-  percent = static_cast<uint8_t>(std::min(static_cast<size_t>(100), progress));
+  percent = ReadingProgress::percent(wordIndex, wordCount);
   return true;
 }
 
@@ -2156,16 +2151,14 @@ void CompanionSyncManager::cacheBookPosition(const String &path, uint32_t wordIn
     return;
   }
   wordIndex = std::min<uint32_t>(wordIndex, wordCount - 1);
-  preferences_.putUInt(bookPositionKey(path).c_str(), wordIndex);
-  preferences_.putUInt(bookWordCountKey(path).c_str(), wordCount);
-  preferences_.putUInt(bookSourceSizeKey(path).c_str(), sourceSize);
-  preferences_.putUInt(bookSourceFingerprintKey(path).c_str(), sourceFingerprint);
+  preferences_.putUInt(ReadingProgress::positionKey(path).c_str(), wordIndex);
+  preferences_.putUInt(ReadingProgress::wordCountKey(path).c_str(), wordCount);
+  preferences_.putUInt(ReadingProgress::sourceSizeKey(path).c_str(), sourceSize);
+  preferences_.putUInt(ReadingProgress::sourceFingerprintKey(path).c_str(), sourceFingerprint);
 }
 
 String CompanionSyncManager::bookIdForPath(const String &path) const {
-  char id[10];
-  std::snprintf(id, sizeof(id), "b%08lx", static_cast<unsigned long>(hashBookPath(path)));
-  return String(id);
+  return ReadingProgress::bookId(path);
 }
 
 bool CompanionSyncManager::resolveBookId(const String &id, String &path) const {
@@ -2254,39 +2247,6 @@ bool CompanionSyncManager::resolveBookName(const String &requested, String &path
   }
   file.close();
   return true;
-}
-
-String CompanionSyncManager::bookPositionKey(const String &bookPath) const {
-  char key[10];
-  std::snprintf(key, sizeof(key), "p%08lx", static_cast<unsigned long>(hashBookPath(bookPath)));
-  return String(key);
-}
-
-String CompanionSyncManager::bookWordCountKey(const String &bookPath) const {
-  char key[10];
-  std::snprintf(key, sizeof(key), "c%08lx", static_cast<unsigned long>(hashBookPath(bookPath)));
-  return String(key);
-}
-
-String CompanionSyncManager::bookSourceSizeKey(const String &bookPath) const {
-  char key[10];
-  std::snprintf(key, sizeof(key), "s%08lx", static_cast<unsigned long>(hashBookPath(bookPath)));
-  return String(key);
-}
-
-String CompanionSyncManager::bookSourceFingerprintKey(const String &bookPath) const {
-  char key[10];
-  std::snprintf(key, sizeof(key), "f%08lx", static_cast<unsigned long>(hashBookPath(bookPath)));
-  return String(key);
-}
-
-uint32_t CompanionSyncManager::hashBookPath(const String &path) const {
-  uint32_t hash = 2166136261UL;
-  for (size_t i = 0; i < path.length(); ++i) {
-    hash ^= static_cast<uint8_t>(path[i]);
-    hash *= 16777619UL;
-  }
-  return hash;
 }
 
 void CompanionSyncManager::finishUpload(bool success) {

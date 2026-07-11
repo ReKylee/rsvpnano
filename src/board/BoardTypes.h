@@ -5,27 +5,6 @@
 
 namespace Board {
 
-    enum class UiOrientation : uint8_t {
-        Landscape = 0,
-        LandscapeFlipped,
-        Portrait,
-        PortraitFlipped,
-    };
-
-    constexpr UiOrientation oppositeUiOrientation(UiOrientation orientation) {
-        switch (orientation) {
-        case UiOrientation::Landscape:
-            return UiOrientation::LandscapeFlipped;
-        case UiOrientation::LandscapeFlipped:
-            return UiOrientation::Landscape;
-        case UiOrientation::Portrait:
-            return UiOrientation::PortraitFlipped;
-        case UiOrientation::PortraitFlipped:
-        default:
-            return UiOrientation::Portrait;
-        }
-    }
-
     struct BatteryStatus {
         bool present = false;
         float voltage = 0.0f;

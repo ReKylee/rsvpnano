@@ -1,0 +1,347 @@
+#include "ui/screens/LibraryScreen.h"
+
+#include <algorithm>
+#include <climits>
+#include <cstdlib>
+
+#include "storage/index/IndexedBook.h"
+#include "ui/screens/ScreenCommon.h"
+
+namespace screens {
+namespace {
+
+constexpr int16_t kNavWidth = 82;
+constexpr int16_t kViewportX = 94;
+constexpr int16_t kViewportY = 8;
+constexpr int16_t kViewportWidth = 498;
+constexpr int16_t kViewportHeight = 120;
+constexpr int16_t kDetailY = 136;
+constexpr int16_t kDetailHeight = 30;
+constexpr int16_t kGap = 5;
+
+uint16_t spineColor(size_t index, bool article) {
+    constexpr uint16_t books[] = {0x99E3, 0x1AF5, 0x0B6A, 0x7B98, 0x4490, 0xB4CD, 0x9A49, 0x32FA};
+    constexpr uint16_t articles[] = {0x8B88, 0x63CF, 0x82A9, 0x536A, 0x6ACF};
+    return article ? articles[index % 5] : books[index % 8];
+}
+
+} // namespace
+
+LibraryResult LibraryScreen::draw(ui::Context& ui, const std::vector<LibraryItem>& items,
+                                  uint32_t nowMs, Screen& screen) {
+    LibraryResult result;
+    const ui::Touch* touch = ui.touch();
+    selectedIndex_ = items.empty() ? 0 : std::min(selectedIndex_, items.size() - 1);
+    if (const Action action = detail::navigation(ui, Screen::Library, screen); action != Action::None) {
+        result.action = action;
+    }
+
+    if (ui.width() < 620 || ui.height() < 150 || ui.height() > 240) {
+        ui::Column column{detail::content(ui), 4};
+        const size_t visible = std::min<size_t>(items.size(), std::max<int16_t>(1, column.bounds.h / 24));
+        for (size_t index = 0; index < visible; ++index) {
+            if (ui.button(column.next(20), items[index].title.c_str())) {
+                result.open = index == selectedIndex_;
+                selectedIndex_ = index;
+            }
+        }
+        return result;
+    }
+
+    const ui::Rect viewport{kViewportX, kViewportY, kViewportWidth, kViewportHeight};
+    const ui::Rect detailRect{kViewportX, kDetailY, kViewportWidth, kDetailHeight};
+    if (!dragging_) offset_ = centeredOffset(items, selectedIndex_);
+
+    if (touch != nullptr && ui::hasTouch(*touch, ui::TouchStart) && ui::contains(viewport, touch->x, touch->y)) {
+        dragging_ = true;
+        moved_ = false;
+        startX_ = touch->x;
+        startY_ = touch->y;
+        startOffset_ = offset_;
+        lastDrawMs_ = 0;
+    }
+    if (dragging_ && touch != nullptr && ui::hasTouch(*touch, ui::TouchMove)) {
+        const int dx = static_cast<int>(touch->x) - startX_;
+        const int dy = static_cast<int>(touch->y) - startY_;
+        moved_ = moved_ || std::abs(dx) > 5 || std::abs(dy) > 5;
+        if (lastDrawMs_ == 0 || nowMs - lastDrawMs_ >= 33) {
+            offset_ = clampOffset(items, static_cast<int16_t>(startOffset_ + dx));
+            lastDrawMs_ = nowMs;
+        }
+    }
+    if (dragging_ && touch != nullptr && ui::hasTouch(*touch, ui::TouchRelease)) {
+        const size_t target = nearest(items, offset_, static_cast<int16_t>(kViewportX + kViewportWidth / 2));
+        if (moved_) {
+            selectedIndex_ = target;
+            offset_ = centeredOffset(items, target);
+        } else if (ui::hasTouch(*touch, ui::TouchTap)) {
+            const size_t tapped = nearest(items, offset_, touch->x);
+            result.open = tapped == selectedIndex_;
+            selectedIndex_ = tapped;
+        }
+        dragging_ = false;
+    }
+    if (touch != nullptr && ui::hasTouch(*touch, ui::TouchTap) && ui::contains(detailRect, touch->x, touch->y)) {
+        result.open = true;
+    }
+
+    if (!ui.redraw({kViewportX, static_cast<int16_t>(kViewportY - 2), kViewportWidth,
+                    static_cast<int16_t>(kViewportHeight + kDetailHeight + 10)}, signature(items, selectedIndex_))) {
+        return result;
+    }
+
+    Arduino_GFX& gfx = ui.gfx();
+    const uint16_t foreground = ui.color(ui::themes::ColorRole::Foreground);
+    const uint16_t muted = ui.color(ui::themes::ColorRole::Muted);
+    const uint16_t accent = ui.color(ui::themes::ColorRole::Accent);
+    const uint16_t outline = ui.color(ui::themes::ColorRole::Outline);
+    const int16_t marker = static_cast<int16_t>(kViewportX + kViewportWidth / 2);
+    gfx.drawFastVLine(marker, kViewportY, kViewportHeight, ui.color(ui::themes::ColorRole::ProgressTrack));
+
+    if (items.empty()) {
+        gfx.setTextSize(2);
+        gfx.setTextColor(muted);
+        gfx.setCursor(kViewportX + 12, kViewportY + 42);
+        gfx.print("No Library Items");
+        return result;
+    }
+
+    int16_t left = 0;
+    for (size_t index = 0; index < items.size(); ++index) {
+        const int16_t width = spineWidth(items[index], index);
+        const int16_t height = spineHeight(items[index], index);
+        const int16_t x = static_cast<int16_t>(kViewportX + left + offset_);
+        left = static_cast<int16_t>(left + width + kGap);
+        if (x + width < kViewportX || x > kViewportX + kViewportWidth) continue;
+        const bool active = index == selectedIndex_;
+        const int16_t y = static_cast<int16_t>(kViewportY + kViewportHeight - height - (active ? 8 : 0));
+        const uint16_t fill = spineColor(index, items[index].article);
+        gfx.fillRect(x, y, width, height, fill);
+        gfx.drawRect(x, y, width, height, foreground);
+        if (active) gfx.fillRect(x, static_cast<int16_t>(y - 2), width, 2, accent);
+        if (items[index].progress > 0) {
+            gfx.fillRect(static_cast<int16_t>(x + width - 9), y, 5,
+                         std::max<int16_t>(8, static_cast<int16_t>(height * items[index].progress / 100)), 0xDACA);
+        }
+        gfx.setTextSize(1);
+        gfx.setTextColor(0xFF9C);
+        int16_t textY = static_cast<int16_t>(y + 6);
+        for (size_t character = 0; character < items[index].spineLabel.length() && textY + 8 < y + height;
+             ++character, textY = static_cast<int16_t>(textY + 11)) {
+            gfx.setCursor(static_cast<int16_t>(x + width / 2 - 3), textY);
+            gfx.write(static_cast<uint8_t>(items[index].spineLabel[character]));
+        }
+    }
+    gfx.drawFastHLine(kViewportX, 128, kViewportWidth, outline);
+    gfx.drawFastHLine(kViewportX, 129, kViewportWidth, outline);
+
+    const LibraryItem& item = items[selectedIndex_];
+    gfx.setTextSize(2);
+    gfx.setTextColor(foreground);
+    gfx.setCursor(kViewportX, kDetailY);
+    gfx.print(item.title);
+    gfx.setTextSize(1);
+    gfx.setTextColor(muted);
+    gfx.setCursor(kViewportX, kDetailY + 18);
+    gfx.print(item.detail);
+    gfx.setTextSize(2);
+    gfx.setTextColor(accent);
+    gfx.setCursor(kViewportX + kViewportWidth - 62, kDetailY + 7);
+    gfx.print(item.progressLabel);
+    return result;
+}
+
+void LibraryScreen::reset() {
+    dragging_ = false;
+    moved_ = false;
+    offset_ = 0;
+    lastDrawMs_ = 0;
+}
+
+void LibraryScreen::invalidate() {
+    items_.clear();
+    sourceCount_ = 0;
+    itemsValid_ = false;
+}
+
+const std::vector<LibraryItem>& LibraryScreen::items(StorageManager& storage, const IndexedBookStore& bookStore,
+                                                      const ReadingLoop& reader,
+                                                      const ReadingProgress::Session& book,
+                                                      Preferences& preferences) {
+    const size_t bookCount = storage.bookCount();
+    if (itemsValid_ && sourceCount_ == bookCount) {
+        if (book.fromStorage && book.index < items_.size() && bookStore.isOpen()) {
+            LibraryItem& current = items_[book.index];
+            current.progress = ReadingProgress::percent(reader.currentIndex(), reader.wordCount());
+            if (const ChapterMarker* chapter = book.metadata.chapterAt(reader.currentIndex())) {
+                current.chapter = chapter->title;
+            }
+            current.detail = detailLine(current.author, current.chapter);
+            current.progressLabel = progressLabel(current.progress);
+        }
+        return items_;
+    }
+
+    items_.clear();
+    items_.reserve(bookCount);
+    for (size_t index = 0; index < bookCount; ++index) {
+        LibraryItem item;
+        item.title = storage.bookDisplayName(index);
+        item.author = storage.bookAuthorName(index);
+        item.article = storage.bookIsArticle(index);
+        item.spineLabel = spineLabel(item.title);
+
+        const String path = storage.bookPath(index);
+        BookMetadata metadata;
+        IndexedBookStore::Header header;
+        const bool metadataLoaded = IndexedBook::readMetadata(path, metadata, &header);
+        uint32_t wordIndex = 0;
+        bool hasPosition = false;
+
+        if (book.fromStorage && index == book.index && bookStore.isOpen()) {
+            wordIndex = static_cast<uint32_t>(reader.currentIndex());
+            item.progress = ReadingProgress::percent(wordIndex, reader.wordCount());
+            if (const ChapterMarker* chapter = book.metadata.chapterAt(wordIndex)) item.chapter = chapter->title;
+        } else if (metadataLoaded && header.wordCount > 0) {
+            const ReadingProgress::BookIdentity identity{header.sourceSize, header.sourceFingerprint, header.wordCount};
+            hasPosition = ReadingProgress::readPositionSidecar(path, identity, wordIndex);
+            if (!hasPosition) {
+                const String positionKey = ReadingProgress::positionKey(path);
+                if (preferences.isKey(positionKey.c_str())) {
+                    const String countKey = ReadingProgress::wordCountKey(path);
+                    const String sizeKey = ReadingProgress::sourceSizeKey(path);
+                    const String fingerprintKey = ReadingProgress::sourceFingerprintKey(path);
+                    const bool countMatches = !preferences.isKey(countKey.c_str())
+                        || preferences.getUInt(countKey.c_str(), 0) == header.wordCount;
+                    const bool sourceMatches = !preferences.isKey(sizeKey.c_str())
+                        || !preferences.isKey(fingerprintKey.c_str())
+                        || (preferences.getUInt(sizeKey.c_str(), 0) == header.sourceSize
+                            && preferences.getUInt(fingerprintKey.c_str(), 0) == header.sourceFingerprint);
+                    if (countMatches && sourceMatches) {
+                        wordIndex = std::min<uint32_t>(preferences.getUInt(positionKey.c_str(), 0),
+                                                       header.wordCount - 1);
+                        hasPosition = true;
+                    }
+                }
+            }
+            item.progress = hasPosition ? ReadingProgress::percent(wordIndex, header.wordCount) : 0;
+            if (const ChapterMarker* chapter = metadata.chapterAt(hasPosition ? wordIndex : 0)) {
+                item.chapter = chapter->title;
+            }
+        } else {
+            item.progress = storedProgress(index, storage, bookStore, reader, book, preferences);
+        }
+
+        item.detail = detailLine(item.author, item.chapter);
+        item.progressLabel = progressLabel(item.progress);
+        items_.push_back(item);
+    }
+    sourceCount_ = bookCount;
+    itemsValid_ = true;
+    return items_;
+}
+
+uint8_t LibraryScreen::storedProgress(size_t index, StorageManager& storage, const IndexedBookStore& bookStore,
+                                      const ReadingLoop& reader, const ReadingProgress::Session& book,
+                                      Preferences& preferences) const {
+    if (book.fromStorage && index == book.index && bookStore.isOpen()) {
+        return ReadingProgress::percent(reader.currentIndex(), reader.wordCount());
+    }
+    const String path = storage.bookPath(index);
+    const String positionKey = ReadingProgress::positionKey(path);
+    const String countKey = ReadingProgress::wordCountKey(path);
+    if (!preferences.isKey(positionKey.c_str()) || !preferences.isKey(countKey.c_str())) return 0;
+    return ReadingProgress::percent(preferences.getUInt(positionKey.c_str(), 0),
+                                    preferences.getUInt(countKey.c_str(), 0));
+}
+
+String LibraryScreen::spineLabel(const String& title) {
+    String cleaned = title;
+    cleaned.trim();
+    String lowered = cleaned;
+    lowered.toLowerCase();
+    if (lowered.startsWith("the ")) cleaned = cleaned.substring(4);
+    else if (lowered.startsWith("an ")) cleaned = cleaned.substring(3);
+    else if (lowered.startsWith("a ")) cleaned = cleaned.substring(2);
+
+    String result;
+    result.reserve(7);
+    for (size_t index = 0; index < cleaned.length() && result.length() < 7; ++index) {
+        char character = cleaned[index];
+        if (character >= 'a' && character <= 'z') character = static_cast<char>(character - 'a' + 'A');
+        if ((character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9')) result += character;
+    }
+    return result.isEmpty() ? String("BOOK") : result;
+}
+
+String LibraryScreen::detailLine(const String& author, const String& chapter) {
+    String result = author.isEmpty() ? String("Unknown") : author;
+    if (!chapter.isEmpty()) result += " · " + chapter;
+    return result;
+}
+
+String LibraryScreen::progressLabel(uint8_t progress) {
+    if (progress == 0) return "new";
+    if (progress >= 100) return "done";
+    return String(progress) + "%";
+}
+
+int16_t LibraryScreen::centeredOffset(const std::vector<LibraryItem>& items, size_t index) const {
+    if (items.empty()) return 0;
+    index = std::min(index, items.size() - 1);
+    int16_t left = 0;
+    for (size_t item = 0; item < index; ++item) left = static_cast<int16_t>(left + spineWidth(items[item], item) + kGap);
+    return clampOffset(items, static_cast<int16_t>(kViewportWidth / 2 - left - spineWidth(items[index], index) / 2));
+}
+
+int16_t LibraryScreen::clampOffset(const std::vector<LibraryItem>& items, int16_t offset) const {
+    if (items.empty()) return 0;
+    int16_t left = 0, lastCenter = 0;
+    for (size_t index = 0; index < items.size(); ++index) {
+        const int16_t width = spineWidth(items[index], index);
+        lastCenter = static_cast<int16_t>(left + width / 2);
+        left = static_cast<int16_t>(left + width + kGap);
+    }
+    const int16_t firstCenter = spineWidth(items[0], 0) / 2;
+    return std::clamp<int16_t>(offset, static_cast<int16_t>(kViewportWidth / 2 - lastCenter),
+                              static_cast<int16_t>(kViewportWidth / 2 - firstCenter));
+}
+
+size_t LibraryScreen::nearest(const std::vector<LibraryItem>& items, int16_t offset, int16_t x) const {
+    if (items.empty()) return 0;
+    size_t result = 0;
+    int distance = INT_MAX;
+    int16_t left = 0;
+    for (size_t index = 0; index < items.size(); ++index) {
+        const int16_t width = spineWidth(items[index], index);
+        const int center = kViewportX + left + width / 2 + offset;
+        if (std::abs(center - x) < distance) {
+            distance = std::abs(center - x);
+            result = index;
+        }
+        left = static_cast<int16_t>(left + width + kGap);
+    }
+    return result;
+}
+
+int16_t LibraryScreen::spineWidth(const LibraryItem& item, size_t index) const {
+    return static_cast<int16_t>((item.article ? 22 : 24) + std::min<size_t>(item.title.length(), 18) / 3
+                              + (index * 7) % 13);
+}
+
+int16_t LibraryScreen::spineHeight(const LibraryItem& item, size_t index) const {
+    return std::min<int16_t>(112, static_cast<int16_t>((item.article ? 78 : 84)
+        + std::min<size_t>(item.title.length(), 24) / 2 + (index * 5) % 17));
+}
+
+uint32_t LibraryScreen::signature(const std::vector<LibraryItem>& items, size_t current) const {
+    uint32_t value = ui::Context::combine(static_cast<uint32_t>(offset_), static_cast<uint32_t>(current));
+    value = ui::Context::combine(value, items.size());
+    for (const LibraryItem& item : items) {
+        value = ui::Context::signature(item.title.c_str(), value);
+        value = ui::Context::combine(value, item.progress);
+    }
+    return value;
+}
+
+} // namespace screens

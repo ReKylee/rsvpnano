@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "display/DisplayTheme.h"
+#include "ui/Theme.h"
 
 #if __has_include(<filesystem>)
 #include <filesystem>
@@ -40,10 +40,10 @@ String validThemeText() {
       "progress_track=#707070\n");
 }
 
-DisplayTheme::Theme parseValidTheme() {
-  DisplayTheme::Theme theme;
+ui::themes::Theme parseValidTheme() {
+  ui::themes::Theme theme;
   String error;
-  TEST_ASSERT_TRUE_MESSAGE(DisplayTheme::parseThemeText(validThemeText(), "valid", theme, error), error.c_str());
+  TEST_ASSERT_TRUE_MESSAGE(ui::themes::parseThemeText(validThemeText(), "valid", theme, error), error.c_str());
   return theme;
 }
 
@@ -61,12 +61,12 @@ void setUp() {}
 void tearDown() {}
 
 void test_parses_valid_theme() {
-  const DisplayTheme::Theme theme = parseValidTheme();
+  const ui::themes::Theme theme = parseValidTheme();
   TEST_ASSERT_EQUAL_STRING("valid", theme.id.c_str());
   TEST_ASSERT_EQUAL_STRING("Valid Theme", theme.name.c_str());
-  TEST_ASSERT_EQUAL_UINT16(0x0000, theme.colors[static_cast<size_t>(DisplayTheme::ColorRole::Background)]);
-  TEST_ASSERT_EQUAL_UINT16(0xFFFF, theme.colors[static_cast<size_t>(DisplayTheme::ColorRole::Foreground)]);
-  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(DisplayTheme::ReaderTypeface::AtkinsonHyperlegible),
+  TEST_ASSERT_EQUAL_UINT16(0x0000, theme.colors[static_cast<size_t>(ui::themes::ColorRole::Background)]);
+  TEST_ASSERT_EQUAL_UINT16(0xFFFF, theme.colors[static_cast<size_t>(ui::themes::ColorRole::Foreground)]);
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(ui::themes::ReaderTypeface::AtkinsonHyperlegible),
                           static_cast<uint8_t>(theme.typeface));
   TEST_ASSERT_TRUE(theme.lowBrightness);
 }
@@ -74,95 +74,95 @@ void test_parses_valid_theme() {
 void test_accepts_rgb565_literal() {
   String text = validThemeText();
   text.replace("accent=#ff0000", "accent=0x07E0");
-  DisplayTheme::Theme theme;
+  ui::themes::Theme theme;
   String error;
-  TEST_ASSERT_TRUE_MESSAGE(DisplayTheme::parseThemeText(text, "rgb565", theme, error), error.c_str());
-  TEST_ASSERT_EQUAL_UINT16(0x07E0, theme.colors[static_cast<size_t>(DisplayTheme::ColorRole::Accent)]);
+  TEST_ASSERT_TRUE_MESSAGE(ui::themes::parseThemeText(text, "rgb565", theme, error), error.c_str());
+  TEST_ASSERT_EQUAL_UINT16(0x07E0, theme.colors[static_cast<size_t>(ui::themes::ColorRole::Accent)]);
 }
 
 void test_rejects_missing_magic() {
   String text = validThemeText();
   text.replace("@rtheme\n", "");
-  DisplayTheme::Theme theme;
+  ui::themes::Theme theme;
   String error;
-  TEST_ASSERT_FALSE(DisplayTheme::parseThemeText(text, "missing", theme, error));
+  TEST_ASSERT_FALSE(ui::themes::parseThemeText(text, "missing", theme, error));
   TEST_ASSERT_EQUAL_STRING("first content line must be @rtheme", error.c_str());
 }
 
 void test_rejects_versioned_magic() {
   String text = validThemeText();
   text.replace("@rtheme", "@rtheme 1");
-  DisplayTheme::Theme theme;
+  ui::themes::Theme theme;
   String error;
-  TEST_ASSERT_FALSE(DisplayTheme::parseThemeText(text, "versioned", theme, error));
+  TEST_ASSERT_FALSE(ui::themes::parseThemeText(text, "versioned", theme, error));
   TEST_ASSERT_EQUAL_STRING("first content line must be @rtheme", error.c_str());
 }
 
 void test_rejects_missing_role() {
   String text = validThemeText();
   text.replace("progress_track=#707070\n", "");
-  DisplayTheme::Theme theme;
+  ui::themes::Theme theme;
   String error;
-  TEST_ASSERT_FALSE(DisplayTheme::parseThemeText(text, "missing-role", theme, error));
+  TEST_ASSERT_FALSE(ui::themes::parseThemeText(text, "missing-role", theme, error));
   TEST_ASSERT_EQUAL_STRING("missing color progress_track", error.c_str());
 }
 
 void test_rejects_missing_typeface() {
   String text = validThemeText();
   text.replace("typeface=atkinson\n", "");
-  DisplayTheme::Theme theme;
+  ui::themes::Theme theme;
   String error;
-  TEST_ASSERT_FALSE(DisplayTheme::parseThemeText(text, "missing-typeface", theme, error));
+  TEST_ASSERT_FALSE(ui::themes::parseThemeText(text, "missing-typeface", theme, error));
   TEST_ASSERT_EQUAL_STRING("missing typeface", error.c_str());
 }
 
 void test_rejects_invalid_typeface() {
   String text = validThemeText();
   text.replace("typeface=atkinson", "typeface=comic_sans");
-  DisplayTheme::Theme theme;
+  ui::themes::Theme theme;
   String error;
-  TEST_ASSERT_FALSE(DisplayTheme::parseThemeText(text, "invalid-typeface", theme, error));
+  TEST_ASSERT_FALSE(ui::themes::parseThemeText(text, "invalid-typeface", theme, error));
   TEST_ASSERT_EQUAL_STRING("typeface must be standard, open_dyslexic, or atkinson", error.c_str());
 }
 
 void test_rejects_inherit_typeface() {
   String text = validThemeText();
   text.replace("typeface=atkinson", "typeface=inherit");
-  DisplayTheme::Theme theme;
+  ui::themes::Theme theme;
   String error;
-  TEST_ASSERT_FALSE(DisplayTheme::parseThemeText(text, "inherit-typeface", theme, error));
+  TEST_ASSERT_FALSE(ui::themes::parseThemeText(text, "inherit-typeface", theme, error));
   TEST_ASSERT_EQUAL_STRING("typeface must be standard, open_dyslexic, or atkinson", error.c_str());
 }
 
 void test_rejects_bad_color() {
   String text = validThemeText();
   text.replace("accent=#ff0000", "accent=#ff00zz");
-  DisplayTheme::Theme theme;
+  ui::themes::Theme theme;
   String error;
-  TEST_ASSERT_FALSE(DisplayTheme::parseThemeText(text, "bad-color", theme, error));
+  TEST_ASSERT_FALSE(ui::themes::parseThemeText(text, "bad-color", theme, error));
   TEST_ASSERT_EQUAL_STRING("invalid color for accent", error.c_str());
 }
 
 void test_unknown_key_is_ignored() {
   String text = validThemeText();
   text += "decorative_orb=#ff00ff\n";
-  DisplayTheme::Theme theme;
+  ui::themes::Theme theme;
   String error;
-  TEST_ASSERT_TRUE_MESSAGE(DisplayTheme::parseThemeText(text, "unknown", theme, error), error.c_str());
+  TEST_ASSERT_TRUE_MESSAGE(ui::themes::parseThemeText(text, "unknown", theme, error), error.c_str());
 }
 
 void test_rejects_bad_low_brightness() {
   String text = validThemeText();
   text.replace("low_brightness=true", "low_brightness=maybe");
-  DisplayTheme::Theme theme;
+  ui::themes::Theme theme;
   String error;
-  TEST_ASSERT_FALSE(DisplayTheme::parseThemeText(text, "bad-low-brightness", theme, error));
+  TEST_ASSERT_FALSE(ui::themes::parseThemeText(text, "bad-low-brightness", theme, error));
   TEST_ASSERT_EQUAL_STRING("low_brightness must be true or false", error.c_str());
 }
 
 void test_theme_id_from_path() {
   TEST_ASSERT_EQUAL_STRING("catppuccin-mocha",
-                           DisplayTheme::themeIdFromPath("/themes/catppuccin-mocha.rtheme").c_str());
+                           ui::themes::themeIdFromPath("/themes/catppuccin-mocha.rtheme").c_str());
 }
 
 void test_repo_themes_parse() {
@@ -175,10 +175,10 @@ void test_repo_themes_parse() {
   TEST_ASSERT_GREATER_OR_EQUAL_UINT32(10, static_cast<uint32_t>(themeFiles.size()));
 
   for (const fs::path &path : themeFiles) {
-    DisplayTheme::Theme theme;
+    ui::themes::Theme theme;
     String error;
-    const String id = DisplayTheme::themeIdFromPath(String(path.generic_string()));
-    TEST_ASSERT_TRUE_MESSAGE(DisplayTheme::parseThemeText(readFile(path), id, theme, error), path.string().c_str());
+    const String id = ui::themes::themeIdFromPath(String(path.generic_string()));
+    TEST_ASSERT_TRUE_MESSAGE(ui::themes::parseThemeText(readFile(path), id, theme, error), path.string().c_str());
   }
 }
 

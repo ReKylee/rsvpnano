@@ -9,6 +9,7 @@
 #include <WiFiClientSecure.h>
 
 #include "net/WifiConnection.h"
+#include "settings/PreferenceSpecs.h"
 #include "update/ReleaseParser.h"
 
 #ifndef RSVP_FIRMWARE_VERSION
@@ -198,6 +199,20 @@ bool OtaUpdater::loadConfig(Config &config) const {
   }
 
   return false;
+}
+
+OtaUpdater::Config OtaUpdater::config(Preferences &preferences) const {
+  Config result;
+  loadConfig(result);
+  const String ssid = settings::load<settings::prefs::WifiSsid>(preferences);
+  if (!ssid.isEmpty()) {
+    result.wifiSsid = ssid;
+    result.wifiPassword = settings::load<settings::prefs::WifiPassword>(preferences);
+  }
+  const String owner = settings::load<settings::prefs::OtaOwner>(preferences);
+  if (!owner.isEmpty()) result.githubOwner = owner;
+  result.githubTag = settings::nvs::get(preferences, settings::prefs::OtaTag::key(), result.githubTag);
+  return result;
 }
 
 bool OtaUpdater::isConfigured(const Config &config) const {

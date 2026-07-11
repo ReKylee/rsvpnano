@@ -9,7 +9,7 @@ namespace Board::Imu {
 
 namespace {
 
-Board::UiOrientation gUiOrientation = WaveshareAmoled241::DisplayWiring::kDefaultUiOrientation;
+ui::Orientation gUiOrientation = WaveshareAmoled241::DisplayWiring::kDefaultUiOrientation;
 
 TwoWire &imuWire() { return Wire1; }
 
@@ -21,9 +21,9 @@ const char *wireName() { return "Wire1"; }
 
 uint8_t address() { return WaveshareAmoled241::ImuWiring::kAddress; }
 
-Board::UiOrientation uiOrientation() { return gUiOrientation; }
+ui::Orientation uiOrientation() { return gUiOrientation; }
 
-void setUiOrientation(Board::UiOrientation orientation) { gUiOrientation = orientation; }
+void setUiOrientation(ui::Orientation orientation) { gUiOrientation = orientation; }
 
 bool probeAddress(uint8_t candidateAddress) {
   return BoardDrivers::Qmi8658::probeAddress(imuWire(), candidateAddress);

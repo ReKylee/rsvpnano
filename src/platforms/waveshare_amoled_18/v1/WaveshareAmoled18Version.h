@@ -1,6 +1,6 @@
 #pragma once
 
-#include "board/BoardTypes.h"
+#include "ui/Touch.h"
 
 namespace WaveshareAmoled18::Version {
 
@@ -11,7 +11,7 @@ constexpr const char *kOtaAssetName = "rsvp-nano-esp32-s3-touch-amoled-1.8-ota.b
 constexpr bool kPanelMemoryRotated180 = true;
 constexpr uint16_t kPanelColumnOffset = 0;
 constexpr uint16_t kPanelRowOffset = 0;
-constexpr Board::UiOrientation kDefaultUiOrientation = Board::UiOrientation::Landscape;
+constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Landscape;
 
 constexpr int kTouchIrqPin = -1;
 constexpr uint8_t kTouchAddress = 0x38;

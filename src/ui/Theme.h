@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace DisplayTheme {
+namespace ui::themes {
 
 constexpr const char *kDefaultThemeId = "default";
 constexpr const char *kThemeMagic = "@rtheme";
@@ -60,4 +60,4 @@ bool hasThemeExtension(const String &path);
 String themeIdFromPath(const String &path);
 bool parseThemeText(const String &text, const String &id, Theme &theme, String &error);
 
-} // namespace DisplayTheme
+} // namespace ui::themes

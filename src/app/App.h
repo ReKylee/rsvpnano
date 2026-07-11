@@ -2,22 +2,16 @@
 
 #include <Arduino.h>
 #include <Preferences.h>
-#include <vector>
 
-#include "app/AppState.h"
-#include "book/BookMetadata.h"
-#include "display/ThemeStore.h"
-#include "fonts/FontCatalog.h"
-#include "display/UiRenderer.h"
+#include "board/BoardDisplay.h"
 #include "input/Input.h"
-#include "reader/ReadingLoop.h"
-#include "rss/RssFeedManager.h"
 #include "storage/StorageManager.h"
-#include "standby/Screensaver.h"
-#include "storage/index/IndexedBookStore.h"
 #include "sync/CompanionSyncManager.h"
-#include "timer/FocusTimer.h"
-#include "update/OtaUpdater.h"
+#include "ui/Ui.h"
+#include "ui/screens/Screens.h"
+#include "ui/screens/ReaderScreen.h"
+#include "ui/screens/LibraryScreen.h"
+#include "ui/screens/StandbyScreen.h"
 #include "usb/UsbMassStorageManager.h"
 
 class App {
@@ -26,298 +20,32 @@ public:
     void update(uint32_t nowMs);
 
 private:
-    enum class MenuScreen : uint8_t {
-        Main,
-        Books,
-        Chapters,
-        Settings,
-        SettingsReading,
-        SettingsDisplay,
-        SettingsPacing,
-        SettingsTypography,
-        Device,
-        SyncOptions,
-        FocusTimerGenres,
-        OtaConfirm,
-    };
-
-    enum class MainItem : size_t {
-        Resume,
-        Chapters,
-        Library,
-        Settings,
-        Device,
-        FocusTimer,
-        PowerOff,
-        Count,
-    };
-
-    enum class SyncItem : size_t {
-        Back,
-        CompanionSync,
-        RssRefresh,
-        UsbTransfer,
-        Count,
-    };
-
-    enum class SettingsItem : size_t {
-        Reading,
-        Display,
-        Pacing,
-        Typography,
-        Count,
-    };
-
-    enum class SettingsReadingItem : size_t {
-        Back,
-        Wpm,
-        PauseMode,
-        PhantomWords,
-        Count,
-    };
-
-    enum class SettingsDisplayItem : size_t {
-        Back,
-        Brightness,
-        Theme,
-        Standby,
-        Count,
-    };
-
-    enum class SettingsPacingItem : size_t {
-        Back,
-        LongWords,
-        Complexity,
-        Punctuation,
-        Count,
-    };
-
-    enum class SettingsTypographyItem : size_t {
-        Back,
-        ReaderFontSize,
-        ReaderTypeface,
-        FocusHighlight,
-        Tracking,
-        Anchor,
-        GuideWidth,
-        GuideGap,
-        ResetTypography,
-        Count,
-    };
-
-    enum class DeviceItem : size_t {
-        StorageStatus,
-        SyncImport,
-        Ota,
-        Count,
-    };
-
-    enum class PauseMode : uint8_t {
-        SentenceEnd = 0,
-        Instant = 1,
-    };
-
-    enum class TouchIntent : uint8_t {
-        None,
-        PlayHold,
-        Scrub,
-        Wpm,
-    };
-
-    struct ReaderTouchSession {
-        bool active = false;
-        uint16_t startX = 0;
-        uint16_t startY = 0;
-        uint16_t lastX = 0;
-        uint16_t lastY = 0;
-        uint32_t startMs = 0;
-        size_t startWordIndex = 0;
-        int scrubStepsApplied = 0;
-    };
-
-    void setState(AppState state, uint32_t nowMs);
-    void render();
-    void renderReader();
-    int renderMenu(UiRenderer::Tap tap = {});
-    int renderBooks(UiRenderer::Tap tap = {});
-    const std::vector<UiRenderer::LibraryItem>& libraryItems();
-    void invalidateLibraryCache();
-    String librarySpineLabelForTitle(const String& title) const;
-    String libraryDetailLineFor(const String& author, const String& chapter) const;
-    String libraryProgressLabelFor(uint8_t progressPercent) const;
-    int libraryBookIndexForRow(size_t row) const;
-    uint8_t storedProgressPercentForBook(size_t index);
-    String chapterLabelForMetadata(const BookMetadata& metadata, size_t wordIndex, const String& fallbackTitle) const;
-    void handleLibraryTouch(const Input::Event& event, uint32_t nowMs);
-    void centerLibraryShelfOn(size_t row, bool animate);
-    bool openSelectedLibraryItem(uint32_t nowMs);
-    int renderChapters(UiRenderer::Tap tap = {});
-    int renderSettings(UiRenderer::Tap tap = {});
-    int renderSettingsReading(UiRenderer::Tap tap = {});
-    int renderSettingsDisplay(UiRenderer::Tap tap = {});
-    int renderSettingsPacing(UiRenderer::Tap tap = {});
-    int renderSettingsTypography(UiRenderer::Tap tap = {});
-    int renderDevice(UiRenderer::Tap tap = {});
-    int renderSyncOptions(UiRenderer::Tap tap = {});
-    int renderFocusTimerGenres(UiRenderer::Tap tap = {});
-    void renderFocusTimerSession(uint32_t nowMs);
-    int renderOtaConfirm(UiRenderer::Tap tap = {});
+    void renderScreen(uint32_t nowMs);
+    void handleScreenAction(screens::Action action, uint32_t nowMs);
     void handleInput(const Input::Event& event, uint32_t nowMs);
-    void handleTouch(const Input::Event& event, uint32_t nowMs);
-    void handleReaderTouch(const Input::Event& event, uint32_t nowMs);
-    void handleReaderTap(uint16_t x, uint16_t y, uint32_t nowMs);
-    bool handlePreviousSentenceTap(uint16_t x, uint16_t y, uint32_t nowMs);
-    void openMenu();
-    void closeMenu(uint32_t nowMs);
-    void back(uint32_t nowMs);
-    void moveSelection(int delta);
-    size_t menuRowCount() const;
-    void select(uint32_t nowMs);
-    void selectMain(uint32_t nowMs);
-    void selectSettings(uint32_t nowMs);
-    void selectSettingsReading(uint32_t nowMs);
-    void selectSettingsDisplay(uint32_t nowMs);
-    void selectSettingsPacing(uint32_t nowMs);
-    void selectSettingsTypography(uint32_t nowMs);
-    void selectDevice(uint32_t nowMs);
-    void selectSyncOptions(uint32_t nowMs);
-    void selectBook(size_t row, uint32_t nowMs);
-    void selectChapter(size_t row, uint32_t nowMs);
-    bool loadBook(size_t index, uint32_t nowMs);
-    void loadBootBook(uint32_t nowMs);
-    void startReader(uint32_t nowMs, bool locked);
-    void requestReaderPause(uint32_t nowMs);
-    bool shouldFinalizeReaderPause(uint32_t nowMs) const;
-    void finalizeReaderPause(uint32_t nowMs);
-    void toggleReaderShortcut(uint32_t nowMs);
-    int scrubStepsForDrag(int deltaX) const;
-    void applyScrubTarget(int targetSteps, uint32_t nowMs);
-    void resetReaderTapTracking();
-    void updateReader(uint32_t nowMs);
-    void applyPacingSettings();
-    void applyTypographySettings();
-    void resetTypographySettings();
-    void adjustWpm(int delta);
-    String phantomBeforeText() const;
-    String phantomAfterText() const;
-    String collectPhantomBeforeText(size_t currentIndex, size_t charTarget) const;
-    String collectPhantomAfterText(size_t currentIndex, size_t charTarget) const;
-    String pacingDelayLabel(uint16_t delayMs) const;
-    String pauseModeLabel() const;
-    String onOffLabel(bool enabled) const;
-    String footerStatusLabel() const;
-    String currentChapterLabel() const;
-    void updateBattery(uint32_t nowMs, bool force = false);
-    bool handleBatteryTap(uint16_t x, uint16_t y, uint32_t nowMs);
-    void updateSync(uint32_t nowMs);
-    void updateUsbTransfer(uint32_t nowMs);
-    void updateFocusTimer(uint32_t nowMs);
-    void runRss(uint32_t nowMs);
+    void handleTouch(uint32_t nowMs);
+    void runRss();
     void enterUsbTransfer(uint32_t nowMs);
-    void exitUsbTransfer(uint32_t nowMs);
-    void openFocusTimer();
-    void selectFocusTimerGenre(uint32_t nowMs);
-    void runOtaCheck(uint32_t nowMs, bool install);
+    void exitUsbTransfer();
+    void runOtaCheck(bool install);
     void enterStandby(uint32_t nowMs);
     void exitStandby(uint32_t nowMs);
-    void seedStandby(uint32_t nowMs, standby::Kind kind);
-    void updateStandby(uint32_t nowMs);
-    void renderStandbyFrame();
     void powerOff(uint32_t nowMs);
-    void saveProgress(bool force);
-    void cacheProgress(uint32_t wordIndex);
-    bool writeProgressSidecar(uint32_t wordIndex, uint32_t wordCount);
-    void mirrorProgressSidecar();
-    bool readProgressSidecar(uint32_t& wordIndex);
-    uint32_t restoredWordIndexForBook();
-    uint32_t savedWordIndexForBook(const String& bookPath);
-    bool mirrorProgressAtChapterTransition(size_t previousWordIndex, size_t currentWordIndex);
-    int findBookIndexByPath(const String& path) const;
-    String bookPositionKey(const String& bookPath) const;
-    String bookWordCountKey(const String& bookPath) const;
-    String bookSourceSizeKey(const String& bookPath) const;
-    String bookSourceFingerprintKey(const String& bookPath) const;
-    static uint32_t hashBookPath(const String& path);
-    uint8_t progressPercent() const;
-    bool batteryShowVoltage() const;
-    String bookTitle() const;
-    String configuredWifiSsid();
-    String configuredWifiPassword();
-    OtaUpdater::Config otaConfig();
-    const char* stateName(AppState state) const;
     static void renderStorageStatus(void* context, const char* title, const char* line1, const char* line2,
                                     int progressPercent);
 
-    FontCatalog fonts_;
-    UiRenderer ui_;
-    ReadingLoop reader_;
+    ui::Context immediateUi_{Board::Display::gfx(), &Board::Display::flush, &Board::Display::flushRegion};
+    screens::ReaderScreen readerScreen_{Board::Display::gfx()};
+    screens::LibraryScreen libraryScreen_;
+    screens::DisplayScreen displayScreen_;
     StorageManager storage_;
-    IndexedBookStore bookStore_;
     CompanionSyncManager sync_;
     UsbMassStorageManager usbTransfer_;
-    RssFeedManager rss_;
-    FocusTimer focusTimer_;
-    standby::ScreensaverSlot standbyScreensaver_;
-    OtaUpdater ota_;
+    screens::FocusScreen focusScreen_;
+    screens::StandbyScreen standbyScreen_;
     Preferences prefs_;
-    ThemeStore themes_;
-    BookMetadata metadata_;
 
-    AppState state_ = AppState::Booting;
-    MenuScreen menuScreen_ = MenuScreen::Main;
+    screens::Screen screen_ = screens::Screen::Status;
     uint32_t bootMs_ = 0;
     uint32_t lastActivityMs_ = 0;
-    uint32_t lastBatteryMs_ = 0;
-    uint32_t lastProgressSaveMs_ = 0;
-    uint32_t wpmFeedbackUntilMs_ = 0;
-    uint32_t lastReaderTapMs_ = 0;
-    uint32_t standbyEnteredMs_ = 0;
-    uint32_t nextStandbyFrameMs_ = 0;
-    uint32_t nextStandbyKindMs_ = 0;
-    ReaderTouchSession readerTouch_;
-    TouchIntent readerTouchIntent_ = TouchIntent::None;
-    size_t selected_ = 0;
-    size_t currentBook_ = 0;
-    size_t lastSavedWordIndex_ = static_cast<size_t>(-1);
-    String currentBookPath_;
-    uint16_t lastReaderTapX_ = 0;
-    uint16_t lastReaderTapY_ = 0;
-    bool storageReady_ = false;
-    bool inputReady_ = false;
-    bool usingStorageBook_ = false;
-    bool libraryShelfTouchActive_ = false;
-    bool libraryShelfMoved_ = false;
-    bool libraryChromeDirty_ = true;
-    uint32_t lastLibraryDragRenderMs_ = 0;
-    uint16_t libraryTouchStartX_ = 0;
-    uint16_t libraryTouchStartY_ = 0;
-    int16_t libraryShelfOffsetPx_ = 0;
-    int16_t libraryTouchStartOffsetPx_ = 0;
-    std::vector<UiRenderer::LibraryItem> libraryItemsCache_;
-    size_t libraryItemsCacheBookCount_ = 0;
-    bool libraryItemsCacheValid_ = false;
-    bool phantomWordsEnabled_ = true;
-    bool focusHighlightEnabled_ = true;
-    bool playLocked_ = false;
-    bool pauseAtSentenceEndRequested_ = false;
-    bool lastReaderTapValid_ = false;
-    uint8_t brightnessIndex_ = 3;
-    uint8_t standbyIndex_ = 1;
-    uint8_t standbyKindIndex_ = 0;
-    uint16_t standbyColumns_ = 0;
-    uint16_t standbyRows_ = 0;
-    uint8_t readerFontSizeIndex_ = 0;
-    uint8_t readerTypefaceIndex_ = 0;
-    PauseMode pauseMode_ = PauseMode::SentenceEnd;
-    int8_t trackingPx_ = 0;
-    uint8_t anchorPercent_ = 30;
-    uint8_t guideHalfWidth_ = 30;
-    uint8_t guideGap_ = 5;
-    uint16_t pacingLongWordDelayMs_ = 200;
-    uint16_t pacingComplexWordDelayMs_ = 200;
-    uint16_t pacingPunctuationDelayMs_ = 200;
-    uint8_t batteryPercent_ = 0;
-    uint8_t batteryLabelMode_ = 0;
-    float batteryVoltage_ = 0.0f;
-    bool batteryCharging_ = false;
 };

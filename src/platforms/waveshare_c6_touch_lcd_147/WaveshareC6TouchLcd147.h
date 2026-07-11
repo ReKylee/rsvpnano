@@ -3,7 +3,7 @@
 #include <Arduino.h>
 #include <driver/gpio.h>
 
-#include "board/BoardTypes.h"
+#include "ui/Touch.h"
 
 namespace WaveshareC6TouchLcd147::Buttons {
 constexpr int kBootPin = 9;
@@ -27,7 +27,7 @@ constexpr uint16_t kPanelHeight = 320;
 constexpr uint16_t kColumnOffset = 34;
 constexpr uint16_t kRowOffset = 0;
 constexpr size_t kTxChunkBytes = 16 * 1024;
-constexpr Board::UiOrientation kDefaultUiOrientation = Board::UiOrientation::Landscape;
+constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Landscape;
 }
 
 namespace WaveshareC6TouchLcd147::ImuWiring {

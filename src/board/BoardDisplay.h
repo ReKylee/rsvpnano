@@ -3,15 +3,15 @@
 #include <Arduino.h>
 #include <Arduino_GFX_Library.h>
 
-#include "board/BoardTypes.h"
+#include "ui/Touch.h"
 
 namespace Board::Display {
 
     bool begin();
     Arduino_GFX& gfx();
     void holdBacklightOffForDeepSleep();
-    Board::UiOrientation defaultUiOrientation();
-    Board::UiOrientation rotatedUiOrientation();
+    ui::Orientation defaultUiOrientation();
+    ui::Orientation rotatedUiOrientation();
     uint16_t nativeWidth();
     uint16_t nativeHeight();
     size_t txChunkBytes();

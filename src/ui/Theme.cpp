@@ -1,10 +1,10 @@
-#include "display/DisplayTheme.h"
+#include "ui/Theme.h"
 
 #include <algorithm>
 #include <cstring>
 #include <iterator>
 
-namespace DisplayTheme {
+namespace ui::themes {
 namespace {
 
 constexpr const char *kColorRoleNames[kColorRoleCount] = {
@@ -315,4 +315,4 @@ bool parseThemeText(const String &text, const String &id, Theme &theme, String &
   return true;
 }
 
-} // namespace DisplayTheme
+} // namespace ui::themes

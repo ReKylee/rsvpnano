@@ -43,8 +43,8 @@ bool flushRegion(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
     return true;
 }
 void holdBacklightOffForDeepSleep() {}
-Board::UiOrientation defaultUiOrientation() { return WaveshareAmoled206::DisplayWiring::kDefaultUiOrientation; }
-Board::UiOrientation rotatedUiOrientation() { return Board::oppositeUiOrientation(defaultUiOrientation()); }
+ui::Orientation defaultUiOrientation() { return WaveshareAmoled206::DisplayWiring::kDefaultUiOrientation; }
+ui::Orientation rotatedUiOrientation() { return ui::opposite(defaultUiOrientation()); }
 uint16_t nativeWidth() { return WaveshareAmoled206::DisplayWiring::kPanelWidth; }
 uint16_t nativeHeight() { return WaveshareAmoled206::DisplayWiring::kPanelHeight; }
 size_t txChunkBytes() { return WaveshareAmoled206::DisplayWiring::kTxChunkBytes; }

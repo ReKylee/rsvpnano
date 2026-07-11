@@ -15,6 +15,15 @@ struct BookMetadata {
   std::vector<ChapterMarker> chapters;
   std::vector<size_t> paragraphStarts;
 
+  const ChapterMarker* chapterAt(size_t wordIndex) const {
+    const ChapterMarker* result = nullptr;
+    for (const ChapterMarker& chapter : chapters) {
+      if (chapter.wordIndex > wordIndex) break;
+      result = &chapter;
+    }
+    return result;
+  }
+
   void clear() {
     title = "";
     author = "";

@@ -18,6 +18,7 @@ class ReadingLoop {
 
   void begin(uint32_t nowMs);
   void start(uint32_t nowMs);
+  void pause();
   bool update(uint32_t nowMs, bool allowCatchUp = true);
   void setWords(std::vector<String> words, uint32_t nowMs);
   void setWordSource(BookWordSource *source, uint32_t nowMs);
@@ -42,6 +43,7 @@ class ReadingLoop {
   uint32_t elapsedInCurrentWordMs(uint32_t nowMs) const;
   bool currentWordEndsSentence() const;
   bool atEnd() const;
+  bool playing() const;
 
  private:
   bool advance(size_t steps);
@@ -58,4 +60,5 @@ class ReadingLoop {
   String currentWord_;
   std::vector<String> loadedWords_;
   BookWordSource *wordSource_ = nullptr;
+  bool playing_ = false;
 };

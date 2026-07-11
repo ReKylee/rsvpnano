@@ -3,7 +3,7 @@
 #include <Arduino.h>
 #include <driver/gpio.h>
 
-#include "board/BoardTypes.h"
+#include "ui/Touch.h"
 
 namespace WaveshareAmoled241::ImuWiring {
 constexpr uint8_t kAddress = 0x6B;
@@ -32,7 +32,7 @@ constexpr uint16_t kPanelWidth = 450;
 constexpr uint16_t kPanelHeight = 600;
 constexpr size_t kTxChunkBytes = 48 * 1024;
 constexpr bool kPanelMemoryRotated180 = false;
-constexpr Board::UiOrientation kDefaultUiOrientation = Board::UiOrientation::Landscape;
+constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Landscape;
 }
 
 namespace WaveshareAmoled241::Power {

@@ -7,12 +7,7 @@
 
 class CompanionSyncManager {
  public:
-  struct Config {
-    String wifiSsid;
-    String wifiPassword;
-  };
-
-  bool begin(const Config &config);
+  bool begin();
   void update();
   void end();
   bool active() const;
@@ -83,11 +78,6 @@ class CompanionSyncManager {
   String bookIdForPath(const String &path) const;
   bool resolveBookId(const String &id, String &path) const;
   bool resolveBookName(const String &requested, String &path) const;
-  String bookPositionKey(const String &bookPath) const;
-  String bookWordCountKey(const String &bookPath) const;
-  String bookSourceSizeKey(const String &bookPath) const;
-  String bookSourceFingerprintKey(const String &bookPath) const;
-  uint32_t hashBookPath(const String &path) const;
   void finishUpload(bool success);
 
   static CompanionSyncManager *instance_;

@@ -78,13 +78,13 @@ void cancel() {}
   return actions;
 }
 
-::Input::TouchSurface touchSurface() {
+ui::TouchSurface touchSurface() {
   return {WaveshareAmoled241::DisplayWiring::kPanelWidth,
           WaveshareAmoled241::DisplayWiring::kPanelHeight};
 }
 
-::Input::TouchTiming touchTiming() {
-  ::Input::TouchTiming timing = {};
+ui::TouchTiming touchTiming() {
+  ui::TouchTiming timing = {};
   timing.releaseConfirmSamples = WaveshareAmoled241::TouchWiring::kReleaseConfirmSamples;
   timing.maxConsecutiveReadFailures =
       WaveshareAmoled241::TouchWiring::kMaxConsecutiveReadFailures;
@@ -107,7 +107,7 @@ bool touchReady() {
   return !digitalRead(WaveshareAmoled241::System::kTouchIrqPin);
 }
 
-bool readTouch(::Input::TouchContact &contact) {
+bool readTouch(ui::TouchContact &contact) {
   std::array<uint8_t, Ft6336Touch::kPacketLength> data = {};
   if (!Ft6336Touch::readPacket(touchWire(), WaveshareAmoled241::TouchWiring::kAddress,
                                WaveshareAmoled241::TouchWiring::kReleaseBusBeforeRead, data.data(),

@@ -4,7 +4,7 @@
 #include <cstring>
 
 #include "board/BoardStorage.h"
-#include "fonts/LiterataFallbackAlpha4.h"
+#include "ui/fonts/LiterataFallbackAlpha4.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 
@@ -15,10 +15,10 @@ namespace {
     constexpr uint8_t kInvalidIndex = 0xFF;
     constexpr uint32_t kMaxRuntimeFontBytes = 2UL * 1024UL * 1024UL;
 
-    const std::array<const AlphaFont*, RFont4::kSizeCount> kFallbackFonts = {
-        &LiterataFallbackAlpha4_52,
-        &LiterataFallbackAlpha4_43,
-        &LiterataFallbackAlpha4_33,
+    const std::array<const ui::fonts::AlphaFont*, RFont4::kSizeCount> kFallbackFonts = {
+        &ui::fonts::LiterataFallbackAlpha4_52,
+        &ui::fonts::LiterataFallbackAlpha4_43,
+        &ui::fonts::LiterataFallbackAlpha4_33,
     };
 
     String basename(String path) {
@@ -226,19 +226,19 @@ bool FontCatalog::indexForId(const String& id, uint8_t& index) const {
     return false;
 }
 
-const AlphaFont* FontCatalog::loadFont(uint8_t typefaceIndex, uint8_t sizeIndex) {
+ui::fonts::Font FontCatalog::loadFont(uint8_t typefaceIndex, uint8_t sizeIndex) {
     const uint8_t safeTypeface = static_cast<uint8_t>(safeTypefaceIndex(typefaceIndex));
     const uint8_t safeSize = safeSizeIndex(sizeIndex);
     const Family& family = families_[safeTypeface];
 
     if (!family.builtIn && !family.paths[safeSize].isEmpty()) {
         if (loadedTypefaceIndex_ == safeTypeface && loadedSizeIndex_ == safeSize && loaded_.font() != nullptr) {
-            return loaded_.font();
+            return ui::fonts::Font::alphaFont(loaded_.font());
         }
         if (loadRuntimeFont(family.paths[safeSize])) {
             loadedTypefaceIndex_ = safeTypeface;
             loadedSizeIndex_ = safeSize;
-            return loaded_.font();
+            return ui::fonts::Font::alphaFont(loaded_.font());
         }
     }
 
@@ -248,15 +248,15 @@ const AlphaFont* FontCatalog::loadFont(uint8_t typefaceIndex, uint8_t sizeIndex)
     return fallbackFont(safeSize);
 }
 
-const AlphaFont* FontCatalog::currentFont() const {
+ui::fonts::Font FontCatalog::currentFont() const {
     if (loaded_.font() != nullptr) {
-        return loaded_.font();
+        return ui::fonts::Font::alphaFont(loaded_.font());
     }
     return fallbackFont(loadedSizeIndex_ == kInvalidIndex ? 0 : loadedSizeIndex_);
 }
 
-const AlphaFont* FontCatalog::fallbackFont(uint8_t sizeIndex) {
-    return kFallbackFonts[std::min<size_t>(sizeIndex, kFallbackFonts.size() - 1)];
+ui::fonts::Font FontCatalog::fallbackFont(uint8_t sizeIndex) {
+    return ui::fonts::Font::alphaFont(kFallbackFonts[std::min<size_t>(sizeIndex, kFallbackFonts.size() - 1)]);
 }
 
 String FontCatalog::normalizeId(const String& value) {
@@ -366,11 +366,11 @@ void FontCatalog::RuntimeFont::clear() {
     pageTableData_.clear();
     pageTablePointers_.clear();
     kerningPairs_.clear();
-    font_ = AlphaFont{};
+    font_ = ui::fonts::AlphaFont{};
     valid_ = false;
 }
 
-const AlphaFont* FontCatalog::RuntimeFont::font() const {
+const ui::fonts::AlphaFont* FontCatalog::RuntimeFont::font() const {
     return valid_ ? &font_ : nullptr;
 }
 
@@ -426,7 +426,7 @@ bool FontCatalog::RuntimeFont::loadRecords(File& file, const RFont4::Header& hea
 
     glyphs_.reserve(fileGlyphs.size());
     for (const RFont4::GlyphRecord& item : fileGlyphs) {
-        AlphaGlyph glyph;
+        ui::fonts::AlphaGlyph glyph;
         glyph.codepoint = item.codepoint;
         glyph.bitmapOffset = item.bitmapOffset;
         glyph.rowOffset = item.rowOffset;
@@ -443,17 +443,17 @@ bool FontCatalog::RuntimeFont::loadRecords(File& file, const RFont4::Header& hea
 
     rows_.reserve(fileRows.size());
     for (const RFont4::RowRecord& item : fileRows) {
-        rows_.push_back(AlphaRow{item.spanOffset, item.spanCount});
+        rows_.push_back(ui::fonts::AlphaRow{item.spanOffset, item.spanCount});
     }
 
     spans_.reserve(fileSpans.size());
     for (const RFont4::SpanRecord& item : fileSpans) {
-        spans_.push_back(AlphaSpan{item.x, item.width});
+        spans_.push_back(ui::fonts::AlphaSpan{item.x, item.width});
     }
 
     kerningPairs_.reserve(fileKerning.size());
     for (const RFont4::KerningRecord& item : fileKerning) {
-        kerningPairs_.push_back(AlphaKerningPair{item.rightCodepoint, item.xAdjust});
+        kerningPairs_.push_back(ui::fonts::AlphaKerningPair{item.rightCodepoint, item.xAdjust});
     }
 
     if (!readBytes(file, header.pageMapOffset, pageMap_.data(), pageMap_.size(), error)) {

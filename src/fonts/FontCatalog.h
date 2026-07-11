@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "fonts/AlphaFont.h"
+#include "ui/fonts/Font.h"
 #include "fonts/RFont4Format.h"
 
 class FontCatalog {
@@ -33,12 +33,12 @@ public:
     bool hasSize(uint8_t typefaceIndex, uint8_t sizeIndex) const;
     bool indexForId(const String& id, uint8_t& index) const;
 
-    const AlphaFont* loadFont(uint8_t typefaceIndex, uint8_t sizeIndex);
-    const AlphaFont* currentFont() const;
+    ui::fonts::Font loadFont(uint8_t typefaceIndex, uint8_t sizeIndex);
+    ui::fonts::Font currentFont() const;
 
     static constexpr uint8_t sizeCount() { return static_cast<uint8_t>(RFont4::kSizeCount); }
     static const char* sizeLabel(uint8_t index) { return RFont4::sizeLabel(index); }
-    static const AlphaFont* fallbackFont(uint8_t sizeIndex);
+    static ui::fonts::Font fallbackFont(uint8_t sizeIndex);
     static String normalizeId(const String& value);
     static bool validateFontFile(const String& path, String& error);
 
@@ -49,7 +49,7 @@ private:
     public:
         bool load(const String& path, String& error);
         void clear();
-        const AlphaFont* font() const;
+        const ui::fonts::AlphaFont* font() const;
 
     private:
         bool readHeader(File& file, RFont4::Header& header, String& error) const;
@@ -59,14 +59,14 @@ private:
 
         String name_;
         std::vector<uint8_t> bitmap_;
-        std::vector<AlphaGlyph> glyphs_;
-        std::vector<AlphaRow> rows_;
-        std::vector<AlphaSpan> spans_;
+        std::vector<ui::fonts::AlphaGlyph> glyphs_;
+        std::vector<ui::fonts::AlphaRow> rows_;
+        std::vector<ui::fonts::AlphaSpan> spans_;
         std::array<uint8_t, RFont4::kPageMapBytes> pageMap_ = {};
         std::vector<uint16_t> pageTableData_;
         std::vector<const uint16_t*> pageTablePointers_;
-        std::vector<AlphaKerningPair> kerningPairs_;
-        AlphaFont font_;
+        std::vector<ui::fonts::AlphaKerningPair> kerningPairs_;
+        ui::fonts::AlphaFont font_;
         bool valid_ = false;
     };
 

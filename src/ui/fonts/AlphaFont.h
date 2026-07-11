@@ -9,6 +9,8 @@
 #include <cstddef>
 #include <cstdint>
 
+namespace ui::fonts {
+
 struct AlphaGlyph {
     uint16_t codepoint = 0;
     uint32_t bitmapOffset = 0;
@@ -855,3 +857,5 @@ private:
     bool ready_ = false;
     bool blendTableValid_ = false;
 };
+
+} // namespace ui::fonts

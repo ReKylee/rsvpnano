@@ -3,7 +3,7 @@
 #include <Arduino.h>
 #include <driver/gpio.h>
 
-#include "board/BoardTypes.h"
+#include "ui/Touch.h"
 
 #ifndef RSVP_LCD_349_REVISION_HEADER
 #error "LCD 3.49 platform env must define RSVP_LCD_349_REVISION_HEADER."
@@ -43,7 +43,7 @@ constexpr uint16_t kPanelWidth = 172;
 constexpr uint16_t kPanelHeight = 640;
 constexpr size_t kTxChunkBytes = 16 * 1024;
 constexpr bool kPanelMemoryRotated180 = true;
-constexpr Board::UiOrientation kDefaultUiOrientation = Board::UiOrientation::Landscape;
+constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Landscape;
 }
 
 namespace WaveshareLcd349::ImuWiring {

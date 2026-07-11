@@ -561,12 +561,14 @@ uint32_t durationForWord(const String &word, bool nextWordStartsLowercase, uint3
 }  // namespace
 
 void ReadingLoop::begin(uint32_t nowMs) {
+  playing_ = false;
   currentIndex_ = 0;
   lastAdvanceMs_ = nowMs;
   setCurrentWordFromIndex();
 }
 
 void ReadingLoop::setWords(std::vector<String> words, uint32_t nowMs) {
+  playing_ = false;
   wordSource_ = nullptr;
   loadedWords_ = std::move(words);
   currentIndex_ = 0;
@@ -575,6 +577,7 @@ void ReadingLoop::setWords(std::vector<String> words, uint32_t nowMs) {
 }
 
 void ReadingLoop::setWordSource(BookWordSource *source, uint32_t nowMs) {
+  playing_ = false;
   loadedWords_.clear();
   wordSource_ = source;
   currentIndex_ = 0;
@@ -583,6 +586,7 @@ void ReadingLoop::setWordSource(BookWordSource *source, uint32_t nowMs) {
 }
 
 void ReadingLoop::clearLoadedBook(uint32_t nowMs) {
+  playing_ = false;
   wordSource_ = nullptr;
   loadedWords_.clear();
   currentIndex_ = 0;
@@ -590,7 +594,12 @@ void ReadingLoop::clearLoadedBook(uint32_t nowMs) {
   setCurrentWordFromIndex();
 }
 
-void ReadingLoop::start(uint32_t nowMs) { lastAdvanceMs_ = nowMs; }
+void ReadingLoop::start(uint32_t nowMs) {
+  lastAdvanceMs_ = nowMs;
+  playing_ = true;
+}
+
+void ReadingLoop::pause() { playing_ = false; }
 
 bool ReadingLoop::update(uint32_t nowMs, bool allowCatchUp) {
   bool changed = false;
@@ -658,6 +667,8 @@ bool ReadingLoop::atEnd() const {
   const size_t count = wordCount();
   return count == 0 || currentIndex_ + 1 >= count;
 }
+
+bool ReadingLoop::playing() const { return playing_; }
 
 void ReadingLoop::scrub(int steps) {
   seekRelative(currentIndex_, steps);

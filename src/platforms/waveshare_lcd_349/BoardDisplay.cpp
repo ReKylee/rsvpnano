@@ -158,12 +158,12 @@ namespace Board::Display {
         gpio_deep_sleep_hold_en();
     }
 
-    Board::UiOrientation defaultUiOrientation() {
+    ui::Orientation defaultUiOrientation() {
         return WaveshareLcd349::DisplayWiring::kDefaultUiOrientation;
     }
 
-    Board::UiOrientation rotatedUiOrientation() {
-        return Board::oppositeUiOrientation(WaveshareLcd349::DisplayWiring::kDefaultUiOrientation);
+    ui::Orientation rotatedUiOrientation() {
+        return ui::opposite(WaveshareLcd349::DisplayWiring::kDefaultUiOrientation);
     }
 
     uint16_t nativeWidth() {

@@ -174,12 +174,12 @@ FocusTimer::State FocusTimer::state() const { return state_; }
 
 FocusTimer::Genre FocusTimer::genre() const { return genre_; }
 
-Board::UiOrientation FocusTimer::uiOrientation() const {
+ui::Orientation FocusTimer::uiOrientation() const {
   switch (state_) {
     case State::GenreSelect:
     case State::Unavailable:
     case State::Complete:
-      return Board::UiOrientation::Landscape;
+      return ui::Orientation::Landscape;
 
     case State::WaitForTouchStart:
     case State::TouchRunning:
@@ -193,10 +193,10 @@ Board::UiOrientation FocusTimer::uiOrientation() const {
 
     case State::BreakRunning:
     case State::WaitAfterWork:
-      return Board::UiOrientation::Landscape;
+      return ui::Orientation::Landscape;
 
     default:
-      return Board::UiOrientation::Portrait;
+      return ui::Orientation::Portrait;
   }
 }
 
@@ -540,7 +540,7 @@ FocusTimer::OrientationState FocusTimer::oppositeShortSide(
   }
 }
 
-Board::UiOrientation FocusTimer::portraitOrientationForShortSide(OrientationState orientation) {
-  return orientation == OrientationState::ShortSideB ? Board::UiOrientation::PortraitFlipped
-                                                     : Board::UiOrientation::Portrait;
+ui::Orientation FocusTimer::portraitOrientationForShortSide(OrientationState orientation) {
+  return orientation == OrientationState::ShortSideB ? ui::Orientation::PortraitFlipped
+                                                     : ui::Orientation::Portrait;
 }

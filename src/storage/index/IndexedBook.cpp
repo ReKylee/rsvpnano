@@ -331,7 +331,7 @@ namespace IndexedBook {
 
             IndexHeader header;
             if (!readIndexHeader(path, header)) {
-                if (StorageFiles::fileExistsWithBytes(indexedIndexPathFor(path))) {
+                if (StorageFiles::fileExistsWithBytes(indexedIndexPathFor(path).c_str())) {
                     Serial.printf("[storage-index] invalid index header: %s\n", indexedIndexPathFor(path).c_str());
                 }
                 return false;
@@ -627,7 +627,7 @@ namespace IndexedBook {
                 File dataFile = Board::Storage::filesystem().open(tmpDataPath, FILE_WRITE);
                 const int dataOpenErrno = errno;
                 if (!dataFile) {
-                    StorageFiles::logError("storage-index", "open data FILE_WRITE", tmpDataPath, dataOpenErrno);
+                    StorageFiles::logError("storage-index", "open data FILE_WRITE", tmpDataPath.c_str(), dataOpenErrno);
                     source.close();
                     removeTempSidecars();
                     report("Index failed", label.c_str(), "SD write failed", 100);
@@ -715,7 +715,7 @@ namespace IndexedBook {
                 File indexFile = Board::Storage::filesystem().open(tmpIndexPath, FILE_WRITE);
                 const int indexOpenErrno = errno;
                 if (!indexFile) {
-                    StorageFiles::logError("storage-index", "open index FILE_WRITE", tmpIndexPath, indexOpenErrno);
+                    StorageFiles::logError("storage-index", "open index FILE_WRITE", tmpIndexPath.c_str(), indexOpenErrno);
                     source.close();
                     removeTempSidecars();
                     report("Index failed", label.c_str(), "SD write failed", 100);
@@ -821,10 +821,12 @@ namespace IndexedBook {
             const bool renamed = indexRenamed && dataRenamed;
             if (!renamed) {
                 if (!dataRenamed) {
-                    StorageFiles::logError("storage-index", "rename data", tmpDataPath, dataPath, dataRenameErrno);
+                    StorageFiles::logError("storage-index", "rename data", tmpDataPath.c_str(), dataPath.c_str(),
+                                           dataRenameErrno);
                 }
                 if (!indexRenamed) {
-                    StorageFiles::logError("storage-index", "rename index", tmpIndexPath, indexPath, indexRenameErrno);
+                    StorageFiles::logError("storage-index", "rename index", tmpIndexPath.c_str(), indexPath.c_str(),
+                                           indexRenameErrno);
                 }
                 Board::Storage::filesystem().remove(tmpIndexPath);
                 Board::Storage::filesystem().remove(tmpDataPath);

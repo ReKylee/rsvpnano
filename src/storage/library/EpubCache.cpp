@@ -44,7 +44,7 @@ namespace EpubCache {
     } // namespace
 
     bool rsvpIsCurrent(const String& rsvpPath) {
-        return StorageFiles::fileExistsWithBytes(rsvpPath) && EpubConverter::isCurrentCache(rsvpPath);
+        return StorageFiles::fileExistsWithBytes(rsvpPath.c_str()) && EpubConverter::isCurrentCache(rsvpPath);
     }
 
     bool hasCurrentCache(const String& epubPath) {
@@ -53,11 +53,11 @@ namespace EpubCache {
 
     String libraryLabel(const String& epubPath) {
         const String rsvpPath = StoragePaths::rsvpCachePathForEpub(epubPath);
-        if (StorageFiles::fileExists(rsvpPath + StoragePaths::kFailedExtension)) {
+        if (StorageFiles::fileExists((rsvpPath + StoragePaths::kFailedExtension).c_str())) {
             return "EPUB failed - check serial";
         }
-        if (StorageFiles::fileExists(rsvpPath + StoragePaths::kConvertingExtension)
-            || StorageFiles::fileExists(rsvpPath + StoragePaths::kTempExtension)) {
+        if (StorageFiles::fileExists((rsvpPath + StoragePaths::kConvertingExtension).c_str())
+            || StorageFiles::fileExists((rsvpPath + StoragePaths::kTempExtension).c_str())) {
             return "EPUB interrupted";
         }
         return "EPUB - converts on open";
@@ -79,7 +79,7 @@ namespace EpubCache {
                 return false;
             }
 
-            if (!StorageFiles::fileExistsWithBytes(epubPath)) {
+            if (!StorageFiles::fileExistsWithBytes(epubPath.c_str())) {
                 Serial.printf("[storage] EPUB source missing or empty: %s\n", epubPath.c_str());
                 report("Preparing book", displayNameForPath(epubPath).c_str(), "EPUB missing", 100);
                 return false;
@@ -90,7 +90,7 @@ namespace EpubCache {
                 return true;
             }
 
-            if (StorageFiles::fileExistsWithBytes(rsvpPath)) {
+            if (StorageFiles::fileExistsWithBytes(rsvpPath.c_str())) {
                 Serial.printf("[storage] EPUB cache stale after converter update: %s\n", rsvpPath.c_str());
             }
         }
@@ -133,7 +133,7 @@ namespace EpubCache {
         }
         logHeapSnapshot("after EPUB conversion");
 
-        if (!StorageFiles::fileExistsWithBytes(rsvpPath)) {
+        if (!StorageFiles::fileExistsWithBytes(rsvpPath.c_str())) {
             Serial.printf("[storage] EPUB conversion failed after %lu ms: %s\n", static_cast<unsigned long>(elapsedMs),
                           epubPath.c_str());
             report("Preparing book", "EPUB conversion failed", "Check serial monitor", 100);

@@ -94,7 +94,7 @@ namespace {
         const String backupPath = finalPath + ".bak";
         Board::Storage::filesystem().remove(backupPath);
 
-        const bool hadFinal = StorageFiles::fileExists(finalPath);
+        const bool hadFinal = StorageFiles::fileExists(finalPath.c_str());
         if (hadFinal && !Board::Storage::filesystem().rename(finalPath, backupPath)) {
             return false;
         }
@@ -1041,7 +1041,7 @@ void CompanionSyncManager::handleThemes() {
         return;
     }
 
-    if (StorageFiles::fileExists(uploadFinalPath_)) {
+    if (StorageFiles::fileExists(uploadFinalPath_.c_str())) {
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
@@ -1110,7 +1110,7 @@ void CompanionSyncManager::handleFonts() {
         return;
     }
 
-    if (StorageFiles::fileExists(uploadFinalPath_)) {
+    if (StorageFiles::fileExists(uploadFinalPath_.c_str())) {
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
@@ -1173,7 +1173,7 @@ void CompanionSyncManager::handleFontUpload() {
 
         uploadFinalPath_ = String(StoragePaths::kFontsPath) + "/" + family + "/"
                          + RFont4::sizeFilename(static_cast<uint8_t>(sizeIndex));
-        if (StorageFiles::fileExists(uploadFinalPath_)) {
+        if (StorageFiles::fileExists(uploadFinalPath_.c_str())) {
             uploadError_ = "Font size already exists";
             return;
         }
@@ -1403,7 +1403,7 @@ void CompanionSyncManager::handleThemeUpload() {
         }
 
         uploadFinalPath_ = String(StoragePaths::kThemesPath) + "/" + filename;
-        if (StorageFiles::fileExists(uploadFinalPath_)) {
+        if (StorageFiles::fileExists(uploadFinalPath_.c_str())) {
             uploadError_ = "Theme already exists";
             return;
         }

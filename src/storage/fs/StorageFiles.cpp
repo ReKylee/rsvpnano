@@ -2,12 +2,13 @@
 
 #include <cerrno>
 #include <cstring>
+#include <string>
 #include "board/BoardStorage.h"
 
 namespace StorageFiles {
     namespace {
 
-        void logErrorMessage(const char* tag, const char* operation, const String& target, int error) {
+        void logErrorMessage(const char* tag, const char* operation, const std::string& target, int error) {
             if (error != 0) {
                 Serial.printf("[%s] %s failed %s errno=%d (%s)\n", tag, operation, target.c_str(), error,
                               std::strerror(error));
@@ -18,13 +19,12 @@ namespace StorageFiles {
 
     } // namespace
 
-    void logError(const char* tag, const char* operation, const String& path, int error) {
-        logErrorMessage(tag, operation, String("path=") + path, error);
+    void logError(const char* tag, const char* operation, const char* path, int error) {
+        logErrorMessage(tag, operation, std::string{"path="} + path, error);
     }
 
-    void logError(const char* tag, const char* operation, const String& sourcePath, const String& targetPath,
-                  int error) {
-        logErrorMessage(tag, operation, String("from=") + sourcePath + " to=" + targetPath, error);
+    void logError(const char* tag, const char* operation, const char* sourcePath, const char* targetPath, int error) {
+        logErrorMessage(tag, operation, std::string{"from="} + sourcePath + " to=" + targetPath, error);
     }
 
     bool directoryExists(const char* path) {
@@ -36,7 +36,7 @@ namespace StorageFiles {
         return exists;
     }
 
-    bool fileExists(const String& path) {
+    bool fileExists(const char* path) {
         File file = Board::Storage::filesystem().open(path);
         const bool exists = file && !file.isDirectory();
         if (file) {
@@ -45,7 +45,7 @@ namespace StorageFiles {
         return exists;
     }
 
-    bool fileExistsWithBytes(const String& path) {
+    bool fileExistsWithBytes(const char* path) {
         File file = Board::Storage::filesystem().open(path);
         const bool exists = file && !file.isDirectory() && file.size() > 0;
         if (file) {
@@ -59,7 +59,7 @@ namespace StorageFiles {
             Serial.printf("[%s] directory exists: %s\n", tag, path);
             return true;
         }
-        if (fileExists(String(path))) {
+        if (fileExists(path)) {
             Serial.printf("[%s] path is a file, not a directory: %s\n", tag, path);
             return false;
         }
@@ -71,7 +71,7 @@ namespace StorageFiles {
         const bool existsAfter = directoryExists(path);
         Serial.printf("[%s] mkdir path=%s ok=%u existsAfter=%u\n", tag, path, mkdirOk ? 1 : 0, existsAfter ? 1 : 0);
         if (!mkdirOk && !existsAfter) {
-            logError(tag, "mkdir", String(path), mkdirErrno);
+            logError(tag, "mkdir", path, mkdirErrno);
         }
         return mkdirOk || existsAfter;
     }

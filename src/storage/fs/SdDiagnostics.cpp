@@ -165,8 +165,8 @@ namespace SdDiagnostics {
             errno = 0;
             const bool removed = Board::Storage::filesystem().remove(path);
             const int removeErrno = errno;
-            if (!removed && StorageFiles::fileExists(path)) {
-                StorageFiles::logError(tag, "remove probe", path, removeErrno);
+            if (!removed && StorageFiles::fileExists(path.c_str())) {
+                StorageFiles::logError(tag, "remove probe", path.c_str(), removeErrno);
                 return false;
             }
             return true;
@@ -186,7 +186,7 @@ namespace SdDiagnostics {
                 File file = Board::Storage::filesystem().open(path, FILE_WRITE);
                 const int openErrno = errno;
                 if (!file) {
-                    StorageFiles::logError(tag, "open FILE_WRITE", path, openErrno);
+                    StorageFiles::logError(tag, "open FILE_WRITE", path.c_str(), openErrno);
                     return false;
                 }
 

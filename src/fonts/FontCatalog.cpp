@@ -473,7 +473,7 @@ bool FontCatalog::RuntimeFont::loadRecords(File& file, const RFont4::Header& hea
 }
 
 void FontCatalog::RuntimeFont::rebuildFont(const RFont4::Header& header) {
-    font_.name = name_.c_str();
+    font_.name = {name_.c_str(), name_.length()};
     font_.bitmap = bitmap_.data();
     font_.glyphs = glyphs_.data();
     font_.glyphCount = header.glyphCount;

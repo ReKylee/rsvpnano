@@ -8,6 +8,7 @@
 #include <climits>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 namespace ui::fonts {
 
@@ -41,7 +42,7 @@ namespace ui::fonts {
     };
 
     struct AlphaFont {
-        const char* name = nullptr;
+        std::string_view name;
         const uint8_t* bitmap = nullptr;
         const AlphaGlyph* glyphs = nullptr;
         uint16_t glyphCount = 0;
@@ -116,11 +117,7 @@ namespace ui::fonts {
             rebuildBlendTable();
         }
 
-        int16_t drawString(const String& text, int16_t x, int16_t baseline) {
-            return drawString(text.c_str(), x, baseline);
-        }
-
-        int16_t drawString(const char* text, int16_t x, int16_t baseline) {
+        int16_t drawString(std::string_view text, int16_t x, int16_t baseline) {
             Bounds bounds;
             if (!measure(text, x, baseline, bounds)) {
                 return -1;
@@ -192,12 +189,7 @@ namespace ui::fonts {
             return 0;
         }
 
-        void getTextBounds(const String& text, int16_t x, int16_t baseline, int16_t* x1, int16_t* y1, uint16_t* w,
-                           uint16_t* h) const {
-            getTextBounds(text.c_str(), x, baseline, x1, y1, w, h);
-        }
-
-        void getTextBounds(const char* text, int16_t x, int16_t baseline, int16_t* x1, int16_t* y1, uint16_t* w,
+        void getTextBounds(std::string_view text, int16_t x, int16_t baseline, int16_t* x1, int16_t* y1, uint16_t* w,
                            uint16_t* h) const {
             Bounds bounds;
             if (!measure(text, x, baseline, bounds)) {
@@ -218,11 +210,7 @@ namespace ui::fonts {
             }
         }
 
-        int16_t textWidth(const String& text) const {
-            return textWidth(text.c_str());
-        }
-
-        int16_t textWidth(const char* text) const {
+        int16_t textWidth(std::string_view text) const {
             Bounds bounds;
             if (!measure(text, 0, 0, bounds)) {
                 return 0;
@@ -230,11 +218,7 @@ namespace ui::fonts {
             return static_cast<int16_t>(bounds.w);
         }
 
-        int16_t textAdvance(const String& text) const {
-            return textAdvance(text.c_str());
-        }
-
-        int16_t textAdvance(const char* text) const {
+        int16_t textAdvance(std::string_view text) const {
             Bounds bounds;
             if (!measure(text, 0, 0, bounds)) {
                 return 0;
@@ -277,8 +261,8 @@ namespace ui::fonts {
             uint8_t width = 0;
         };
 
-        bool measure(const char* text, int16_t x, int16_t baseline, Bounds& bounds) const {
-            if (!ready_ || font_ == nullptr || text == nullptr) {
+        bool measure(std::string_view text, int16_t x, int16_t baseline, Bounds& bounds) const {
+            if (!ready_ || font_ == nullptr) {
                 bounds = {};
                 return false;
             }
@@ -289,7 +273,7 @@ namespace ui::fonts {
             int16_t maxX = INT16_MIN;
             int16_t maxY = INT16_MIN;
 
-            const char* cursor = text;
+            std::string_view cursor = text;
             uint16_t previousCodepoint = 0;
             bool hasPrevious = false;
             uint16_t codepoint = 0;
@@ -341,13 +325,13 @@ namespace ui::fonts {
             return true;
         }
 
-        void drawGlyphs(const char* text, int16_t x, int16_t baseline) {
-            if (output_ == nullptr || font_ == nullptr || text == nullptr) {
+        void drawGlyphs(std::string_view text, int16_t x, int16_t baseline) {
+            if (output_ == nullptr || font_ == nullptr) {
                 return;
             }
 
             int16_t cursorX = x;
-            const char* cursor = text;
+            std::string_view cursor = text;
             uint16_t previousCodepoint = 0;
             bool hasPrevious = false;
             uint16_t codepoint = 0;
@@ -375,8 +359,8 @@ namespace ui::fonts {
             }
         }
 
-        bool drawGlyphsToStrips(const char* text, int16_t x, int16_t baseline, const Bounds& bounds) {
-            if (output_ == nullptr || font_ == nullptr || text == nullptr || bounds.w == 0 || bounds.h == 0) {
+        bool drawGlyphsToStrips(std::string_view text, int16_t x, int16_t baseline, const Bounds& bounds) {
+            if (output_ == nullptr || font_ == nullptr || bounds.w == 0 || bounds.h == 0) {
                 return false;
             }
 
@@ -419,10 +403,10 @@ namespace ui::fonts {
             }
         }
 
-        void compositeGlyphsIntoStrip(const char* text, int16_t x, int16_t baseline, int16_t stripX, int16_t stripY,
-                                      uint16_t stripWidth, uint8_t stripRows) {
+        void compositeGlyphsIntoStrip(std::string_view text, int16_t x, int16_t baseline, int16_t stripX,
+                                      int16_t stripY, uint16_t stripWidth, uint8_t stripRows) {
             int16_t cursorX = x;
-            const char* cursor = text;
+            std::string_view cursor = text;
             uint16_t previousCodepoint = 0;
             bool hasPrevious = false;
             uint16_t codepoint = 0;
@@ -791,13 +775,13 @@ namespace ui::fonts {
             return static_cast<uint8_t>((bg * inv + fg * coverage + maxCoverage / 2) / maxCoverage);
         }
 
-        static bool nextCodepoint(const char*& text, uint16_t& codepoint) {
-            const uint8_t first = static_cast<uint8_t>(*text);
-            if (first == 0) {
+        static bool nextCodepoint(std::string_view& text, uint16_t& codepoint) {
+            if (text.empty()) {
                 return false;
             }
 
-            ++text;
+            const uint8_t first = static_cast<uint8_t>(text.front());
+            text.remove_prefix(1);
             if (first < 0x80) {
                 codepoint = first;
                 return true;
@@ -808,12 +792,12 @@ namespace ui::fonts {
             };
 
             if ((first & 0xE0U) == 0xC0U) {
-                const uint8_t b1 = static_cast<uint8_t>(*text);
-                if (b1 == 0 || !isContinuation(b1)) {
+                if (text.empty() || !isContinuation(static_cast<uint8_t>(text.front()))) {
                     codepoint = '?';
                     return true;
                 }
-                ++text;
+                const uint8_t b1 = static_cast<uint8_t>(text.front());
+                text.remove_prefix(1);
 
                 const uint16_t value = static_cast<uint16_t>(((first & 0x1FU) << 6U) | (b1 & 0x3FU));
                 codepoint = value >= 0x80U ? value : static_cast<uint16_t>('?');
@@ -821,19 +805,19 @@ namespace ui::fonts {
             }
 
             if ((first & 0xF0U) == 0xE0U) {
-                const uint8_t b1 = static_cast<uint8_t>(*text);
-                if (b1 == 0 || !isContinuation(b1)) {
+                if (text.empty() || !isContinuation(static_cast<uint8_t>(text.front()))) {
                     codepoint = '?';
                     return true;
                 }
-                ++text;
+                const uint8_t b1 = static_cast<uint8_t>(text.front());
+                text.remove_prefix(1);
 
-                const uint8_t b2 = static_cast<uint8_t>(*text);
-                if (b2 == 0 || !isContinuation(b2)) {
+                if (text.empty() || !isContinuation(static_cast<uint8_t>(text.front()))) {
                     codepoint = '?';
                     return true;
                 }
-                ++text;
+                const uint8_t b2 = static_cast<uint8_t>(text.front());
+                text.remove_prefix(1);
 
                 const uint16_t value =
                     static_cast<uint16_t>(((first & 0x0FU) << 12U) | ((b1 & 0x3FU) << 6U) | (b2 & 0x3FU));
@@ -843,11 +827,10 @@ namespace ui::fonts {
 
             if ((first & 0xF8U) == 0xF0U) {
                 for (uint8_t i = 0; i < 3; ++i) {
-                    const uint8_t b = static_cast<uint8_t>(*text);
-                    if (b == 0 || !isContinuation(b)) {
+                    if (text.empty() || !isContinuation(static_cast<uint8_t>(text.front()))) {
                         break;
                     }
-                    ++text;
+                    text.remove_prefix(1);
                 }
                 codepoint = '?';
                 return true;

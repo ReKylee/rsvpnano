@@ -564,7 +564,7 @@ namespace screens {
     int16_t ReaderScreen::textWidth(const String& value) const {
         text_.setFont(font_);
         if (typography_.tracking == 0)
-            return text_.advance(value.c_str());
+            return text_.advance({value.c_str(), value.length()});
         int16_t width = 0;
         for (size_t index = 0; index < value.length();) {
             uint16_t codepoint = 0;
@@ -580,7 +580,7 @@ namespace screens {
         text_.setFont(font_);
         text_.setColors(color, background_);
         if (typography_.tracking == 0) {
-            text_.draw(value.c_str(), x, baseline);
+            text_.draw({value.c_str(), value.length()}, x, baseline);
             return;
         }
         for (size_t index = 0; index < value.length();) {

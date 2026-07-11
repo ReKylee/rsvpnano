@@ -2,6 +2,9 @@
 
 #include "ui/fonts/AlphaFont.h"
 
+#include <string>
+#include <string_view>
+
 namespace ui::fonts {
 
     struct Font {
@@ -53,12 +56,13 @@ namespace ui::fonts {
             alpha_.setTextColor(foreground, background);
         }
 
-        int16_t draw(const char* text, int16_t x, int16_t baseline) {
+        int16_t draw(std::string_view text, int16_t x, int16_t baseline) {
             if (font_.kind == Font::Kind::Alpha4)
                 return alpha_.drawString(text, x, baseline);
             prepareGfx();
             output_.setCursor(x, baseline);
-            output_.print(text == nullptr ? "" : text);
+            for (const char byte: text)
+                output_.write(static_cast<uint8_t>(byte));
             return advance(text);
         }
 
@@ -66,31 +70,32 @@ namespace ui::fonts {
             if (font_.kind == Font::Kind::Alpha4)
                 return alpha_.drawCodepoint(codepoint, x, baseline);
             char encoded[4] = {};
-            encode(codepoint, encoded);
-            return draw(encoded, x, baseline);
+            const uint8_t length = encode(codepoint, encoded);
+            return draw({encoded, length}, x, baseline);
         }
 
         int16_t glyphAdvance(uint16_t codepoint) const {
             if (font_.kind == Font::Kind::Alpha4)
                 return alpha_.glyphAdvance(codepoint);
             char encoded[4] = {};
-            encode(codepoint, encoded);
-            return advance(encoded);
+            const uint8_t length = encode(codepoint, encoded);
+            return advance({encoded, length});
         }
 
         int16_t kerning(uint16_t left, uint16_t right) const {
             return font_.kind == Font::Kind::Alpha4 ? alpha_.kerningAdjust(left, right) : 0;
         }
 
-        int16_t advance(const char* text) const {
+        int16_t advance(std::string_view text) const {
             if (font_.kind == Font::Kind::Alpha4)
                 return alpha_.textAdvance(text);
-            if (text == nullptr || *text == '\0')
+            if (text.empty())
                 return 0;
             prepareGfx();
             int16_t x = 0, y = 0;
             uint16_t width = 0, height = 0;
-            output_.getTextBounds(text, 0, 0, &x, &y, &width, &height);
+            const std::string owned{text};
+            output_.getTextBounds(owned.c_str(), 0, 0, &x, &y, &width, &height);
             return static_cast<int16_t>(width);
         }
 
@@ -102,16 +107,19 @@ namespace ui::fonts {
             output_.setTextColor(foreground_, background_);
         }
 
-        static void encode(uint16_t codepoint, char (&out)[4]) {
+        static uint8_t encode(uint16_t codepoint, char (&out)[4]) {
             if (codepoint < 0x80U) {
                 out[0] = static_cast<char>(codepoint);
+                return 1;
             } else if (codepoint < 0x800U) {
                 out[0] = static_cast<char>(0xC0U | (codepoint >> 6U));
                 out[1] = static_cast<char>(0x80U | (codepoint & 0x3FU));
+                return 2;
             } else {
                 out[0] = static_cast<char>(0xE0U | (codepoint >> 12U));
                 out[1] = static_cast<char>(0x80U | ((codepoint >> 6U) & 0x3FU));
                 out[2] = static_cast<char>(0x80U | (codepoint & 0x3FU));
+                return 3;
             }
         }
 

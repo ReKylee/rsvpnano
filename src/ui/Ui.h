@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 #include "ui/Theme.h"
@@ -75,6 +76,17 @@ namespace ui {
         bool changed = false;
     };
 
+    struct KeyboardState {
+        bool shifted = false;
+        bool symbols = false;
+    };
+
+    enum class KeyboardAction : uint8_t {
+        None,
+        Submit,
+        Cancel,
+    };
+
     enum class Icon : uint8_t {
         None,
         Bookmark,
@@ -125,6 +137,7 @@ namespace ui {
         SliderResult slider(Rect rect, int value, int minimum, int maximum, int step = 1);
         SliderResult slider(Rect rect, std::string_view label, int value, int minimum, int maximum, int step = 1,
                             std::string_view suffix = {});
+        KeyboardAction keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state);
         void dial(Rect rect, int value, int minimum, int maximum, std::string_view label = {});
         bool redraw(Rect rect, uint32_t signature);
         void drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,

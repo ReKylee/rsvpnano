@@ -33,7 +33,7 @@ namespace {
         ui::TouchTiming timing;
         timing.releaseConfirmSamples = 1;
         timing.pollIntervalMs = 0;
-        context.setTouchSource({{100, 100}, timing, &beginTouch, &touchReady, &readTouch, &touchOrientation}, 0);
+        context.setTouchSource({{320, 172}, timing, &beginTouch, &touchReady, &readTouch, &touchOrientation}, 0);
     }
 
     ui::themes::Theme theme() {
@@ -175,6 +175,43 @@ void test_labels_align_and_battery_owns_its_drawing() {
     TEST_ASSERT_EQUAL(0, gfx.writes);
 }
 
+void test_keyboard_edits_and_submits() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx, &flush, &flushRegion);
+    auto colors = theme();
+    context.setTheme(colors);
+    enableTouch(context);
+    std::string value;
+    ui::KeyboardState keyboard;
+
+    context.beginFrame(3);
+    TEST_ASSERT_EQUAL(ui::KeyboardAction::None, context.keyboard({0, 0, 200, 140}, value, 8, keyboard));
+    context.endFrame();
+
+    gContact = {true, 8, 38};
+    TEST_ASSERT_TRUE(context.pollTouch(1));
+    context.beginFrame(3);
+    context.keyboard({0, 0, 200, 140}, value, 8, keyboard);
+    context.endFrame();
+    gContact = {};
+    TEST_ASSERT_TRUE(context.pollTouch(2));
+    context.beginFrame(3);
+    context.keyboard({0, 0, 200, 140}, value, 8, keyboard);
+    context.endFrame();
+    TEST_ASSERT_EQUAL_STRING("1", value.c_str());
+
+    gContact = {true, 180, 126};
+    TEST_ASSERT_TRUE(context.pollTouch(3));
+    context.beginFrame(3);
+    context.keyboard({0, 0, 200, 140}, value, 8, keyboard);
+    context.endFrame();
+    gContact = {};
+    TEST_ASSERT_TRUE(context.pollTouch(4));
+    context.beginFrame(3);
+    TEST_ASSERT_EQUAL(ui::KeyboardAction::Submit, context.keyboard({0, 0, 200, 140}, value, 8, keyboard));
+    context.endFrame();
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_unchanged_widget_does_not_draw_or_flush);
@@ -183,5 +220,6 @@ int main(int, char**) {
     RUN_TEST(test_layout_cursors_are_deterministic);
     RUN_TEST(test_labels_truncate_to_their_rectangles);
     RUN_TEST(test_labels_align_and_battery_owns_its_drawing);
+    RUN_TEST(test_keyboard_edits_and_submits);
     return UNITY_END();
 }

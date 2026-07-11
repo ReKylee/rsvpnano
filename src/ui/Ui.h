@@ -167,6 +167,12 @@ namespace ui {
         void drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
                       TextAlign align = TextAlign::Left, uint8_t maxLines = 1);
         void drawIcon(Rect rect, Icon icon, uint16_t color, uint16_t surface);
+        void drawBookmarkIcon(Rect rect, uint16_t ink, uint16_t surface);
+        void drawBooksIcon(Rect rect, uint16_t ink);
+        void drawEditIcon(Rect rect, uint16_t ink);
+        void drawDeviceIcon(Rect rect, uint16_t ink);
+        void drawHourglassIcon(Rect rect, uint16_t ink);
+        void drawPowerIcon(Rect rect, uint16_t ink, uint16_t surface);
         int valueAt(Rect rect, uint16_t x, int minimum, int maximum, int step) const;
         bool tapped(size_t slot, Rect rect);
         void resetTouchGesture();

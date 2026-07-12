@@ -1,5 +1,6 @@
 Import("env")
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -24,5 +25,13 @@ def detect_version() -> str:
         return "dev"
 
 
-version = detect_version().replace('"', "")
-env.Append(CPPDEFINES=[("RSVP_FIRMWARE_VERSION", '\\"%s\\"' % version)])
+version = detect_version()
+generated_dir = Path(env.subst("$BUILD_DIR")) / "generated"
+generated_header = generated_dir / "FirmwareVersion.generated.h"
+contents = f"#pragma once\n\ninline constexpr char kFirmwareVersion[] = {json.dumps(version)};\n"
+
+generated_dir.mkdir(parents=True, exist_ok=True)
+if not generated_header.exists() or generated_header.read_text(encoding="utf-8") != contents:
+    generated_header.write_text(contents, encoding="utf-8")
+
+env.AppendUnique(CPPPATH=[str(generated_dir)])

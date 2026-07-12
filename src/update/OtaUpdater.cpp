@@ -6,13 +6,10 @@
 #include <HTTPUpdate.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include "FirmwareVersion.generated.h"
 #include "net/WifiConnection.h"
 #include "settings/PreferenceSpecs.h"
 #include "update/ReleaseParser.h"
-
-#ifndef RSVP_FIRMWARE_VERSION
-#define RSVP_FIRMWARE_VERSION "dev"
-#endif
 
 namespace {
 
@@ -196,7 +193,7 @@ bool OtaUpdater::isConfigured(const Config& config) const {
 }
 
 String OtaUpdater::currentVersion() const {
-    return RSVP_FIRMWARE_VERSION;
+    return kFirmwareVersion;
 }
 
 bool OtaUpdater::connectWiFi(const Config& config, StatusCallback callback, void* context) const {

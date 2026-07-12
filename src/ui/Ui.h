@@ -125,6 +125,8 @@ namespace ui {
 
         void setTheme(const ui::themes::Theme& theme);
         void setLanguage(UiLanguage language);
+        void setOrientation(Orientation orientation);
+        Orientation orientation() const { return touchOrientation_; }
         std::string_view text(UiText key) const;
         void setTouchSource(TouchSource source, uint32_t nowMs);
         bool pollTouch(uint32_t nowMs);
@@ -148,12 +150,16 @@ namespace ui {
         bool tab(Rect rect, std::string_view text, bool active, Icon icon = Icon::None);
         void battery(Rect rect, uint8_t percent, bool charging, std::string_view label);
         void progress(Rect rect, int value, int minimum = 0, int maximum = 100);
+        void steps(Rect rect, uint8_t current, uint8_t total,
+                   ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);
         SliderResult slider(Rect rect, int value, int minimum, int maximum, int step = 1);
         SliderResult slider(Rect rect, std::string_view label, int value, int minimum, int maximum, int step = 1,
                             std::string_view suffix = {});
         KeyboardAction keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state,
                                 bool masked = false);
         void dial(Rect rect, int value, int minimum, int maximum, std::string_view label = {});
+        void hourglass(Rect rect, uint8_t progress, bool paused = false, bool complete = false,
+                       ui::themes::ColorRole sandRole = ui::themes::ColorRole::Accent);
         bool redraw(Rect rect, uint32_t signature);
         void markDirty(Rect rect);
         void drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
@@ -186,6 +192,7 @@ namespace ui {
             Button,
             Tab,
             Progress,
+            Steps,
             Slider,
             Dial,
             Battery,

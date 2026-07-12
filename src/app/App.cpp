@@ -4,7 +4,6 @@
 #include <string>
 
 #include "board/BoardAudio.h"
-#include "board/BoardImu.h"
 #include "board/BoardInput.h"
 #include "board/BoardPower.h"
 #include "board/BoardStorage.h"
@@ -31,12 +30,13 @@ void App::begin() {
     bootMs_ = millis();
     lastActivityMs_ = bootMs_;
     immediateUi_.setTouchSource({Board::Input::touchSurface(), Board::Input::touchTiming(), &Board::Input::beginTouch,
-                                 &Board::Input::touchReady, &Board::Input::readTouch, &Board::Imu::uiOrientation},
+                                 &Board::Input::touchReady, &Board::Input::readTouch},
                                 bootMs_);
 
     if (!Board::Display::begin()) {
         Serial.println("[app] display init failed");
     }
+    immediateUi_.setOrientation(Board::Display::defaultUiOrientation());
     immediateUi_.setTheme(interfaceScreen_.themes.selected());
     screens::status(immediateUi_, immediateUi_.text(UiText::Ready));
 
@@ -46,7 +46,7 @@ void App::begin() {
     readerScreen_.begin(prefs_, bootMs_);
     interfaceScreen_.begin(immediateUi_, prefs_, &Board::Display::setBrightness);
     networkScreen_.begin(prefs_);
-    focusScreen_.timer.begin();
+    focusScreen_.begin(storage_.mounted() ? &Board::Storage::filesystem() : nullptr);
     readerScreen_.loadInitialBook(immediateUi_, storage_, prefs_, bootMs_);
     libraryScreen_.invalidate();
 }
@@ -86,8 +86,7 @@ void App::update(uint32_t nowMs) {
         sync_.update();
     }
     if (screen_ == screens::Screen::FocusSession) {
-        focusScreen_.timer.update(nowMs);
-        if (focusScreen_.timer.consumeCompletionCue())
+        if (focusScreen_.update(nowMs))
             Board::Audio::beep();
     }
     readerScreen_.book.save(prefs_, readerScreen_.store, readerScreen_.reader, false, nowMs);
@@ -134,14 +133,6 @@ void App::renderScreen(uint32_t nowMs) {
     }
     case screens::Screen::Usb:
         screens::status(immediateUi_, "USB", usbTransfer_.statusMessage(), immediateUi_.text(UiText::HoldPowerToExit));
-        return;
-    case screens::Screen::FocusSession:
-        if (focusScreen_.session(immediateUi_, nowMs)) {
-            focusScreen_.timer.abandon();
-            readerScreen_.reader.pause();
-            screen_ = screens::Screen::Reader;
-            renderScreen(nowMs);
-        }
         return;
     case screens::Screen::Standby:
         standbyScreen_.draw(immediateUi_);
@@ -227,22 +218,24 @@ void App::renderScreen(uint32_t nowMs) {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         action = screens::ota(immediateUi_, screen_);
         break;
-    case screens::Screen::FocusGenres:
+    case screens::Screen::FocusTimers:
+    case screens::Screen::FocusEditor:
+    case screens::Screen::FocusNameEdit:
+    case screens::Screen::FocusSession: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        if (focusScreen_.genres(immediateUi_, nowMs, screen_)) {
-            immediateUi_.endFrame();
-            screen_ = screens::Screen::FocusSession;
+        focusScreen_.draw(immediateUi_, nowMs, screen_);
+        immediateUi_.endFrame();
+        if (renderedScreen == screens::Screen::FocusSession && screen_ != screens::Screen::FocusSession)
+            focusScreen_.close();
+        if (screen_ != renderedScreen)
             renderScreen(nowMs);
-            return;
-        }
-        break;
+        return;
+    }
     }
     immediateUi_.endFrame();
     if (screen_ != renderedScreen) {
         if (screen_ == screens::Screen::Library)
             libraryScreen_.reset();
-        if (screen_ == screens::Screen::FocusGenres)
-            focusScreen_.timer.open();
     }
     handleScreenAction(action, nowMs);
 }
@@ -311,9 +304,8 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
     if (screen_ == screens::Screen::FocusSession
         && (Input::hasAction(event.actions, Input::ActionBack)
             || Input::hasAction(event.actions, Input::ActionSelect))) {
-        focusScreen_.timer.abandon();
-        readerScreen_.reader.pause();
-        screen_ = screens::Screen::Reader;
+        focusScreen_.close();
+        screen_ = screens::Screen::FocusTimers;
         renderScreen(nowMs);
         return;
     }
@@ -354,6 +346,10 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
                        || screen_ == screens::Screen::ReaderSettings
                        || screen_ == screens::Screen::NetworkSettings) {
                 screen_ = screens::Screen::Settings;
+            } else if (screen_ == screens::Screen::FocusNameEdit) {
+                screen_ = screens::Screen::FocusEditor;
+            } else if (screen_ == screens::Screen::FocusEditor) {
+                screen_ = screens::Screen::FocusTimers;
             } else {
                 screen_ = screens::Screen::Read;
             }
@@ -495,6 +491,8 @@ void App::deepSleepFromStandby(uint32_t nowMs) {
 }
 
 void App::powerOff(uint32_t nowMs) {
+    if (screen_ == screens::Screen::FocusSession)
+        focusScreen_.close();
     readerScreen_.book.save(prefs_, readerScreen_.store, readerScreen_.reader, true, nowMs);
     readerScreen_.book.mirror(readerScreen_.store, readerScreen_.reader);
     readerScreen_.reader.pause();

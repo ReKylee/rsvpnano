@@ -43,7 +43,7 @@ namespace WaveshareLcd349::DisplayWiring {
     constexpr uint16_t kPanelHeight = 640;
     constexpr size_t kTxChunkBytes = 16 * 1024;
     constexpr bool kPanelMemoryRotated180 = true;
-    constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Landscape;
+    constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::LandscapeFlipped;
 } // namespace WaveshareLcd349::DisplayWiring
 
 namespace WaveshareLcd349::ImuWiring {

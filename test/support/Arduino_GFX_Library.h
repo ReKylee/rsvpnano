@@ -16,6 +16,11 @@ public:
     virtual int16_t height() const {
         return height_;
     }
+    virtual void setRotation(uint8_t rotation) {
+        if (((rotation_ ^ rotation) & 1U) != 0)
+            std::swap(width_, height_);
+        rotation_ = rotation;
+    }
     virtual void fillScreen(uint16_t) {
         ++writes;
     }
@@ -34,9 +39,11 @@ public:
     }
     virtual void drawFastHLine(int16_t, int16_t, int16_t, uint16_t) {
         ++writes;
+        ++horizontalLines;
     }
     virtual void drawFastVLine(int16_t, int16_t, int16_t, uint16_t) {
         ++writes;
+        ++verticalLines;
     }
     virtual void drawCircle(int16_t, int16_t, int16_t, uint16_t) {
         ++writes;
@@ -67,9 +74,12 @@ public:
     int writes = 0;
     int textWrites = 0;
     int flushes = 0;
+    int horizontalLines = 0;
+    int verticalLines = 0;
     int16_t cursorX = 0;
     int16_t cursorY = 0;
     uint16_t lastFillColor = 0;
+    uint8_t rotation_ = 0;
 
 private:
     int16_t width_;

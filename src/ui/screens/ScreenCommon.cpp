@@ -32,8 +32,10 @@ namespace screens::detail {
             screen = Screen::Device;
         }
         if (ui.tab({0, 140, kRailWidth, static_cast<int16_t>(ui.height() - 140)}, ui.text(UiText::Focus),
-                   active == Screen::FocusGenres || active == Screen::FocusSession, ui::Icon::Hourglass)) {
-            screen = Screen::FocusGenres;
+                   active == Screen::FocusTimers || active == Screen::FocusEditor
+                       || active == Screen::FocusNameEdit || active == Screen::FocusSession,
+                   ui::Icon::Hourglass)) {
+            screen = Screen::FocusTimers;
         }
         if (ui.iconButton({static_cast<int16_t>(ui.width() - 38), 7, 28, 28}, ui::Icon::Power)) {
             return Action::PowerOff;

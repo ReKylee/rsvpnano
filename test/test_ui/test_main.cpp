@@ -25,15 +25,11 @@ namespace {
         contact = gContact;
         return true;
     }
-    ui::Orientation touchOrientation() {
-        return ui::Orientation::Portrait;
-    }
-
     void enableTouch(ui::Context& context) {
         ui::TouchTiming timing;
         timing.releaseConfirmSamples = 1;
         timing.pollIntervalMs = 0;
-        context.setTouchSource({{320, 172}, timing, &beginTouch, &touchReady, &readTouch, &touchOrientation}, 0);
+        context.setTouchSource({{320, 172}, timing, &beginTouch, &touchReady, &readTouch}, 0);
     }
 
     ui::themes::Theme theme() {
@@ -309,6 +305,107 @@ void test_keyboard_edits_and_submits() {
     TEST_ASSERT_TRUE(passwordKeyboard.passwordVisible);
 }
 
+void test_orientation_owns_graphics_touch_and_hourglass_cache() {
+    Arduino_GFX gfx(320, 172);
+    ui::Context context(gfx, &flush, &flushRegion);
+    auto colors = theme();
+    context.setTheme(colors);
+    enableTouch(context);
+
+    context.setOrientation(ui::Orientation::Landscape);
+    TEST_ASSERT_EQUAL(ui::Orientation::Landscape, context.orientation());
+    TEST_ASSERT_EQUAL(3, gfx.rotation_);
+    TEST_ASSERT_EQUAL(172, context.width());
+    TEST_ASSERT_EQUAL(320, context.height());
+
+    context.beginFrame(5);
+    context.hourglass({10, 10, 80, 120}, 25);
+    context.endFrame();
+    gfx.writes = 0;
+    gRegionFlushes = 0;
+    context.beginFrame(5);
+    context.hourglass({10, 10, 80, 120}, 25);
+    context.endFrame();
+    TEST_ASSERT_EQUAL(0, gfx.writes);
+    TEST_ASSERT_EQUAL(0, gRegionFlushes);
+
+    context.beginFrame(5);
+    context.hourglass({10, 10, 80, 120}, 26);
+    context.endFrame();
+    TEST_ASSERT_GREATER_THAN(0, gfx.writes);
+
+    gfx.horizontalLines = gfx.verticalLines = 0;
+    context.beginFrame(5);
+    context.hourglass({10, 10, 120, 80}, 26);
+    context.endFrame();
+    TEST_ASSERT_TRUE(gfx.verticalLines > gfx.horizontalLines);
+
+    struct OrientationCase {
+        ui::Orientation orientation;
+        uint16_t expected[4][2];
+    };
+    constexpr OrientationCase cases[] = {
+        {ui::Orientation::Portrait, {{0, 0}, {319, 0}, {0, 171}, {319, 171}}},
+        {ui::Orientation::LandscapeFlipped, {{0, 319}, {0, 0}, {171, 319}, {171, 0}}},
+        {ui::Orientation::PortraitFlipped, {{319, 171}, {0, 171}, {319, 0}, {0, 0}}},
+        {ui::Orientation::Landscape, {{171, 0}, {171, 319}, {0, 0}, {0, 319}}},
+    };
+    constexpr uint16_t corners[][2] = {{0, 0}, {319, 0}, {0, 171}, {319, 171}};
+    uint32_t nowMs = 1;
+    for (const auto& testCase: cases) {
+        context.setOrientation(testCase.orientation);
+        for (size_t corner = 0; corner < 4; ++corner) {
+            gContact = {true, corners[corner][0], corners[corner][1]};
+            TEST_ASSERT_TRUE(context.pollTouch(nowMs++));
+            TEST_ASSERT_EQUAL(testCase.expected[corner][0], context.touch()->x);
+            TEST_ASSERT_EQUAL(testCase.expected[corner][1], context.touch()->y);
+        }
+    }
+
+    context.setOrientation(ui::Orientation::Portrait);
+    context.setOrientation(ui::Orientation::Landscape);
+    gContact = {true, 10, 20};
+    TEST_ASSERT_TRUE(context.pollTouch(nowMs++));
+    context.beginFrame(6);
+    context.button({140, 0, 30, 30}, "Mapped");
+    context.endFrame();
+    gContact = {};
+    TEST_ASSERT_TRUE(context.pollTouch(nowMs));
+    context.beginFrame(6);
+    TEST_ASSERT_TRUE(context.button({140, 0, 30, 30}, "Mapped"));
+    context.endFrame();
+}
+
+void test_focus_timer_text_does_not_redraw_hourglass() {
+    Arduino_GFX gfx(640, 172);
+    ui::Context context(gfx, &flush, &flushRegion);
+    auto colors = theme();
+    context.setTheme(colors);
+
+    context.beginFrame(7);
+    context.label({260, 0, 120, 28}, "25:00", 3, ui::themes::ColorRole::Accent, ui::TextAlign::Center);
+    context.hourglass({8, 30, 624, 112}, 20);
+    context.steps({8, 144, 624, 14}, 1, 4);
+    context.endFrame();
+
+    gfx.writes = gfx.textWrites = gfx.horizontalLines = gfx.verticalLines = 0;
+    context.beginFrame(7);
+    context.label({260, 0, 120, 28}, "24:59", 3, ui::themes::ColorRole::Accent, ui::TextAlign::Center);
+    context.hourglass({8, 30, 624, 112}, 20);
+    context.steps({8, 144, 624, 14}, 1, 4);
+    context.endFrame();
+    TEST_ASSERT_GREATER_THAN(0, gfx.textWrites);
+    TEST_ASSERT_EQUAL(0, gfx.horizontalLines);
+    TEST_ASSERT_EQUAL(0, gfx.verticalLines);
+
+    context.beginFrame(7);
+    context.label({260, 0, 120, 28}, "24:59", 3, ui::themes::ColorRole::Accent, ui::TextAlign::Center);
+    context.hourglass({8, 30, 624, 112}, 20, true);
+    context.steps({8, 144, 624, 14}, 1, 4);
+    context.endFrame();
+    TEST_ASSERT_GREATER_THAN(0, gfx.verticalLines);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_unchanged_widget_does_not_draw_or_flush);
@@ -320,5 +417,7 @@ int main(int, char**) {
     RUN_TEST(test_labels_align_and_battery_owns_its_drawing);
     RUN_TEST(test_setting_gives_long_values_the_full_card_width);
     RUN_TEST(test_keyboard_edits_and_submits);
+    RUN_TEST(test_orientation_owns_graphics_touch_and_hourglass_cache);
+    RUN_TEST(test_focus_timer_text_does_not_redraw_hourglass);
     return UNITY_END();
 }

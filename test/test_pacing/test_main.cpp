@@ -462,7 +462,7 @@ void test_word_at_returns_correct_word(void) {
 }
 
 void test_word_source_streams_words_and_prefetches(void) {
-  FakeWordSource source({String("alpha"), String("beta,"), String("Gamma")});
+  FakeWordSource source({"alpha", "beta,", "Gamma"});
   ReadingLoop r;
   r.setWpm(300);
   r.setWordSource(&source, 0);

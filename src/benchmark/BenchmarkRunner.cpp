@@ -5,7 +5,6 @@
 #include "board/BoardStorage.h"
 
 #include "board/Board.h"
-#include "board/BoardImu.h"
 #include "board/BoardInput.h"
 #include "converter/EpubConverter.h"
 #include "input/Input.h"
@@ -191,7 +190,7 @@ namespace {
     bool beginInput() {
         const bool started = Input::begin();
         gDisplay.setTouchSource({Board::Input::touchSurface(), Board::Input::touchTiming(), &Board::Input::beginTouch,
-                                 &Board::Input::touchReady, &Board::Input::readTouch, &Board::Imu::uiOrientation},
+                                 &Board::Input::touchReady, &Board::Input::readTouch},
                                 millis());
         return started;
     }

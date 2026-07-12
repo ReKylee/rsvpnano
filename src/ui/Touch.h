@@ -63,7 +63,6 @@ namespace ui {
         bool (*begin)() = nullptr;
         bool (*ready)() = nullptr;
         bool (*read)(TouchContact&) = nullptr;
-        Orientation (*orientation)() = nullptr;
     };
 
 } // namespace ui

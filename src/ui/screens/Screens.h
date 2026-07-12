@@ -15,8 +15,14 @@
 #include "reader/ReadingLoop.h"
 #include "settings/NvsSecurity.h"
 #include "standby/ScreensaverTypes.h"
-#include "timer/FocusTimer.h"
+#include "timer/FocusOrientation.h"
+#include "timer/FocusSession.h"
+#include "timer/FocusTimers.h"
 #include "ui/Ui.h"
+
+namespace fs {
+    class FS;
+}
 
 namespace screens {
 
@@ -38,7 +44,9 @@ namespace screens {
         StorageEncryption,
         Sync,
         Ota,
-        FocusGenres,
+        FocusTimers,
+        FocusEditor,
+        FocusNameEdit,
         FocusSession,
         Reader,
         Usb,
@@ -134,10 +142,31 @@ namespace screens {
     Action ota(ui::Context& ui, Screen& screen);
     class FocusScreen {
     public:
-        FocusTimer timer;
+        void begin(fs::FS* filesystem);
+        bool update(uint32_t nowMs);
+        void draw(ui::Context& ui, uint32_t nowMs, Screen& screen);
+        void close();
 
-        bool genres(ui::Context& ui, uint32_t nowMs, Screen& screen);
-        bool session(ui::Context& ui, uint32_t nowMs);
+    private:
+        void drawTimers(ui::Context& ui, Screen& screen);
+        void drawEditor(ui::Context& ui, Screen& screen);
+        void drawNameEditor(ui::Context& ui, Screen& screen);
+        bool drawSession(ui::Context& ui, uint32_t nowMs);
+        void edit(size_t index, bool creating, Screen& screen);
+        bool persist(const focus::Timers& timers);
+
+        fs::FS* filesystem_ = nullptr;
+        focus::Timers timers_;
+        focus::Timer draft_;
+        focus::Session session_;
+        focus::OrientationReader orientation_;
+        ui::KeyboardState keyboard_;
+        size_t page_ = 0;
+        size_t editIndex_ = 0;
+        size_t activeIndex_ = 0;
+        bool creating_ = false;
+        bool deleteConfirm_ = false;
+        bool writable_ = false;
     };
     void status(ui::Context& ui, std::string_view title, std::string_view line1 = {}, std::string_view line2 = {},
                 int progress = -1);

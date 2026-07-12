@@ -54,13 +54,21 @@ namespace ui {
         }
     }
 
+    void Context::setOrientation(Orientation orientation) {
+        if (touchOrientation_ == orientation)
+            return;
+        touchOrientation_ = orientation;
+        gfx_.setRotation(static_cast<uint8_t>(orientation));
+        resetTouchGesture();
+        invalidate();
+    }
+
     std::string_view Context::text(UiText key) const {
         return Localization::text(language_, key);
     }
 
     void Context::setTouchSource(TouchSource source, uint32_t nowMs) {
         touchSource_ = source;
-        touchOrientation_ = source.orientation == nullptr ? Orientation::Portrait : source.orientation();
         beginTouch(nowMs);
     }
 
@@ -69,12 +77,6 @@ namespace ui {
         if (touchSource_.read == nullptr)
             return false;
 
-        const Orientation orientation =
-            touchSource_.orientation == nullptr ? Orientation::Portrait : touchSource_.orientation();
-        if (orientation != touchOrientation_) {
-            touchOrientation_ = orientation;
-            resetTouchGesture();
-        }
         if (!touchInitialized_) {
             if (nowMs >= touchBackoffUntilMs_ && !beginTouch(nowMs)) {
                 touchBackoffUntilMs_ = nowMs + touchSource_.timing.recoveryRetryMs;
@@ -375,6 +377,30 @@ namespace ui {
         }
     }
 
+    void Context::steps(Rect rect, uint8_t current, uint8_t total, ui::themes::ColorRole activeRole) {
+        current = std::min(current, total);
+        uint32_t state = combine(current, total);
+        state = combine(state, static_cast<uint8_t>(activeRole));
+        if (!claim(Kind::Steps, rect, state).changed)
+            return;
+
+        if (total == 0) {
+            return;
+        }
+        const int16_t radius = std::max<int16_t>(2, std::min<int16_t>(4, static_cast<int16_t>((rect.h - 2) / 2)));
+        const int16_t spacing = static_cast<int16_t>(radius * 2 + 5);
+        const int16_t width = static_cast<int16_t>((total - 1) * spacing + radius * 2);
+        const int16_t firstX = static_cast<int16_t>(rect.x + (rect.w - width) / 2 + radius);
+        const int16_t centerY = static_cast<int16_t>(rect.y + rect.h / 2);
+        for (uint8_t index = 0; index < total; ++index) {
+            const int16_t x = static_cast<int16_t>(firstX + index * spacing);
+            if (index < current)
+                gfx_.fillCircle(x, centerY, radius, color(activeRole));
+            else
+                gfx_.drawCircle(x, centerY, radius, color(ui::themes::ColorRole::Outline));
+        }
+    }
+
     SliderResult Context::slider(Rect rect, int value, int minimum, int maximum, int step) {
         return slider(rect, {}, value, minimum, maximum, step, {});
     }
@@ -506,6 +532,127 @@ namespace ui {
             drawText({rect.x, static_cast<int16_t>(cy + radius / 2), rect.w, textHeight(1)}, labelText, 1,
                      color(ui::themes::ColorRole::Muted), TextAlign::Center);
         }
+    }
+
+    void Context::hourglass(Rect rect, uint8_t progress, bool paused, bool complete,
+                            ui::themes::ColorRole sandRole) {
+        progress = std::min<uint8_t>(progress, 100);
+        uint32_t state = combine(progress, paused);
+        state = combine(state, complete);
+        state = combine(state, static_cast<uint8_t>(sandRole));
+        if (!claim(Kind::Custom, rect, state).changed)
+            return;
+
+        const uint16_t ink = color(paused ? ui::themes::ColorRole::Muted : sandRole);
+        const uint16_t outline = color(ui::themes::ColorRole::Foreground);
+        const int16_t inset = std::max<int16_t>(3, std::min(rect.w, rect.h) / 12);
+        const int16_t left = static_cast<int16_t>(rect.x + inset);
+        const int16_t right = static_cast<int16_t>(rect.x + rect.w - inset - 1);
+        const int16_t top = static_cast<int16_t>(rect.y + inset);
+        const int16_t bottom = static_cast<int16_t>(rect.y + rect.h - inset - 1);
+        const int16_t centerX = static_cast<int16_t>((left + right) / 2);
+        const int16_t centerY = static_cast<int16_t>((top + bottom) / 2);
+
+        if (rect.w > rect.h) {
+            constexpr int16_t segments = 10;
+            const int16_t chamberWidth = std::max<int16_t>(1, static_cast<int16_t>(centerX - left));
+            const int16_t chamberHeight = std::max<int16_t>(3, static_cast<int16_t>((bottom - top) / 2));
+            const int16_t waist = std::max<int16_t>(2, chamberHeight / 14);
+            const int16_t capWidth = std::max<int16_t>(8, std::min<int16_t>(16, rect.h / 8));
+            gfx_.fillRoundRect(static_cast<int16_t>(left - capWidth / 2), top, capWidth,
+                               static_cast<int16_t>(bottom - top + 1), capWidth / 2, outline);
+            gfx_.fillRoundRect(static_cast<int16_t>(right - capWidth / 2), top, capWidth,
+                               static_cast<int16_t>(bottom - top + 1), capWidth / 2, outline);
+
+            int16_t previousLeftX = left;
+            int16_t previousLeftHalf = chamberHeight;
+            int16_t previousRightX = centerX;
+            int16_t previousRightHalf = waist;
+            for (int16_t step = 1; step <= segments; ++step) {
+                const int16_t leftX = static_cast<int16_t>(left + chamberWidth * step / segments);
+                const int16_t leftScale = static_cast<int16_t>(segments - step);
+                const int16_t leftHalf = static_cast<int16_t>(waist + (chamberHeight - waist) * leftScale * leftScale
+                                                                        / (segments * segments));
+                const int16_t rightX = static_cast<int16_t>(centerX + chamberWidth * step / segments);
+                const int16_t rightHalf = static_cast<int16_t>(waist + (chamberHeight - waist) * step * step
+                                                                         / (segments * segments));
+                for (int16_t thickness = -1; thickness <= 1; ++thickness) {
+                    gfx_.drawLine(previousLeftX, static_cast<int16_t>(centerY - previousLeftHalf + thickness), leftX,
+                                  static_cast<int16_t>(centerY - leftHalf + thickness), outline);
+                    gfx_.drawLine(previousLeftX, static_cast<int16_t>(centerY + previousLeftHalf + thickness), leftX,
+                                  static_cast<int16_t>(centerY + leftHalf + thickness), outline);
+                    gfx_.drawLine(previousRightX, static_cast<int16_t>(centerY - previousRightHalf + thickness), rightX,
+                                  static_cast<int16_t>(centerY - rightHalf + thickness), outline);
+                    gfx_.drawLine(previousRightX, static_cast<int16_t>(centerY + previousRightHalf + thickness), rightX,
+                                  static_cast<int16_t>(centerY + rightHalf + thickness), outline);
+                }
+                previousLeftX = leftX;
+                previousLeftHalf = leftHalf;
+                previousRightX = rightX;
+                previousRightHalf = rightHalf;
+            }
+
+            const int16_t leftColumns = static_cast<int16_t>(chamberWidth * (100 - progress) / 100);
+            for (int16_t column = 1; column <= leftColumns; ++column) {
+                const int16_t distance = column;
+                const int16_t half = static_cast<int16_t>(waist + (chamberHeight - waist) * distance * distance
+                                                                    / (chamberWidth * chamberWidth));
+                gfx_.drawFastVLine(static_cast<int16_t>(centerX - column),
+                                   static_cast<int16_t>(centerY - half + 3),
+                                   std::max<int16_t>(1, static_cast<int16_t>(half * 2 - 5)), ink);
+            }
+            const int16_t rightColumns = static_cast<int16_t>(chamberWidth * progress / 100);
+            for (int16_t column = 1; column <= rightColumns; ++column) {
+                const int16_t distance = static_cast<int16_t>(chamberWidth - column);
+                const int16_t half = static_cast<int16_t>(waist + (chamberHeight - waist) * distance * distance
+                                                                    / (chamberWidth * chamberWidth));
+                gfx_.drawFastVLine(static_cast<int16_t>(right - column),
+                                   static_cast<int16_t>(centerY - half + 3),
+                                   std::max<int16_t>(1, static_cast<int16_t>(half * 2 - 5)), ink);
+            }
+            if (!paused && progress > 0 && progress < 100)
+                gfx_.drawFastHLine(static_cast<int16_t>(centerX + 1), centerY,
+                                   std::max<int16_t>(1, static_cast<int16_t>(right - rightColumns - centerX - 2)), ink);
+            if (paused) {
+                gfx_.fillRect(static_cast<int16_t>(centerX - 6), static_cast<int16_t>(top + 5), 4, 13, ink);
+                gfx_.fillRect(static_cast<int16_t>(centerX + 2), static_cast<int16_t>(top + 5), 4, 13, ink);
+            } else if (complete) {
+                gfx_.drawLine(static_cast<int16_t>(centerX - 7), static_cast<int16_t>(top + 11),
+                              static_cast<int16_t>(centerX - 2), static_cast<int16_t>(top + 16), ink);
+                gfx_.drawLine(static_cast<int16_t>(centerX - 2), static_cast<int16_t>(top + 16),
+                              static_cast<int16_t>(centerX + 8), static_cast<int16_t>(top + 5), ink);
+            }
+            markDirty(rect);
+            return;
+        }
+
+        const int16_t chamberHeight = std::max<int16_t>(1, static_cast<int16_t>(centerY - top - 3));
+
+        gfx_.drawFastHLine(left, top, static_cast<int16_t>(right - left + 1), outline);
+        gfx_.drawFastHLine(left, bottom, static_cast<int16_t>(right - left + 1), outline);
+        gfx_.drawLine(left, static_cast<int16_t>(top + 1), centerX, centerY, outline);
+        gfx_.drawLine(right, static_cast<int16_t>(top + 1), centerX, centerY, outline);
+        gfx_.drawLine(centerX, centerY, left, static_cast<int16_t>(bottom - 1), outline);
+        gfx_.drawLine(centerX, centerY, right, static_cast<int16_t>(bottom - 1), outline);
+
+        const int16_t topRows = static_cast<int16_t>(chamberHeight * (100 - progress) / 100);
+        for (int16_t row = 0; row < topRows; ++row) {
+            const int16_t y = static_cast<int16_t>(centerY - 2 - row);
+            const int16_t half = std::max<int16_t>(1, static_cast<int16_t>((right - left) * (row + 1)
+                                                                           / (2 * chamberHeight)));
+            gfx_.drawFastHLine(static_cast<int16_t>(centerX - half), y, static_cast<int16_t>(half * 2 + 1), ink);
+        }
+        const int16_t bottomRows = static_cast<int16_t>(chamberHeight * progress / 100);
+        for (int16_t row = 0; row < bottomRows; ++row) {
+            const int16_t y = static_cast<int16_t>(bottom - 2 - row);
+            const int16_t half = std::max<int16_t>(1, static_cast<int16_t>((right - left) * (bottomRows - row)
+                                                                           / (2 * chamberHeight)));
+            gfx_.drawFastHLine(static_cast<int16_t>(centerX - half), y, static_cast<int16_t>(half * 2 + 1), ink);
+        }
+        if (!paused && progress > 0 && progress < 100)
+            gfx_.drawFastVLine(centerX, static_cast<int16_t>(centerY + 1),
+                               std::max<int16_t>(1, static_cast<int16_t>(bottom - bottomRows - centerY - 2)), ink);
+        markDirty(rect);
     }
 
     bool Context::redraw(Rect rect, uint32_t state) {
@@ -711,11 +858,11 @@ namespace ui {
         const uint16_t rawY = std::clamp<uint16_t>(contact.y, 0, maxY);
         switch (touchOrientation_) {
         case Orientation::LandscapeFlipped:
-            return {true, static_cast<uint16_t>(maxY - rawY), rawX};
+            return {true, rawY, static_cast<uint16_t>(maxX - rawX)};
         case Orientation::PortraitFlipped:
             return {true, static_cast<uint16_t>(maxX - rawX), static_cast<uint16_t>(maxY - rawY)};
         case Orientation::Landscape:
-            return {true, rawY, static_cast<uint16_t>(maxX - rawX)};
+            return {true, static_cast<uint16_t>(maxY - rawY), rawX};
         default:
             return {true, rawX, rawY};
         }

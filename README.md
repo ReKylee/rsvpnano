@@ -258,7 +258,7 @@ Sync
 ```
 
 `Brightness` cycles through the brightness presets. `Theme` cycles Dark, Light, Night, and Yellow.
-`Focus Timer` opens the orientation-based timer. `Sync` opens a second menu:
+`Focus Timer` opens the user-defined hourglass timers. `Sync` opens a second menu:
 
 ```text
 Wi-Fi Sync
@@ -396,16 +396,19 @@ RSS checks can continue in the background, while installable firmware updates st
 
 ### Focus Timer
 
-The Focus Timer uses the device orientation to guide work and break blocks.
+The Focus Timer provides up to eight custom Pomodoro routines. Each routine has its own name,
+focus duration, break duration, and round count. The defaults are stored in
+`/config/focus.conf` on the SD card, where they can also be edited as text.
 
 1. Swipe up from the bottom edge.
 2. Choose `Focus Timer`.
-3. Choose a timer category.
-4. Place or flip the device as prompted.
-5. Follow the on-screen timer.
-6. Use Back or `PWR` where available to exit the timer page.
+3. Start an existing timer, or use Add/Edit to customize one.
+4. Stand the device on either short end to begin focusing.
+5. When a phase finishes, flip it 180 degrees to start the next phase.
+6. Lay the device flat to pause, then return it to the same end to resume.
+7. Use Exit or Back to return to the timer list.
 
-Touch-and-hold during an active timer cancels the current timer block.
+The standard fallback routine is Pomodoro: 25 minutes of focus, 5 minutes of break, for four rounds.
 
 ### SD Card Check
 

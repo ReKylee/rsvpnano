@@ -15,6 +15,9 @@ namespace StoragePaths {
     constexpr const char* kSettingsConfigBackupPath = "/config/settings.conf.bak";
     constexpr const char* kRssConfigPath = "/config/rss.conf";
     constexpr const char* kRssConfigTempPath = "/config/rss.conf.tmp";
+    constexpr const char* kFocusConfigPath = "/config/focus.conf";
+    constexpr const char* kFocusConfigTempPath = "/config/focus.conf.tmp";
+    constexpr const char* kFocusConfigBackupPath = "/config/focus.conf.bak";
     constexpr const char* kSdFrequencyProbePath = "/.sdfreq.tmp";
     constexpr const char* kThemesPath = "/themes";
     constexpr const char* kFontsPath = "/fonts";

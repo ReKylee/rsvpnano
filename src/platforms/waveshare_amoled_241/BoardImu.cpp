@@ -9,8 +9,6 @@ namespace Board::Imu {
 
     namespace {
 
-        ui::Orientation gUiOrientation = WaveshareAmoled241::DisplayWiring::kDefaultUiOrientation;
-
         TwoWire& imuWire() {
             return Wire1;
         }
@@ -27,14 +25,6 @@ namespace Board::Imu {
 
     uint8_t address() {
         return WaveshareAmoled241::ImuWiring::kAddress;
-    }
-
-    ui::Orientation uiOrientation() {
-        return gUiOrientation;
-    }
-
-    void setUiOrientation(ui::Orientation orientation) {
-        gUiOrientation = orientation;
     }
 
     bool probeAddress(uint8_t candidateAddress) {

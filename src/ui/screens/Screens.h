@@ -100,21 +100,31 @@ namespace screens {
         void drawEdit(ui::Context& ui, Preferences& preferences, Screen& screen);
 
     private:
+        struct WifiNetwork {
+            std::string ssid;
+            int32_t rssi = 0;
+            bool secured = false;
+        };
+
+        enum class WifiScanState : uint8_t {
+            Idle,
+            Scanning,
+            Complete,
+            Failed,
+        };
+
         enum class EditField : uint8_t {
             Owner,
             Tag,
         };
 
-        std::array<std::string, 8> networks_;
-        std::array<bool, 8> securedNetworks_{};
+        std::array<WifiNetwork, 8> networks_;
         size_t networkCount_ = 0;
         std::string password_;
         std::string editValue_;
         ui::KeyboardState keyboard_;
         EditField editField_ = EditField::Owner;
-        bool scanStarted_ = false;
-        bool scanFinished_ = false;
-        bool scanFailed_ = false;
+        WifiScanState scanState_ = WifiScanState::Idle;
         bool connectionFailed_ = false;
     };
     Action device(ui::Context& ui, bool storageReady, size_t bookCount,

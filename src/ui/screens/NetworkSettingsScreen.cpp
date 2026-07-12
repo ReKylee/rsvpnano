@@ -3,6 +3,7 @@
 #include <WiFi.h>
 
 #include <algorithm>
+#include <functional>
 
 #include "net/WifiConnection.h"
 #include "settings/PreferenceSpecs.h"
@@ -76,9 +77,7 @@ namespace screens {
     void NetworkScreen::openWifiScan() {
         closeWifi();
         networkCount_ = 0;
-        scanStarted_ = false;
-        scanFinished_ = false;
-        scanFailed_ = false;
+        scanState_ = WifiScanState::Idle;
     }
 
     void NetworkScreen::closeWifi() {
@@ -96,57 +95,72 @@ namespace screens {
         ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
                  ui.text(UiText::WifiNetworks), 2);
 
-        if (!scanStarted_) {
+        if (scanState_ == WifiScanState::Idle) {
             WiFi.mode(WIFI_STA);
-            scanStarted_ = WiFi.scanNetworks(true) == WIFI_SCAN_RUNNING;
-            scanFailed_ = !scanStarted_;
-            scanFinished_ = scanFailed_;
+            scanState_ = WiFi.scanNetworks(true) == WIFI_SCAN_RUNNING ? WifiScanState::Scanning
+                                                                      : WifiScanState::Failed;
         }
-        if (scanStarted_ && !scanFinished_) {
+        if (scanState_ == WifiScanState::Scanning) {
             const int16_t found = WiFi.scanComplete();
             if (found == WIFI_SCAN_FAILED) {
-                scanFailed_ = true;
-                scanFinished_ = true;
+                scanState_ = WifiScanState::Failed;
             } else if (found >= 0) {
-                for (int16_t index = 0; index < found && networkCount_ < networks_.size(); ++index) {
+                for (int16_t index = 0; index < found; ++index) {
                     const String foundSsid = WiFi.SSID(index);
                     if (foundSsid.isEmpty())
                         continue;
                     const std::string candidate{foundSsid.c_str(), foundSsid.length()};
-                    if (std::find(networks_.begin(), networks_.begin() + networkCount_, candidate)
-                        == networks_.begin() + networkCount_) {
-                        networks_[networkCount_] = candidate;
-                        securedNetworks_[networkCount_] = WiFi.encryptionType(index) != WIFI_AUTH_OPEN;
-                        ++networkCount_;
+                    const int32_t rssi = WiFi.RSSI(index);
+                    const bool secured = WiFi.encryptionType(index) != WIFI_AUTH_OPEN;
+                    const auto activeNetworks = std::span{networks_}.first(networkCount_);
+                    const auto existing = std::ranges::find(activeNetworks, candidate, &WifiNetwork::ssid);
+                    if (existing == activeNetworks.end()) {
+                        if (networkCount_ < networks_.size()) {
+                            networks_[networkCount_] = {candidate, rssi, secured};
+                            ++networkCount_;
+                        } else {
+                            const auto weakest = std::ranges::min_element(networks_, std::ranges::less{},
+                                                                          &WifiNetwork::rssi);
+                            if (rssi > weakest->rssi)
+                                *weakest = {candidate, rssi, secured};
+                        }
+                    } else if (rssi > existing->rssi) {
+                        existing->rssi = rssi;
+                        existing->secured = secured;
                     }
                 }
+                std::ranges::sort(std::span{networks_}.first(networkCount_), std::ranges::greater{},
+                                  &WifiNetwork::rssi);
                 WiFi.scanDelete();
-                scanFinished_ = true;
+                scanState_ = WifiScanState::Complete;
             }
         }
 
         const ui::Rect list{content.x, static_cast<int16_t>(content.y + 30), content.w,
                             static_cast<int16_t>(content.h - 30)};
-        if (!scanFinished_) {
+        if (scanState_ == WifiScanState::Idle || scanState_ == WifiScanState::Scanning) {
             ui.label(list, ui.text(UiText::ScanningNetworks), 2, ui::themes::ColorRole::Muted,
                      ui::TextAlign::Center);
             return;
         }
-        if (scanFailed_ || networkCount_ == 0) {
+        if (scanState_ == WifiScanState::Failed || networkCount_ == 0) {
             ui::Column column{list, 8};
-            ui.label(column.next(32), ui.text(scanFailed_ ? UiText::ScanFailed : UiText::NoNetworksFound), 2,
+            ui.label(column.next(32),
+                     ui.text(scanState_ == WifiScanState::Failed ? UiText::ScanFailed : UiText::NoNetworksFound), 2,
                      ui::themes::ColorRole::Muted, ui::TextAlign::Center);
             if (ui.button(column.next(34), ui.text(UiText::Retry)))
                 openWifiScan();
             return;
         }
 
-        ui::Grid grid{list, 2, 27, 5};
+        ui::Grid grid{list, 2, 30, 2};
         for (size_t index = 0; index < networkCount_; ++index) {
-            if (ui.button(grid.next(), networks_[index])) {
-                const bool savedNetwork = networks_[index] == ssid;
-                ssid = networks_[index];
-                if (!securedNetworks_[index]) {
+            const WifiNetwork& network = networks_[index];
+            const std::string signal = std::to_string(network.rssi) + " dBm";
+            if (ui.setting(grid.next(), network.ssid, signal)) {
+                const bool savedNetwork = network.ssid == ssid;
+                ssid = network.ssid;
+                if (!network.secured) {
                     password_.clear();
                     settings::save<settings::prefs::WifiSsid>(preferences, ssid);
                     settings::save<settings::prefs::WifiPassword>(preferences, password_);

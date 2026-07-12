@@ -206,6 +206,11 @@ void test_setting_gives_long_values_the_full_card_width() {
     context.setting({0, 0, 120, 34}, "Typeface", "Atkinson Hyperlegible");
     context.endFrame();
     TEST_ASSERT_EQUAL(28, gfx.textWrites);
+
+    context.beginFrame(2);
+    context.setting({0, 0, 200, 30}, "Home WiFi", "-42 dBm");
+    context.endFrame();
+    TEST_ASSERT_EQUAL(109, gfx.cursorX);
 }
 
 void test_keyboard_edits_and_submits() {

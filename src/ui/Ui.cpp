@@ -189,13 +189,23 @@ namespace ui {
             gfx_.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
             gfx_.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
             const int16_t textWidth = std::max<int16_t>(0, static_cast<int16_t>(rect.w - 14));
-            const bool largeValue = rect.h >= 32 && value.size() * 12U <= static_cast<size_t>(textWidth);
-            drawText({static_cast<int16_t>(rect.x + 7), static_cast<int16_t>(rect.y + 3), textWidth, 8}, label, 1,
-                     color(ui::themes::ColorRole::Muted));
-            drawText({static_cast<int16_t>(rect.x + 7), static_cast<int16_t>(rect.y + 11), textWidth,
-                      static_cast<int16_t>(std::max<int16_t>(0, rect.h - 13))},
-                     value, largeValue ? 2 : 1, color(ui::themes::ColorRole::Accent), TextAlign::Left,
-                     !largeValue && rect.h >= 32 ? 2 : 1);
+            if (rect.h <= 30) {
+                const int16_t valueWidth = std::min<int16_t>(textWidth / 2,
+                                                             static_cast<int16_t>(value.size() * 12U));
+                drawText({static_cast<int16_t>(rect.x + 7), rect.y,
+                          static_cast<int16_t>(std::max<int16_t>(0, textWidth - valueWidth - 8)), rect.h},
+                         label, 2, color(ui::themes::ColorRole::Foreground));
+                drawText({static_cast<int16_t>(rect.x + rect.w - valueWidth - 7), rect.y, valueWidth, rect.h}, value,
+                         2, color(ui::themes::ColorRole::Muted), TextAlign::Right);
+            } else {
+                const bool largeValue = value.size() * 12U <= static_cast<size_t>(textWidth);
+                drawText({static_cast<int16_t>(rect.x + 7), static_cast<int16_t>(rect.y + 3), textWidth, 8}, label, 1,
+                         color(ui::themes::ColorRole::Muted));
+                drawText({static_cast<int16_t>(rect.x + 7), static_cast<int16_t>(rect.y + 11), textWidth,
+                          static_cast<int16_t>(std::max<int16_t>(0, rect.h - 13))},
+                         value, largeValue ? 2 : 1, color(ui::themes::ColorRole::Accent), TextAlign::Left,
+                         !largeValue && rect.h >= 32 ? 2 : 1);
+            }
         }
         return tapped(slot, rect);
     }

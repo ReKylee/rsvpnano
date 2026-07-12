@@ -146,6 +146,38 @@ void test_disabled_button_ignores_touch() {
     context.endFrame();
 }
 
+void test_tap_target_handles_touch_without_drawing() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx, &flush, &flushRegion);
+    auto colors = theme();
+    context.setTheme(colors);
+    enableTouch(context);
+
+    context.beginFrame(10);
+    context.tap({0, 0, 80, 24});
+    context.endFrame();
+    gfx.writes = 0;
+    gRegionFlushes = 0;
+
+    gContact = {true, 20, 10};
+    TEST_ASSERT_TRUE(context.pollTouch(1));
+    context.beginFrame(10);
+    TEST_ASSERT_FALSE(context.tap({0, 0, 80, 24}));
+    context.endFrame();
+    gContact = {};
+    TEST_ASSERT_TRUE(context.pollTouch(2));
+    context.beginFrame(10);
+    TEST_ASSERT_TRUE(context.tap({0, 0, 80, 24}));
+    context.endFrame();
+    TEST_ASSERT_EQUAL(0, gfx.writes);
+    TEST_ASSERT_EQUAL(0, gRegionFlushes);
+
+    context.beginFrame(10);
+    context.endFrame();
+    TEST_ASSERT_EQUAL(0, gfx.writes);
+    TEST_ASSERT_EQUAL(0, gRegionFlushes);
+}
+
 void test_layout_cursors_are_deterministic() {
     ui::Column column{{10, 20, 100, 80}, 4};
     TEST_ASSERT_EQUAL_INT16(20, column.next(10).y);
@@ -465,6 +497,7 @@ int main(int, char**) {
     RUN_TEST(test_changed_and_removed_widgets_redraw);
     RUN_TEST(test_button_and_slider_consume_touch);
     RUN_TEST(test_disabled_button_ignores_touch);
+    RUN_TEST(test_tap_target_handles_touch_without_drawing);
     RUN_TEST(test_layout_cursors_are_deterministic);
     RUN_TEST(test_labels_truncate_to_their_rectangles);
     RUN_TEST(test_labels_align_and_battery_owns_its_drawing);

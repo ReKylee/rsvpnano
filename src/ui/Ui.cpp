@@ -133,7 +133,8 @@ namespace ui {
     void Context::endFrame() {
         for (size_t index = nextSlot_; index < slotCount_; ++index) {
             if (slots_[index].valid) {
-                clear(slots_[index].rect);
+                if (slots_[index].kind != Kind::Touch)
+                    clear(slots_[index].rect);
                 slots_[index].valid = false;
             }
         }
@@ -241,6 +242,12 @@ namespace ui {
                      label, 2, color(ui::themes::ColorRole::Foreground));
         }
         return tapped(slot, rect);
+    }
+
+    bool Context::tap(Rect rect, bool enabled) {
+        const size_t slot = nextSlot_;
+        claim(Kind::Touch, rect, enabled);
+        return enabled && tapped(slot, rect);
     }
 
     bool Context::button(Rect rect, std::string_view text, bool enabled, Icon icon, uint8_t textLines,
@@ -776,10 +783,11 @@ namespace ui {
         }
         const bool changed = !slot.valid || structureChanged || slot.signature != state;
         if (changed) {
-            if (slot.valid && !(slot.rect == rect)) {
+            if (slot.valid && slot.kind != Kind::Touch && (!(slot.rect == rect) || kind == Kind::Touch)) {
                 clear(slot.rect);
             }
-            clear(rect);
+            if (kind != Kind::Touch)
+                clear(rect);
             slot = {rect, state, kind, true};
         }
         slotCount_ = std::max(slotCount_, index + 1);

@@ -144,6 +144,7 @@ namespace ui {
         bool setting(Rect rect, std::string_view label, std::string_view value,
                      SettingLayout layout = SettingLayout::Stacked);
         bool toggle(Rect rect, std::string_view label, bool enabled);
+        bool tap(Rect rect, bool enabled = true);
         bool button(Rect rect, std::string_view text, bool enabled = true, Icon icon = Icon::None, uint8_t textLines = 1,
                     std::string_view detailLeft = {}, std::string_view detailRight = {});
         bool iconButton(Rect rect, Icon icon);
@@ -197,7 +198,8 @@ namespace ui {
             Slider,
             Dial,
             Battery,
-            Custom
+            Custom,
+            Touch
         };
 
         struct Slot {

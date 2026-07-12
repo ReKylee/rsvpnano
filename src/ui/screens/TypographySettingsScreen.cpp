@@ -20,7 +20,7 @@ namespace screens {
             config.typefaceIndex = 0;
             config.typography = {};
 
-            settings::save<pref::ReaderFontSizeIndex>(preferences, config.fontSizeIndex, FontCatalog::sizeCount());
+            settings::save<pref::ReaderFontSizeIndex>(preferences, config.fontSizeIndex);
             settings::save<pref::ReaderTypefaceId>(preferences, fonts.typefaceId(config.typefaceIndex).c_str());
             settings::save<pref::TypographyFocusHighlight>(preferences, config.typography.focusHighlight);
             settings::save<pref::TypographyTracking>(preferences, config.typography.tracking);
@@ -43,7 +43,7 @@ namespace screens {
                              static_cast<int16_t>(content.h - 44)}, 4};
 
         if (ui.setting(font.next(32), ui.text(UiText::FontSize), FontCatalog::sizeLabel(config.fontSizeIndex))) {
-            config.fontSizeIndex = settings::cycle<pref::ReaderFontSizeIndex>(preferences, FontCatalog::sizeCount());
+            config.fontSizeIndex = settings::cycle<pref::ReaderFontSizeIndex>(preferences);
             config.font = fonts.loadFont(config.typefaceIndex, config.fontSizeIndex);
         }
 

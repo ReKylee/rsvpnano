@@ -9,6 +9,7 @@
 #include <string>
 #include <type_traits>
 
+#include "settings/Config.h"
 #include "settings/Nvs.h"
 
 namespace settings {
@@ -55,13 +56,6 @@ namespace settings {
     concept SanitizedSetting = Setting<Spec> && requires(typename Spec::Value value) {
         {
             Spec::sanitize(value)
-        } -> std::same_as<typename Spec::Value>;
-    };
-
-    template<typename Spec, typename Context>
-    concept ContextSetting = Setting<Spec> && requires(typename Spec::Value value, Context context) {
-        {
-            Spec::sanitize(value, context)
         } -> std::same_as<typename Spec::Value>;
     };
 
@@ -117,19 +111,6 @@ namespace settings {
         }
     };
 
-    template<Key Name, typename T, T Default>
-    struct CountedIndex : Scalar<Name, T, Default> {
-        static T sanitize(T value, size_t count) {
-            if (count == 0) {
-                return 0;
-            }
-            if (static_cast<size_t>(value) < count) {
-                return value;
-            }
-            return static_cast<T>(std::min<size_t>(Default, count - 1));
-        }
-    };
-
     template<Key Name, typename T, T Default, T Count>
         requires std::is_enum_v<T>
     struct EnumSetting : Scalar<Name, T, Default> {
@@ -168,38 +149,22 @@ namespace settings {
         }
     }
 
-    template<Setting Spec, typename Context>
-        requires ContextSetting<Spec, Context>
-    typename Spec::Value sanitize(typename Spec::Value value, Context context) {
-        return Spec::sanitize(value, context);
-    }
-
     template<Setting Spec>
     typename Spec::Value load(Preferences& prefs) {
         using Value = typename Spec::Value;
         return sanitize<Spec>(nvs::get(prefs, Spec::key(), Spec::defaultValue()));
     }
 
-    template<Setting Spec, typename Context>
-        requires ContextSetting<Spec, Context>
-    typename Spec::Value load(Preferences& prefs, Context context) {
-        using Value = typename Spec::Value;
-        return sanitize<Spec>(nvs::get(prefs, Spec::key(), Spec::defaultValue()), context);
-    }
-
     template<Setting Spec>
     bool save(Preferences& prefs, typename Spec::Value value) {
         using Value = typename Spec::Value;
         const Value cleaned = sanitize<Spec>(value);
-        return load<Spec>(prefs) == cleaned || nvs::put(prefs, Spec::key(), cleaned);
-    }
-
-    template<Setting Spec, typename Context>
-        requires ContextSetting<Spec, Context>
-    bool save(Preferences& prefs, typename Spec::Value value, Context context) {
-        using Value = typename Spec::Value;
-        const Value cleaned = sanitize<Spec>(value, context);
-        return load<Spec>(prefs, context) == cleaned || nvs::put(prefs, Spec::key(), cleaned);
+        if (load<Spec>(prefs) == cleaned)
+            return true;
+        if (!nvs::put(prefs, Spec::key(), cleaned))
+            return false;
+        markDirty();
+        return true;
     }
 
     template<Setting Spec>
@@ -209,7 +174,12 @@ namespace settings {
 
     template<Setting Spec>
     bool reset(Preferences& prefs) {
-        return nvs::remove(prefs, Spec::key());
+        if (!contains<Spec>(prefs))
+            return true;
+        if (!nvs::remove(prefs, Spec::key()))
+            return false;
+        markDirty();
+        return true;
     }
 
     template<BoolSetting Spec>
@@ -239,18 +209,6 @@ namespace settings {
         const auto next = static_cast<Value>((static_cast<size_t>(static_cast<Stored>(load<Spec>(prefs))) + 1U)
                                              % Spec::count());
         save<Spec>(prefs, next);
-        return next;
-    }
-
-    template<Setting Spec>
-        requires ContextSetting<Spec, size_t>
-    typename Spec::Value cycle(Preferences& prefs, size_t count, typename Spec::Value step = 1) {
-        using Value = typename Spec::Value;
-        const Value current = load<Spec>(prefs, count);
-        const size_t stepValue = std::max<size_t>(1, static_cast<size_t>(step));
-        const Value next =
-            count == 0 ? Value{} : static_cast<Value>((static_cast<size_t>(current) + stepValue) % count);
-        save<Spec>(prefs, next, count);
         return next;
     }
 

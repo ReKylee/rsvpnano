@@ -17,10 +17,6 @@
 
 namespace {
 
-    constexpr const char* kConfigPaths[] = {
-        "/config/rss.conf",
-        "/rss.conf",
-    };
     constexpr const char* kStatusTitle = "RSS";
     constexpr uint32_t kFeedRequestTimeoutMs = 30000;
     constexpr uint32_t kFeedTotalTimeoutMs = 90000;
@@ -490,16 +486,7 @@ RssFeedManager::Result RssFeedManager::checkFeeds(const OtaUpdater::Config& wifi
         return result;
     }
 
-    File config;
-    for (const char* path: kConfigPaths) {
-        config = Board::Storage::filesystem().open(path);
-        if (config && !config.isDirectory()) {
-            break;
-        }
-        if (config) {
-            config.close();
-        }
-    }
+    File config = Board::Storage::filesystem().open(StoragePaths::kRssConfigPath);
 
     if (!config || config.isDirectory()) {
         if (config) {
@@ -507,7 +494,7 @@ RssFeedManager::Result RssFeedManager::checkFeeds(const OtaUpdater::Config& wifi
         }
         disconnectWiFi();
         result.summary = "No feeds";
-        result.detail = "/config/rss.conf";
+        result.detail = StoragePaths::kRssConfigPath;
         return result;
     }
 
@@ -534,7 +521,7 @@ RssFeedManager::Result RssFeedManager::checkFeeds(const OtaUpdater::Config& wifi
     if (feeds.empty()) {
         disconnectWiFi();
         result.summary = "No feed URLs";
-        result.detail = "/config/rss.conf";
+        result.detail = StoragePaths::kRssConfigPath;
         return result;
     }
 

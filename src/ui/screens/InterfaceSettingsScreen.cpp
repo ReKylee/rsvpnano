@@ -7,10 +7,9 @@
 namespace screens {
     namespace pref = settings::prefs;
 
-    void InterfaceScreen::begin(ui::Context& ui, Preferences& preferences, size_t standbyDurationCount,
-                              void (*setBrightness)(uint8_t)) {
-        config.brightnessIndex = settings::load<pref::BrightnessIndex>(preferences, 20U);
-        config.standbyIndex = settings::load<pref::StandbyTimerIndex>(preferences, standbyDurationCount);
+    void InterfaceScreen::begin(ui::Context& ui, Preferences& preferences, void (*setBrightness)(uint8_t)) {
+        config.brightnessIndex = settings::load<pref::BrightnessIndex>(preferences);
+        config.standbyIndex = settings::load<pref::StandbyTimerIndex>(preferences);
         config.language = settings::load<pref::UiLanguage>(preferences);
         config.screensaver = settings::load<pref::ScreensaverMode>(preferences);
         if (setBrightness != nullptr)
@@ -41,7 +40,7 @@ namespace screens {
                           100, 5, "%");
             brightness.changed) {
             config.brightnessIndex = static_cast<uint8_t>(brightness.value / 5 - 1);
-            settings::save<pref::BrightnessIndex>(preferences, config.brightnessIndex, 20U);
+            settings::save<pref::BrightnessIndex>(preferences, config.brightnessIndex);
             if (setBrightness != nullptr)
                 setBrightness(static_cast<uint8_t>(brightness.value));
         }
@@ -74,7 +73,7 @@ namespace screens {
         }
         if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), firstRowY, halfWidth, 32},
                        ui.text(UiText::Standby), standby)) {
-            config.standbyIndex = settings::cycle<pref::StandbyTimerIndex>(preferences, standbyDurations.size());
+            config.standbyIndex = settings::cycle<pref::StandbyTimerIndex>(preferences);
         }
 
         const UiText screensaver = config.screensaver == standby::Kind::Maze      ? UiText::Maze

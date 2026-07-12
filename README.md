@@ -185,7 +185,9 @@ You can set Wi-Fi credentials from:
 - The web companion `Settings` page.
 - The native companion app settings page.
 - The on-device Wi-Fi settings page.
-- Advanced users can still use `/config/ota.conf`.
+
+User preferences are mirrored to `/config/settings.conf` on the SD card. Wi-Fi passwords are deliberately excluded
+from that file and remain in device storage; configure or change them through one of the settings interfaces above.
 
 RSS feeds are managed from the web companion or the native app, then checked from the device with
 `Articles -> Update RSS`. New articles are saved into `/books/articles`.
@@ -204,8 +206,8 @@ RSS support in `v0.0.8` includes:
 Some feeds still block embedded clients, require JavaScript, return very large pages, or publish summaries instead of full articles. Those are feed or website limitations rather than SD card problems.
 
 OTA updates use GitHub Releases. Open `Settings -> Firmware update` on the device after Wi-Fi is configured.
-By default the updater follows the latest release; `/config/ota.conf` or the device Wi-Fi settings
-can set `github_tag` to pin checks to one release tag. Preview/fork channels can use
+By default the updater follows the latest release; the device settings can set an OTA tag to pin checks to one
+release. Preview/fork channels can use
 `owner/repo@tag`, for example `ReKylee/rsvpnano@preview-v0.0.9`.
 
 ## Device Controls

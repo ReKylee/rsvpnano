@@ -71,8 +71,7 @@ namespace screens {
         InterfaceSettings config;
         ThemeStore themes;
 
-        void begin(ui::Context& ui, Preferences& preferences, size_t standbyDurationCount,
-                   void (*setBrightness)(uint8_t));
+        void begin(ui::Context& ui, Preferences& preferences, void (*setBrightness)(uint8_t));
         void draw(ui::Context& ui, Preferences& preferences, std::span<const uint32_t> standbyDurations,
                   void (*setBrightness)(uint8_t), Screen& screen);
     };

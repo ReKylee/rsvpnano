@@ -16,7 +16,7 @@ namespace settings {
 
         struct Wpm : Bounded<"wpm", uint16_t, 300, 10, 1000> {};
 
-        struct BrightnessIndex : CountedIndex<"bright", uint8_t, 13> {};
+        struct BrightnessIndex : Bounded<"bright", uint8_t, 13, 0, 19> {};
 
         struct ThemeId : StringSetting<"theme_id"> {};
 
@@ -44,7 +44,7 @@ namespace settings {
 
         struct ReaderProgressVisible : Scalar<"read_pct", bool, false> {};
 
-        struct ReaderFontSizeIndex : CountedIndex<"font_size", uint8_t, 0> {};
+        struct ReaderFontSizeIndex : Bounded<"font_size", uint8_t, 0, 0, 2> {};
 
         struct ReaderTypefaceId : StringSetting<"font_id"> {};
 
@@ -67,7 +67,7 @@ namespace settings {
         struct PauseMode
             : EnumSetting<"pause_md", ::PauseMode, ::PauseMode::SentenceEnd, ::PauseMode::Count> {};
 
-        struct StandbyTimerIndex : CountedIndex<"stby_tmr", uint8_t, 1> {};
+        struct StandbyTimerIndex : Bounded<"stby_tmr", uint8_t, 1, 0, 4> {};
 
         struct WifiSsid : StringSetting<"wifi_ssid"> {};
 

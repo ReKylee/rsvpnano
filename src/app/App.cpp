@@ -7,8 +7,10 @@
 #include "board/BoardImu.h"
 #include "board/BoardInput.h"
 #include "board/BoardPower.h"
+#include "board/BoardStorage.h"
 #include "board/BoardSystem.h"
 #include "rss/RssFeedManager.h"
+#include "settings/Config.h"
 #include "settings/PreferenceSpecs.h"
 #include "storage/index/ReadingProgress.h"
 #include "update/OtaUpdater.h"
@@ -38,8 +40,10 @@ void App::begin() {
     screens::status(immediateUi_, immediateUi_.text(UiText::Ready));
 
     storage_.begin();
+    if (storage_.mounted())
+        settings::reconcile(prefs_, Board::Storage::filesystem());
     readerScreen_.begin(prefs_, bootMs_);
-    interfaceScreen_.begin(immediateUi_, prefs_, kStandbyMs.size(), &Board::Display::setBrightness);
+    interfaceScreen_.begin(immediateUi_, prefs_, &Board::Display::setBrightness);
     networkScreen_.begin(prefs_);
     focusScreen_.timer.begin();
     readerScreen_.loadInitialBook(immediateUi_, storage_, prefs_, bootMs_);
@@ -56,6 +60,9 @@ void App::update(uint32_t nowMs) {
         lastActivityMs_ = nowMs;
         handleTouch(nowMs);
     }
+
+    if (storage_.mounted() && !usbTransfer_.active())
+        settings::update(prefs_, Board::Storage::filesystem(), nowMs);
 
     if (screen_ == screens::Screen::Standby) {
         if (standbyScreen_.update(immediateUi_, nowMs))
@@ -304,7 +311,7 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
         if (sync_.active()) {
             sync_.end();
             readerScreen_.begin(prefs_, nowMs);
-            interfaceScreen_.begin(immediateUi_, prefs_, kStandbyMs.size(), &Board::Display::setBrightness);
+            interfaceScreen_.begin(immediateUi_, prefs_, &Board::Display::setBrightness);
             networkScreen_.begin(prefs_);
             networkScreen_.autoCheckPending = false;
             screen_ = screens::Screen::Device;
@@ -383,6 +390,7 @@ void App::runRss() {
 void App::enterUsbTransfer(uint32_t nowMs) {
 #if RSVP_USB_TRANSFER_ENABLED
     readerScreen_.book.save(prefs_, readerScreen_.store, readerScreen_.reader, true, nowMs);
+    settings::flush(prefs_, Board::Storage::filesystem());
     if (!usbTransfer_.begin(true)) {
         screens::status(immediateUi_, "USB", immediateUi_.text(UiText::CouldNotStart), usbTransfer_.statusMessage());
         delay(1200);
@@ -453,6 +461,8 @@ void App::deepSleepFromStandby(uint32_t nowMs) {
     standbyScreen_.reset();
     if (sync_.active())
         sync_.end();
+    if (!usbTransfer_.active())
+        settings::flush(prefs_, Board::Storage::filesystem());
     if (usbTransfer_.active())
         usbTransfer_.end();
     Board::Display::sleep();
@@ -471,6 +481,7 @@ void App::powerOff(uint32_t nowMs) {
     readerScreen_.reader.pause();
     screens::status(immediateUi_, immediateUi_.text(UiText::Off), immediateUi_.text(UiText::ReleasePower));
     delay(250);
+    settings::flush(prefs_, Board::Storage::filesystem());
     Board::Display::sleep();
     readerScreen_.store.close();
     storage_.end();

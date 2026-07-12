@@ -32,7 +32,6 @@ namespace SdDiagnostics {
         constexpr const char* kPreferenceFrequencyKhz = "freq_khz";
         constexpr const char* kPreferenceCardType = "card_type";
         constexpr const char* kPreferenceCardSizeMb = "size_mb";
-        constexpr const char* kFrequencyProbePath = "/.sdfreq.tmp";
         constexpr const char* kFolderProbeName = ".sdcheck.tmp";
         int sMountedFrequencyKhz = 0;
 
@@ -271,7 +270,7 @@ namespace SdDiagnostics {
             if (!mounted) {
                 return false;
             }
-            if (!writeReadProbeFile(kFrequencyProbePath, kFrequencyProbeBytes, "sd-probe")) {
+            if (!writeReadProbeFile(StoragePaths::kSdFrequencyProbePath, kFrequencyProbeBytes, "sd-probe")) {
                 Serial.printf("[sd-check] frequency %d kHz failed sustained probe\n", frequencyKhz);
                 Board::Storage::end();
                 mounted = false;
@@ -363,7 +362,7 @@ namespace SdDiagnostics {
         }
 
         Serial.printf("[sd-check] validating mounted frequency %d kHz\n", sMountedFrequencyKhz);
-        if (writeReadProbeFile(kFrequencyProbePath, kFrequencyProbeBytes, "sd-probe")) {
+        if (writeReadProbeFile(StoragePaths::kSdFrequencyProbePath, kFrequencyProbeBytes, "sd-probe")) {
             if (mountedFrequencyKhz != nullptr) {
                 *mountedFrequencyKhz = sMountedFrequencyKhz;
             }

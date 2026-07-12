@@ -24,7 +24,6 @@ namespace {
     namespace pref = settings::prefs;
 
     constexpr const char* kMdnsName = "rsvp-nano";
-    constexpr const char* kRssConfigPath = "/config/rss.conf";
     constexpr size_t kMaxMetadataLineChars = 160;
     constexpr size_t kMaxSettingsPatchBytes = 8192;
     constexpr size_t kMaxRssFeedsPatchBytes = 4096;
@@ -934,7 +933,7 @@ void CompanionSyncManager::handleRssFeeds() {
     }
 
     statusLine1_ = "RSS feeds saved";
-    statusLine2_ = kRssConfigPath;
+    statusLine2_ = StoragePaths::kRssConfigPath;
     server_.send(200, "application/json", rssFeedsJson());
 }
 
@@ -1414,12 +1413,12 @@ String CompanionSyncManager::settingsJson() {
     const uint16_t longDelay = settings::load<pref::PacingLongWordDelay>(*preferences_);
     const uint16_t complexDelay = settings::load<pref::PacingComplexWordDelay>(*preferences_);
     const uint16_t punctuationDelay = settings::load<pref::PacingPunctuationDelay>(*preferences_);
-    const uint8_t brightness = settings::load<pref::BrightnessIndex>(*preferences_, kBrightnessCount);
+    const uint8_t brightness = settings::load<pref::BrightnessIndex>(*preferences_);
     const bool handedness = settings::load<pref::Handedness>(*preferences_);
     const FooterMetric footerMetric = settings::load<pref::FooterMetricMode>(*preferences_);
     const BatteryLabel batteryLabel = settings::load<pref::BatteryLabelMode>(*preferences_);
     const UiLanguage language = settings::load<pref::UiLanguage>(*preferences_);
-    const uint8_t fontSize = settings::load<pref::ReaderFontSizeIndex>(*preferences_, FontCatalog::sizeCount());
+    const uint8_t fontSize = settings::load<pref::ReaderFontSizeIndex>(*preferences_);
     FontCatalog fontCatalog;
     fontCatalog.loadFromSd();
     uint8_t typeface = 0;
@@ -1601,7 +1600,7 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
             error = "brightnessIndex must be between 0 and 19";
             return false;
         }
-        settings::save<pref::BrightnessIndex>(*preferences_, static_cast<uint8_t>(intValue), kBrightnessCount);
+        settings::save<pref::BrightnessIndex>(*preferences_, static_cast<uint8_t>(intValue));
     }
     if (readJsonString(body, "themeId", stringValue)) {
         ThemeStore themeStore;
@@ -1669,8 +1668,7 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
             error = "fontSizeIndex must be between 0 and 2";
             return false;
         }
-        settings::save<pref::ReaderFontSizeIndex>(*preferences_, static_cast<uint8_t>(intValue),
-                                                  FontCatalog::sizeCount());
+        settings::save<pref::ReaderFontSizeIndex>(*preferences_, static_cast<uint8_t>(intValue));
     }
     if (!themeTypefaceApplied && readJsonString(body, "typeface", stringValue)) {
         FontCatalog fontCatalog;
@@ -1762,7 +1760,7 @@ String CompanionSyncManager::rssFeedsJson() {
     String body;
     body.reserve(256);
     body += "{\"ok\":true,\"feeds\":[";
-    File file = Board::Storage::filesystem().open(kRssConfigPath);
+    File file = Board::Storage::filesystem().open(StoragePaths::kRssConfigPath);
     bool first = true;
     if (file && !file.isDirectory()) {
         while (file.available()) {
@@ -1848,7 +1846,7 @@ bool CompanionSyncManager::writeRssFeedsJson(const String& body, String& error) 
     }
 
     Board::Storage::filesystem().mkdir(StoragePaths::kConfigPath);
-    const String tmpPath = String(kRssConfigPath) + ".tmp";
+    const String tmpPath = StoragePaths::kRssConfigTempPath;
     Board::Storage::filesystem().remove(tmpPath);
     File file = Board::Storage::filesystem().open(tmpPath, FILE_WRITE);
     if (!file) {
@@ -1862,8 +1860,8 @@ bool CompanionSyncManager::writeRssFeedsJson(const String& body, String& error) 
     }
     file.close();
 
-    Board::Storage::filesystem().remove(kRssConfigPath);
-    if (!Board::Storage::filesystem().rename(tmpPath, kRssConfigPath)) {
+    Board::Storage::filesystem().remove(StoragePaths::kRssConfigPath);
+    if (!Board::Storage::filesystem().rename(tmpPath, StoragePaths::kRssConfigPath)) {
         Board::Storage::filesystem().remove(tmpPath);
         error = "Could not save RSS config";
         return false;

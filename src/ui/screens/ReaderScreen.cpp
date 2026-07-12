@@ -103,8 +103,7 @@ namespace screens {
         text_.begin();
         fonts.loadFromSd();
         auto& config = session.settings;
-        config.fontSizeIndex =
-            settings::load<settings::prefs::ReaderFontSizeIndex>(preferences, FontCatalog::sizeCount());
+        config.fontSizeIndex = settings::load<settings::prefs::ReaderFontSizeIndex>(preferences);
         config.phantomWords = settings::load<settings::prefs::PhantomWords>(preferences);
         config.chapterScrollReversed = settings::load<settings::prefs::ChapterScrollReversed>(preferences);
         config.typography.focusHighlight = settings::load<settings::prefs::TypographyFocusHighlight>(preferences);

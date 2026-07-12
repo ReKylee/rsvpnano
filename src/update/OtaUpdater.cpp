@@ -6,8 +6,6 @@
 #include <HTTPUpdate.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#include "board/BoardStorage.h"
-
 #include "net/WifiConnection.h"
 #include "settings/PreferenceSpecs.h"
 #include "update/ReleaseParser.h"
@@ -18,10 +16,6 @@
 
 namespace {
 
-    constexpr const char* kConfigPaths[] = {
-        "/config/ota.conf",
-        "/ota.conf",
-    };
     constexpr size_t kMaxReleaseJsonBytes = 32768;
     constexpr const char* kStatusTitle = "OTA";
     const char* kRedirectHeaderKeys[] = {
@@ -37,12 +31,6 @@ namespace {
     String trimCopy(String value) {
         value.trim();
         return value;
-    }
-
-    bool parseBoolValue(const String& value) {
-        String lowered = trimCopy(value);
-        lowered.toLowerCase();
-        return lowered == "1" || lowered == "true" || lowered == "yes" || lowered == "on";
     }
 
     bool isUrlUnreserved(char value) {
@@ -186,20 +174,8 @@ namespace {
 
 } // namespace
 
-bool OtaUpdater::loadConfig(Config& config) const {
-    config = Config();
-    for (const char* path: kConfigPaths) {
-        if (loadConfigFromPath(path, config)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 OtaUpdater::Config OtaUpdater::config(Preferences& preferences) const {
     Config result;
-    loadConfig(result);
     const std::string ssid = settings::load<settings::prefs::WifiSsid>(preferences);
     if (!ssid.empty()) {
         result.wifiSsid = ssid.c_str();
@@ -221,54 +197,6 @@ bool OtaUpdater::isConfigured(const Config& config) const {
 
 String OtaUpdater::currentVersion() const {
     return RSVP_FIRMWARE_VERSION;
-}
-
-bool OtaUpdater::loadConfigFromPath(const char* path, Config& config) const {
-    File file = Board::Storage::filesystem().open(path);
-    if (!file || file.isDirectory()) {
-        if (file) {
-            file.close();
-        }
-        return false;
-    }
-
-    while (file.available()) {
-        String line = file.readStringUntil('\n');
-        line.trim();
-        if (line.isEmpty() || line.startsWith("#")) {
-            continue;
-        }
-
-        const int equalsIndex = line.indexOf('=');
-        if (equalsIndex <= 0) {
-            continue;
-        }
-
-        String key = line.substring(0, equalsIndex);
-        String value = line.substring(equalsIndex + 1);
-        key.trim();
-        value.trim();
-        key.toLowerCase();
-
-        if (key == "wifi_ssid") {
-            config.wifiSsid = value;
-        } else if (key == "wifi_password") {
-            config.wifiPassword = value;
-        } else if (key == "github_owner") {
-            config.githubOwner = value;
-        } else if (key == "github_repo") {
-            config.githubRepo = value;
-        } else if (key == "github_tag") {
-            config.githubTag = value;
-        } else if (key == "asset_name") {
-            config.assetName = value;
-        } else if (key == "auto_check") {
-            config.autoCheck = parseBoolValue(value);
-        }
-    }
-
-    file.close();
-    return true;
 }
 
 bool OtaUpdater::connectWiFi(const Config& config, StatusCallback callback, void* context) const {

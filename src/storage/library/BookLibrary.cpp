@@ -251,7 +251,7 @@ namespace BookLibrary {
 
     bool isArticle(const Listing& listing, size_t index) {
         const std::string path = pathAt(listing, index);
-        return std::string_view{path}.starts_with("/books/articles/");
+        return std::string_view{path}.starts_with(kArticleFilesPrefix);
     }
 
     std::string displayName(const Listing& listing, size_t index) {

@@ -8,7 +8,14 @@ namespace StoragePaths {
     constexpr const char* kBooksPath = "/books";
     constexpr const char* kBookFilesPath = "/books/books";
     constexpr const char* kArticleFilesPath = "/books/articles";
+    constexpr const char* kArticleFilesPrefix = "/books/articles/";
     constexpr const char* kConfigPath = "/config";
+    constexpr const char* kSettingsConfigPath = "/config/settings.conf";
+    constexpr const char* kSettingsConfigTempPath = "/config/settings.conf.tmp";
+    constexpr const char* kSettingsConfigBackupPath = "/config/settings.conf.bak";
+    constexpr const char* kRssConfigPath = "/config/rss.conf";
+    constexpr const char* kRssConfigTempPath = "/config/rss.conf.tmp";
+    constexpr const char* kSdFrequencyProbePath = "/.sdfreq.tmp";
     constexpr const char* kThemesPath = "/themes";
     constexpr const char* kFontsPath = "/fonts";
     constexpr const char* kTextExtension = ".txt";

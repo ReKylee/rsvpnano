@@ -41,7 +41,6 @@ public:
         bool rebootRequired = false;
     };
 
-    bool loadConfig(Config& config) const;
     Config config(Preferences& preferences) const;
     bool isConfigured(const Config& config) const;
     String currentVersion() const;
@@ -54,7 +53,6 @@ private:
         String assetUrl;
     };
 
-    bool loadConfigFromPath(const char* path, Config& config) const;
     bool connectWiFi(const Config& config, StatusCallback callback, void* context) const;
     void disconnectWiFi() const;
     bool fetchRelease(const Config& config, LatestRelease& release, String& errorDetail, StatusCallback callback,

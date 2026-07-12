@@ -76,9 +76,16 @@ namespace ui {
         bool changed = false;
     };
 
+    enum class KeyboardMode : uint8_t {
+        Letters,
+        Numbers,
+        Symbols,
+    };
+
     struct KeyboardState {
+        KeyboardMode mode = KeyboardMode::Letters;
         bool shifted = false;
-        bool symbols = false;
+        bool passwordVisible = false;
     };
 
     enum class KeyboardAction : uint8_t {

@@ -11,7 +11,7 @@ constexpr size_t kLanguageCount = static_cast<size_t>(UiLanguage::Count);
 constexpr size_t kTextCount = static_cast<size_t>(UiText::Count);
 constexpr size_t kDefaultLanguageIndex = 0;
 static_assert(kLanguageCount == 7, "UiLanguage count mismatch");
-static_assert(kTextCount == 163, "UiText count mismatch");
+static_assert(kTextCount == 165, "UiText count mismatch");
 
 constexpr std::array<std::string_view, kLanguageCount> kLanguageNames = {{
 	/* English  */ "English",
@@ -192,6 +192,8 @@ constexpr TextTable kTexts = {{
 		/* Connecting               */ "Connecting",
 		/* ConnectionFailed         */ "Connection failed",
 		/* Space                    */ "Space",
+		/* Show                     */ "Show",
+		/* Hide                     */ "Hide",
 	}},
 	// Spanish (es)
 	{{
@@ -358,6 +360,8 @@ constexpr TextTable kTexts = {{
 		/* Connecting               */ "Conectando",
 		/* ConnectionFailed         */ "Error de conexi\u00F3n",
 		/* Space                    */ "Espacio",
+		/* Show                     */ "Ver",
+		/* Hide                     */ "Ocultar",
 	}},
 	// French (fr)
 	{{
@@ -524,6 +528,8 @@ constexpr TextTable kTexts = {{
 		/* Connecting               */ "Connexion",
 		/* ConnectionFailed         */ "\u00C9chec de la connexion",
 		/* Space                    */ "Espace",
+		/* Show                     */ "Voir",
+		/* Hide                     */ "Masquer",
 	}},
 	// German (de)
 	{{
@@ -690,6 +696,8 @@ constexpr TextTable kTexts = {{
 		/* Connecting               */ "Verbindung wird hergestellt",
 		/* ConnectionFailed         */ "Verbindung fehlgeschlagen",
 		/* Space                    */ "Leer",
+		/* Show                     */ "Zeigen",
+		/* Hide                     */ "Aus",
 	}},
 	// Romanian (ro)
 	{{
@@ -856,6 +864,8 @@ constexpr TextTable kTexts = {{
 		/* Connecting               */ "Se conecteaz\u0103",
 		/* ConnectionFailed         */ "Conexiunea a e\u0219uat",
 		/* Space                    */ "Spa\u021Biu",
+		/* Show                     */ "Arat\u0103",
+		/* Hide                     */ "Ascunde",
 	}},
 	// Polish (pl)
 	{{
@@ -1022,6 +1032,8 @@ constexpr TextTable kTexts = {{
 		/* Connecting               */ "\u0141\u0105czenie",
 		/* ConnectionFailed         */ "Po\u0142\u0105czenie nie powiod\u0142o si\u0119",
 		/* Space                    */ "Spacja",
+		/* Show                     */ "Poka\u017C",
+		/* Hide                     */ "Ukryj",
 	}},
 	// Russian (ru)
 	{{
@@ -1188,6 +1200,8 @@ constexpr TextTable kTexts = {{
 		/* Connecting               */ "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435",
 		/* ConnectionFailed         */ "\u041E\u0448\u0438\u0431\u043A\u0430 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F",
 		/* Space                    */ "\u041F\u0440\u043E\u0431\u0435\u043B",
+		/* Show                     */ "\u041F\u043E\u043A\u0430\u0437",
+		/* Hide                     */ "\u0421\u043A\u0440\u044B\u0442\u044C",
 	}},
 }};
 

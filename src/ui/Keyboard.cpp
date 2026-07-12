@@ -6,43 +6,64 @@
 namespace ui {
     namespace {
 
-        constexpr std::array<std::string_view, 10> kNumbers = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"};
         constexpr std::array<std::string_view, 10> kTopLetters = {"q", "w", "e", "r", "t", "y", "u", "i", "o", "p"};
         constexpr std::array<std::string_view, 9> kMiddleLetters = {"a", "s", "d", "f", "g", "h", "j", "k", "l"};
         constexpr std::array<std::string_view, 7> kBottomLetters = {"z", "x", "c", "v", "b", "n", "m"};
+        constexpr std::array<std::string_view, 10> kNumbers = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"};
+        constexpr std::array<std::string_view, 9> kNumberSymbols = {"@", "#", "$", "%", "&", "*", "(", ")", "-"};
+        constexpr std::array<std::string_view, 10> kNumberExtras = {"+", "=", "_", "/", "\\", ":", ";", "?", "!", "."};
         constexpr std::array<std::string_view, 10> kTopSymbols = {"!", "@", "#", "$", "%", "^", "&", "*", "(", ")"};
-        constexpr std::array<std::string_view, 10> kMiddleSymbols = {"[", "]", "{", "}", "<", ">", "+", "=", "?", "~"};
-        constexpr std::array<std::string_view, 9> kLowerSymbols = {"\\", "|", ";", ":", "'", "\"", ",", "/", "`"};
-        constexpr std::array<std::string_view, 10> kBottomSymbols = {"_", "-", ".", ",", "@", ":", "/", "?", "=", "+"};
+        constexpr std::array<std::string_view, 9> kMiddleSymbols = {"[", "]", "{", "}", "<", ">", "+", "=", "~"};
+        constexpr std::array<std::string_view, 10> kBottomSymbols = {"\\", "|", ";", ":", "'", "\"", ",", "/", "`", "?"};
 
     } // namespace
 
     KeyboardAction Context::keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state,
                                      bool masked) {
         constexpr int16_t gap = 3;
-        const int16_t inputHeight = std::min<int16_t>(26, std::max<int16_t>(16, rect.h / 5));
-        const int16_t rowHeight = std::max<int16_t>(1, static_cast<int16_t>((rect.h - inputHeight - gap * 5) / 5));
+        const int16_t inputHeight = std::min<int16_t>(32, std::max<int16_t>(24, rect.h / 5));
+        const int16_t rowHeight = std::max<int16_t>(1, static_cast<int16_t>((rect.h - inputHeight - gap * 4) / 4));
         const int16_t firstRowY = static_cast<int16_t>(rect.y + inputHeight + gap);
         const int16_t keyWidth = std::max<int16_t>(1, static_cast<int16_t>((rect.w - gap * 9) / 10));
-        const bool shifted = state.shifted;
-        const bool symbols = state.symbols;
 
         std::array<char, 64> hidden{};
         const size_t hiddenLength = std::min(value.size(), hidden.size());
         std::fill_n(hidden.begin(), hiddenLength, '*');
-        const std::string_view shownValue = masked ? std::string_view{hidden.data(), hiddenLength}
-                                                  : std::string_view{value};
-        label({rect.x, rect.y, rect.w, inputHeight}, shownValue.empty() ? std::string_view{"_"} : shownValue, 2,
-              ui::themes::ColorRole::Accent);
+        std::string_view shownValue = masked && !state.passwordVisible ? std::string_view{hidden.data(), hiddenLength}
+                                                                       : std::string_view{value};
+        const int16_t revealWidth = masked ? std::clamp<int16_t>(rect.w / 7, 60, 72) : 0;
+        const int16_t valueWidth = static_cast<int16_t>(rect.w - (masked ? revealWidth + gap : 0));
+        const size_t visibleCharacters = static_cast<size_t>(std::max<int16_t>(1, (valueWidth - 12) / 12));
+        if (shownValue.size() > visibleCharacters) {
+            size_t start = shownValue.size() - visibleCharacters;
+            while (start < shownValue.size() && (static_cast<uint8_t>(shownValue[start]) & 0xC0U) == 0x80U)
+                ++start;
+            shownValue.remove_prefix(start);
+        }
+        const Rect input{rect.x, rect.y, valueWidth, inputHeight};
+        if (redraw(input, signature(shownValue))) {
+            const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
+            gfx_.fillRoundRect(input.x, input.y, input.w, input.h, 5, surface);
+            gfx_.drawRoundRect(input.x, input.y, input.w, input.h, 5, color(ui::themes::ColorRole::Outline));
+            drawText({static_cast<int16_t>(input.x + 6), input.y, static_cast<int16_t>(input.w - 12), input.h},
+                     shownValue.empty() ? std::string_view{"_"} : shownValue, 2,
+                     color(ui::themes::ColorRole::Accent));
+            markDirty(input);
+        }
+        if (masked
+            && button({static_cast<int16_t>(rect.x + valueWidth + gap), rect.y, revealWidth, inputHeight},
+                      text(state.passwordVisible ? UiText::Hide : UiText::Show))) {
+            state.passwordVisible = !state.passwordVisible;
+        }
 
         const auto append = [&](std::string_view key) {
             if (key.empty() || value.size() + key.size() > maxLength)
                 return;
-            if (shifted && key.size() == 1 && key.front() >= 'a' && key.front() <= 'z')
+            if (state.shifted && key.size() == 1 && key.front() >= 'a' && key.front() <= 'z')
                 value.push_back(static_cast<char>(key.front() - 'a' + 'A'));
             else
                 value.append(key);
-            if (shifted)
+            if (state.shifted)
                 state.shifted = false;
         };
 
@@ -60,56 +81,67 @@ namespace ui {
             for (size_t index = 0; index < N; ++index) {
                 const std::string_view key = keys[index];
                 char uppercase[2] = {key.empty() ? '\0' : key.front(), '\0'};
-                if (shifted && uppercase[0] >= 'a' && uppercase[0] <= 'z')
+                if (state.shifted && uppercase[0] >= 'a' && uppercase[0] <= 'z')
                     uppercase[0] = static_cast<char>(uppercase[0] - 'a' + 'A');
-                const std::string_view shown = shifted && key.size() == 1 ? std::string_view{uppercase, 1} : key;
+                const std::string_view shown = state.shifted && key.size() == 1 ? std::string_view{uppercase, 1} : key;
                 const int16_t x = static_cast<int16_t>(rect.x + (firstColumn + index) * (keyWidth + gap));
                 if (button({x, y, keyWidth, rowHeight}, shown))
                     append(key);
             }
         };
 
-        if (symbols) {
-            drawCharacters(kTopSymbols, firstRowY);
-            drawCharacters(kMiddleSymbols, static_cast<int16_t>(firstRowY + rowHeight + gap));
-            drawCharacters(kLowerSymbols, static_cast<int16_t>(firstRowY + (rowHeight + gap) * 2));
-            const int16_t backX = static_cast<int16_t>(rect.x + 9 * (keyWidth + gap));
-            if (button({backX, static_cast<int16_t>(firstRowY + (rowHeight + gap) * 2), keyWidth, rowHeight}, "<"))
+        const int16_t secondRowY = static_cast<int16_t>(firstRowY + rowHeight + gap);
+        const int16_t thirdRowY = static_cast<int16_t>(secondRowY + rowHeight + gap);
+        const int16_t backX = static_cast<int16_t>(rect.x + 9 * (keyWidth + gap));
+        switch (state.mode) {
+        case KeyboardMode::Letters:
+            drawCharacters(kTopLetters, firstRowY);
+            drawCharacters(kMiddleLetters, secondRowY);
+            if (button({backX, secondRowY, keyWidth, rowHeight}, "<-"))
                 eraseLast();
-            drawCharacters(kBottomSymbols, static_cast<int16_t>(firstRowY + (rowHeight + gap) * 3));
-        } else {
-            drawCharacters(kNumbers, firstRowY);
-            drawCharacters(kTopLetters, static_cast<int16_t>(firstRowY + rowHeight + gap));
-            drawCharacters(kMiddleLetters, static_cast<int16_t>(firstRowY + (rowHeight + gap) * 2));
-            const int16_t backX = static_cast<int16_t>(rect.x + 9 * (keyWidth + gap));
-            if (button({backX, static_cast<int16_t>(firstRowY + (rowHeight + gap) * 2), keyWidth, rowHeight}, "<"))
-                eraseLast();
-
-            const int16_t bottomY = static_cast<int16_t>(firstRowY + (rowHeight + gap) * 3);
-            if (button({rect.x, bottomY, keyWidth, rowHeight}, shifted ? "a" : "A"))
+            if (button({rect.x, thirdRowY, keyWidth, rowHeight}, state.shifted ? "a" : "A"))
                 state.shifted = !state.shifted;
-            drawCharacters(kBottomLetters, bottomY, 1);
-            if (button({static_cast<int16_t>(rect.x + 8 * (keyWidth + gap)), bottomY, keyWidth, rowHeight}, "-"))
+            drawCharacters(kBottomLetters, thirdRowY, 1);
+            if (button({static_cast<int16_t>(rect.x + 8 * (keyWidth + gap)), thirdRowY, keyWidth, rowHeight}, "-"))
                 append("-");
-            if (button({static_cast<int16_t>(rect.x + 9 * (keyWidth + gap)), bottomY, keyWidth, rowHeight}, "'"))
+            if (button({backX, thirdRowY, keyWidth, rowHeight}, "'"))
                 append("'");
+            break;
+        case KeyboardMode::Numbers:
+            drawCharacters(kNumbers, firstRowY);
+            drawCharacters(kNumberSymbols, secondRowY);
+            if (button({backX, secondRowY, keyWidth, rowHeight}, "<-"))
+                eraseLast();
+            drawCharacters(kNumberExtras, thirdRowY);
+            break;
+        case KeyboardMode::Symbols:
+            drawCharacters(kTopSymbols, firstRowY);
+            drawCharacters(kMiddleSymbols, secondRowY);
+            if (button({backX, secondRowY, keyWidth, rowHeight}, "<-"))
+                eraseLast();
+            drawCharacters(kBottomSymbols, thirdRowY);
+            break;
         }
 
-        const int16_t controlsY = static_cast<int16_t>(firstRowY + (rowHeight + gap) * 4);
-        const int16_t controlWidth = std::max<int16_t>(1, static_cast<int16_t>((rect.w - gap * 5) / 6));
-        if (button({rect.x, controlsY, controlWidth, rowHeight}, symbols ? "ABC" : "123"))
-            state.symbols = !state.symbols;
-        if (button({static_cast<int16_t>(rect.x + controlWidth + gap), controlsY, controlWidth, rowHeight}, "."))
-            append(".");
-        if (button({static_cast<int16_t>(rect.x + (controlWidth + gap) * 2), controlsY, controlWidth, rowHeight}, "_"))
-            append("_");
-        if (button({static_cast<int16_t>(rect.x + (controlWidth + gap) * 3), controlsY, controlWidth, rowHeight},
-                   text(UiText::Space)))
+        const int16_t controlsY = static_cast<int16_t>(thirdRowY + rowHeight + gap);
+        const int16_t controlWidth = std::max<int16_t>(1, static_cast<int16_t>((rect.w - gap * 6) / 7));
+        ui::Row controls{{rect.x, controlsY, rect.w, rowHeight}, gap};
+        if (tab(controls.next(controlWidth), "ABC", state.mode == KeyboardMode::Letters)) {
+            state.mode = KeyboardMode::Letters;
+            state.shifted = false;
+        }
+        if (tab(controls.next(controlWidth), "123", state.mode == KeyboardMode::Numbers)) {
+            state.mode = KeyboardMode::Numbers;
+            state.shifted = false;
+        }
+        if (tab(controls.next(controlWidth), "#+=", state.mode == KeyboardMode::Symbols)) {
+            state.mode = KeyboardMode::Symbols;
+            state.shifted = false;
+        }
+        if (button(controls.next(static_cast<int16_t>(controlWidth * 2 + gap)), text(UiText::Space)))
             append(" ");
-        const bool cancel = button(
-            {static_cast<int16_t>(rect.x + (controlWidth + gap) * 4), controlsY, controlWidth, rowHeight}, "X");
-        const bool submit = button(
-            {static_cast<int16_t>(rect.x + (controlWidth + gap) * 5), controlsY, controlWidth, rowHeight}, "OK");
+        const bool cancel = button(controls.next(controlWidth), "X");
+        const bool submit = button(controls.next(controlWidth), "OK");
         return submit ? KeyboardAction::Submit : cancel ? KeyboardAction::Cancel : KeyboardAction::None;
     }
 

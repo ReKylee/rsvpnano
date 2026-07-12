@@ -1450,17 +1450,6 @@ Polish = "Minutnik skupienia"
 Russian = "Таймер фокуса"
 
 [[strings]]
-key = "NewTimer"
-context = "Action creating a focus timer and its initial name."
-English = "New timer"
-Spanish = "Nuevo temporizador"
-French = "Nouveau minuteur"
-German = "Neuer Timer"
-Romanian = "Temporizator nou"
-Polish = "Nowy minutnik"
-Russian = "Новый таймер"
-
-[[strings]]
 key = "TimerName"
 context = "Label for a custom focus timer name."
 English = "Timer name"
@@ -1547,28 +1536,6 @@ German = "Löschen bestätigen"
 Romanian = "Confirmă ștergerea"
 Polish = "Potwierdź usunięcie"
 Russian = "Подтвердить удаление"
-
-[[strings]]
-key = "Previous"
-context = "Action showing the previous page."
-English = "Previous"
-Spanish = "Anterior"
-French = "Précédent"
-German = "Zurück"
-Romanian = "Anterior"
-Polish = "Poprzednia"
-Russian = "Назад"
-
-[[strings]]
-key = "Next"
-context = "Action showing the next page."
-English = "Next"
-Spanish = "Siguiente"
-French = "Suivant"
-German = "Weiter"
-Romanian = "Următor"
-Polish = "Następna"
-Russian = "Далее"
 
 [[strings]]
 key = "Break"

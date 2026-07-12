@@ -161,7 +161,6 @@ namespace screens {
         focus::Session session_;
         focus::OrientationReader orientation_;
         ui::KeyboardState keyboard_;
-        size_t page_ = 0;
         size_t editIndex_ = 0;
         size_t activeIndex_ = 0;
         bool creating_ = false;

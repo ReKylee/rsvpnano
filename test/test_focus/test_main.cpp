@@ -33,6 +33,8 @@ void test_focus_config_round_trip_and_validation() {
     TEST_ASSERT_FALSE(focus::parse("version=1\n[[timer]]\nname=\"Bad\"\nname=\"Again\"\nfocus_minutes=25\nbreak_minutes=5\nrounds=4\n", parsed));
     TEST_ASSERT_FALSE(focus::parse("version=1\n[[timer]]\nname=\"Bad\"\nfocus_minutes=181\nbreak_minutes=5\nrounds=4\n", parsed));
     TEST_ASSERT_FALSE(focus::parse("version=1\n[[timer]]\nname=\"Bad\"\nfocus_minutes=25\nbreak_minutes=5\nrounds=4\ncolor=red\n", parsed));
+    TEST_ASSERT_TRUE(focus::valid({.name = "12345678901234"}));
+    TEST_ASSERT_FALSE(focus::valid({.name = "123456789012345"}));
 
     focus::Timers full;
     full.count = focus::kMaxTimers;

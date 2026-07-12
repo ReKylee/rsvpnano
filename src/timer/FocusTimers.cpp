@@ -102,7 +102,7 @@ namespace focus {
     } // namespace
 
     bool valid(const Timer& timer) {
-        return !timer.name.empty() && timer.name.size() <= 32 && validUtf8(timer.name)
+        return !timer.name.empty() && timer.name.size() <= kMaxTimerNameBytes && validUtf8(timer.name)
             && timer.focusMinutes >= 1 && timer.focusMinutes <= 180
             && timer.breakMinutes >= 1 && timer.breakMinutes <= 60 && timer.rounds >= 1 && timer.rounds <= 12;
     }

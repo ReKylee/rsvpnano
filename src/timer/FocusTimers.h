@@ -8,7 +8,8 @@
 
 namespace focus {
 
-    constexpr size_t kMaxTimers = 8;
+    constexpr size_t kMaxTimers = 6;
+    constexpr size_t kMaxTimerNameBytes = 14;
 
     struct Timer {
         std::string name;

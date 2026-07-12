@@ -396,13 +396,14 @@ RSS checks can continue in the background, while installable firmware updates st
 
 ### Focus Timer
 
-The Focus Timer provides up to eight custom Pomodoro routines. Each routine has its own name,
+The Focus Timer provides up to six custom Pomodoro routines. Each routine has its own name,
 focus duration, break duration, and round count. The defaults are stored in
-`/config/focus.conf` on the SD card, where they can also be edited as text.
+`/config/focus.conf` on the SD card, where they can also be edited as text. Timer names are limited
+to 14 UTF-8 bytes (14 ASCII characters) so they fit above the hourglass.
 
 1. Swipe up from the bottom edge.
 2. Choose `Focus Timer`.
-3. Start an existing timer, or use Add/Edit to customize one.
+3. Tap a timer to start it, hold it to edit, or use Add to create one.
 4. Stand the device on either short end to begin focusing.
 5. When a phase finishes, flip it 180 degrees to start the next phase.
 6. Lay the device flat to pause, then return it to the same end to resume.

@@ -7,12 +7,6 @@
 #include "timer/FocusTimerStorage.h"
 
 namespace screens {
-    namespace {
-
-        constexpr size_t kTimersPerPage = 4;
-
-    } // namespace
-
     void FocusScreen::begin(fs::FS* filesystem) {
         filesystem_ = filesystem;
         timers_.items[0] = focus::defaultTimer();
@@ -65,51 +59,128 @@ namespace screens {
     void FocusScreen::drawTimers(ui::Context& ui, Screen& screen) {
         detail::navigation(ui, Screen::FocusTimers, screen);
         const ui::Rect content = detail::tabContent(ui);
-        const size_t pageCount = (timers_.count + kTimersPerPage - 1) / kTimersPerPage;
-        page_ = std::min(page_, pageCount - 1);
-        constexpr int16_t gap = 6;
-        const int16_t cellWidth = static_cast<int16_t>((content.w - gap) / 2);
-        const size_t first = page_ * kTimersPerPage;
-        const size_t end = std::min(timers_.count, first + kTimersPerPage);
-        for (size_t index = first; index < end; ++index) {
-            const size_t local = index - first;
-            const int16_t x = static_cast<int16_t>(content.x + (local % 2) * (cellWidth + gap));
-            const int16_t y = static_cast<int16_t>(content.y + (local / 2) * 58);
-            const ui::Rect cell{x, y, cellWidth, 52};
-            const int16_t editWidth = 38;
+        constexpr int16_t columns = 3;
+        constexpr int16_t rows = 2;
+        constexpr int16_t rowGap = 8;
+        const int16_t cellWidth = static_cast<int16_t>(content.w / columns);
+        const int16_t cellHeight = static_cast<int16_t>((content.h - rowGap) / rows);
+        const size_t visibleCount = timers_.count + (timers_.count < focus::kMaxTimers ? 1 : 0);
+
+        uint32_t state = static_cast<uint32_t>(timers_.count);
+        state = ui::Context::combine(state, writable_);
+        state = ui::Context::combine(state, orientation_.available());
+        for (size_t index = 0; index < timers_.count; ++index) {
             const focus::Timer& timer = timers_.items[index];
-            char focusTime[8];
-            char details[16];
-            std::snprintf(focusTime, sizeof(focusTime), "%um", static_cast<unsigned int>(timer.focusMinutes));
-            std::snprintf(details, sizeof(details), "%um · %ux", static_cast<unsigned int>(timer.breakMinutes),
-                          static_cast<unsigned int>(timer.rounds));
-            if (ui.button({cell.x, cell.y, static_cast<int16_t>(cell.w - editWidth - 4), cell.h}, timer.name,
-                          orientation_.available(), ui::Icon::None, 1, focusTime, details)) {
+            state = ui::Context::signature(timer.name, state);
+            state = ui::Context::combine(state, timer.focusMinutes);
+            state = ui::Context::combine(state, timer.breakMinutes);
+            state = ui::Context::combine(state, timer.rounds);
+        }
+        const bool redraw = ui.redraw(content, state);
+
+        for (size_t index = 0; index < visibleCount; ++index) {
+            const ui::Rect cell{static_cast<int16_t>(content.x + (index % columns) * cellWidth),
+                                static_cast<int16_t>(content.y + (index / columns) * (cellHeight + rowGap)),
+                                cellWidth, cellHeight};
+
+            if (index == timers_.count) {
+                if (redraw) {
+                    const uint16_t ink = ui.color(writable_ ? ui::themes::ColorRole::Accent
+                                                            : ui::themes::ColorRole::Muted);
+                    const int16_t centerX = static_cast<int16_t>(cell.x + cell.w / 2);
+                    const int16_t centerY = static_cast<int16_t>(cell.y + cell.h / 2);
+                    ui.gfx().drawCircle(centerX, centerY, 21, ink);
+                    ui.gfx().fillRect(static_cast<int16_t>(centerX - 1), static_cast<int16_t>(centerY - 8), 3, 17,
+                                      ink);
+                    ui.gfx().fillRect(static_cast<int16_t>(centerX - 8), static_cast<int16_t>(centerY - 1), 17, 3,
+                                      ink);
+                }
+                if (ui.tap(cell, writable_)) {
+                    edit(timers_.count, true, screen);
+                }
+                continue;
+            }
+
+            const focus::Timer& timer = timers_.items[index];
+            if (redraw) {
+                const uint16_t ink = ui.color(orientation_.available() ? ui::themes::ColorRole::Foreground
+                                                                       : ui::themes::ColorRole::Muted);
+                const uint16_t outline = ui.color(ui::themes::ColorRole::Outline);
+                constexpr int16_t glassWidth = 52;
+                constexpr int16_t roundsWidth = 36;
+                constexpr int16_t groupGap = 4;
+                constexpr int16_t visualHeight = 70;
+                constexpr int16_t chamberHeight = 18;
+                constexpr int16_t taperHeight = 8;
+                constexpr int16_t baseOverhang = 5;
+                constexpr int16_t baseHeight = 2;
+                constexpr int16_t textLift = 2;
+                const int16_t visualTop = static_cast<int16_t>(cell.y + (cell.h - visualHeight) / 2);
+                const int16_t centerX = static_cast<int16_t>(cell.x + cell.w / 2);
+                const int16_t left = static_cast<int16_t>(centerX - glassWidth / 2);
+                const int16_t right = static_cast<int16_t>(left + glassWidth - 1);
+                const int16_t top = static_cast<int16_t>(visualTop + 18);
+                const int16_t topRectBottom = static_cast<int16_t>(top + chamberHeight);
+                const int16_t waist = static_cast<int16_t>(topRectBottom + taperHeight);
+                const int16_t bottomRectTop = static_cast<int16_t>(waist + taperHeight);
+                const uint16_t focusSand = ui.blend(ui::themes::ColorRole::Accent, 64);
+                const uint16_t breakSand = ui.blend(ui::themes::ColorRole::BreakAccent, 64);
+                const uint16_t base = ui.color(ui::themes::ColorRole::SurfaceActive);
+                const int16_t titleWidth = static_cast<int16_t>(cell.w - 4);
+                const uint8_t titleSize = timer.name.size() * 12 <= static_cast<size_t>(titleWidth) ? 2 : 1;
+                ui.drawText({static_cast<int16_t>(cell.x + 2), static_cast<int16_t>(visualTop - textLift),
+                             titleWidth, 16},
+                            timer.name, titleSize, ink, ui::TextAlign::Center);
+                ui.gfx().fillRect(left, top, glassWidth, chamberHeight, focusSand);
+                ui.gfx().fillTriangle(left, topRectBottom, right, topRectBottom, centerX, waist, focusSand);
+                ui.gfx().fillTriangle(centerX, waist, left, bottomRectTop, right, bottomRectTop, breakSand);
+                ui.gfx().fillRect(left, bottomRectTop, glassWidth, chamberHeight, breakSand);
+                ui.gfx().fillRect(static_cast<int16_t>(left - baseOverhang), static_cast<int16_t>(top - baseHeight),
+                                  static_cast<int16_t>(glassWidth + baseOverhang * 2), baseHeight, base);
+                ui.gfx().fillRect(static_cast<int16_t>(left - baseOverhang),
+                                  static_cast<int16_t>(bottomRectTop + chamberHeight),
+                                  static_cast<int16_t>(glassWidth + baseOverhang * 2), baseHeight, base);
+                ui.gfx().drawFastHLine(left, top, glassWidth, outline);
+                ui.gfx().drawFastVLine(left, top, chamberHeight, outline);
+                ui.gfx().drawFastVLine(right, top, chamberHeight, outline);
+                ui.gfx().drawLine(left, topRectBottom, centerX, waist, outline);
+                ui.gfx().drawLine(right, topRectBottom, centerX, waist, outline);
+                ui.gfx().drawLine(centerX, waist, left, bottomRectTop, outline);
+                ui.gfx().drawLine(centerX, waist, right, bottomRectTop, outline);
+                ui.gfx().drawFastVLine(left, bottomRectTop, chamberHeight, outline);
+                ui.gfx().drawFastVLine(right, bottomRectTop, chamberHeight, outline);
+                ui.gfx().drawFastHLine(left, static_cast<int16_t>(bottomRectTop + chamberHeight - 1), glassWidth,
+                                       outline);
+                char focusTime[8];
+                char breakTime[8];
+                char rounds[8];
+                std::snprintf(focusTime, sizeof(focusTime), "%um", static_cast<unsigned int>(timer.focusMinutes));
+                std::snprintf(breakTime, sizeof(breakTime), "%um", static_cast<unsigned int>(timer.breakMinutes));
+                std::snprintf(rounds, sizeof(rounds), "x%u", static_cast<unsigned int>(timer.rounds));
+                ui.drawText({left, static_cast<int16_t>(top - textLift), glassWidth, chamberHeight}, focusTime, 2, ink,
+                            ui::TextAlign::Center);
+                ui.drawText({left, static_cast<int16_t>(bottomRectTop - textLift), glassWidth, chamberHeight},
+                            breakTime, 2, ink, ui::TextAlign::Center);
+                ui.drawText({static_cast<int16_t>(right + groupGap),
+                             static_cast<int16_t>(bottomRectTop - textLift), roundsWidth, chamberHeight},
+                            rounds, 2, ink, ui::TextAlign::Center);
+            }
+
+            const bool tapped = ui.tap(cell, orientation_.available());
+            const ui::Touch* touch = ui.touch();
+            const bool held = writable_ && touch != nullptr && ui::hasTouch(*touch, ui::TouchHold)
+                           && ui::contains(cell, touch->x, touch->y);
+            if (held) {
+                edit(index, false, screen);
+            } else if (tapped) {
                 activeIndex_ = index;
                 session_.begin(timer);
                 screen = Screen::FocusSession;
             }
-            if (ui.button({static_cast<int16_t>(cell.x + cell.w - editWidth), cell.y, editWidth, cell.h}, "", writable_,
-                          ui::Icon::Edit)) {
-                edit(index, false, screen);
-            }
         }
 
-        const int16_t controlsY = static_cast<int16_t>(content.y + content.h - 38);
-        const int16_t controlWidth = static_cast<int16_t>((content.w - gap * 2) / 3);
-        ui::Row controls{{content.x, controlsY, content.w, 38}, gap};
-        if (ui.button(controls.next(controlWidth), ui.text(UiText::Previous), page_ > 0))
-            --page_;
-        if (ui.button(controls.next(controlWidth), ui.text(UiText::Add), writable_ && timers_.count < focus::kMaxTimers)) {
-            edit(timers_.count, true, screen);
-            draft_.name = ui.text(UiText::NewTimer);
-        }
-        if (ui.button(controls.next(controlWidth), ui.text(UiText::Next), page_ + 1 < pageCount))
-            ++page_;
-
-        if (!orientation_.available())
-            ui.label({content.x, static_cast<int16_t>(controlsY - 8), content.w, 8}, ui.text(UiText::ImuUnavailable),
-                     1, ui::themes::ColorRole::Muted, ui::TextAlign::Center);
+        if (redraw)
+            ui.markDirty(content);
     }
 
     void FocusScreen::drawEditor(ui::Context& ui, Screen& screen) {
@@ -151,7 +222,6 @@ namespace screens {
                     ++updated.count;
                 if (persist(updated)) {
                     timers_ = std::move(updated);
-                    page_ = editIndex_ / kTimersPerPage;
                     screen = Screen::FocusTimers;
                 }
             }
@@ -167,7 +237,6 @@ namespace screens {
                 --updated.count;
                 if (persist(updated)) {
                     timers_ = std::move(updated);
-                    page_ = std::min(page_, (timers_.count - 1) / kTimersPerPage);
                     deleteConfirm_ = false;
                     screen = Screen::FocusTimers;
                 }
@@ -181,7 +250,7 @@ namespace screens {
                  ui::themes::ColorRole::Foreground, ui::TextAlign::Center);
         const ui::KeyboardAction action =
             ui.keyboard({content.x, static_cast<int16_t>(content.y + 24), content.w,
-                         static_cast<int16_t>(content.h - 24)}, draft_.name, 32, keyboard_);
+                         static_cast<int16_t>(content.h - 24)}, draft_.name, focus::kMaxTimerNameBytes, keyboard_);
         if (action == ui::KeyboardAction::Cancel || action == ui::KeyboardAction::Submit)
             screen = Screen::FocusEditor;
     }
@@ -219,6 +288,8 @@ namespace screens {
         editIndex_ = index;
         creating_ = creating;
         draft_ = creating ? focus::defaultTimer() : timers_.items[index];
+        if (creating)
+            draft_.name.clear();
         deleteConfirm_ = false;
         keyboard_ = {};
         screen = Screen::FocusEditor;

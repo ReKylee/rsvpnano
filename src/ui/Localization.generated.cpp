@@ -11,7 +11,7 @@ constexpr size_t kLanguageCount = static_cast<size_t>(UiLanguage::Count);
 constexpr size_t kTextCount = static_cast<size_t>(UiText::Count);
 constexpr size_t kDefaultLanguageIndex = 0;
 static_assert(kLanguageCount == 7, "UiLanguage count mismatch");
-static_assert(kTextCount == 163, "UiText count mismatch");
+static_assert(kTextCount == 164, "UiText count mismatch");
 
 constexpr std::array<std::string_view, kLanguageCount> kLanguageNames = {{
 	/* English  */ "English",
@@ -190,6 +190,7 @@ constexpr TextTable kTexts = {{
 		/* Connecting               */ "Connecting",
 		/* ConnectionFailed         */ "Connection failed",
 		/* Space                    */ "Space",
+		/* Clear                    */ "Clear",
 		/* Show                     */ "Show",
 		/* Hide                     */ "Hide",
 	}},
@@ -356,6 +357,7 @@ constexpr TextTable kTexts = {{
 		/* Connecting               */ "Conectando",
 		/* ConnectionFailed         */ "Error de conexi\u00F3n",
 		/* Space                    */ "Espacio",
+		/* Clear                    */ "Borrar",
 		/* Show                     */ "Ver",
 		/* Hide                     */ "Ocultar",
 	}},
@@ -522,6 +524,7 @@ constexpr TextTable kTexts = {{
 		/* Connecting               */ "Connexion",
 		/* ConnectionFailed         */ "\u00C9chec de la connexion",
 		/* Space                    */ "Espace",
+		/* Clear                    */ "Effacer",
 		/* Show                     */ "Voir",
 		/* Hide                     */ "Masquer",
 	}},
@@ -688,6 +691,7 @@ constexpr TextTable kTexts = {{
 		/* Connecting               */ "Verbindung wird hergestellt",
 		/* ConnectionFailed         */ "Verbindung fehlgeschlagen",
 		/* Space                    */ "Leer",
+		/* Clear                    */ "Leeren",
 		/* Show                     */ "Zeigen",
 		/* Hide                     */ "Aus",
 	}},
@@ -854,6 +858,7 @@ constexpr TextTable kTexts = {{
 		/* Connecting               */ "Se conecteaz\u0103",
 		/* ConnectionFailed         */ "Conexiunea a e\u0219uat",
 		/* Space                    */ "Spa\u021Biu",
+		/* Clear                    */ "\u0218terge",
 		/* Show                     */ "Arat\u0103",
 		/* Hide                     */ "Ascunde",
 	}},
@@ -1020,6 +1025,7 @@ constexpr TextTable kTexts = {{
 		/* Connecting               */ "\u0141\u0105czenie",
 		/* ConnectionFailed         */ "Po\u0142\u0105czenie nie powiod\u0142o si\u0119",
 		/* Space                    */ "Spacja",
+		/* Clear                    */ "Wyczy\u015B\u0107",
 		/* Show                     */ "Poka\u017C",
 		/* Hide                     */ "Ukryj",
 	}},
@@ -1186,6 +1192,7 @@ constexpr TextTable kTexts = {{
 		/* Connecting               */ "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435",
 		/* ConnectionFailed         */ "\u041E\u0448\u0438\u0431\u043A\u0430 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F",
 		/* Space                    */ "\u041F\u0440\u043E\u0431\u0435\u043B",
+		/* Clear                    */ "\u041E\u0447\u0438\u0441\u0442\u0438\u0442\u044C",
 		/* Show                     */ "\u041F\u043E\u043A\u0430\u0437",
 		/* Hide                     */ "\u0421\u043A\u0440\u044B\u0442\u044C",
 	}},

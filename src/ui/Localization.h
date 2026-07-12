@@ -178,6 +178,7 @@ enum class UiText : uint8_t {
 	Connecting,
 	ConnectionFailed,
 	Space,
+	Clear,
 	Show,
 	Hide,
 	Count,

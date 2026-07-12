@@ -124,23 +124,18 @@ namespace ui {
         }
 
         const int16_t controlsY = static_cast<int16_t>(thirdRowY + rowHeight + gap);
-        const int16_t controlWidth = std::max<int16_t>(1, static_cast<int16_t>((rect.w - gap * 6) / 7));
+        const int16_t controlWidth = std::max<int16_t>(1, static_cast<int16_t>((rect.w - gap * 4) / 5));
         ui::Row controls{{rect.x, controlsY, rect.w, rowHeight}, gap};
-        if (tab(controls.next(controlWidth), "ABC", state.mode == KeyboardMode::Letters)) {
-            state.mode = KeyboardMode::Letters;
+        constexpr std::array<std::string_view, 3> modeLabels = {"ABC", "123", "#+="};
+        if (button(controls.next(controlWidth), modeLabels[static_cast<uint8_t>(state.mode)])) {
+            state.mode = static_cast<KeyboardMode>((static_cast<uint8_t>(state.mode) + 1U) % modeLabels.size());
             state.shifted = false;
         }
-        if (tab(controls.next(controlWidth), "123", state.mode == KeyboardMode::Numbers)) {
-            state.mode = KeyboardMode::Numbers;
-            state.shifted = false;
-        }
-        if (tab(controls.next(controlWidth), "#+=", state.mode == KeyboardMode::Symbols)) {
-            state.mode = KeyboardMode::Symbols;
-            state.shifted = false;
-        }
-        if (button(controls.next(static_cast<int16_t>(controlWidth * 2 + gap)), text(UiText::Space)))
+        if (button(controls.next(controlWidth), text(UiText::Space)))
             append(" ");
-        const bool cancel = button(controls.next(controlWidth), "X");
+        if (button(controls.next(controlWidth), text(UiText::Clear)))
+            value.clear();
+        const bool cancel = button(controls.next(controlWidth), text(UiText::Back));
         const bool submit = button(controls.next(controlWidth), "OK");
         return submit ? KeyboardAction::Submit : cancel ? KeyboardAction::Cancel : KeyboardAction::None;
     }

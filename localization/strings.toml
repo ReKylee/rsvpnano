@@ -1848,6 +1848,17 @@ Polish = "Spacja"
 Russian = "Пробел"
 
 [[strings]]
+key = "Clear"
+context = "Action clearing all text in the embedded keyboard."
+English = "Clear"
+Spanish = "Borrar"
+French = "Effacer"
+German = "Leeren"
+Romanian = "Șterge"
+Polish = "Wyczyść"
+Russian = "Очистить"
+
+[[strings]]
 key = "Show"
 context = "Short action revealing a masked password."
 English = "Show"

@@ -34,6 +34,7 @@ void App::begin() {
     if (!Board::Display::begin()) {
         Serial.println("[app] display init failed");
     }
+    immediateUi_.setTheme(interfaceScreen_.themes.selected());
     screens::status(immediateUi_, immediateUi_.text(UiText::Ready));
 
     storage_.begin();
@@ -126,7 +127,12 @@ void App::renderScreen(uint32_t nowMs) {
         screens::status(immediateUi_, "USB", usbTransfer_.statusMessage(), immediateUi_.text(UiText::HoldPowerToExit));
         return;
     case screens::Screen::FocusSession:
-        focusScreen_.session(immediateUi_, nowMs);
+        if (focusScreen_.session(immediateUi_, nowMs)) {
+            focusScreen_.timer.abandon();
+            readerScreen_.reader.pause();
+            screen_ = screens::Screen::Reader;
+            renderScreen(nowMs);
+        }
         return;
     case screens::Screen::Standby:
         standbyScreen_.draw(immediateUi_);
@@ -350,15 +356,7 @@ void App::handleTouch(uint32_t nowMs) {
         exitStandby(nowMs);
         return;
     }
-    if (screen_ == screens::Screen::FocusSession && ui::hasTouch(*touch, ui::TouchTap)) {
-        focusScreen_.timer.abandon();
-        readerScreen_.reader.pause();
-        screen_ = screens::Screen::Reader;
-        renderScreen(nowMs);
-        return;
-    }
-    if (sync_.active() || usbTransfer_.active() || screen_ == screens::Screen::Status
-        || screen_ == screens::Screen::FocusSession)
+    if (sync_.active() || usbTransfer_.active() || screen_ == screens::Screen::Status)
         return;
     if (screen_ == screens::Screen::Reader) {
         readerScreen_.handleTouch(immediateUi_, nowMs, prefs_);

@@ -213,10 +213,16 @@ namespace screens {
         } else if (action == ui::KeyboardAction::Submit) {
             if (editField_ == EditField::Owner) {
                 owner = editValue_;
-                settings::save<settings::prefs::OtaOwner>(preferences, owner);
+                if (owner.empty())
+                    preferences.remove(settings::prefs::OtaOwner::key());
+                else
+                    settings::save<settings::prefs::OtaOwner>(preferences, owner);
             } else {
                 tag = editValue_;
-                settings::save<settings::prefs::OtaTag>(preferences, tag);
+                if (tag.empty())
+                    preferences.remove(settings::prefs::OtaTag::key());
+                else
+                    settings::save<settings::prefs::OtaTag>(preferences, tag);
             }
             screen = Screen::NetworkSettings;
         }

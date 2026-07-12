@@ -123,7 +123,7 @@ namespace screens {
         FocusTimer timer;
 
         bool genres(ui::Context& ui, uint32_t nowMs, Screen& screen);
-        void session(ui::Context& ui, uint32_t nowMs);
+        bool session(ui::Context& ui, uint32_t nowMs);
     };
     void status(ui::Context& ui, std::string_view title, std::string_view line1 = {}, std::string_view line2 = {},
                 int progress = -1);

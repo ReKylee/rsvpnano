@@ -26,10 +26,10 @@ namespace screens {
         return false;
     }
 
-    void FocusScreen::session(ui::Context& ui, uint32_t nowMs) {
+    bool FocusScreen::session(ui::Context& ui, uint32_t nowMs) {
         if (!timer.available()) {
             status(ui, ui.text(UiText::FocusTimer), ui.text(UiText::ImuUnavailable));
-            return;
+            return false;
         }
         const uint32_t seconds = timer.remainingMs(nowMs) / 1000UL;
         char time[8];
@@ -46,10 +46,12 @@ namespace screens {
                                                                               : UiText::Reading;
         ui.label({static_cast<int16_t>(area.x + dialSize + 8), area.y, static_cast<int16_t>(area.w - dialSize - 8), 24},
                  ui.text(genre), 2);
-        ui.button({static_cast<int16_t>(area.x + dialSize + 8), static_cast<int16_t>(area.y + 36),
-                   static_cast<int16_t>(area.w - dialSize - 8), 36},
-                  ui.text(UiText::Exit));
+        const bool exit = ui.button({static_cast<int16_t>(area.x + dialSize + 8),
+                                     static_cast<int16_t>(area.y + 36),
+                                     static_cast<int16_t>(area.w - dialSize - 8), 36},
+                                    ui.text(UiText::Exit));
         ui.endFrame();
+        return exit;
     }
 
 } // namespace screens

@@ -129,7 +129,6 @@ enum class UiText : uint8_t {
 	StorageReady,
 	StorageUnavailable,
 	Items,
-	SyncImport,
 	OtaUpdate,
 	StorageEncryption,
 	StorageEncryptionExplanation,

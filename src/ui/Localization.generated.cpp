@@ -11,7 +11,7 @@ constexpr size_t kLanguageCount = static_cast<size_t>(UiLanguage::Count);
 constexpr size_t kTextCount = static_cast<size_t>(UiText::Count);
 constexpr size_t kDefaultLanguageIndex = 0;
 static_assert(kLanguageCount == 7, "UiLanguage count mismatch");
-static_assert(kTextCount == 164, "UiText count mismatch");
+static_assert(kTextCount == 163, "UiText count mismatch");
 
 constexpr std::array<std::string_view, kLanguageCount> kLanguageNames = {{
 	/* English  */ "English",
@@ -141,7 +141,6 @@ constexpr TextTable kTexts = {{
 		/* StorageReady             */ "Storage ready",
 		/* StorageUnavailable       */ "Storage unavailable",
 		/* Items                    */ "items",
-		/* SyncImport               */ "Sync / Import",
 		/* OtaUpdate                */ "OTA update",
 		/* StorageEncryption        */ "Storage encryption",
 		/* StorageEncryptionExplanation */ "Encrypts internal settings (NVS partition) with a key kept only in this device. A copied partition cannot be read elsewhere.",
@@ -308,7 +307,6 @@ constexpr TextTable kTexts = {{
 		/* StorageReady             */ "Almacenamiento listo",
 		/* StorageUnavailable       */ "Almacenamiento no disponible",
 		/* Items                    */ "elementos",
-		/* SyncImport               */ "Sincronizar / Importar",
 		/* OtaUpdate                */ "Actualizaci\u00F3n OTA",
 		/* StorageEncryption        */ "Cifrado del almacenamiento",
 		/* StorageEncryptionExplanation */ "Cifra la partici\u00F3n NVS con una clave guardada solo en este dispositivo. Los datos NVS copiados no se pueden leer en otro lugar.",
@@ -475,7 +473,6 @@ constexpr TextTable kTexts = {{
 		/* StorageReady             */ "Stockage pr\u00EAt",
 		/* StorageUnavailable       */ "Stockage indisponible",
 		/* Items                    */ "\u00E9l\u00E9ments",
-		/* SyncImport               */ "Sync / Importer",
 		/* OtaUpdate                */ "Mise \u00E0 jour OTA",
 		/* StorageEncryption        */ "Chiffrement du stockage",
 		/* StorageEncryptionExplanation */ "Chiffre la partition NVS avec une cl\u00E9 stock\u00E9e uniquement dans cet appareil. Une copie des donn\u00E9es NVS ne peut pas \u00EAtre lue ailleurs.",
@@ -642,7 +639,6 @@ constexpr TextTable kTexts = {{
 		/* StorageReady             */ "Speicher bereit",
 		/* StorageUnavailable       */ "Speicher nicht verf\u00FCgbar",
 		/* Items                    */ "Elemente",
-		/* SyncImport               */ "Sync / Import",
 		/* OtaUpdate                */ "OTA-Update",
 		/* StorageEncryption        */ "Speicherverschl\u00FCsselung",
 		/* StorageEncryptionExplanation */ "Verschl\u00FCsselt die NVS-Partition mit einem Schl\u00FCssel, der nur in diesem Ger\u00E4t liegt. Kopierte NVS-Daten sind anderswo nicht lesbar.",
@@ -809,7 +805,6 @@ constexpr TextTable kTexts = {{
 		/* StorageReady             */ "Stocare preg\u0103tit\u0103",
 		/* StorageUnavailable       */ "Stocare indisponibil\u0103",
 		/* Items                    */ "elemente",
-		/* SyncImport               */ "Sincronizare / Import",
 		/* OtaUpdate                */ "Actualizare OTA",
 		/* StorageEncryption        */ "Criptarea stoc\u0103rii",
 		/* StorageEncryptionExplanation */ "Cripteaz\u0103 parti\u021Bia NVS cu o cheie stocat\u0103 doar \u00EEn acest dispozitiv. Datele NVS copiate nu pot fi citite \u00EEn alt\u0103 parte.",
@@ -976,7 +971,6 @@ constexpr TextTable kTexts = {{
 		/* StorageReady             */ "Pami\u0119\u0107 gotowa",
 		/* StorageUnavailable       */ "Pami\u0119\u0107 niedost\u0119pna",
 		/* Items                    */ "element\u00F3w",
-		/* SyncImport               */ "Synchronizuj / Importuj",
 		/* OtaUpdate                */ "Aktualizacja OTA",
 		/* StorageEncryption        */ "Szyfrowanie pami\u0119ci",
 		/* StorageEncryptionExplanation */ "Szyfruje partycj\u0119 NVS kluczem zapisanym tylko w tym urz\u0105dzeniu. Skopiowanych danych NVS nie mo\u017Cna odczyta\u0107 gdzie indziej.",
@@ -1143,7 +1137,6 @@ constexpr TextTable kTexts = {{
 		/* StorageReady             */ "\u0425\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0435 \u0433\u043E\u0442\u043E\u0432\u043E",
 		/* StorageUnavailable       */ "\u0425\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0435 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E",
 		/* Items                    */ "\u044D\u043B\u0435\u043C\u0435\u043D\u0442\u043E\u0432",
-		/* SyncImport               */ "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F / \u0418\u043C\u043F\u043E\u0440\u0442",
 		/* OtaUpdate                */ "\u041E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 OTA",
 		/* StorageEncryption        */ "\u0428\u0438\u0444\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0445\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0430",
 		/* StorageEncryptionExplanation */ "\u0428\u0438\u0444\u0440\u0443\u0435\u0442 \u0440\u0430\u0437\u0434\u0435\u043B NVS \u043A\u043B\u044E\u0447\u043E\u043C, \u0445\u0440\u0430\u043D\u044F\u0449\u0438\u043C\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E \u0432 \u044D\u0442\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435. \u0421\u043A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u043D\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 NVS \u043D\u0435\u043B\u044C\u0437\u044F \u043F\u0440\u043E\u0447\u0438\u0442\u0430\u0442\u044C \u043D\u0430 \u0434\u0440\u0443\u0433\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435.",

@@ -16,18 +16,18 @@ namespace screens {
         storage += std::to_string(bookCount);
         storage += " ";
         storage += ui.text(UiText::Items);
-        if (ui.button(grid.next(), storage))
-            return Action::StorageStatus;
-        if (ui.button(grid.next(), ui.text(UiText::SyncImport)))
-            screen = Screen::Sync;
-        if (ui.button(grid.next(), ui.text(UiText::OtaUpdate)))
-            screen = Screen::Ota;
+
         std::string encryption{ui.text(UiText::StorageEncryption)};
         encryption += " · ";
         encryption += ui.text(encryptionState == settings::NvsEncryptionState::Enabled ? UiText::On
                             : encryptionState == settings::NvsEncryptionState::Available && storageReady
                                 ? UiText::Off
                                 : UiText::Unavailable);
+
+        if (ui.button(grid.next(), storage))
+            return Action::StorageStatus;
+        if (ui.button(grid.next(), ui.text(UiText::UsbTransfer)))
+            return Action::UsbTransfer;
         const ui::Rect encryptionButton = grid.next();
         if (ui.button(encryptionButton, encryption) && storageReady
             && encryptionState == settings::NvsEncryptionState::Available) {
@@ -40,6 +40,14 @@ namespace screens {
             encryptionAcknowledged = false;
             screen = Screen::StorageEncryption;
         }
+        if (ui.button(grid.next(), ui.text(UiText::CompanionSync))) {
+            screen = Screen::Sync;
+            return Action::CompanionSync;
+        }
+        if (ui.button(grid.next(), ui.text(UiText::RefreshRss)))
+            return Action::RssRefresh;
+        if (ui.button(grid.next(), ui.text(UiText::OtaUpdate)))
+            screen = Screen::Ota;
         return Action::None;
     }
 

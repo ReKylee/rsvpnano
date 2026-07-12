@@ -70,14 +70,18 @@ namespace focus {
         return elapsed >= durationMs_ ? 0 : durationMs_ - elapsed;
     }
 
-    uint8_t Session::progressPercent(uint32_t nowMs) const {
+    uint16_t Session::progressPermille(uint32_t nowMs) const {
+        if (phase_ == Phase::WaitingBreak)
+            return 1000;
+        if (phase_ == Phase::WaitingFocus)
+            return 0;
         const uint32_t total = phase_ == Phase::Focus || phase_ == Phase::PausedFocus ? focusDurationMs_
                              : phase_ == Phase::Break || phase_ == Phase::PausedBreak ? breakDurationMs_
                                                                                      : 0;
         if (total == 0)
-            return phase_ == Phase::Complete ? 100 : 0;
+            return phase_ == Phase::Complete ? 1000 : 0;
         const uint32_t remaining = remainingMs(nowMs);
-        return static_cast<uint8_t>(std::min<uint32_t>(100, ((total - std::min(total, remaining)) * 100U) / total));
+        return static_cast<uint16_t>(static_cast<uint64_t>(total - std::min(total, remaining)) * 1000U / total);
     }
 
     bool Session::consumeCompletionCue() {

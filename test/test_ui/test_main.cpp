@@ -319,24 +319,24 @@ void test_orientation_owns_graphics_touch_and_hourglass_cache() {
     TEST_ASSERT_EQUAL(320, context.height());
 
     context.beginFrame(5);
-    context.hourglass({10, 10, 80, 120}, 25);
+    context.hourglass({10, 10, 80, 120}, 250);
     context.endFrame();
     gfx.writes = 0;
     gRegionFlushes = 0;
     context.beginFrame(5);
-    context.hourglass({10, 10, 80, 120}, 25);
+    context.hourglass({10, 10, 80, 120}, 250);
     context.endFrame();
     TEST_ASSERT_EQUAL(0, gfx.writes);
     TEST_ASSERT_EQUAL(0, gRegionFlushes);
 
     context.beginFrame(5);
-    context.hourglass({10, 10, 80, 120}, 26);
+    context.hourglass({10, 10, 80, 120}, 260);
     context.endFrame();
     TEST_ASSERT_GREATER_THAN(0, gfx.writes);
 
     gfx.horizontalLines = gfx.verticalLines = 0;
     context.beginFrame(5);
-    context.hourglass({10, 10, 120, 80}, 26);
+    context.hourglass({10, 10, 120, 80}, 260);
     context.endFrame();
     TEST_ASSERT_TRUE(gfx.verticalLines > gfx.horizontalLines);
 
@@ -383,15 +383,13 @@ void test_focus_timer_text_does_not_redraw_hourglass() {
     context.setTheme(colors);
 
     context.beginFrame(7);
-    context.label({260, 0, 120, 28}, "25:00", 3, ui::themes::ColorRole::Accent, ui::TextAlign::Center);
-    context.hourglass({8, 30, 624, 112}, 20);
+    context.hourglass({8, 0, 506, 142}, 200, false, false, ui::themes::ColorRole::Accent, false, "25:00");
     context.steps({8, 144, 624, 14}, 1, 4);
     context.endFrame();
 
     gfx.writes = gfx.textWrites = gfx.horizontalLines = gfx.verticalLines = 0;
     context.beginFrame(7);
-    context.label({260, 0, 120, 28}, "24:59", 3, ui::themes::ColorRole::Accent, ui::TextAlign::Center);
-    context.hourglass({8, 30, 624, 112}, 20);
+    context.hourglass({8, 0, 506, 142}, 200, false, false, ui::themes::ColorRole::Accent, false, "24:59");
     context.steps({8, 144, 624, 14}, 1, 4);
     context.endFrame();
     TEST_ASSERT_GREATER_THAN(0, gfx.textWrites);
@@ -399,11 +397,66 @@ void test_focus_timer_text_does_not_redraw_hourglass() {
     TEST_ASSERT_EQUAL(0, gfx.verticalLines);
 
     context.beginFrame(7);
-    context.label({260, 0, 120, 28}, "24:59", 3, ui::themes::ColorRole::Accent, ui::TextAlign::Center);
-    context.hourglass({8, 30, 624, 112}, 20, true);
+    context.hourglass({8, 0, 506, 142}, 200, true, false, ui::themes::ColorRole::Accent, false, "24:59");
     context.steps({8, 144, 624, 14}, 1, 4);
     context.endFrame();
     TEST_ASSERT_GREATER_THAN(0, gfx.verticalLines);
+
+    gfx.writes = gfx.horizontalLines = gfx.verticalLines = 0;
+    context.beginFrame(7);
+    context.hourglass({8, 0, 506, 142}, 200, false, false, ui::themes::ColorRole::BreakAccent, true, "24:59");
+    context.steps({8, 144, 624, 14}, 1, 4, ui::themes::ColorRole::BreakAccent);
+    context.endFrame();
+    TEST_ASSERT_GREATER_THAN(0, gfx.horizontalLines);
+    TEST_ASSERT_GREATER_THAN(0, gfx.verticalLines);
+}
+
+void test_steps_follow_the_long_axis() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx, &flush, &flushRegion);
+    auto colors = theme();
+    context.setTheme(colors);
+
+    context.beginFrame(8);
+    context.steps({8, 8, 40, 156}, 1, 4);
+    context.endFrame();
+
+    TEST_ASSERT_EQUAL(4, gfx.circleWrites);
+    TEST_ASSERT_EQUAL(gfx.firstCircleX, gfx.lastCircleX);
+    TEST_ASSERT_LESS_THAN(gfx.lastCircleY, gfx.firstCircleY);
+}
+
+void test_hourglass_source_follows_glass_and_fallen_sand_settles_at_base() {
+    Arduino_GFX gfx(640, 172);
+    ui::Context context(gfx, &flush, &flushRegion);
+    auto colors = theme();
+    context.setTheme(colors);
+
+    context.beginFrame(9);
+    context.hourglass({52, 8, 536, 156}, 0);
+    context.endFrame();
+
+    TEST_ASSERT_GREATER_THAN(0, gfx.verticalLines);
+    TEST_ASSERT_GREATER_THAN(gfx.firstVerticalHeight, gfx.lastVerticalHeight);
+
+    gfx.verticalLines = 0;
+    gfx.firstVerticalHeight = gfx.secondVerticalHeight = gfx.lastVerticalHeight = 0;
+    context.beginFrame(9);
+    context.hourglass({52, 8, 536, 156}, 1);
+    context.endFrame();
+
+    TEST_ASSERT_GREATER_THAN(100, gfx.lastVerticalHeight);
+
+    gfx.verticalLines = 0;
+    gfx.firstVerticalHeight = gfx.lastVerticalHeight = 0;
+    context.beginFrame(9);
+    context.hourglass({52, 8, 536, 156}, 1000);
+    context.endFrame();
+
+    TEST_ASSERT_GREATER_THAN(0, gfx.verticalLines);
+    TEST_ASSERT_LESS_THAN(566, gfx.maxVerticalX);
+    TEST_ASSERT_EQUAL(gfx.firstVerticalHeight, gfx.secondVerticalHeight);
+    TEST_ASSERT_GREATER_THAN(gfx.lastVerticalHeight, gfx.firstVerticalHeight);
 }
 
 int main(int, char**) {
@@ -419,5 +472,7 @@ int main(int, char**) {
     RUN_TEST(test_keyboard_edits_and_submits);
     RUN_TEST(test_orientation_owns_graphics_touch_and_hourglass_cache);
     RUN_TEST(test_focus_timer_text_does_not_redraw_hourglass);
+    RUN_TEST(test_steps_follow_the_long_axis);
+    RUN_TEST(test_hourglass_source_follows_glass_and_fallen_sand_settles_at_base);
     return UNITY_END();
 }

@@ -20,6 +20,7 @@ namespace focus {
         constexpr uint8_t kResetReg = 0x60;
         constexpr uint8_t kResetResultReg = 0x4D;
         constexpr uint8_t kWhoAmI = 0x05;
+        constexpr uint32_t kSampleIntervalMs = 50;
         constexpr uint32_t kStableMs = 700;
         constexpr float kSideThreshold = 0.78f;
         constexpr float kCrossLimit = 0.42f;
@@ -61,6 +62,7 @@ namespace focus {
             available_ = true;
             candidate_ = stable_ = Orientation::Unknown;
             candidateSinceMs_ = 0;
+            lastSampleMs_ = millis() - kSampleIntervalMs;
             Serial.printf("[focus] IMU ready addr=0x%02X bus=%s\n", address_, Board::Imu::wireName());
             return true;
         }
@@ -71,6 +73,9 @@ namespace focus {
     Orientation OrientationReader::update(uint32_t nowMs) {
         if (!available_)
             return Orientation::Unknown;
+        if (nowMs - lastSampleMs_ < kSampleIntervalMs)
+            return stable_;
+        lastSampleMs_ = nowMs;
         float x = 0;
         float y = 0;
         float z = 0;
@@ -109,6 +114,8 @@ namespace focus {
 
     Orientation OrientationReader::classify(float x, float y, float z) {
         if (std::fabs(z) >= kFlatThreshold && std::fabs(x) <= 0.30f && std::fabs(y) <= 0.30f)
+            return Orientation::Flat;
+        if (std::fabs(y) >= kSideThreshold && std::fabs(x) <= kCrossLimit && std::fabs(z) <= kCrossLimit)
             return Orientation::Flat;
         if (x >= kSideThreshold && std::fabs(y) <= kCrossLimit && std::fabs(z) <= kCrossLimit)
             return Orientation::ShortA;

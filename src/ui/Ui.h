@@ -158,8 +158,9 @@ namespace ui {
         KeyboardAction keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state,
                                 bool masked = false);
         void dial(Rect rect, int value, int minimum, int maximum, std::string_view label = {});
-        void hourglass(Rect rect, uint8_t progress, bool paused = false, bool complete = false,
-                       ui::themes::ColorRole sandRole = ui::themes::ColorRole::Accent);
+        void hourglass(Rect rect, uint16_t progressPermille, bool paused = false, bool complete = false,
+                       ui::themes::ColorRole sandRole = ui::themes::ColorRole::Accent, bool reversed = false,
+                       std::string_view time = {});
         bool redraw(Rect rect, uint32_t signature);
         void markDirty(Rect rect);
         void drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,

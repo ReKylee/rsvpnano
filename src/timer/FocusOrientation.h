@@ -24,6 +24,7 @@ namespace focus {
         Orientation candidate_ = Orientation::Unknown;
         Orientation stable_ = Orientation::Unknown;
         uint32_t candidateSinceMs_ = 0;
+        uint32_t lastSampleMs_ = 0;
     };
 
 } // namespace focus

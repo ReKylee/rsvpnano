@@ -191,15 +191,10 @@ namespace screens {
         const focus::Timer& timer = timers_.items[activeIndex_];
         const focus::Phase phase = session_.phase();
         const bool paused = phase == focus::Phase::PausedFocus || phase == focus::Phase::PausedBreak;
+        const bool reversed = phase == focus::Phase::Break || phase == focus::Phase::PausedBreak;
         const bool focusPhase = phase == focus::Phase::WaitingFocus || phase == focus::Phase::Focus
                              || phase == focus::Phase::PausedFocus;
         const bool complete = phase == focus::Phase::Complete;
-        const bool hasInstruction = phase == focus::Phase::WaitingFocus || phase == focus::Phase::WaitingBreak;
-        const UiText instruction = phase == focus::Phase::WaitingFocus && session_.round() == 1
-                                     ? UiText::FlipToStart
-                                 : phase == focus::Phase::WaitingFocus ? UiText::FlipForFocus
-                                                                       : UiText::FlipForBreak;
-
         uint32_t remaining = session_.remainingMs(nowMs);
         if (phase == focus::Phase::WaitingFocus)
             remaining = static_cast<uint32_t>(timer.focusMinutes) * 60UL * 1000UL;
@@ -211,23 +206,13 @@ namespace screens {
                       static_cast<unsigned long>(seconds % 60UL));
         const ui::themes::ColorRole phaseRole = focusPhase || complete ? ui::themes::ColorRole::Accent
                                                                        : ui::themes::ColorRole::BreakAccent;
-        constexpr int16_t topHeight = 28;
-        constexpr int16_t exitWidth = 54;
-        constexpr int16_t timeWidth = 120;
-        const int16_t timeX = static_cast<int16_t>(area.x + (area.w - timeWidth) / 2);
-        ui.label({area.x, area.y, static_cast<int16_t>(timeX - area.x - 4), topHeight},
-                 hasInstruction ? ui.text(instruction) : std::string_view{}, 1, ui::themes::ColorRole::Muted,
-                 ui::TextAlign::Left, 2);
-        ui.label({timeX, area.y, timeWidth, topHeight}, time, 3, phaseRole, ui::TextAlign::Center);
-        const bool exit = ui.button({static_cast<int16_t>(area.x + area.w - exitWidth), area.y, exitWidth, topHeight},
-                                    ui.text(UiText::Exit));
-
-        const ui::Rect hourglass{area.x, static_cast<int16_t>(area.y + topHeight + 2), area.w,
-                                 static_cast<int16_t>(area.h - topHeight - 18)};
-        ui.hourglass(hourglass, session_.progressPercent(nowMs), paused, complete, phaseRole);
-        ui.steps({area.x, static_cast<int16_t>(area.y + area.h - 14), area.w, 14}, session_.round(), session_.rounds(),
-                 phaseRole);
-        return exit;
+        constexpr int16_t railWidth = 40;
+        constexpr int16_t gap = 4;
+        const ui::Rect hourglass{static_cast<int16_t>(area.x + railWidth + gap), area.y,
+                                 static_cast<int16_t>(area.w - (railWidth + gap) * 2), area.h};
+        ui.steps({area.x, area.y, railWidth, area.h}, session_.round(), session_.rounds(), phaseRole);
+        ui.hourglass(hourglass, session_.progressPermille(nowMs), paused, complete, phaseRole, reversed, time);
+        return ui.button({static_cast<int16_t>(area.x + area.w - railWidth), area.y, railWidth, area.h}, ">>");
     }
 
     void FocusScreen::edit(size_t index, bool creating, Screen& screen) {

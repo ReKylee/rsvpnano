@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 
@@ -41,15 +42,23 @@ public:
         ++writes;
         ++horizontalLines;
     }
-    virtual void drawFastVLine(int16_t, int16_t, int16_t, uint16_t) {
+    virtual void drawFastVLine(int16_t x, int16_t, int16_t height, uint16_t) {
         ++writes;
         ++verticalLines;
+        maxVerticalX = std::max(maxVerticalX, x);
+        if (verticalLines == 1)
+            firstVerticalHeight = height;
+        else if (verticalLines == 2)
+            secondVerticalHeight = height;
+        lastVerticalHeight = height;
     }
-    virtual void drawCircle(int16_t, int16_t, int16_t, uint16_t) {
+    virtual void drawCircle(int16_t x, int16_t y, int16_t, uint16_t) {
         ++writes;
+        recordCircle(x, y);
     }
-    virtual void fillCircle(int16_t, int16_t, int16_t, uint16_t) {
+    virtual void fillCircle(int16_t x, int16_t y, int16_t, uint16_t) {
         ++writes;
+        recordCircle(x, y);
     }
     virtual void drawLine(int16_t, int16_t, int16_t, int16_t, uint16_t) {
         ++writes;
@@ -76,12 +85,30 @@ public:
     int flushes = 0;
     int horizontalLines = 0;
     int verticalLines = 0;
+    int16_t maxVerticalX = 0;
+    int16_t firstVerticalHeight = 0;
+    int16_t secondVerticalHeight = 0;
+    int16_t lastVerticalHeight = 0;
+    int circleWrites = 0;
+    int16_t firstCircleX = 0;
+    int16_t firstCircleY = 0;
+    int16_t lastCircleX = 0;
+    int16_t lastCircleY = 0;
     int16_t cursorX = 0;
     int16_t cursorY = 0;
     uint16_t lastFillColor = 0;
     uint8_t rotation_ = 0;
 
 private:
+    void recordCircle(int16_t x, int16_t y) {
+        if (circleWrites++ == 0) {
+            firstCircleX = x;
+            firstCircleY = y;
+        }
+        lastCircleX = x;
+        lastCircleY = y;
+    }
+
     int16_t width_;
     int16_t height_;
 };

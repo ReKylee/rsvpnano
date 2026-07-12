@@ -61,11 +61,14 @@ void test_focus_session_flip_pause_and_completion() {
 
     session.update(91000, focus::Orientation::ShortA);
     TEST_ASSERT_EQUAL(focus::Phase::WaitingBreak, session.phase());
+    TEST_ASSERT_EQUAL(1000, session.progressPermille(91000));
     TEST_ASSERT_TRUE(session.consumeCompletionCue());
     session.update(92000, focus::Orientation::ShortB);
     TEST_ASSERT_EQUAL(focus::Phase::Break, session.phase());
+    TEST_ASSERT_EQUAL(0, session.progressPermille(92000));
     session.update(152000, focus::Orientation::ShortB);
     TEST_ASSERT_EQUAL(focus::Phase::WaitingFocus, session.phase());
+    TEST_ASSERT_EQUAL(0, session.progressPermille(152000));
     session.update(153000, focus::Orientation::ShortA);
     TEST_ASSERT_EQUAL(focus::Phase::Focus, session.phase());
     session.update(213000, focus::Orientation::ShortA);

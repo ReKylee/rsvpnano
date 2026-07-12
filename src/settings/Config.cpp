@@ -385,6 +385,10 @@ namespace settings {
         dirtyAtMs = millis();
     }
 
+    bool configMirrorReady() {
+        return mirrorEnabled;
+    }
+
     bool reconcile(Preferences& preferences, fs::FS& filesystem) {
         MirroredSettings::Values saved = MirroredSettings::load(preferences);
         MirroredSettings::Values fileValues = saved;

@@ -13,6 +13,7 @@
 #include "fonts/FontCatalog.h"
 #include "reader/ReaderSettings.h"
 #include "reader/ReadingLoop.h"
+#include "settings/NvsSecurity.h"
 #include "standby/ScreensaverTypes.h"
 #include "timer/FocusTimer.h"
 #include "ui/Ui.h"
@@ -34,6 +35,7 @@ namespace screens {
         WifiConnect,
         NetworkEdit,
         Device,
+        StorageEncryption,
         Sync,
         Ota,
         FocusGenres,
@@ -52,6 +54,7 @@ namespace screens {
         RssRefresh,
         UsbTransfer,
         StorageStatus,
+        EnableStorageEncryption,
         OtaCheck,
         OtaInstall,
     };
@@ -114,7 +117,9 @@ namespace screens {
         bool scanFailed_ = false;
         bool connectionFailed_ = false;
     };
-    Action device(ui::Context& ui, bool storageReady, size_t bookCount, Screen& screen);
+    Action device(ui::Context& ui, bool storageReady, size_t bookCount,
+                  settings::NvsEncryptionState encryptionState, Screen& screen);
+    Action storageEncryption(ui::Context& ui, settings::NvsEncryptionState encryptionState, Screen& screen);
     Action sync(ui::Context& ui, Screen& screen);
     Action ota(ui::Context& ui, Screen& screen);
     class FocusScreen {

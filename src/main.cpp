@@ -6,6 +6,7 @@
 #include "benchmark/BenchmarkRunner.h"
 #endif
 #include "board/Board.h"
+#include "settings/NvsSecurity.h"
 
 App app;
 
@@ -19,6 +20,12 @@ void setup() {
         delay(10);
     }
     Board::System::logStartupDiagnostics();
+    if (!settings::initializeNvsEncryption()) {
+        Serial.println("[main] encrypted NVS initialization failed; restarting");
+        delay(1000);
+        ESP.restart();
+        return;
+    }
 #if RSVP_BENCHMARK_MODE
     Serial.println("[main] benchmark setup");
     Benchmark::run();

@@ -188,6 +188,9 @@ You can set Wi-Fi credentials from:
 
 User preferences are mirrored to `/config/settings.conf` on the SD card. Wi-Fi passwords are deliberately excluded
 from that file and remain in device storage; configure or change them through one of the settings interfaces above.
+Hardware-backed NVS encryption is optional under `Device -> Storage encryption`. Enabling it permanently reserves one
+per-device eFuse key block, clears the saved Wi-Fi password, and cannot be undone. It protects NVS against raw flash
+access; without Secure Boot it does not prevent unauthorized firmware from accessing settings while running on the device.
 
 RSS feeds are managed from the web companion or the native app, then checked from the device with
 `Articles -> Update RSS`. New articles are saved into `/books/articles`.

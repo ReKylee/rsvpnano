@@ -11,6 +11,7 @@
 #include "board/BoardSystem.h"
 #include "rss/RssFeedManager.h"
 #include "settings/Config.h"
+#include "settings/NvsSecurity.h"
 #include "settings/PreferenceSpecs.h"
 #include "storage/index/ReadingProgress.h"
 #include "update/OtaUpdater.h"
@@ -207,7 +208,12 @@ void App::renderScreen(uint32_t nowMs) {
         break;
     case screens::Screen::Device:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        action = screens::device(immediateUi_, storage_.mounted(), storage_.bookCount(), screen_);
+        action = screens::device(immediateUi_, storage_.mounted(), storage_.bookCount(), settings::nvsEncryptionState(),
+                                 screen_);
+        break;
+    case screens::Screen::StorageEncryption:
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        action = screens::storageEncryption(immediateUi_, settings::nvsEncryptionState(), screen_);
         break;
     case screens::Screen::Sync:
         if (sync_.active()) {
@@ -272,6 +278,18 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
         renderScreen(nowMs);
         break;
     }
+    case screens::Action::EnableStorageEncryption:
+        screens::status(immediateUi_, immediateUi_.text(UiText::StorageEncryption),
+                        immediateUi_.text(UiText::EnablingEncryption));
+        if (!storage_.mounted()
+            || !settings::enableNvsEncryption(prefs_, Board::Storage::filesystem())) {
+            screens::status(immediateUi_, immediateUi_.text(UiText::StorageEncryption),
+                            immediateUi_.text(UiText::Unavailable));
+            delay(1200);
+            screen_ = screens::Screen::Device;
+            renderScreen(nowMs);
+        }
+        return;
     case screens::Action::OtaCheck:
         runOtaCheck(false);
         return;
@@ -320,7 +338,8 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
             if (screen_ == screens::Screen::Read) {
                 readerScreen_.reader.pause();
                 screen_ = screens::Screen::Reader;
-            } else if (screen_ == screens::Screen::Sync || screen_ == screens::Screen::Ota) {
+            } else if (screen_ == screens::Screen::StorageEncryption || screen_ == screens::Screen::Sync
+                       || screen_ == screens::Screen::Ota) {
                 screen_ = screens::Screen::Device;
             } else if (screen_ == screens::Screen::WifiConnect) {
                 networkScreen_.closeWifi();

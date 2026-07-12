@@ -155,14 +155,15 @@ namespace ui {
     }
 
     void Context::label(Rect rect, std::string_view text, uint8_t textSize, ui::themes::ColorRole role,
-                        TextAlign align) {
+                        TextAlign align, uint8_t textLines) {
         uint32_t state = combine(signature(text), textSize);
         state = combine(state, static_cast<uint8_t>(role));
         state = combine(state, static_cast<uint8_t>(align));
+        state = combine(state, textLines);
         if (!claim(Kind::Label, rect, state).changed) {
             return;
         }
-        drawText(rect, text, textSize, color(role), align);
+        drawText(rect, text, textSize, color(role), align, textLines);
     }
 
     void Context::separator(Rect rect, std::string_view text) {
@@ -221,11 +222,12 @@ namespace ui {
         return tapped(slot, rect);
     }
 
-    bool Context::button(Rect rect, std::string_view text, Icon icon, uint8_t textLines, std::string_view detailLeft,
-                         std::string_view detailRight) {
+    bool Context::button(Rect rect, std::string_view text, bool enabled, Icon icon, uint8_t textLines,
+                         std::string_view detailLeft, std::string_view detailRight) {
         const size_t slot = nextSlot_;
-        const bool activated = tapped(slot, rect);
-        uint32_t state = combine(signature(text), static_cast<uint8_t>(icon));
+        const bool activated = enabled && tapped(slot, rect);
+        uint32_t state = combine(signature(text), enabled);
+        state = combine(state, static_cast<uint8_t>(icon));
         state = combine(state, textLines);
         state = signature(detailLeft, state);
         state = signature(detailRight, state);
@@ -233,8 +235,10 @@ namespace ui {
         if (widget.changed) {
             const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
             gfx_.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
-            gfx_.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
-            if (rect.w > 16 && rect.h >= 28)
+            gfx_.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5,
+                               color(enabled ? ui::themes::ColorRole::Outline
+                                             : ui::themes::ColorRole::ProgressTrack));
+            if (enabled && rect.w > 16 && rect.h >= 28)
                 gfx_.fillRect(static_cast<int16_t>(rect.x + 8), static_cast<int16_t>(rect.y + rect.h - 3),
                               static_cast<int16_t>(rect.w - 16), 2, color(ui::themes::ColorRole::Accent));
             const int16_t iconWidth = icon == Icon::None ? 0 : std::min<int16_t>(34, rect.w / 3);
@@ -242,7 +246,9 @@ namespace ui {
             const int16_t textHeight = hasDetail ? static_cast<int16_t>(rect.h - 18) : rect.h;
             const ui::Rect textRect{static_cast<int16_t>(rect.x + 6), rect.y,
                                     static_cast<int16_t>(std::max<int16_t>(0, rect.w - iconWidth - 12)), textHeight};
-            drawText(textRect, text, 2, color(ui::themes::ColorRole::Foreground), TextAlign::Center, textLines);
+            drawText(textRect, text, 2,
+                     color(enabled ? ui::themes::ColorRole::Foreground : ui::themes::ColorRole::Muted),
+                     TextAlign::Center, textLines);
             if (hasDetail) {
                 const int16_t detailWidth = static_cast<int16_t>((textRect.w - 8) / 2);
                 const int16_t detailY = static_cast<int16_t>(rect.y + rect.h - 20);
@@ -252,7 +258,7 @@ namespace ui {
             }
             if (icon != Icon::None)
                 drawIcon({static_cast<int16_t>(rect.x + rect.w - iconWidth), rect.y, iconWidth, rect.h}, icon,
-                         color(ui::themes::ColorRole::Accent), surface);
+                         color(enabled ? ui::themes::ColorRole::Accent : ui::themes::ColorRole::Muted), surface);
         }
         return activated;
     }

@@ -128,6 +128,28 @@ void test_button_and_slider_consume_touch() {
     TEST_ASSERT_EQUAL(25, committed.value);
 }
 
+void test_disabled_button_ignores_touch() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx, &flush, &flushRegion);
+    auto colors = theme();
+    context.setTheme(colors);
+    enableTouch(context);
+
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button({0, 0, 80, 24}, "Enable", false));
+    context.endFrame();
+    gContact = {true, 20, 10};
+    TEST_ASSERT_TRUE(context.pollTouch(1));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button({0, 0, 80, 24}, "Enable", false));
+    context.endFrame();
+    gContact = {};
+    TEST_ASSERT_TRUE(context.pollTouch(2));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button({0, 0, 80, 24}, "Enable", false));
+    context.endFrame();
+}
+
 void test_layout_cursors_are_deterministic() {
     ui::Column column{{10, 20, 100, 80}, 4};
     TEST_ASSERT_EQUAL_INT16(20, column.next(10).y);
@@ -150,9 +172,9 @@ void test_labels_truncate_to_their_rectangles() {
 
     gfx.textWrites = 0;
     context.beginFrame(2);
-    context.button({0, 0, 72, 40}, "Alpha Beta", ui::Icon::None, 2, "By", "42%");
+    context.button({0, 0, 72, 40}, "Alpha Beta", true, ui::Icon::None, 2, "By", "42%");
     context.endFrame();
-    TEST_ASSERT_EQUAL(14, gfx.textWrites);
+    TEST_ASSERT_EQUAL(13, gfx.textWrites);
 }
 
 void test_labels_align_and_battery_owns_its_drawing() {
@@ -183,7 +205,7 @@ void test_setting_gives_long_values_the_full_card_width() {
     context.beginFrame(1);
     context.setting({0, 0, 120, 34}, "Typeface", "Atkinson Hyperlegible");
     context.endFrame();
-    TEST_ASSERT_EQUAL(27, gfx.textWrites);
+    TEST_ASSERT_EQUAL(28, gfx.textWrites);
 }
 
 void test_keyboard_edits_and_submits() {
@@ -228,6 +250,7 @@ int main(int, char**) {
     RUN_TEST(test_unchanged_widget_does_not_draw_or_flush);
     RUN_TEST(test_changed_and_removed_widgets_redraw);
     RUN_TEST(test_button_and_slider_consume_touch);
+    RUN_TEST(test_disabled_button_ignores_touch);
     RUN_TEST(test_layout_cursors_are_deterministic);
     RUN_TEST(test_labels_truncate_to_their_rectangles);
     RUN_TEST(test_labels_align_and_battery_owns_its_drawing);

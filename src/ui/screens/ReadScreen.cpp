@@ -25,7 +25,7 @@ namespace screens {
         }
         progress[progressLength++] = '%';
         const std::string_view progressText{progress, progressLength};
-        if (ui.button(resume, model.title, ui::Icon::Bookmark, 2, author, progressText)) {
+        if (ui.button(resume, model.title, true, ui::Icon::Bookmark, 2, author, progressText)) {
             return Action::Resume;
         }
 

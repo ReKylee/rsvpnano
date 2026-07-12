@@ -26,7 +26,9 @@ namespace screens::detail {
             screen = Screen::Settings;
         }
         if (ui.tab({0, 106, kRailWidth, 34}, ui.text(UiText::Device),
-                   active == Screen::Device || active == Screen::Sync || active == Screen::Ota, ui::Icon::Device)) {
+                   active == Screen::Device || active == Screen::StorageEncryption || active == Screen::Sync
+                       || active == Screen::Ota,
+                   ui::Icon::Device)) {
             screen = Screen::Device;
         }
         if (ui.tab({0, 140, kRailWidth, static_cast<int16_t>(ui.height() - 140)}, ui.text(UiText::Focus),

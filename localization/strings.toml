@@ -1349,6 +1349,83 @@ Polish = "Aktualizacja OTA"
 Russian = "Обновление OTA"
 
 [[strings]]
+key = "StorageEncryption"
+context = "Device storage encryption setting and confirmation title."
+English = "Storage encryption"
+Spanish = "Cifrado del almacenamiento"
+French = "Chiffrement du stockage"
+German = "Speicherverschlüsselung"
+Romanian = "Criptarea stocării"
+Polish = "Szyfrowanie pamięci"
+Russian = "Шифрование хранилища"
+
+[[strings]]
+key = "StorageEncryptionExplanation"
+context = "Explanation that the NVS partition is encrypted with a device-only key."
+English = "Encrypts internal settings (NVS partition) with a key kept only in this device. A copied partition cannot be read elsewhere."
+Spanish = "Cifra la partición NVS con una clave guardada solo en este dispositivo. Los datos NVS copiados no se pueden leer en otro lugar."
+French = "Chiffre la partition NVS avec une clé stockée uniquement dans cet appareil. Une copie des données NVS ne peut pas être lue ailleurs."
+German = "Verschlüsselt die NVS-Partition mit einem Schlüssel, der nur in diesem Gerät liegt. Kopierte NVS-Daten sind anderswo nicht lesbar."
+Romanian = "Criptează partiția NVS cu o cheie stocată doar în acest dispozitiv. Datele NVS copiate nu pot fi citite în altă parte."
+Polish = "Szyfruje partycję NVS kluczem zapisanym tylko w tym urządzeniu. Skopiowanych danych NVS nie można odczytać gdzie indziej."
+Russian = "Шифрует раздел NVS ключом, хранящимся только в этом устройстве. Скопированные данные NVS нельзя прочитать на другом устройстве."
+
+[[strings]]
+key = "StorageEncryptionPermanent"
+context = "Warning that enabling encryption permanently burns an eFuse and requires encrypted NVS firmware."
+English = "This burns a one-time hardware fuse (eFuse) and cannot be undone. NVS is erased and must stay encrypted; unsupported firmware cannot read it."
+Spanish = "Quema permanentemente un eFuse. NVS se borra y debe seguir cifrado; el firmware incompatible no puede leerlo."
+French = "Grave définitivement un eFuse. La NVS est effacée et doit rester chiffrée ; un firmware incompatible ne peut pas la lire."
+German = "Brennt dauerhaft eine eFuse. NVS wird gelöscht und muss verschlüsselt bleiben; inkompatible Firmware kann es nicht lesen."
+Romanian = "Arde permanent un eFuse. NVS este ștearsă și trebuie să rămână criptată; firmware-ul incompatibil nu o poate citi."
+Polish = "Trwale wypala eFuse. NVS zostaje wymazana i musi pozostać zaszyfrowana; niezgodne oprogramowanie jej nie odczyta."
+Russian = "Навсегда прожигает eFuse. NVS стирается и должна оставаться зашифрованной; несовместимая прошивка её не прочитает."
+
+[[strings]]
+key = "StorageEncryptionReset"
+context = "Warning that SD-backed settings return after restart but the Wi-Fi password must be entered again."
+English = "After restart, settings return from the SD card. The Wi-Fi password is erased and must be entered again."
+Spanish = "Tras reiniciar, los ajustes vuelven desde la tarjeta SD. La contraseña Wi-Fi se borra y debe introducirse de nuevo."
+French = "Après redémarrage, les réglages reviennent depuis la carte SD. Le mot de passe Wi-Fi est effacé et doit être saisi à nouveau."
+German = "Nach dem Neustart kommen die Einstellungen von der SD-Karte zurück. Das WLAN-Passwort wird gelöscht und muss neu eingegeben werden."
+Romanian = "După repornire, setările revin de pe cardul SD. Parola Wi-Fi este ștearsă și trebuie introdusă din nou."
+Polish = "Po ponownym uruchomieniu ustawienia wrócą z karty SD. Hasło Wi-Fi zostanie usunięte i trzeba je wpisać ponownie."
+Russian = "После перезапуска настройки восстановятся с SD-карты. Пароль Wi-Fi будет удалён, и его нужно будет ввести снова."
+
+[[strings]]
+key = "IUnderstand"
+context = "Toggle confirming that the storage encryption explanation was read."
+English = "I understand"
+Spanish = "Lo entiendo"
+French = "J'ai compris"
+German = "Ich verstehe"
+Romanian = "Am înțeles"
+Polish = "Rozumiem"
+Russian = "Я понимаю"
+
+[[strings]]
+key = "EnableProtection"
+context = "Action enabling storage encryption after confirmation."
+English = "Enable protection"
+Spanish = "Activar protección"
+French = "Activer la protection"
+German = "Schutz aktivieren"
+Romanian = "Activează protecția"
+Polish = "Włącz ochronę"
+Russian = "Включить защиту"
+
+[[strings]]
+key = "EnablingEncryption"
+context = "Status shown while hardware-backed storage encryption is being enabled."
+English = "Enabling encryption"
+Spanish = "Activando el cifrado"
+French = "Activation du chiffrement"
+German = "Verschlüsselung wird aktiviert"
+Romanian = "Se activează criptarea"
+Polish = "Włączanie szyfrowania"
+Russian = "Включение шифрования"
+
+[[strings]]
 key = "CompanionSync"
 context = "Action starting companion synchronization."
 English = "Companion sync"

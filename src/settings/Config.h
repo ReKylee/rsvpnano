@@ -11,6 +11,7 @@ namespace fs {
 namespace settings {
 
     void markDirty();
+    bool configMirrorReady();
     bool reconcile(Preferences& preferences, fs::FS& filesystem);
     void update(Preferences& preferences, fs::FS& filesystem, uint32_t nowMs);
     bool flush(Preferences& preferences, fs::FS& filesystem);

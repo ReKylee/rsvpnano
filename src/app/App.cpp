@@ -58,7 +58,8 @@ void App::update(uint32_t nowMs) {
     }
 
     if (screen_ == screens::Screen::Standby) {
-        standbyScreen_.update(immediateUi_, nowMs);
+        if (standbyScreen_.update(immediateUi_, nowMs))
+            deepSleepFromStandby(nowMs);
         return;
     }
 
@@ -443,6 +444,25 @@ void App::exitStandby(uint32_t nowMs) {
     lastActivityMs_ = nowMs;
     screen_ = screens::Screen::Reader;
     renderScreen(nowMs);
+}
+
+void App::deepSleepFromStandby(uint32_t nowMs) {
+    Serial.println("[app] standby timeout reached; entering deep sleep");
+    readerScreen_.book.save(prefs_, readerScreen_.store, readerScreen_.reader, true, nowMs);
+    readerScreen_.book.mirror(readerScreen_.store, readerScreen_.reader);
+    standbyScreen_.reset();
+    if (sync_.active())
+        sync_.end();
+    if (usbTransfer_.active())
+        usbTransfer_.end();
+    Board::Display::sleep();
+    readerScreen_.store.close();
+    storage_.end();
+    Input::end();
+    prefs_.end();
+    Board::System::holdBacklightOffForDeepSleep();
+    Serial.flush();
+    Board::System::deepSleepUntilConfiguredWake();
 }
 
 void App::powerOff(uint32_t nowMs) {

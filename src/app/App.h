@@ -31,6 +31,7 @@ private:
     void runOtaCheck(bool install);
     void enterStandby(uint32_t nowMs);
     void exitStandby(uint32_t nowMs);
+    void deepSleepFromStandby(uint32_t nowMs);
     void powerOff(uint32_t nowMs);
     static void renderStorageStatus(void* context, const char* title, const char* line1, const char* line2,
                                     int progressPercent);

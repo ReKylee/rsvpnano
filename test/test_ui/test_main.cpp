@@ -244,7 +244,7 @@ void test_keyboard_edits_and_submits() {
     context.endFrame();
     TEST_ASSERT_EQUAL_STRING("q", value.c_str());
 
-    gContact = {true, 35, 126};
+    gContact = {true, 15, 126};
     TEST_ASSERT_TRUE(context.pollTouch(3));
     context.beginFrame(3);
     context.keyboard({0, 0, 200, 140}, value, 8, keyboard);

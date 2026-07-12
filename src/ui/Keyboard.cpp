@@ -124,19 +124,24 @@ namespace ui {
         }
 
         const int16_t controlsY = static_cast<int16_t>(thirdRowY + rowHeight + gap);
-        const int16_t controlWidth = std::max<int16_t>(1, static_cast<int16_t>((rect.w - gap * 4) / 5));
+        const int16_t availableWidth = static_cast<int16_t>(rect.w - gap * 4);
+        const int16_t modeWidth = static_cast<int16_t>(availableWidth * 3 / 19);
+        const int16_t spaceWidth = static_cast<int16_t>(availableWidth * 5 / 19);
+        const int16_t clearWidth = static_cast<int16_t>(availableWidth * 3 / 19);
+        const int16_t backWidth = static_cast<int16_t>(availableWidth * 4 / 19);
+        const int16_t okWidth = static_cast<int16_t>(availableWidth - modeWidth - spaceWidth - clearWidth - backWidth);
         ui::Row controls{{rect.x, controlsY, rect.w, rowHeight}, gap};
         constexpr std::array<std::string_view, 3> modeLabels = {"ABC", "123", "#+="};
-        if (button(controls.next(controlWidth), modeLabels[static_cast<uint8_t>(state.mode)])) {
+        if (button(controls.next(modeWidth), modeLabels[static_cast<uint8_t>(state.mode)])) {
             state.mode = static_cast<KeyboardMode>((static_cast<uint8_t>(state.mode) + 1U) % modeLabels.size());
             state.shifted = false;
         }
-        if (button(controls.next(controlWidth), text(UiText::Space)))
+        if (button(controls.next(spaceWidth), text(UiText::Space)))
             append(" ");
-        if (button(controls.next(controlWidth), text(UiText::Clear)))
+        if (button(controls.next(clearWidth), text(UiText::Clear)))
             value.clear();
-        const bool cancel = button(controls.next(controlWidth), text(UiText::Back));
-        const bool submit = button(controls.next(controlWidth), "OK");
+        const bool cancel = button(controls.next(backWidth), text(UiText::Back));
+        const bool submit = button(controls.next(okWidth), "OK");
         return submit ? KeyboardAction::Submit : cancel ? KeyboardAction::Cancel : KeyboardAction::None;
     }
 

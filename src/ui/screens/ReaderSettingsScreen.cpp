@@ -41,7 +41,7 @@ namespace screens {
             config.batteryLabel = settings::cycle<settings::prefs::BatteryLabelMode>(preferences);
         }
 
-        const int16_t visibilityY = static_cast<int16_t>(sectionsY + 83);
+        const int16_t visibilityY = static_cast<int16_t>(sectionsY + 84);
         ui.separator({content.x, visibilityY, content.w, 10}, ui.text(UiText::VisibleWhileReadingSection));
         ui::Grid visibility{{content.x, static_cast<int16_t>(visibilityY + 14), content.w,
                              static_cast<int16_t>(content.h - 107)}, 3, 28, gap};

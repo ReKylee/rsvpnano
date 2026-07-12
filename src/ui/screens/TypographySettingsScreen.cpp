@@ -64,7 +64,7 @@ namespace screens {
         ui.separator({content.x, geometryY, content.w, 10}, ui.text(UiText::GeometrySection));
         ui::Grid geometry{{content.x, static_cast<int16_t>(geometryY + 12), content.w,
                            static_cast<int16_t>(content.y + content.h - geometryY - 12)},
-                          2, 30, 4};
+                          2, 32, 4};
         if (const auto value = ui.slider(geometry.next(), ui.text(UiText::Tracking), config.typography.tracking, -2,
                                          3, 1, " px");
             value.changed) {

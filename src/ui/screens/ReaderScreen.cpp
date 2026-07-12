@@ -112,12 +112,10 @@ namespace screens {
         config.typography.anchor = settings::load<settings::prefs::TypographyAnchor>(preferences);
         config.typography.guideWidth = settings::load<settings::prefs::TypographyGuideWidth>(preferences);
         config.typography.guideGap = settings::load<settings::prefs::TypographyGuideGap>(preferences);
-        config.pauseMode = static_cast<PauseMode>(settings::load<settings::prefs::PauseMode>(preferences));
-        config.footerMetric =
-            static_cast<FooterMetric>(settings::load<settings::prefs::FooterMetricMode>(preferences));
-        config.batteryLabel =
-            static_cast<BatteryLabel>(settings::load<settings::prefs::BatteryLabelMode>(preferences));
-        config.leftHanded = settings::load<settings::prefs::Handedness>(preferences) != 0;
+        config.pauseMode = settings::load<settings::prefs::PauseMode>(preferences);
+        config.footerMetric = settings::load<settings::prefs::FooterMetricMode>(preferences);
+        config.batteryLabel = settings::load<settings::prefs::BatteryLabelMode>(preferences);
+        config.leftHanded = settings::load<settings::prefs::Handedness>(preferences);
         config.batteryVisibleWhileReading = settings::load<settings::prefs::ReaderBatteryVisible>(preferences);
         config.chapterVisibleWhileReading = settings::load<settings::prefs::ReaderChapterVisible>(preferences);
         config.progressVisibleWhileReading = settings::load<settings::prefs::ReaderProgressVisible>(preferences);
@@ -163,8 +161,6 @@ namespace screens {
             book.cache(preferences, store, reader, static_cast<uint32_t>(reader.currentIndex()));
         } else {
             settings::save<settings::prefs::BookPath>(preferences, book.path.c_str());
-            preferences.putUInt(ReadingProgress::wordCountKey(book.path.c_str()).c_str(),
-                                static_cast<uint32_t>(reader.wordCount()));
         }
         return true;
     }
@@ -452,9 +448,8 @@ namespace screens {
             return;
         }
         if (batteryTapped({ui::TouchTap, touch.x, touch.y})) {
-            battery.label = static_cast<BatteryLabel>((static_cast<uint8_t>(battery.label) + 1U) % 3U);
+            battery.label = settings::cycle<settings::prefs::BatteryLabelMode>(preferences);
             session.settings.batteryLabel = battery.label;
-            settings::save<settings::prefs::BatteryLabelMode>(preferences, static_cast<uint8_t>(battery.label));
             lastTapValid_ = false;
             return;
         }
@@ -462,10 +457,7 @@ namespace screens {
         if (touch.y >= static_cast<uint16_t>(std::max<int16_t>(0, gfx_.height() - 40))
             && (session.settings.leftHanded ? touch.x <= footerTapWidth
                                             : touch.x >= static_cast<uint16_t>(gfx_.width() - footerTapWidth))) {
-            session.settings.footerMetric = static_cast<FooterMetric>(
-                (static_cast<uint8_t>(session.settings.footerMetric) + 1U) % 3U);
-            settings::save<settings::prefs::FooterMetricMode>(preferences,
-                                                               static_cast<uint8_t>(session.settings.footerMetric));
+            session.settings.footerMetric = settings::cycle<settings::prefs::FooterMetricMode>(preferences);
             lastTapValid_ = false;
             return;
         }

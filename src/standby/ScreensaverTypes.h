@@ -11,6 +11,7 @@ namespace standby {
         Maze,
         Voronoi,
         ScreenOff,
+        Count,
     };
 
     struct Frame {

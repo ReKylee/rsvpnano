@@ -208,10 +208,9 @@ OtaUpdater::Config OtaUpdater::config(Preferences& preferences) const {
     const std::string owner = settings::load<settings::prefs::OtaOwner>(preferences);
     if (!owner.empty())
         result.githubOwner = owner.c_str();
-    const std::string githubTag =
-        settings::nvs::get(preferences, settings::prefs::OtaTag::key(), std::string{result.githubTag.c_str()});
-    result.githubTag = githubTag.c_str();
-    if (preferences.isKey(settings::prefs::OtaAuto::key()))
+    if (settings::contains<settings::prefs::OtaTag>(preferences))
+        result.githubTag = settings::load<settings::prefs::OtaTag>(preferences).c_str();
+    if (settings::contains<settings::prefs::OtaAuto>(preferences))
         result.autoCheck = settings::load<settings::prefs::OtaAuto>(preferences);
     return result;
 }

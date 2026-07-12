@@ -125,6 +125,55 @@ namespace ReadingProgress {
         return true;
     }
 
+    bool readCachedPosition(Preferences& preferences, const String& bookPath, const BookIdentity& identity,
+                            uint32_t& wordIndex) {
+        if (bookPath.isEmpty() || !isValidIdentity(identity))
+            return false;
+
+        const String savedPositionKey = positionKey(bookPath);
+        if (!settings::nvs::contains(preferences, savedPositionKey.c_str()))
+            return false;
+
+        const String savedCountKey = wordCountKey(bookPath);
+        if (settings::nvs::contains(preferences, savedCountKey.c_str())
+            && settings::nvs::get(preferences, savedCountKey.c_str(), uint32_t{0}) != identity.wordCount)
+            return false;
+
+        const String savedSizeKey = sourceSizeKey(bookPath);
+        const String savedFingerprintKey = sourceFingerprintKey(bookPath);
+        if (settings::nvs::contains(preferences, savedSizeKey.c_str())
+            && settings::nvs::contains(preferences, savedFingerprintKey.c_str())
+            && (settings::nvs::get(preferences, savedSizeKey.c_str(), uint32_t{0}) != identity.sourceSize
+                || settings::nvs::get(preferences, savedFingerprintKey.c_str(), uint32_t{0})
+                       != identity.sourceFingerprint))
+            return false;
+
+        wordIndex = std::min<uint32_t>(settings::nvs::get(preferences, savedPositionKey.c_str(), uint32_t{0}),
+                                       identity.wordCount - 1);
+        return true;
+    }
+
+    void cachePosition(Preferences& preferences, const String& bookPath, const BookIdentity& identity,
+                       uint32_t wordIndex) {
+        if (bookPath.isEmpty() || !isValidIdentity(identity))
+            return;
+        settings::nvs::put(preferences, positionKey(bookPath).c_str(),
+                           std::min<uint32_t>(wordIndex, identity.wordCount - 1));
+        settings::nvs::put(preferences, wordCountKey(bookPath).c_str(), identity.wordCount);
+        settings::nvs::put(preferences, sourceSizeKey(bookPath).c_str(), identity.sourceSize);
+        settings::nvs::put(preferences, sourceFingerprintKey(bookPath).c_str(), identity.sourceFingerprint);
+    }
+
+    uint8_t cachedPercent(Preferences& preferences, const String& bookPath) {
+        const String savedPositionKey = positionKey(bookPath);
+        const String savedCountKey = wordCountKey(bookPath);
+        if (!settings::nvs::contains(preferences, savedPositionKey.c_str())
+            || !settings::nvs::contains(preferences, savedCountKey.c_str()))
+            return 0;
+        return percent(settings::nvs::get(preferences, savedPositionKey.c_str(), uint32_t{0}),
+                       settings::nvs::get(preferences, savedCountKey.c_str(), uint32_t{0}));
+    }
+
     String positionKey(const String& bookPath) {
         return key('p', bookPath);
     }
@@ -168,12 +217,9 @@ namespace ReadingProgress {
         if (wordCount > 0)
             wordIndex = std::min<uint32_t>(wordIndex, static_cast<uint32_t>(wordCount - 1));
         settings::save<settings::prefs::BookPath>(preferences, path.c_str());
-        preferences.putUInt(positionKey(path.c_str()).c_str(), wordIndex);
-        preferences.putUInt(wordCountKey(path.c_str()).c_str(), static_cast<uint32_t>(wordCount));
-        if (store.isOpen()) {
-            preferences.putUInt(sourceSizeKey(path.c_str()).c_str(), store.sourceSize());
-            preferences.putUInt(sourceFingerprintKey(path.c_str()).c_str(), store.sourceFingerprint());
-        }
+        if (store.isOpen())
+            cachePosition(preferences, path.c_str(),
+                          {store.sourceSize(), store.sourceFingerprint(), static_cast<uint32_t>(wordCount)}, wordIndex);
         settings::save<settings::prefs::Wpm>(preferences, reader.wpm());
         lastSavedWordIndex = wordIndex;
     }
@@ -188,22 +234,11 @@ namespace ReadingProgress {
         if (readSessionSidecar(*this, store, reader, wordIndex))
             return wordIndex;
 
-        const String savedPositionKey = positionKey(path.c_str());
-        if (!preferences.isKey(savedPositionKey.c_str()))
+        if (!readCachedPosition(preferences, path.c_str(),
+                                {store.sourceSize(), store.sourceFingerprint(),
+                                 static_cast<uint32_t>(reader.wordCount())},
+                                wordIndex))
             return kNoSavedWordIndex;
-        const String savedCountKey = wordCountKey(path.c_str());
-        if (preferences.isKey(savedCountKey.c_str())
-            && preferences.getUInt(savedCountKey.c_str(), 0) != static_cast<uint32_t>(reader.wordCount())) {
-            return kNoSavedWordIndex;
-        }
-        const String savedSizeKey = sourceSizeKey(path.c_str());
-        const String savedFingerprintKey = sourceFingerprintKey(path.c_str());
-        if (preferences.isKey(savedSizeKey.c_str()) && preferences.isKey(savedFingerprintKey.c_str())
-            && (preferences.getUInt(savedSizeKey.c_str(), 0) != store.sourceSize()
-                || preferences.getUInt(savedFingerprintKey.c_str(), 0) != store.sourceFingerprint())) {
-            return kNoSavedWordIndex;
-        }
-        wordIndex = preferences.getUInt(savedPositionKey.c_str(), 0);
         writeSessionSidecar(*this, store, wordIndex, static_cast<uint32_t>(reader.wordCount()));
         return wordIndex;
     }

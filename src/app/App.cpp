@@ -22,7 +22,7 @@ namespace {
 } // namespace
 
 void App::begin() {
-    prefs_.begin(settings::kPrefsNamespace, false);
+    settings::nvs::begin(prefs_, settings::kPrefsNamespace);
     storage_.setStatusCallback(&App::renderStorageStatus, this);
     Input::begin();
     bootMs_ = millis();
@@ -247,7 +247,7 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
         powerOff(nowMs);
         return;
     case screens::Action::CompanionSync:
-        sync_.begin();
+        sync_.begin(prefs_);
         renderScreen(nowMs);
         return;
     case screens::Action::RssRefresh:
@@ -459,7 +459,7 @@ void App::deepSleepFromStandby(uint32_t nowMs) {
     readerScreen_.store.close();
     storage_.end();
     Input::end();
-    prefs_.end();
+    settings::nvs::end(prefs_);
     Board::System::holdBacklightOffForDeepSleep();
     Serial.flush();
     Board::System::deepSleepUntilConfiguredWake();

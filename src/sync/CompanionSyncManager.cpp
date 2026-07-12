@@ -31,30 +31,7 @@ namespace {
     constexpr size_t kMaxThemeUploadBytes = 4096;
     constexpr size_t kMaxFontUploadBytes = 2UL * 1024UL * 1024UL;
     constexpr size_t kMaxRssFeeds = 24;
-    constexpr uint16_t kDefaultWpm = 300;
-    constexpr uint16_t kMinWpm = 10;
-    constexpr uint16_t kMaxWpm = 1000;
-    constexpr uint8_t kDefaultBrightness = 13;
-    constexpr uint8_t kMaxBrightness = 19;
-    constexpr uint8_t kMaxUiLanguage = static_cast<uint8_t>(UiLanguage::Count) - 1;
-    constexpr uint8_t kMaxHandedness = 1;
-    constexpr uint8_t kMaxFooterMetric = 2;
-    constexpr uint8_t kMaxBatteryLabel = 2;
-    constexpr uint8_t kMaxReaderFontSize = 2;
-    constexpr uint8_t kMaxPauseMode = 1;
-    constexpr uint16_t kDefaultPacingDelayMs = 200;
-    constexpr uint16_t kMaxPacingDelayMs = 600;
-    constexpr int8_t kMinTypographyTracking = -2;
-    constexpr int8_t kMaxTypographyTracking = 3;
-    constexpr uint8_t kMinTypographyAnchor = 30;
-    constexpr uint8_t kMaxTypographyAnchor = 40;
-    constexpr uint8_t kDefaultTypographyAnchor = 30;
-    constexpr uint8_t kMinTypographyGuideWidth = 12;
-    constexpr uint8_t kMaxTypographyGuideWidth = 30;
-    constexpr uint8_t kDefaultTypographyGuideWidth = 30;
-    constexpr uint8_t kMinTypographyGuideGap = 2;
-    constexpr uint8_t kMaxTypographyGuideGap = 8;
-    constexpr uint8_t kDefaultTypographyGuideGap = 5;
+    constexpr size_t kBrightnessCount = 20;
 
     bool ensureLibraryDirectories() {
         return StorageFiles::ensureDirectory(StoragePaths::kBooksPath, "sync")
@@ -363,26 +340,6 @@ loadDraft();refresh();
         return "root";
     }
 
-    uint16_t clampU16(uint16_t value, uint16_t minValue, uint16_t maxValue) {
-        if (value < minValue) {
-            return minValue;
-        }
-        if (value > maxValue) {
-            return maxValue;
-        }
-        return value;
-    }
-
-    int clampInt(int value, int minValue, int maxValue) {
-        if (value < minValue) {
-            return minValue;
-        }
-        if (value > maxValue) {
-            return maxValue;
-        }
-        return value;
-    }
-
     String enumLabel(uint8_t value, const char* const* labels, size_t count, uint8_t fallback = 0) {
         if (value >= count) {
             value = fallback;
@@ -604,7 +561,7 @@ loadDraft();refresh();
 
 CompanionSyncManager* CompanionSyncManager::instance_ = nullptr;
 
-bool CompanionSyncManager::begin() {
+bool CompanionSyncManager::begin(Preferences& preferences) {
     if (active_) {
         return true;
     }
@@ -613,7 +570,7 @@ bool CompanionSyncManager::begin() {
     pairingCode_ = std::to_string(static_cast<uint32_t>(esp_random()) % 900000UL + 100000UL);
     statusLine1_ = "Starting sync";
     statusLine2_ = "Preparing Wi-Fi";
-    preferences_.begin(settings::kPrefsNamespace, false);
+    preferences_ = &preferences;
 
     const bool networkReady = startAccessPoint();
     if (!networkReady) {
@@ -654,12 +611,11 @@ void CompanionSyncManager::end() {
         WiFi.softAPdisconnect(true);
     }
     WiFi.mode(WIFI_OFF);
-    preferences_.end();
-
     networkMode_ = NetworkMode::None;
     active_ = false;
     statusLine1_ = "Idle";
     statusLine2_ = "";
+    preferences_ = nullptr;
     instance_ = nullptr;
 }
 
@@ -946,8 +902,8 @@ void CompanionSyncManager::handleWifi() {
     }
 
     if (server_.method() == HTTP_DELETE) {
-        preferences_.remove(pref::WifiSsid::key());
-        preferences_.remove(pref::WifiPassword::key());
+        settings::reset<pref::WifiSsid>(*preferences_);
+        settings::reset<pref::WifiPassword>(*preferences_);
         statusLine1_ = "Wi-Fi cleared";
         statusLine2_ = "";
         server_.send(200, "application/json", wifiJson());
@@ -961,7 +917,7 @@ void CompanionSyncManager::handleWifi() {
     }
 
     statusLine1_ = "Wi-Fi saved";
-    statusLine2_ = preferences_.getString(pref::WifiSsid::key(), "").c_str();
+    statusLine2_ = settings::load<pref::WifiSsid>(*preferences_);
     server_.send(200, "application/json", wifiJson());
 }
 
@@ -1310,7 +1266,8 @@ void CompanionSyncManager::handleBookPosition() {
         return;
     }
 
-    cacheBookPosition(path, wordIndex, header.sourceSize, header.sourceFingerprint, header.wordCount);
+    ReadingProgress::cachePosition(*preferences_, path,
+                                   {header.sourceSize, header.sourceFingerprint, header.wordCount}, wordIndex);
     statusLine1_ = "Position saved";
     statusLine2_ = relativeLibraryName(path).c_str();
     server_.send(200, "application/json",
@@ -1452,52 +1409,32 @@ String CompanionSyncManager::settingsJson() {
     static const char* const batteryLabelLabels[] = {"percent", "time_remaining", "voltage"};
     static const char* const pauseModeLabels[] = {"sentence_end", "instant"};
 
-    const uint16_t wpm = clampU16(preferences_.getUShort(pref::Wpm::key(), kDefaultWpm), kMinWpm, kMaxWpm);
-    const uint8_t pauseMode =
-        static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::PauseMode::key(), 0), 0, kMaxPauseMode));
-    const uint16_t longDelay =
-        clampU16(preferences_.getUShort(pref::PacingLongWordDelay::key(), kDefaultPacingDelayMs), 0, kMaxPacingDelayMs);
-    const uint16_t complexDelay =
-        clampU16(preferences_.getUShort(pref::PacingComplexWordDelay::key(), kDefaultPacingDelayMs), 0,
-                 kMaxPacingDelayMs);
-    const uint16_t punctuationDelay =
-        clampU16(preferences_.getUShort(pref::PacingPunctuationDelay::key(), kDefaultPacingDelayMs), 0,
-                 kMaxPacingDelayMs);
-    const uint8_t brightness =
-        static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::BrightnessIndex::key(), kDefaultBrightness), 0,
-                                      kMaxBrightness));
-    const uint8_t handedness =
-        static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::Handedness::key(), 0), 0, kMaxHandedness));
-    const uint8_t footerMetric =
-        static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::FooterMetricMode::key(), 0), 0, kMaxFooterMetric));
-    const uint8_t batteryLabel =
-        static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::BatteryLabelMode::key(), 0), 0, kMaxBatteryLabel));
-    const uint8_t language =
-        static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::UiLanguage::key(), 0), 0, kMaxUiLanguage));
-    const uint8_t fontSize = static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::ReaderFontSizeIndex::key(), 0),
-                                                           0, kMaxReaderFontSize));
+    const uint16_t wpm = settings::load<pref::Wpm>(*preferences_);
+    const ::PauseMode pauseMode = settings::load<pref::PauseMode>(*preferences_);
+    const uint16_t longDelay = settings::load<pref::PacingLongWordDelay>(*preferences_);
+    const uint16_t complexDelay = settings::load<pref::PacingComplexWordDelay>(*preferences_);
+    const uint16_t punctuationDelay = settings::load<pref::PacingPunctuationDelay>(*preferences_);
+    const uint8_t brightness = settings::load<pref::BrightnessIndex>(*preferences_, kBrightnessCount);
+    const bool handedness = settings::load<pref::Handedness>(*preferences_);
+    const FooterMetric footerMetric = settings::load<pref::FooterMetricMode>(*preferences_);
+    const BatteryLabel batteryLabel = settings::load<pref::BatteryLabelMode>(*preferences_);
+    const UiLanguage language = settings::load<pref::UiLanguage>(*preferences_);
+    const uint8_t fontSize = settings::load<pref::ReaderFontSizeIndex>(*preferences_, FontCatalog::sizeCount());
     FontCatalog fontCatalog;
     fontCatalog.loadFromSd();
     uint8_t typeface = 0;
-    const String savedTypefaceId = preferences_.getString(pref::ReaderTypefaceId::key(), "");
-    if (savedTypefaceId.isEmpty() || !fontCatalog.indexForId(savedTypefaceId, typeface))
+    const std::string savedTypefaceId = settings::load<pref::ReaderTypefaceId>(*preferences_);
+    if (savedTypefaceId.empty() || !fontCatalog.indexForId(savedTypefaceId.c_str(), typeface))
         typeface = 0;
-    const int tracking = clampInt(preferences_.getChar(pref::TypographyTracking::key(), 0), kMinTypographyTracking,
-                                  kMaxTypographyTracking);
-    const uint8_t anchor =
-        static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::TypographyAnchor::key(), kDefaultTypographyAnchor),
-                                      kMinTypographyAnchor, kMaxTypographyAnchor));
-    const uint8_t guideWidth = static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::TypographyGuideWidth::key(),
-                                                                                   kDefaultTypographyGuideWidth),
-                                                             kMinTypographyGuideWidth, kMaxTypographyGuideWidth));
-    const uint8_t guideGap = static_cast<uint8_t>(clampInt(preferences_.getUChar(pref::TypographyGuideGap::key(),
-                                                                                 kDefaultTypographyGuideGap),
-                                                           kMinTypographyGuideGap, kMaxTypographyGuideGap));
+    const int tracking = settings::load<pref::TypographyTracking>(*preferences_);
+    const uint8_t anchor = settings::load<pref::TypographyAnchor>(*preferences_);
+    const uint8_t guideWidth = settings::load<pref::TypographyGuideWidth>(*preferences_);
+    const uint8_t guideGap = settings::load<pref::TypographyGuideGap>(*preferences_);
     ThemeStore themeStore;
     themeStore.loadFromSd();
-    const String savedThemeId = preferences_.getString(pref::ThemeId::key(), "");
-    if (!savedThemeId.isEmpty()) {
-        themeStore.selectById({savedThemeId.c_str(), savedThemeId.length()});
+    const std::string savedThemeId = settings::load<pref::ThemeId>(*preferences_);
+    if (!savedThemeId.empty()) {
+        themeStore.selectById(savedThemeId);
     }
     const ui::themes::Theme& selectedTheme = themeStore.selected();
 
@@ -1507,7 +1444,7 @@ String CompanionSyncManager::settingsJson() {
     body += ",\"reading\":{";
     body += "\"wpm\":" + String(wpm);
     body += ",\"pauseMode\":\"";
-    body += enumLabel(pauseMode, pauseModeLabels, 2);
+    body += enumLabel(static_cast<uint8_t>(pauseMode), pauseModeLabels, 2);
     body += "\"";
     body += ",\"pacing\":{\"longWordMs\":" + String(longDelay) + ",\"complexWordMs\":" + String(complexDelay)
           + ",\"punctuationMs\":" + String(punctuationDelay) + "}";
@@ -1516,22 +1453,22 @@ String CompanionSyncManager::settingsJson() {
     body += "\"themeId\":\"" + jsonEscape(String(selectedTheme.id.c_str())) + "\"";
     body += ",\"brightnessIndex\":" + String(brightness);
     body += ",\"handedness\":\"";
-    body += enumLabel(handedness, handednessLabels, 2);
+    body += enumLabel(static_cast<uint8_t>(handedness), handednessLabels, 2);
     body += "\"";
     body += ",\"footerMetric\":\"";
-    body += enumLabel(footerMetric, footerMetricLabels, 3);
+    body += enumLabel(static_cast<uint8_t>(footerMetric), footerMetricLabels, 3);
     body += "\"";
     body += ",\"batteryLabel\":\"";
-    body += enumLabel(batteryLabel, batteryLabelLabels, 3);
+    body += enumLabel(static_cast<uint8_t>(batteryLabel), batteryLabelLabels, 3);
     body += "\"";
     body += ",\"readingBattery\":"
-          + String(preferences_.getBool(pref::ReaderBatteryVisible::key(), true) ? "true" : "false");
+          + String(settings::load<pref::ReaderBatteryVisible>(*preferences_) ? "true" : "false");
     body += ",\"readingChapter\":"
-          + String(preferences_.getBool(pref::ReaderChapterVisible::key(), false) ? "true" : "false");
+          + String(settings::load<pref::ReaderChapterVisible>(*preferences_) ? "true" : "false");
     body += ",\"readingProgress\":"
-          + String(preferences_.getBool(pref::ReaderProgressVisible::key(), false) ? "true" : "false");
-    body += ",\"language\":" + String(language);
-    body += ",\"phantomWords\":" + String(preferences_.getBool(pref::PhantomWords::key(), true) ? "true" : "false");
+          + String(settings::load<pref::ReaderProgressVisible>(*preferences_) ? "true" : "false");
+    body += ",\"language\":" + String(static_cast<uint8_t>(language));
+    body += ",\"phantomWords\":" + String(settings::load<pref::PhantomWords>(*preferences_) ? "true" : "false");
     body += ",\"fontSizeIndex\":" + String(fontSize);
     body += "}";
     body += ",\"typography\":{";
@@ -1539,7 +1476,7 @@ String CompanionSyncManager::settingsJson() {
     body += jsonEscape(fontCatalog.typefaceId(typeface));
     body += "\"";
     body += ",\"focusHighlight\":"
-          + String(preferences_.getBool(pref::TypographyFocusHighlight::key(), true) ? "true" : "false");
+          + String(settings::load<pref::TypographyFocusHighlight>(*preferences_) ? "true" : "false");
     body += ",\"tracking\":" + String(tracking);
     body += ",\"anchorPercent\":" + String(anchor);
     body += ",\"guideWidth\":" + String(guideWidth);
@@ -1588,17 +1525,18 @@ String CompanionSyncManager::settingsJson() {
     }
     body += "]";
     body += ",\"limits\":{";
-    body += "\"wpm\":{\"min\":" + String(kMinWpm) + ",\"max\":" + String(kMaxWpm) + "}";
-    body += ",\"brightnessIndex\":{\"min\":0,\"max\":" + String(kMaxBrightness) + "}";
-    body += ",\"pacingMs\":{\"min\":0,\"max\":" + String(kMaxPacingDelayMs) + "}";
-    body +=
-        ",\"tracking\":{\"min\":" + String(kMinTypographyTracking) + ",\"max\":" + String(kMaxTypographyTracking) + "}";
-    body += ",\"anchorPercent\":{\"min\":" + String(kMinTypographyAnchor) + ",\"max\":" + String(kMaxTypographyAnchor)
-          + "}";
-    body += ",\"guideWidth\":{\"min\":" + String(kMinTypographyGuideWidth)
-          + ",\"max\":" + String(kMaxTypographyGuideWidth) + "}";
-    body +=
-        ",\"guideGap\":{\"min\":" + String(kMinTypographyGuideGap) + ",\"max\":" + String(kMaxTypographyGuideGap) + "}";
+    body += "\"wpm\":{\"min\":" + String(pref::Wpm::minValue()) + ",\"max\":" + String(pref::Wpm::maxValue()) + "}";
+    body += ",\"brightnessIndex\":{\"min\":0,\"max\":" + String(kBrightnessCount - 1) + "}";
+    body += ",\"pacingMs\":{\"min\":" + String(pref::PacingLongWordDelay::minValue())
+          + ",\"max\":" + String(pref::PacingLongWordDelay::maxValue()) + "}";
+    body += ",\"tracking\":{\"min\":" + String(pref::TypographyTracking::minValue())
+          + ",\"max\":" + String(pref::TypographyTracking::maxValue()) + "}";
+    body += ",\"anchorPercent\":{\"min\":" + String(pref::TypographyAnchor::minValue())
+          + ",\"max\":" + String(pref::TypographyAnchor::maxValue()) + "}";
+    body += ",\"guideWidth\":{\"min\":" + String(pref::TypographyGuideWidth::minValue())
+          + ",\"max\":" + String(pref::TypographyGuideWidth::maxValue()) + "}";
+    body += ",\"guideGap\":{\"min\":" + String(pref::TypographyGuideGap::minValue())
+          + ",\"max\":" + String(pref::TypographyGuideGap::maxValue()) + "}";
     body += "}}";
     return body;
 }
@@ -1620,11 +1558,11 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
     bool themeTypefaceApplied = false;
 
     if (readJsonInt(body, "wpm", intValue)) {
-        if (intValue < kMinWpm || intValue > kMaxWpm) {
+        if (intValue < pref::Wpm::minValue() || intValue > pref::Wpm::maxValue()) {
             error = "wpm must be between 10 and 1000";
             return false;
         }
-        preferences_.putUShort(pref::Wpm::key(), static_cast<uint16_t>(intValue));
+        settings::save<pref::Wpm>(*preferences_, static_cast<uint16_t>(intValue));
     }
     if (readJsonString(body, "pauseMode", stringValue)) {
         const int value = enumValue(stringValue, pauseModeLabels, 2);
@@ -1632,35 +1570,38 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
             error = "pauseMode must be sentence_end or instant";
             return false;
         }
-        preferences_.putUChar(pref::PauseMode::key(), static_cast<uint8_t>(value));
+        settings::save<pref::PauseMode>(*preferences_, static_cast<::PauseMode>(value));
     }
     if (readJsonInt(body, "longWordMs", intValue)) {
-        if (intValue < 0 || intValue > kMaxPacingDelayMs) {
+        if (intValue < pref::PacingLongWordDelay::minValue()
+            || intValue > pref::PacingLongWordDelay::maxValue()) {
             error = "longWordMs must be between 0 and 600";
             return false;
         }
-        preferences_.putUShort(pref::PacingLongWordDelay::key(), static_cast<uint16_t>(intValue));
+        settings::save<pref::PacingLongWordDelay>(*preferences_, static_cast<uint16_t>(intValue));
     }
     if (readJsonInt(body, "complexWordMs", intValue)) {
-        if (intValue < 0 || intValue > kMaxPacingDelayMs) {
+        if (intValue < pref::PacingComplexWordDelay::minValue()
+            || intValue > pref::PacingComplexWordDelay::maxValue()) {
             error = "complexWordMs must be between 0 and 600";
             return false;
         }
-        preferences_.putUShort(pref::PacingComplexWordDelay::key(), static_cast<uint16_t>(intValue));
+        settings::save<pref::PacingComplexWordDelay>(*preferences_, static_cast<uint16_t>(intValue));
     }
     if (readJsonInt(body, "punctuationMs", intValue)) {
-        if (intValue < 0 || intValue > kMaxPacingDelayMs) {
+        if (intValue < pref::PacingPunctuationDelay::minValue()
+            || intValue > pref::PacingPunctuationDelay::maxValue()) {
             error = "punctuationMs must be between 0 and 600";
             return false;
         }
-        preferences_.putUShort(pref::PacingPunctuationDelay::key(), static_cast<uint16_t>(intValue));
+        settings::save<pref::PacingPunctuationDelay>(*preferences_, static_cast<uint16_t>(intValue));
     }
     if (readJsonInt(body, "brightnessIndex", intValue)) {
-        if (intValue < 0 || intValue > kMaxBrightness) {
+        if (intValue < 0 || intValue >= static_cast<int>(kBrightnessCount)) {
             error = "brightnessIndex must be between 0 and 19";
             return false;
         }
-        preferences_.putUChar(pref::BrightnessIndex::key(), static_cast<uint8_t>(intValue));
+        settings::save<pref::BrightnessIndex>(*preferences_, static_cast<uint8_t>(intValue), kBrightnessCount);
     }
     if (readJsonString(body, "themeId", stringValue)) {
         ThemeStore themeStore;
@@ -1670,13 +1611,13 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
             return false;
         }
         const ui::themes::Theme& theme = themeStore.selected();
-        preferences_.putString(pref::ThemeId::key(), theme.id.c_str());
+        settings::save<pref::ThemeId>(*preferences_, theme.id);
         FontCatalog fontCatalog;
         fontCatalog.loadFromSd();
         uint8_t themeTypeface = 0;
         const std::string_view typefaceName = ui::themes::readerTypefaceName(theme.typeface);
         if (fontCatalog.indexForId(String(typefaceName.data(), typefaceName.size()), themeTypeface)) {
-            preferences_.putString(pref::ReaderTypefaceId::key(), fontCatalog.typefaceId(themeTypeface));
+            settings::save<pref::ReaderTypefaceId>(*preferences_, fontCatalog.typefaceId(themeTypeface).c_str());
             themeTypefaceApplied = true;
         }
     }
@@ -1686,7 +1627,7 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
             error = "handedness must be right or left";
             return false;
         }
-        preferences_.putUChar(pref::Handedness::key(), static_cast<uint8_t>(value));
+        settings::save<pref::Handedness>(*preferences_, value != 0);
     }
     if (readJsonString(body, "footerMetric", stringValue)) {
         const int value = enumValue(stringValue, footerMetricLabels, 3);
@@ -1694,7 +1635,7 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
             error = "footerMetric must be percentage, chapter_time, or book_time";
             return false;
         }
-        preferences_.putUChar(pref::FooterMetricMode::key(), static_cast<uint8_t>(value));
+        settings::save<pref::FooterMetricMode>(*preferences_, static_cast<FooterMetric>(value));
     }
     if (readJsonString(body, "batteryLabel", stringValue)) {
         const int value = enumValue(stringValue, batteryLabelLabels, 3);
@@ -1702,33 +1643,34 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
             error = "batteryLabel must be percent, time_remaining, or voltage";
             return false;
         }
-        preferences_.putUChar(pref::BatteryLabelMode::key(), static_cast<uint8_t>(value));
+        settings::save<pref::BatteryLabelMode>(*preferences_, static_cast<BatteryLabel>(value));
     }
     if (readJsonBool(body, "readingBattery", boolValue)) {
-        preferences_.putBool(pref::ReaderBatteryVisible::key(), boolValue);
+        settings::save<pref::ReaderBatteryVisible>(*preferences_, boolValue);
     }
     if (readJsonBool(body, "readingChapter", boolValue)) {
-        preferences_.putBool(pref::ReaderChapterVisible::key(), boolValue);
+        settings::save<pref::ReaderChapterVisible>(*preferences_, boolValue);
     }
     if (readJsonBool(body, "readingProgress", boolValue)) {
-        preferences_.putBool(pref::ReaderProgressVisible::key(), boolValue);
+        settings::save<pref::ReaderProgressVisible>(*preferences_, boolValue);
     }
     if (readJsonInt(body, "language", intValue)) {
-        if (intValue < 0 || intValue > kMaxUiLanguage) {
+        if (intValue < 0 || intValue >= static_cast<int>(pref::UiLanguage::count())) {
             error = "language is out of range";
             return false;
         }
-        preferences_.putUChar(pref::UiLanguage::key(), static_cast<uint8_t>(intValue));
+        settings::save<pref::UiLanguage>(*preferences_, static_cast<UiLanguage>(intValue));
     }
     if (readJsonBool(body, "phantomWords", boolValue)) {
-        preferences_.putBool(pref::PhantomWords::key(), boolValue);
+        settings::save<pref::PhantomWords>(*preferences_, boolValue);
     }
     if (readJsonInt(body, "fontSizeIndex", intValue)) {
-        if (intValue < 0 || intValue > kMaxReaderFontSize) {
+        if (intValue < 0 || intValue >= FontCatalog::sizeCount()) {
             error = "fontSizeIndex must be between 0 and 2";
             return false;
         }
-        preferences_.putUChar(pref::ReaderFontSizeIndex::key(), static_cast<uint8_t>(intValue));
+        settings::save<pref::ReaderFontSizeIndex>(*preferences_, static_cast<uint8_t>(intValue),
+                                                  FontCatalog::sizeCount());
     }
     if (!themeTypefaceApplied && readJsonString(body, "typeface", stringValue)) {
         FontCatalog fontCatalog;
@@ -1738,48 +1680,49 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
             error = "typeface does not match an available font";
             return false;
         }
-        preferences_.putString(pref::ReaderTypefaceId::key(), fontCatalog.typefaceId(value));
+        settings::save<pref::ReaderTypefaceId>(*preferences_, fontCatalog.typefaceId(value).c_str());
     }
     if (readJsonBool(body, "focusHighlight", boolValue)) {
-        preferences_.putBool(pref::TypographyFocusHighlight::key(), boolValue);
+        settings::save<pref::TypographyFocusHighlight>(*preferences_, boolValue);
     }
     if (readJsonInt(body, "tracking", intValue)) {
-        if (intValue < kMinTypographyTracking || intValue > kMaxTypographyTracking) {
+        if (intValue < pref::TypographyTracking::minValue() || intValue > pref::TypographyTracking::maxValue()) {
             error = "tracking is out of range";
             return false;
         }
-        preferences_.putChar(pref::TypographyTracking::key(), static_cast<int8_t>(intValue));
+        settings::save<pref::TypographyTracking>(*preferences_, static_cast<int8_t>(intValue));
     }
     if (readJsonInt(body, "anchorPercent", intValue)) {
-        if (intValue < kMinTypographyAnchor || intValue > kMaxTypographyAnchor) {
+        if (intValue < pref::TypographyAnchor::minValue() || intValue > pref::TypographyAnchor::maxValue()) {
             error = "anchorPercent is out of range";
             return false;
         }
-        preferences_.putUChar(pref::TypographyAnchor::key(), static_cast<uint8_t>(intValue));
+        settings::save<pref::TypographyAnchor>(*preferences_, static_cast<uint8_t>(intValue));
     }
     if (readJsonInt(body, "guideWidth", intValue)) {
-        if (intValue < kMinTypographyGuideWidth || intValue > kMaxTypographyGuideWidth) {
+        if (intValue < pref::TypographyGuideWidth::minValue()
+            || intValue > pref::TypographyGuideWidth::maxValue()) {
             error = "guideWidth is out of range";
             return false;
         }
-        preferences_.putUChar(pref::TypographyGuideWidth::key(), static_cast<uint8_t>(intValue));
+        settings::save<pref::TypographyGuideWidth>(*preferences_, static_cast<uint8_t>(intValue));
     }
     if (readJsonInt(body, "guideGap", intValue)) {
-        if (intValue < kMinTypographyGuideGap || intValue > kMaxTypographyGuideGap) {
+        if (intValue < pref::TypographyGuideGap::minValue() || intValue > pref::TypographyGuideGap::maxValue()) {
             error = "guideGap is out of range";
             return false;
         }
-        preferences_.putUChar(pref::TypographyGuideGap::key(), static_cast<uint8_t>(intValue));
+        settings::save<pref::TypographyGuideGap>(*preferences_, static_cast<uint8_t>(intValue));
     }
 
     return true;
 }
 
 String CompanionSyncManager::wifiJson() {
-    const String ssid = preferences_.getString(pref::WifiSsid::key(), "");
-    return String("{\"ok\":true,\"configured\":") + (ssid.isEmpty() ? "false" : "true") + ",\"ssid\":\""
-         + jsonEscape(ssid) + "\",\"passwordSet\":"
-         + (preferences_.getString(pref::WifiPassword::key(), "").isEmpty() ? "false" : "true") + "}";
+    const std::string ssid = settings::load<pref::WifiSsid>(*preferences_);
+    return String("{\"ok\":true,\"configured\":") + (ssid.empty() ? "false" : "true") + ",\"ssid\":\""
+         + jsonEscape(ssid.c_str()) + "\",\"passwordSet\":"
+         + (settings::load<pref::WifiPassword>(*preferences_).empty() ? "false" : "true") + "}";
 }
 
 bool CompanionSyncManager::applyWifiJson(const String& body, String& error) {
@@ -1810,8 +1753,8 @@ bool CompanionSyncManager::applyWifiJson(const String& body, String& error) {
         return false;
     }
 
-    preferences_.putString(pref::WifiSsid::key(), ssid);
-    preferences_.putString(pref::WifiPassword::key(), password);
+    settings::save<pref::WifiSsid>(*preferences_, ssid.c_str());
+    settings::save<pref::WifiPassword>(*preferences_, password.c_str());
     return true;
 }
 
@@ -2065,39 +2008,11 @@ bool CompanionSyncManager::progressForPath(const String& path, uint32_t sourceSi
         return true;
     }
 
-    const String positionKey = ReadingProgress::positionKey(path);
-    const String countKey = ReadingProgress::wordCountKey(path);
-    if (!preferences_.isKey(positionKey.c_str()) || !preferences_.isKey(countKey.c_str())) {
+    if (!ReadingProgress::readCachedPosition(*preferences_, path, {sourceSize, sourceFingerprint, wordCount},
+                                             wordIndex))
         return false;
-    }
-    if (preferences_.getUInt(countKey.c_str(), 0) != wordCount) {
-        return false;
-    }
-
-    if (preferences_.isKey(ReadingProgress::sourceSizeKey(path).c_str())
-        && preferences_.getUInt(ReadingProgress::sourceSizeKey(path).c_str(), 0) != sourceSize) {
-        return false;
-    }
-    if (preferences_.isKey(ReadingProgress::sourceFingerprintKey(path).c_str())
-        && preferences_.getUInt(ReadingProgress::sourceFingerprintKey(path).c_str(), 0) != sourceFingerprint) {
-        return false;
-    }
-
-    wordIndex = std::min<uint32_t>(preferences_.getUInt(positionKey.c_str(), 0), wordCount - 1);
     percent = ReadingProgress::percent(wordIndex, wordCount);
     return true;
-}
-
-void CompanionSyncManager::cacheBookPosition(const String& path, uint32_t wordIndex, uint32_t sourceSize,
-                                             uint32_t sourceFingerprint, uint32_t wordCount) {
-    if (wordCount == 0) {
-        return;
-    }
-    wordIndex = std::min<uint32_t>(wordIndex, wordCount - 1);
-    preferences_.putUInt(ReadingProgress::positionKey(path).c_str(), wordIndex);
-    preferences_.putUInt(ReadingProgress::wordCountKey(path).c_str(), wordCount);
-    preferences_.putUInt(ReadingProgress::sourceSizeKey(path).c_str(), sourceSize);
-    preferences_.putUInt(ReadingProgress::sourceFingerprintKey(path).c_str(), sourceFingerprint);
 }
 
 String CompanionSyncManager::bookIdForPath(const String& path) const {

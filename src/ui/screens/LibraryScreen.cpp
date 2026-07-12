@@ -220,25 +220,8 @@ namespace screens {
                 const ReadingProgress::BookIdentity identity{header.sourceSize, header.sourceFingerprint,
                                                              header.wordCount};
                 hasPosition = ReadingProgress::readPositionSidecar(path.c_str(), identity, wordIndex);
-                if (!hasPosition) {
-                    const String positionKey = ReadingProgress::positionKey(path.c_str());
-                    if (preferences.isKey(positionKey.c_str())) {
-                        const String countKey = ReadingProgress::wordCountKey(path.c_str());
-                        const String sizeKey = ReadingProgress::sourceSizeKey(path.c_str());
-                        const String fingerprintKey = ReadingProgress::sourceFingerprintKey(path.c_str());
-                        const bool countMatches = !preferences.isKey(countKey.c_str())
-                                               || preferences.getUInt(countKey.c_str(), 0) == header.wordCount;
-                        const bool sourceMatches =
-                            !preferences.isKey(sizeKey.c_str()) || !preferences.isKey(fingerprintKey.c_str())
-                            || (preferences.getUInt(sizeKey.c_str(), 0) == header.sourceSize
-                                && preferences.getUInt(fingerprintKey.c_str(), 0) == header.sourceFingerprint);
-                        if (countMatches && sourceMatches) {
-                            wordIndex =
-                                std::min<uint32_t>(preferences.getUInt(positionKey.c_str(), 0), header.wordCount - 1);
-                            hasPosition = true;
-                        }
-                    }
-                }
+                if (!hasPosition)
+                    hasPosition = ReadingProgress::readCachedPosition(preferences, path.c_str(), identity, wordIndex);
                 item.progress = hasPosition ? ReadingProgress::percent(wordIndex, header.wordCount) : 0;
                 if (const ChapterMarker* chapter = metadata.chapterAt(hasPosition ? wordIndex : 0)) {
                     item.chapter = chapter->title;
@@ -262,12 +245,7 @@ namespace screens {
             return ReadingProgress::percent(reader.currentIndex(), reader.wordCount());
         }
         const std::string path = storage.bookPath(index);
-        const String positionKey = ReadingProgress::positionKey(path.c_str());
-        const String countKey = ReadingProgress::wordCountKey(path.c_str());
-        if (!preferences.isKey(positionKey.c_str()) || !preferences.isKey(countKey.c_str()))
-            return 0;
-        return ReadingProgress::percent(preferences.getUInt(positionKey.c_str(), 0),
-                                        preferences.getUInt(countKey.c_str(), 0));
+        return ReadingProgress::cachedPercent(preferences, path.c_str());
     }
 
     std::string LibraryScreen::spineLabel(std::string_view title) {

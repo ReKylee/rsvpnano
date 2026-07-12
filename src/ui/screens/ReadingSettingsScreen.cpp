@@ -34,8 +34,7 @@ namespace screens {
         const int16_t rowY = static_cast<int16_t>(controlsY + 54);
         if (ui.setting({content.x, rowY, halfWidth, 42}, ui.text(UiText::Pause),
                        ui.text(config.pauseMode == PauseMode::SentenceEnd ? UiText::SentenceEnd : UiText::Instant))) {
-            config.pauseMode = config.pauseMode == PauseMode::SentenceEnd ? PauseMode::Instant : PauseMode::SentenceEnd;
-            settings::save<pref::PauseMode>(preferences, static_cast<uint8_t>(config.pauseMode));
+            config.pauseMode = settings::cycle<pref::PauseMode>(preferences);
         }
 
         if (ui.toggle({static_cast<int16_t>(content.x + halfWidth + gap), rowY, halfWidth, 42},

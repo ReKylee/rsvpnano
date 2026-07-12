@@ -7,19 +7,22 @@
 
 enum class PauseMode : uint8_t {
     SentenceEnd,
-    Instant
+    Instant,
+    Count,
 };
 
 enum class FooterMetric : uint8_t {
     Percentage,
     ChapterTime,
     BookTime,
+    Count,
 };
 
 enum class BatteryLabel : uint8_t {
     Percentage,
     TimeRemaining,
     Voltage,
+    Count,
 };
 
 struct ReaderTypography {

@@ -19,7 +19,7 @@ namespace screens {
         if (ui.setting(grid.next(), ui.text(UiText::ReaderHand),
                        ui.text(config.leftHanded ? UiText::Left : UiText::Right))) {
             config.leftHanded = !config.leftHanded;
-            settings::save<settings::prefs::Handedness>(preferences, static_cast<uint8_t>(config.leftHanded));
+            settings::save<settings::prefs::Handedness>(preferences, config.leftHanded);
         }
         if (ui.setting(grid.next(), ui.text(UiText::ChapterScroll),
                        ui.text(config.chapterScrollReversed ? UiText::Reversed : UiText::Normal)))
@@ -30,20 +30,14 @@ namespace screens {
                             : config.footerMetric == FooterMetric::BookTime    ? UiText::BookTime
                                                                               : UiText::Percentage;
         if (ui.setting(grid.next(), ui.text(UiText::Footer), ui.text(footer))) {
-            config.footerMetric =
-                static_cast<FooterMetric>((static_cast<uint8_t>(config.footerMetric) + 1U) % 3U);
-            settings::save<settings::prefs::FooterMetricMode>(preferences,
-                                                               static_cast<uint8_t>(config.footerMetric));
+            config.footerMetric = settings::cycle<settings::prefs::FooterMetricMode>(preferences);
         }
 
         const UiText battery = config.batteryLabel == BatteryLabel::TimeRemaining ? UiText::TimeLeft
                              : config.batteryLabel == BatteryLabel::Voltage       ? UiText::Voltage
                                                                                   : UiText::Percentage;
         if (ui.setting(grid.next(), ui.text(UiText::BatteryLabel), ui.text(battery))) {
-            config.batteryLabel =
-                static_cast<BatteryLabel>((static_cast<uint8_t>(config.batteryLabel) + 1U) % 3U);
-            settings::save<settings::prefs::BatteryLabelMode>(preferences,
-                                                               static_cast<uint8_t>(config.batteryLabel));
+            config.batteryLabel = settings::cycle<settings::prefs::BatteryLabelMode>(preferences);
         }
 
         const int16_t visibilityY = static_cast<int16_t>(sectionsY + 83);

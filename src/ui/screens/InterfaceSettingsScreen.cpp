@@ -11,9 +11,8 @@ namespace screens {
                               void (*setBrightness)(uint8_t)) {
         config.brightnessIndex = settings::load<pref::BrightnessIndex>(preferences, 20U);
         config.standbyIndex = settings::load<pref::StandbyTimerIndex>(preferences, standbyDurationCount);
-        config.language = static_cast<UiLanguage>(settings::load<pref::UiLanguage>(preferences));
-        config.screensaver = static_cast<standby::Kind>(std::min<uint8_t>(
-            settings::load<pref::ScreensaverMode>(preferences), static_cast<uint8_t>(standby::Kind::ScreenOff)));
+        config.language = settings::load<pref::UiLanguage>(preferences);
+        config.screensaver = settings::load<pref::ScreensaverMode>(preferences);
         if (setBrightness != nullptr)
             setBrightness(static_cast<uint8_t>((config.brightnessIndex + 1U) * 5U));
 
@@ -65,7 +64,7 @@ namespace screens {
         if (ui.setting({content.x, secondRowY, halfWidth, 32}, ui.text(UiText::Language),
                        Localization::languageName(config.language))) {
             config.language = Localization::nextLanguage(config.language);
-            settings::save<pref::UiLanguage>(preferences, static_cast<uint8_t>(config.language));
+            settings::save<pref::UiLanguage>(preferences, config.language);
             ui.setLanguage(config.language);
         }
 
@@ -84,8 +83,7 @@ namespace screens {
                                                                                   : UiText::Life;
         if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), secondRowY, halfWidth, 32},
                        ui.text(UiText::Screensaver), ui.text(screensaver))) {
-            config.screensaver = static_cast<standby::Kind>((static_cast<uint8_t>(config.screensaver) + 1U) % 4U);
-            settings::save<pref::ScreensaverMode>(preferences, static_cast<uint8_t>(config.screensaver));
+            config.screensaver = settings::cycle<pref::ScreensaverMode>(preferences);
         }
     }
 

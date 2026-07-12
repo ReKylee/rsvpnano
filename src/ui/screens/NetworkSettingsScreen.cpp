@@ -17,7 +17,7 @@ namespace screens {
         owner.assign(config.githubOwner.c_str(), config.githubOwner.length());
         tag.assign(config.githubTag.c_str(), config.githubTag.length());
         automatic = config.autoCheck;
-        ssidStored = preferences.isKey(settings::prefs::WifiSsid::key());
+        ssidStored = settings::contains<settings::prefs::WifiSsid>(preferences);
         autoCheckPending = automatic && !ssid.empty();
     }
 
@@ -65,8 +65,8 @@ namespace screens {
         if (ui.button(actions.next(), ui.text(UiText::FirmwareUpdates)))
             screen = Screen::Ota;
         if (ssidStored && ui.button(actions.next(), ui.text(UiText::ForgetNetwork))) {
-            preferences.remove(settings::prefs::WifiSsid::key());
-            preferences.remove(settings::prefs::WifiPassword::key());
+            settings::reset<settings::prefs::WifiSsid>(preferences);
+            settings::reset<settings::prefs::WifiPassword>(preferences);
             ssid.clear();
             ssidStored = false;
             autoCheckPending = false;
@@ -214,13 +214,13 @@ namespace screens {
             if (editField_ == EditField::Owner) {
                 owner = editValue_;
                 if (owner.empty())
-                    preferences.remove(settings::prefs::OtaOwner::key());
+                    settings::reset<settings::prefs::OtaOwner>(preferences);
                 else
                     settings::save<settings::prefs::OtaOwner>(preferences, owner);
             } else {
                 tag = editValue_;
                 if (tag.empty())
-                    preferences.remove(settings::prefs::OtaTag::key());
+                    settings::reset<settings::prefs::OtaTag>(preferences);
                 else
                     settings::save<settings::prefs::OtaTag>(preferences, tag);
             }

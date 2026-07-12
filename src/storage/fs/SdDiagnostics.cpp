@@ -8,6 +8,7 @@
 #include <driver/sdmmc_types.h>
 
 #include "board/BoardStorage.h"
+#include "settings/Nvs.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 
@@ -92,16 +93,16 @@ namespace SdDiagnostics {
 
         FrequencyCache readFrequencyCache() {
             Preferences preferences;
-            if (!preferences.begin(kPreferencesNamespace, true)) {
+            if (!settings::nvs::begin(preferences, kPreferencesNamespace, true)) {
                 Serial.println("[sd-check] frequency cache unavailable");
                 return FrequencyCache{};
             }
             FrequencyCache cache;
-            cache.frequencyKhz = preferences.getInt(kPreferenceFrequencyKhz, 0);
-            cache.cardType = cardTypeFromByte(preferences.getUChar(kPreferenceCardType,
-                                                                   cardTypeByte(Board::Storage::CardType::None)));
-            cache.sizeMb = preferences.getUInt(kPreferenceCardSizeMb, 0);
-            preferences.end();
+            cache.frequencyKhz = settings::nvs::get(preferences, kPreferenceFrequencyKhz, int32_t{0});
+            cache.cardType = cardTypeFromByte(settings::nvs::get(
+                preferences, kPreferenceCardType, cardTypeByte(Board::Storage::CardType::None)));
+            cache.sizeMb = settings::nvs::get(preferences, kPreferenceCardSizeMb, uint32_t{0});
+            settings::nvs::end(preferences);
             if (!isSupportedFrequency(cache.frequencyKhz) || cache.cardType == Board::Storage::CardType::None
                 || cache.sizeMb == 0) {
                 if (cache.frequencyKhz != 0) {
@@ -131,14 +132,14 @@ namespace SdDiagnostics {
             }
 
             Preferences preferences;
-            if (!preferences.begin(kPreferencesNamespace, false)) {
+            if (!settings::nvs::begin(preferences, kPreferencesNamespace)) {
                 Serial.println("[sd-check] frequency cache write unavailable");
                 return;
             }
-            preferences.putInt(kPreferenceFrequencyKhz, frequencyKhz);
-            preferences.putUChar(kPreferenceCardType, cardTypeByte(cardType));
-            preferences.putUInt(kPreferenceCardSizeMb, sizeMb);
-            preferences.end();
+            settings::nvs::put(preferences, kPreferenceFrequencyKhz, static_cast<int32_t>(frequencyKhz));
+            settings::nvs::put(preferences, kPreferenceCardType, cardTypeByte(cardType));
+            settings::nvs::put(preferences, kPreferenceCardSizeMb, sizeMb);
+            settings::nvs::end(preferences);
         }
 
         size_t buildFrequencyProbeOrder(FrequencyList& frequencies) {

@@ -2,15 +2,16 @@
 
 #include <Arduino.h>
 #include <FS.h>
-#include <Preferences.h>
 #include <WebServer.h>
 
 #include <string>
 #include <string_view>
 
+class Preferences;
+
 class CompanionSyncManager {
 public:
-    bool begin();
+    bool begin(Preferences& preferences);
     void update();
     void end();
     bool active() const;
@@ -76,8 +77,6 @@ private:
     RsvpMetadata readRsvpMetadata(const String& path) const;
     bool progressForPath(const String& path, uint32_t sourceSize, uint32_t sourceFingerprint, uint32_t wordCount,
                          uint32_t& wordIndex, uint8_t& percent);
-    void cacheBookPosition(const String& path, uint32_t wordIndex, uint32_t sourceSize, uint32_t sourceFingerprint,
-                           uint32_t wordCount);
     String bookIdForPath(const String& path) const;
     bool resolveBookId(const String& id, String& path) const;
     bool resolveBookName(const String& requested, String& path) const;
@@ -92,7 +91,7 @@ private:
     String uploadError_;
     std::string pairingCode_;
     std::string networkSsid_;
-    Preferences preferences_;
+    Preferences* preferences_ = nullptr;
     std::string statusLine1_ = "Idle";
     std::string statusLine2_;
     NetworkMode networkMode_ = NetworkMode::None;

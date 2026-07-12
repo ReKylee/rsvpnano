@@ -42,6 +42,11 @@ namespace ReadingProgress {
 
     bool readPositionSidecar(const String& bookPath, const BookIdentity& identity, uint32_t& wordIndex);
     bool writePositionSidecar(const String& bookPath, const BookIdentity& identity, uint32_t wordIndex);
+    bool readCachedPosition(Preferences& preferences, const String& bookPath, const BookIdentity& identity,
+                            uint32_t& wordIndex);
+    void cachePosition(Preferences& preferences, const String& bookPath, const BookIdentity& identity,
+                       uint32_t wordIndex);
+    uint8_t cachedPercent(Preferences& preferences, const String& bookPath);
     String positionKey(const String& bookPath);
     String wordCountKey(const String& bookPath);
     String sourceSizeKey(const String& bookPath);

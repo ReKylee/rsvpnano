@@ -1,6 +1,8 @@
 #pragma once
 
+#include "reader/ReaderSettings.h"
 #include "settings/Setting.h"
+#include "standby/ScreensaverTypes.h"
 #include "ui/Localization.h"
 
 namespace settings {
@@ -19,19 +21,22 @@ namespace settings {
         struct ThemeId : StringSetting<"theme_id"> {};
 
         struct UiLanguage
-            : Bounded<"ui_lang", uint8_t, 0, 0, static_cast<uint8_t>(::UiLanguage::Count) - 1> {};
+            : EnumSetting<"ui_lang", ::UiLanguage, ::UiLanguage::English, ::UiLanguage::Count> {};
 
-        struct Handedness : Bounded<"handed", uint8_t, 0, 0, 1> {};
+        struct Handedness : Scalar<"handed", bool, false> {};
 
         struct PhantomWords : Scalar<"phantom_on", bool, true> {};
 
         struct ChapterScrollReversed : Scalar<"ch_scroll_rev", bool, false> {};
 
-        struct FooterMetricMode : Bounded<"prog_md", uint8_t, 0, 0, 2> {};
+        struct FooterMetricMode
+            : EnumSetting<"prog_md", ::FooterMetric, ::FooterMetric::Percentage, ::FooterMetric::Count> {};
 
-        struct BatteryLabelMode : Bounded<"bat_md", uint8_t, 0, 0, 2> {};
+        struct BatteryLabelMode
+            : EnumSetting<"bat_md", ::BatteryLabel, ::BatteryLabel::Percentage, ::BatteryLabel::Count> {};
 
-        struct ScreensaverMode : Scalar<"scrn_sv", uint8_t, 0> {};
+        struct ScreensaverMode
+            : EnumSetting<"scrn_sv", standby::Kind, standby::Kind::Life, standby::Kind::Count> {};
 
         struct ReaderBatteryVisible : Scalar<"read_bat", bool, true> {};
 
@@ -59,7 +64,8 @@ namespace settings {
 
         struct PacingPunctuationDelay : Bounded<"pace_pms", uint16_t, 200, 0, 600, 50> {};
 
-        struct PauseMode : Bounded<"pause_md", uint8_t, 0, 0, 1> {};
+        struct PauseMode
+            : EnumSetting<"pause_md", ::PauseMode, ::PauseMode::SentenceEnd, ::PauseMode::Count> {};
 
         struct StandbyTimerIndex : CountedIndex<"stby_tmr", uint8_t, 1> {};
 
@@ -74,5 +80,8 @@ namespace settings {
         struct OtaTag : StringSetting<"ota_tag"> {};
 
     } // namespace prefs
+
+    static_assert(prefs::UiLanguage::sanitize(::UiLanguage::Count) == ::UiLanguage::English);
+    static_assert(prefs::PauseMode::sanitize(::PauseMode::Count) == ::PauseMode::SentenceEnd);
 
 } // namespace settings

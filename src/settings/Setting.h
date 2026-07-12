@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <type_traits>
 
 #include "settings/Nvs.h"
 
@@ -79,6 +80,13 @@ namespace settings {
         } -> std::same_as<typename Spec::Value>;
     };
 
+    template<typename Spec>
+    concept CountedEnumSetting = Setting<Spec> && std::is_enum_v<typename Spec::Value> && requires {
+        {
+            Spec::count()
+        } -> std::same_as<size_t>;
+    };
+
     template<Key Name, typename T, T Default>
     struct Scalar : PreferenceKey<Name> {
         using Value = T;
@@ -119,6 +127,26 @@ namespace settings {
                 return value;
             }
             return static_cast<T>(std::min<size_t>(Default, count - 1));
+        }
+    };
+
+    template<Key Name, typename T, T Default, T Count>
+        requires std::is_enum_v<T>
+    struct EnumSetting : Scalar<Name, T, Default> {
+        using Stored = std::underlying_type_t<T>;
+        static_assert(static_cast<Stored>(Count) > 0, "enum setting count must be positive");
+
+        static constexpr size_t count() {
+            return static_cast<size_t>(static_cast<Stored>(Count));
+        }
+
+        static constexpr T sanitize(T value) {
+            const Stored stored = static_cast<Stored>(value);
+            if constexpr (std::is_signed_v<Stored>) {
+                if (stored < 0)
+                    return Default;
+            }
+            return static_cast<size_t>(stored) < count() ? value : Default;
         }
     };
 
@@ -174,6 +202,16 @@ namespace settings {
         return load<Spec>(prefs, context) == cleaned || nvs::put(prefs, Spec::key(), cleaned);
     }
 
+    template<Setting Spec>
+    bool contains(Preferences& prefs) {
+        return nvs::contains(prefs, Spec::key());
+    }
+
+    template<Setting Spec>
+    bool reset(Preferences& prefs) {
+        return nvs::remove(prefs, Spec::key());
+    }
+
     template<BoolSetting Spec>
     bool toggle(Preferences& prefs) {
         const bool next = !load<Spec>(prefs);
@@ -190,6 +228,16 @@ namespace settings {
         const Value stepValue = Spec::step();
         const Value next =
             current >= maxValue || maxValue - current < stepValue ? minValue : static_cast<Value>(current + stepValue);
+        save<Spec>(prefs, next);
+        return next;
+    }
+
+    template<CountedEnumSetting Spec>
+    typename Spec::Value cycle(Preferences& prefs) {
+        using Value = typename Spec::Value;
+        using Stored = std::underlying_type_t<Value>;
+        const auto next = static_cast<Value>((static_cast<size_t>(static_cast<Stored>(load<Spec>(prefs))) + 1U)
+                                             % Spec::count());
         save<Spec>(prefs, next);
         return next;
     }

@@ -9,6 +9,7 @@
 
 #include "net/WifiConnection.h"
 #include "rss/FeedParser.h"
+#include "settings/Nvs.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 #include "text/AsciiText.h"
@@ -866,11 +867,11 @@ bool RssFeedManager::saveItem(const feedparser::FeedItem& item, Preferences& pre
 }
 
 bool RssFeedManager::itemAlreadySeen(const feedparser::FeedItem& item, Preferences& preferences) {
-    return preferences.getBool(seenKeyForItem(item).c_str(), false);
+    return settings::nvs::get(preferences, seenKeyForItem(item).c_str(), false);
 }
 
 void RssFeedManager::markItemSeen(const feedparser::FeedItem& item, Preferences& preferences) {
-    preferences.putBool(seenKeyForItem(item).c_str(), true);
+    settings::nvs::put(preferences, seenKeyForItem(item).c_str(), true);
 }
 
 String RssFeedManager::seenKeyForItem(const feedparser::FeedItem& item) const {

@@ -32,26 +32,32 @@ namespace screens {
         constexpr int16_t gap = 6;
         const int16_t sectionY = static_cast<int16_t>(content.y + 30);
         ui.separator({content.x, sectionY, content.w, 10}, ui.text(UiText::ConnectionReleaseSection));
-        ui::Grid grid{{content.x, static_cast<int16_t>(sectionY + 14), content.w,
-                       static_cast<int16_t>(content.h - 44)}, 2, 32, gap};
-        if (ui.setting(grid.next(), ui.text(UiText::Network),
-                       ssid.empty() ? ui.text(UiText::NotSet) : std::string_view{ssid})) {
+        const int16_t firstRowY = static_cast<int16_t>(sectionY + 14);
+        const int16_t networkWidth = static_cast<int16_t>((content.w - gap) * 2 / 3);
+        if (ui.setting({content.x, firstRowY, networkWidth, 32}, ui.text(UiText::Network),
+                       ssid.empty() ? ui.text(UiText::NotSet) : std::string_view{ssid},
+                       ui::SettingLayout::Inline)) {
             openWifiScan();
             screen = Screen::WifiScan;
         }
-        if (ui.toggle(grid.next(), ui.text(UiText::AutomaticChecks), automatic)) {
+        if (ui.toggle({static_cast<int16_t>(content.x + networkWidth + gap), firstRowY,
+                       static_cast<int16_t>(content.w - networkWidth - gap), 32},
+                      ui.text(UiText::AutomaticChecks), automatic)) {
             automatic = !automatic;
             settings::save<settings::prefs::OtaAuto>(preferences, automatic);
             autoCheckPending = automatic && !ssid.empty();
         }
-        if (ui.setting(grid.next(), ui.text(UiText::OtaOwner),
+        const int16_t secondRowY = static_cast<int16_t>(firstRowY + 38);
+        const int16_t halfWidth = static_cast<int16_t>((content.w - gap) / 2);
+        if (ui.setting({content.x, secondRowY, halfWidth, 32}, ui.text(UiText::OtaOwner),
                        owner.empty() ? ui.text(UiText::Default) : std::string_view{owner})) {
             editField_ = EditField::Owner;
             editValue_ = owner;
             keyboard_ = {};
             screen = Screen::NetworkEdit;
         }
-        if (ui.setting(grid.next(), ui.text(UiText::ReleaseTag),
+        if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), secondRowY, halfWidth, 32},
+                       ui.text(UiText::ReleaseTag),
                        tag.empty() ? ui.text(UiText::Latest) : std::string_view{tag})) {
             editField_ = EditField::Tag;
             editValue_ = tag;
@@ -157,7 +163,7 @@ namespace screens {
         for (size_t index = 0; index < networkCount_; ++index) {
             const WifiNetwork& network = networks_[index];
             const std::string signal = std::to_string(network.rssi) + " dBm";
-            if (ui.setting(grid.next(), network.ssid, signal)) {
+            if (ui.setting(grid.next(), network.ssid, signal, ui::SettingLayout::Inline)) {
                 const bool savedNetwork = network.ssid == ssid;
                 ssid = network.ssid;
                 if (!network.secured) {

@@ -208,9 +208,15 @@ void test_setting_gives_long_values_the_full_card_width() {
     TEST_ASSERT_EQUAL(28, gfx.textWrites);
 
     context.beginFrame(2);
-    context.setting({0, 0, 200, 30}, "Home WiFi", "-42 dBm");
+    context.setting({0, 0, 306, 30}, "Home WiFi", "-42 dBm", ui::SettingLayout::Inline);
     context.endFrame();
-    TEST_ASSERT_EQUAL(109, gfx.cursorX);
+    TEST_ASSERT_EQUAL(215, gfx.cursorX);
+
+    gfx.textWrites = 0;
+    context.beginFrame(3);
+    context.slider({0, 0, 200, 50}, "Long words", 150, 0, 600, 50, " ms");
+    context.endFrame();
+    TEST_ASSERT_EQUAL(16, gfx.textWrites);
 }
 
 void test_keyboard_edits_and_submits() {

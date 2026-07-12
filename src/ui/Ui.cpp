@@ -181,22 +181,31 @@ namespace ui {
         markDirty(rect);
     }
 
-    bool Context::setting(Rect rect, std::string_view label, std::string_view value) {
+    bool Context::setting(Rect rect, std::string_view label, std::string_view value, SettingLayout layout) {
         const size_t slot = nextSlot_;
         uint32_t state = signature(value, signature(label));
+        state = combine(state, static_cast<uint8_t>(layout));
         if (claim(Kind::Setting, rect, state).changed) {
             const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
             gfx_.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
             gfx_.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
             const int16_t textWidth = std::max<int16_t>(0, static_cast<int16_t>(rect.w - 14));
-            if (rect.h <= 30) {
-                const int16_t valueWidth = std::min<int16_t>(textWidth / 2,
-                                                             static_cast<int16_t>(value.size() * 12U));
-                drawText({static_cast<int16_t>(rect.x + 7), rect.y,
-                          static_cast<int16_t>(std::max<int16_t>(0, textWidth - valueWidth - 8)), rect.h},
-                         label, 2, color(ui::themes::ColorRole::Foreground));
+            if (layout == SettingLayout::Inline) {
+                const int16_t labelRequired = static_cast<int16_t>(label.size() * 12U);
+                uint8_t valueSize = 2;
+                int16_t valueRequired = static_cast<int16_t>(value.size() * 12U);
+                if (labelRequired + valueRequired + 8 > textWidth) {
+                    valueSize = 1;
+                    valueRequired = static_cast<int16_t>(value.size() * 6U);
+                }
+                const int16_t labelWidth = labelRequired + valueRequired + 8 <= textWidth
+                                             ? labelRequired
+                                             : std::min<int16_t>(labelRequired, textWidth / 2);
+                const int16_t valueWidth = std::max<int16_t>(0, static_cast<int16_t>(textWidth - labelWidth - 8));
+                drawText({static_cast<int16_t>(rect.x + 7), rect.y, labelWidth, rect.h}, label, 2,
+                         color(ui::themes::ColorRole::Foreground));
                 drawText({static_cast<int16_t>(rect.x + rect.w - valueWidth - 7), rect.y, valueWidth, rect.h}, value,
-                         2, color(ui::themes::ColorRole::Muted), TextAlign::Right);
+                         valueSize, color(ui::themes::ColorRole::Accent), TextAlign::Right);
             } else {
                 const bool largeValue = value.size() * 12U <= static_cast<size_t>(textWidth);
                 drawText({static_cast<int16_t>(rect.x + 7), static_cast<int16_t>(rect.y + 3), textWidth, 8}, label, 1,
@@ -375,7 +384,7 @@ namespace ui {
         const size_t slot = nextSlot_;
         const Touch* event = touch();
         const bool labeled = !label.empty();
-        const int16_t visualHeight = labeled ? std::min<int16_t>(34, rect.h) : rect.h;
+        const int16_t visualHeight = labeled ? std::min<int16_t>(50, rect.h) : rect.h;
         const Rect visual{rect.x, static_cast<int16_t>(rect.y + (rect.h - visualHeight) / 2), rect.w, visualHeight};
         const Rect track{static_cast<int16_t>(visual.x + (labeled ? 8 : 0)),
                          static_cast<int16_t>(visual.y + (labeled ? visual.h - 8 : visual.h / 2 - 1)),
@@ -415,21 +424,30 @@ namespace ui {
                               suffix.data());
                 const std::string_view valueView{valueText};
                 const int16_t headerWidth = static_cast<int16_t>(visual.w - 14);
-                uint8_t labelSize = visual.h >= 32 ? 2 : 1;
-                uint8_t valueSize = labelSize;
-                int16_t valueWidth = static_cast<int16_t>(valueView.size() * 6U * valueSize);
-                if (static_cast<size_t>(headerWidth) < label.size() * 6U * labelSize + valueWidth + 8U) {
-                    valueSize = 1;
-                    valueWidth = static_cast<int16_t>(valueView.size() * 6U);
+                if (visual.h >= 44) {
+                    drawText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 2), headerWidth, 16},
+                             label, 2, color(ui::themes::ColorRole::Foreground));
+                    drawText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 18), headerWidth,
+                              16},
+                             valueView, 2, color(ui::themes::ColorRole::Accent), TextAlign::Right);
+                } else {
+                    uint8_t labelSize = visual.h >= 30 ? 2 : 1;
+                    uint8_t valueSize = labelSize;
+                    int16_t valueWidth = static_cast<int16_t>(valueView.size() * 6U * valueSize);
+                    if (static_cast<size_t>(headerWidth) < label.size() * 6U * labelSize + valueWidth + 8U) {
+                        valueSize = 1;
+                        valueWidth = static_cast<int16_t>(valueView.size() * 6U);
+                    }
+                    if (static_cast<size_t>(headerWidth) < label.size() * 6U * labelSize + valueWidth + 8U)
+                        labelSize = 1;
+                    const int16_t labelWidth =
+                        std::max<int16_t>(0, static_cast<int16_t>(headerWidth - valueWidth - 8));
+                    const int16_t textY = static_cast<int16_t>(visual.y + 2);
+                    drawText({static_cast<int16_t>(visual.x + 7), textY, labelWidth, 16}, label, labelSize,
+                             color(ui::themes::ColorRole::Foreground));
+                    drawText({static_cast<int16_t>(visual.x + visual.w - valueWidth - 7), textY, valueWidth, 16},
+                             valueView, valueSize, color(ui::themes::ColorRole::Accent), TextAlign::Right);
                 }
-                if (static_cast<size_t>(headerWidth) < label.size() * 6U * labelSize + valueWidth + 8U)
-                    labelSize = 1;
-                const int16_t labelWidth = std::max<int16_t>(0, static_cast<int16_t>(headerWidth - valueWidth - 8));
-                const int16_t textY = static_cast<int16_t>(visual.y + 2);
-                drawText({static_cast<int16_t>(visual.x + 7), textY, labelWidth, 16}, label, labelSize,
-                         color(ui::themes::ColorRole::Foreground));
-                drawText({static_cast<int16_t>(visual.x + visual.w - valueWidth - 7), textY, valueWidth, 16},
-                         valueView, valueSize, color(ui::themes::ColorRole::Accent), TextAlign::Right);
             }
             gfx_.fillRect(track.x, track.y, track.w, track.h, color(ui::themes::ColorRole::ProgressTrack));
             const int16_t knobX =

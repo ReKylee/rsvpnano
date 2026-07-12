@@ -54,14 +54,15 @@ namespace screens {
 
         const int16_t firstRowY = static_cast<int16_t>(sectionsY + 14);
         const int16_t secondRowY = static_cast<int16_t>(firstRowY + 37);
-        if (ui.setting({content.x, firstRowY, halfWidth, 32}, ui.text(UiText::Theme), themes.selected().name)) {
+        if (ui.setting({content.x, firstRowY, halfWidth, 32}, ui.text(UiText::Theme), themes.selected().name,
+                       ui::SettingLayout::Inline)) {
             themes.selectNext();
             settings::save<pref::ThemeId>(preferences, themes.selected().id);
             ui.setTheme(themes.selected());
         }
 
         if (ui.setting({content.x, secondRowY, halfWidth, 32}, ui.text(UiText::Language),
-                       Localization::languageName(config.language))) {
+                       Localization::languageName(config.language), ui::SettingLayout::Inline)) {
             config.language = Localization::nextLanguage(config.language);
             settings::save<pref::UiLanguage>(preferences, config.language);
             ui.setLanguage(config.language);
@@ -72,7 +73,7 @@ namespace screens {
             standby = std::to_string(standbyDurations[config.standbyIndex] / 60000UL) + "m";
         }
         if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), firstRowY, halfWidth, 32},
-                       ui.text(UiText::Standby), standby)) {
+                       ui.text(UiText::Standby), standby, ui::SettingLayout::Inline)) {
             config.standbyIndex = settings::cycle<pref::StandbyTimerIndex>(preferences);
         }
 
@@ -81,7 +82,7 @@ namespace screens {
                                   : config.screensaver == standby::Kind::ScreenOff ? UiText::ScreenOff
                                                                                   : UiText::Life;
         if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), secondRowY, halfWidth, 32},
-                       ui.text(UiText::Screensaver), ui.text(screensaver))) {
+                       ui.text(UiText::Screensaver), ui.text(screensaver), ui::SettingLayout::Inline)) {
             config.screensaver = settings::cycle<pref::ScreensaverMode>(preferences);
         }
     }

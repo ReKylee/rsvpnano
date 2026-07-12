@@ -33,7 +33,8 @@ namespace screens {
         const int16_t halfWidth = static_cast<int16_t>((content.w - gap) / 2);
         const int16_t rowY = static_cast<int16_t>(controlsY + 54);
         if (ui.setting({content.x, rowY, halfWidth, 42}, ui.text(UiText::Pause),
-                       ui.text(config.pauseMode == PauseMode::SentenceEnd ? UiText::SentenceEnd : UiText::Instant))) {
+                       ui.text(config.pauseMode == PauseMode::SentenceEnd ? UiText::SentenceEnd : UiText::Instant),
+                       ui::SettingLayout::Inline)) {
             config.pauseMode = settings::cycle<pref::PauseMode>(preferences);
         }
 

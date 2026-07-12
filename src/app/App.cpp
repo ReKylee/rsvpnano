@@ -178,6 +178,19 @@ void App::renderScreen(uint32_t nowMs) {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         networkScreen_.draw(immediateUi_, prefs_, screen_);
         break;
+    case screens::Screen::WifiScan:
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        networkScreen_.drawWifiScan(immediateUi_, prefs_, screen_);
+        break;
+    case screens::Screen::WifiConnect:
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        if (networkScreen_.drawWifiConnect(immediateUi_, prefs_, screen_))
+            return;
+        break;
+    case screens::Screen::NetworkEdit:
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        networkScreen_.drawEdit(immediateUi_, prefs_, screen_);
+        break;
     case screens::Screen::Device:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         action = screens::device(immediateUi_, storage_.mounted(), storage_.bookCount(), screen_);
@@ -295,6 +308,13 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
                 screen_ = screens::Screen::Reader;
             } else if (screen_ == screens::Screen::Sync || screen_ == screens::Screen::Ota) {
                 screen_ = screens::Screen::Device;
+            } else if (screen_ == screens::Screen::WifiConnect) {
+                networkScreen_.closeWifi();
+                screen_ = screens::Screen::WifiScan;
+            } else if (screen_ == screens::Screen::WifiScan || screen_ == screens::Screen::NetworkEdit) {
+                if (screen_ == screens::Screen::WifiScan)
+                    networkScreen_.closeWifi();
+                screen_ = screens::Screen::NetworkSettings;
             } else if (screen_ == screens::Screen::ReadingSettings || screen_ == screens::Screen::InterfaceSettings
                        || screen_ == screens::Screen::PacingSettings
                        || screen_ == screens::Screen::TypographySettings

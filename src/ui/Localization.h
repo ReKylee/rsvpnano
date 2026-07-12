@@ -165,6 +165,14 @@ enum class UiText : uint8_t {
 	Sync,
 	ChapterShort,
 	BookShort,
+	WifiNetworks,
+	ScanningNetworks,
+	ScanFailed,
+	NoNetworksFound,
+	Retry,
+	Connecting,
+	ConnectionFailed,
+	Space,
 	Count,
 };
 

@@ -11,7 +11,7 @@ constexpr size_t kLanguageCount = static_cast<size_t>(UiLanguage::Count);
 constexpr size_t kTextCount = static_cast<size_t>(UiText::Count);
 constexpr size_t kDefaultLanguageIndex = 0;
 static_assert(kLanguageCount == 7, "UiLanguage count mismatch");
-static_assert(kTextCount == 148, "UiText count mismatch");
+static_assert(kTextCount == 156, "UiText count mismatch");
 
 constexpr std::array<std::string_view, kLanguageCount> kLanguageNames = {{
 	/* English  */ "English",
@@ -177,6 +177,14 @@ constexpr TextTable kTexts = {{
 		/* Sync                     */ "Sync",
 		/* ChapterShort             */ "CH",
 		/* BookShort                */ "BOOK",
+		/* WifiNetworks             */ "Wi-Fi networks",
+		/* ScanningNetworks         */ "Scanning networks",
+		/* ScanFailed               */ "Scan failed",
+		/* NoNetworksFound          */ "No networks found",
+		/* Retry                    */ "Retry",
+		/* Connecting               */ "Connecting",
+		/* ConnectionFailed         */ "Connection failed",
+		/* Space                    */ "Space",
 	}},
 	// Spanish (es)
 	{{
@@ -328,6 +336,14 @@ constexpr TextTable kTexts = {{
 		/* Sync                     */ "Sincronizaci\u00F3n",
 		/* ChapterShort             */ "CAP",
 		/* BookShort                */ "LIBRO",
+		/* WifiNetworks             */ "Redes Wi-Fi",
+		/* ScanningNetworks         */ "Buscando redes",
+		/* ScanFailed               */ "Error al buscar",
+		/* NoNetworksFound          */ "No se encontraron redes",
+		/* Retry                    */ "Reintentar",
+		/* Connecting               */ "Conectando",
+		/* ConnectionFailed         */ "Error de conexi\u00F3n",
+		/* Space                    */ "Espacio",
 	}},
 	// French (fr)
 	{{
@@ -479,6 +495,14 @@ constexpr TextTable kTexts = {{
 		/* Sync                     */ "Synchronisation",
 		/* ChapterShort             */ "CH",
 		/* BookShort                */ "LIVRE",
+		/* WifiNetworks             */ "R\u00E9seaux Wi-Fi",
+		/* ScanningNetworks         */ "Recherche des r\u00E9seaux",
+		/* ScanFailed               */ "\u00C9chec de la recherche",
+		/* NoNetworksFound          */ "Aucun r\u00E9seau trouv\u00E9",
+		/* Retry                    */ "R\u00E9essayer",
+		/* Connecting               */ "Connexion",
+		/* ConnectionFailed         */ "\u00C9chec de la connexion",
+		/* Space                    */ "Espace",
 	}},
 	// German (de)
 	{{
@@ -630,6 +654,14 @@ constexpr TextTable kTexts = {{
 		/* Sync                     */ "Synchronisierung",
 		/* ChapterShort             */ "KAP",
 		/* BookShort                */ "BUCH",
+		/* WifiNetworks             */ "WLAN-Netze",
+		/* ScanningNetworks         */ "Netzwerke werden gesucht",
+		/* ScanFailed               */ "Suche fehlgeschlagen",
+		/* NoNetworksFound          */ "Keine Netzwerke gefunden",
+		/* Retry                    */ "Erneut versuchen",
+		/* Connecting               */ "Verbindung wird hergestellt",
+		/* ConnectionFailed         */ "Verbindung fehlgeschlagen",
+		/* Space                    */ "Leer",
 	}},
 	// Romanian (ro)
 	{{
@@ -781,6 +813,14 @@ constexpr TextTable kTexts = {{
 		/* Sync                     */ "Sincronizare",
 		/* ChapterShort             */ "CAP",
 		/* BookShort                */ "CARTE",
+		/* WifiNetworks             */ "Re\u021Bele Wi-Fi",
+		/* ScanningNetworks         */ "Se caut\u0103 re\u021Bele",
+		/* ScanFailed               */ "Scanarea a e\u0219uat",
+		/* NoNetworksFound          */ "Nu s-au g\u0103sit re\u021Bele",
+		/* Retry                    */ "Re\u00EEncearc\u0103",
+		/* Connecting               */ "Se conecteaz\u0103",
+		/* ConnectionFailed         */ "Conexiunea a e\u0219uat",
+		/* Space                    */ "Spa\u021Biu",
 	}},
 	// Polish (pl)
 	{{
@@ -932,6 +972,14 @@ constexpr TextTable kTexts = {{
 		/* Sync                     */ "Synchronizacja",
 		/* ChapterShort             */ "ROZDZ",
 		/* BookShort                */ "KSI\u0104\u017BKA",
+		/* WifiNetworks             */ "Sieci Wi-Fi",
+		/* ScanningNetworks         */ "Wyszukiwanie sieci",
+		/* ScanFailed               */ "Skanowanie nie powiod\u0142o si\u0119",
+		/* NoNetworksFound          */ "Nie znaleziono sieci",
+		/* Retry                    */ "Spr\u00F3buj ponownie",
+		/* Connecting               */ "\u0141\u0105czenie",
+		/* ConnectionFailed         */ "Po\u0142\u0105czenie nie powiod\u0142o si\u0119",
+		/* Space                    */ "Spacja",
 	}},
 	// Russian (ru)
 	{{
@@ -1083,6 +1131,14 @@ constexpr TextTable kTexts = {{
 		/* Sync                     */ "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F",
 		/* ChapterShort             */ "\u0413\u041B",
 		/* BookShort                */ "\u041A\u041D\u0418\u0413\u0410",
+		/* WifiNetworks             */ "\u0421\u0435\u0442\u0438 Wi-Fi",
+		/* ScanningNetworks         */ "\u041F\u043E\u0438\u0441\u043A \u0441\u0435\u0442\u0435\u0439",
+		/* ScanFailed               */ "\u041E\u0448\u0438\u0431\u043A\u0430 \u043F\u043E\u0438\u0441\u043A\u0430",
+		/* NoNetworksFound          */ "\u0421\u0435\u0442\u0438 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u044B",
+		/* Retry                    */ "\u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u044C",
+		/* Connecting               */ "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435",
+		/* ConnectionFailed         */ "\u041E\u0448\u0438\u0431\u043A\u0430 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F",
+		/* Space                    */ "\u041F\u0440\u043E\u0431\u0435\u043B",
 	}},
 }};
 

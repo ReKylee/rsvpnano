@@ -273,7 +273,7 @@ bool OtaUpdater::loadConfigFromPath(const char* path, Config& config) const {
 }
 
 bool OtaUpdater::connectWiFi(const Config& config, StatusCallback callback, void* context) const {
-    return net::connectStation(config.wifiSsid, config.wifiPassword, [&](int percent) {
+    return net::connectStation(config.wifiSsid.c_str(), config.wifiPassword.c_str(), [&](int percent) {
         reportStatus(callback, context, kStatusTitle, "Connecting Wi-Fi", config.wifiSsid, percent);
     });
 }

@@ -17,7 +17,8 @@ namespace ui {
 
     } // namespace
 
-    KeyboardAction Context::keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state) {
+    KeyboardAction Context::keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state,
+                                     bool masked) {
         constexpr int16_t gap = 3;
         const int16_t inputHeight = std::min<int16_t>(26, std::max<int16_t>(16, rect.h / 5));
         const int16_t rowHeight = std::max<int16_t>(1, static_cast<int16_t>((rect.h - inputHeight - gap * 5) / 5));
@@ -26,8 +27,13 @@ namespace ui {
         const bool shifted = state.shifted;
         const bool symbols = state.symbols;
 
-        label({rect.x, rect.y, rect.w, inputHeight}, value.empty() ? std::string_view{"_"} : std::string_view{value},
-              2, ui::themes::ColorRole::Accent);
+        std::array<char, 64> hidden{};
+        const size_t hiddenLength = std::min(value.size(), hidden.size());
+        std::fill_n(hidden.begin(), hiddenLength, '*');
+        const std::string_view shownValue = masked ? std::string_view{hidden.data(), hiddenLength}
+                                                  : std::string_view{value};
+        label({rect.x, rect.y, rect.w, inputHeight}, shownValue.empty() ? std::string_view{"_"} : shownValue, 2,
+              ui::themes::ColorRole::Accent);
 
         const auto append = [&](std::string_view key) {
             if (key.empty() || value.size() + key.size() > maxLength)
@@ -98,7 +104,7 @@ namespace ui {
         if (button({static_cast<int16_t>(rect.x + (controlWidth + gap) * 2), controlsY, controlWidth, rowHeight}, "_"))
             append("_");
         if (button({static_cast<int16_t>(rect.x + (controlWidth + gap) * 3), controlsY, controlWidth, rowHeight},
-                   "Space"))
+                   text(UiText::Space)))
             append(" ");
         const bool cancel = button(
             {static_cast<int16_t>(rect.x + (controlWidth + gap) * 4), controlsY, controlWidth, rowHeight}, "X");

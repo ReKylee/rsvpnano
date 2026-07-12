@@ -1,6 +1,7 @@
 #pragma once
 
 #include "settings/Setting.h"
+#include "ui/Localization.h"
 
 namespace settings {
 
@@ -17,7 +18,8 @@ namespace settings {
 
         struct ThemeId : StringSetting<"theme_id"> {};
 
-        struct UiLanguage : Bounded<"ui_lang", uint8_t, 0, 0, 5> {};
+        struct UiLanguage
+            : Bounded<"ui_lang", uint8_t, 0, 0, static_cast<uint8_t>(::UiLanguage::Count) - 1> {};
 
         struct Handedness : Bounded<"handed", uint8_t, 0, 0, 1> {};
 

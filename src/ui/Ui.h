@@ -137,7 +137,8 @@ namespace ui {
         SliderResult slider(Rect rect, int value, int minimum, int maximum, int step = 1);
         SliderResult slider(Rect rect, std::string_view label, int value, int minimum, int maximum, int step = 1,
                             std::string_view suffix = {});
-        KeyboardAction keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state);
+        KeyboardAction keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state,
+                                bool masked = false);
         void dial(Rect rect, int value, int minimum, int maximum, std::string_view label = {});
         bool redraw(Rect rect, uint32_t signature);
         void markDirty(Rect rect);

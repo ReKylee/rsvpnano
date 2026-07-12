@@ -590,7 +590,7 @@ RssFeedManager::Result RssFeedManager::checkFeeds(const OtaUpdater::Config& wifi
 }
 
 bool RssFeedManager::connectWiFi(const OtaUpdater::Config& wifiConfig, StatusCallback callback, void* context) {
-    return net::connectStation(wifiConfig.wifiSsid, wifiConfig.wifiPassword, [&](int percent) {
+    return net::connectStation(wifiConfig.wifiSsid.c_str(), wifiConfig.wifiPassword.c_str(), [&](int percent) {
         report(callback, context, "Connecting Wi-Fi", wifiConfig.wifiSsid, percent);
     });
 }

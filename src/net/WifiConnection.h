@@ -15,7 +15,7 @@ namespace net {
 
     // Brings up WIFI_STA and blocks until associated or the connect timeout
     // elapses. Returns true only when connected. progress may be null.
-    bool connectStation(const String& ssid, const String& password, const WifiProgress& progress = nullptr);
+    bool connectStation(const char* ssid, const char* password, const WifiProgress& progress = nullptr);
 
     // Disconnects and powers the radio off (WIFI_OFF).
     void disconnect();

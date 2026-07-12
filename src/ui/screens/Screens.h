@@ -4,6 +4,7 @@
 #include <Preferences.h>
 
 #include <span>
+#include <array>
 #include <string>
 
 #include "book/BookMetadata.h"
@@ -29,6 +30,9 @@ namespace screens {
         TypographySettings,
         ReaderSettings,
         NetworkSettings,
+        WifiScan,
+        WifiConnect,
+        NetworkEdit,
         Device,
         Sync,
         Ota,
@@ -87,6 +91,29 @@ namespace screens {
 
         void begin(Preferences& preferences);
         void draw(ui::Context& ui, Preferences& preferences, Screen& screen);
+        void openWifiScan();
+        void closeWifi();
+        void drawWifiScan(ui::Context& ui, Preferences& preferences, Screen& screen);
+        bool drawWifiConnect(ui::Context& ui, Preferences& preferences, Screen& screen);
+        void drawEdit(ui::Context& ui, Preferences& preferences, Screen& screen);
+
+    private:
+        enum class EditField : uint8_t {
+            Owner,
+            Tag,
+        };
+
+        std::array<std::string, 8> networks_;
+        std::array<bool, 8> securedNetworks_{};
+        size_t networkCount_ = 0;
+        std::string password_;
+        std::string editValue_;
+        ui::KeyboardState keyboard_;
+        EditField editField_ = EditField::Owner;
+        bool scanStarted_ = false;
+        bool scanFinished_ = false;
+        bool scanFailed_ = false;
+        bool connectionFailed_ = false;
     };
     Action device(ui::Context& ui, bool storageReady, size_t bookCount, Screen& screen);
     Action sync(ui::Context& ui, Screen& screen);

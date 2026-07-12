@@ -10,11 +10,11 @@ namespace net {
 
     } // namespace
 
-    bool connectStation(const String& ssid, const String& password, const WifiProgress& progress) {
+    bool connectStation(const char* ssid, const char* password, const WifiProgress& progress) {
         WiFi.persistent(false);
         WiFi.setAutoReconnect(false);
         WiFi.mode(WIFI_STA);
-        WiFi.begin(ssid.c_str(), password.c_str());
+        WiFi.begin(ssid, password);
 
         const uint32_t startMs = millis();
         while (WiFi.status() != WL_CONNECTED && millis() - startMs < kWifiConnectTimeoutMs) {

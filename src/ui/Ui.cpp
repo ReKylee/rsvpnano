@@ -413,12 +413,12 @@ namespace ui {
         }
     }
 
-    SliderResult Context::slider(Rect rect, int value, int minimum, int maximum, int step,
+    ScalarResult Context::slider(Rect rect, int value, int minimum, int maximum, int step,
                                  ui::themes::ColorRole activeRole) {
         return slider(rect, {}, value, minimum, maximum, step, {}, activeRole);
     }
 
-    SliderResult Context::slider(Rect rect, std::string_view label, int value, int minimum, int maximum, int step,
+    ScalarResult Context::slider(Rect rect, std::string_view label, int value, int minimum, int maximum, int step,
                                  std::string_view suffix, ui::themes::ColorRole activeRole) {
         const size_t slot = nextSlot_;
         const Touch* event = touch();
@@ -431,21 +431,21 @@ namespace ui {
         const bool started = event != nullptr && hasTouch(*event, TouchStart) && contains(rect, event->x, event->y);
         if (started && slot < kSlotCapacity) {
             capturedSlot_ = slot;
-            capturedSliderInitialValue_ = std::clamp(value, minimum, maximum);
-            capturedSliderValue_ = valueAt(track, event->x, minimum, maximum, step);
+            capturedScalarInitialValue_ = std::clamp(value, minimum, maximum);
+            capturedScalarValue_ = valueAt(track, event->x, minimum, maximum, step);
         }
 
-        SliderResult result{std::clamp(value, minimum, maximum), false};
+        ScalarResult result{std::clamp(value, minimum, maximum), false};
         const bool moving =
             event != nullptr
             && (hasTouch(*event, TouchStart) || hasTouch(*event, TouchMove) || hasTouch(*event, TouchRelease));
         if (capturedSlot_ == slot && moving) {
-            capturedSliderValue_ = valueAt(track, event->x, minimum, maximum, step);
+            capturedScalarValue_ = valueAt(track, event->x, minimum, maximum, step);
         }
         if (capturedSlot_ == slot)
-            result.value = capturedSliderValue_;
+            result.value = capturedScalarValue_;
         if (capturedSlot_ == slot && event != nullptr && hasTouch(*event, TouchRelease))
-            result.changed = result.value != capturedSliderInitialValue_;
+            result.changed = result.value != capturedScalarInitialValue_;
 
         uint32_t state = signature(suffix, signature(label));
         state = combine(state, static_cast<uint32_t>(result.value));
@@ -519,6 +519,91 @@ namespace ui {
 
         if (capturedSlot_ == slot && event != nullptr && hasTouch(*event, TouchRelease)) {
             capturedSlot_ = kSlotCapacity;
+        }
+        return result;
+    }
+
+    ScalarResult Context::stepper(Rect rect, std::string_view label, int value, int minimum, int maximum, int step,
+                                  std::string_view suffix, ui::themes::ColorRole activeRole) {
+        const size_t slot = nextSlot_;
+        const int safeStep = std::max(1, step);
+        const int16_t buttonWidth = std::min<int16_t>(42, std::max<int16_t>(16, rect.w / 5));
+        const Rect decrement{rect.x, rect.y, buttonWidth, rect.h};
+        const Rect increment{static_cast<int16_t>(rect.x + rect.w - buttonWidth), rect.y, buttonWidth, rect.h};
+        const Touch* event = touch();
+
+        if (event != nullptr && hasTouch(*event, TouchStart) && slot < kSlotCapacity) {
+            const int8_t direction = contains(decrement, event->x, event->y) ? -1
+                                   : contains(increment, event->x, event->y) ? 1
+                                                                            : 0;
+            if (direction != 0) {
+                capturedSlot_ = slot;
+                capturedScalarInitialValue_ = std::clamp(value, minimum, maximum);
+                capturedScalarValue_ = capturedScalarInitialValue_;
+                capturedStepperDirection_ = direction;
+            }
+        }
+
+        ScalarResult result{std::clamp(value, minimum, maximum), false};
+        if (capturedSlot_ == slot) {
+            const Rect target = capturedStepperDirection_ < 0 ? decrement : increment;
+            const bool overTarget = event != nullptr && contains(target, event->x, event->y);
+            if (overTarget && event != nullptr && hasTouch(*event, TouchRelease) && hasTouch(*event, TouchTap)) {
+                capturedScalarValue_ = std::clamp(capturedScalarInitialValue_ + capturedStepperDirection_ * safeStep,
+                                                  minimum, maximum);
+            } else if (overTarget && touchActive_
+                       && touchLastPollMs_ - touchStartedAtMs_ >= touchSource_.timing.holdMs) {
+                constexpr uint32_t repeatMs = 120;
+                const uint32_t repeats =
+                    (touchLastPollMs_ - touchStartedAtMs_ - touchSource_.timing.holdMs) / repeatMs;
+                const int delta = safeStep * (1 + static_cast<int>(repeats));
+                capturedScalarValue_ = std::clamp(capturedScalarInitialValue_ + capturedStepperDirection_ * delta,
+                                                  minimum, maximum);
+            }
+            result.value = capturedScalarValue_;
+            result.changed = result.value != value;
+            if (event != nullptr && hasTouch(*event, TouchRelease)) {
+                capturedSlot_ = kSlotCapacity;
+                capturedStepperDirection_ = 0;
+            }
+        }
+
+        uint32_t state = signature(suffix, signature(label));
+        state = combine(state, static_cast<uint32_t>(result.value));
+        state = combine(state, static_cast<uint32_t>(minimum));
+        state = combine(state, static_cast<uint32_t>(maximum));
+        state = combine(state, static_cast<uint8_t>(activeRole));
+        if (claim(Kind::Stepper, rect, state).changed) {
+            const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
+            const uint16_t outline = color(ui::themes::ColorRole::Outline);
+            gfx_.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
+            gfx_.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, outline);
+            gfx_.drawFastVLine(static_cast<int16_t>(rect.x + buttonWidth), static_cast<int16_t>(rect.y + 4),
+                               static_cast<int16_t>(rect.h - 8), outline);
+            gfx_.drawFastVLine(static_cast<int16_t>(rect.x + rect.w - buttonWidth), static_cast<int16_t>(rect.y + 4),
+                               static_cast<int16_t>(rect.h - 8), outline);
+
+            const uint16_t muted = color(ui::themes::ColorRole::Muted);
+            drawText(decrement, "-", 2, result.value > minimum ? color(activeRole) : muted, TextAlign::Center);
+            drawText(increment, "+", 2, result.value < maximum ? color(activeRole) : muted, TextAlign::Center);
+
+            char valueText[24];
+            std::snprintf(valueText, sizeof(valueText), "%d%.*s", result.value, static_cast<int>(suffix.size()),
+                          suffix.data());
+            const Rect middle{static_cast<int16_t>(decrement.x + decrement.w + 6), rect.y,
+                              static_cast<int16_t>(rect.w - buttonWidth * 2 - 12), rect.h};
+            if (rect.h >= 44) {
+                drawText({middle.x, static_cast<int16_t>(middle.y + 2), middle.w, 16}, label, 2,
+                         color(ui::themes::ColorRole::Foreground), TextAlign::Center);
+                drawText({middle.x, static_cast<int16_t>(middle.y + 20), middle.w,
+                          static_cast<int16_t>(middle.h - 20)}, valueText, 2, color(activeRole), TextAlign::Center);
+            } else {
+                const int16_t valueWidth = std::min<int16_t>(middle.w / 2, textWidth(valueText, 2));
+                drawText({middle.x, middle.y, static_cast<int16_t>(middle.w - valueWidth - 6), middle.h}, label, 2,
+                         color(ui::themes::ColorRole::Foreground));
+                drawText({static_cast<int16_t>(middle.x + middle.w - valueWidth), middle.y, valueWidth, middle.h},
+                         valueText, 2, color(activeRole), TextAlign::Right);
+            }
         }
         return result;
     }

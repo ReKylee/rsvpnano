@@ -71,7 +71,7 @@ namespace ui {
         }
     };
 
-    struct SliderResult {
+    struct ScalarResult {
         int value = 0;
         bool changed = false;
     };
@@ -153,11 +153,14 @@ namespace ui {
         void progress(Rect rect, int value, int minimum = 0, int maximum = 100);
         void steps(Rect rect, uint8_t current, uint8_t total,
                    ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);
-        SliderResult slider(Rect rect, int value, int minimum, int maximum, int step = 1,
+        ScalarResult slider(Rect rect, int value, int minimum, int maximum, int step = 1,
                             ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);
-        SliderResult slider(Rect rect, std::string_view label, int value, int minimum, int maximum, int step = 1,
+        ScalarResult slider(Rect rect, std::string_view label, int value, int minimum, int maximum, int step = 1,
                             std::string_view suffix = {},
                             ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);
+        ScalarResult stepper(Rect rect, std::string_view label, int value, int minimum, int maximum, int step = 1,
+                             std::string_view suffix = {},
+                             ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);
         KeyboardAction keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state,
                                 bool masked = false);
         void dial(Rect rect, int value, int minimum, int maximum, std::string_view label = {});
@@ -198,6 +201,7 @@ namespace ui {
             Progress,
             Steps,
             Slider,
+            Stepper,
             Dial,
             Battery,
             Custom,
@@ -258,8 +262,9 @@ namespace ui {
         size_t slotCount_ = 0;
         size_t nextSlot_ = 0;
         size_t capturedSlot_ = kSlotCapacity;
-        int capturedSliderValue_ = 0;
-        int capturedSliderInitialValue_ = 0;
+        int capturedScalarValue_ = 0;
+        int capturedScalarInitialValue_ = 0;
+        int8_t capturedStepperDirection_ = 0;
         uint8_t screen_ = 0xFF;
         bool invalid_ = true;
         bool drew_ = false;

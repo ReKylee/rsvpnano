@@ -157,7 +157,8 @@ namespace screens {
                 std::snprintf(focusTime, sizeof(focusTime), "%um", static_cast<unsigned int>(timer.focusMinutes));
                 std::snprintf(breakTime, sizeof(breakTime), "%um", static_cast<unsigned int>(timer.breakMinutes));
                 std::snprintf(rounds, sizeof(rounds), "x%u", static_cast<unsigned int>(timer.rounds));
-                ui.drawText({left, top, glassWidth, chamberHeight}, focusTime, 2, ink, ui::TextAlign::Center);
+                ui.drawText({left, static_cast<int16_t>(top + 2), glassWidth, chamberHeight}, focusTime, 2, ink,
+                            ui::TextAlign::Center);
                 ui.drawText({left, static_cast<int16_t>(bottomRectTop - textLift), glassWidth, chamberHeight},
                             breakTime, 2, ink, ui::TextAlign::Center);
                 ui.drawText({static_cast<int16_t>(right + groupGap),
@@ -185,98 +186,122 @@ namespace screens {
     void FocusScreen::drawEditor(ui::Context& ui, Screen& screen) {
         const ui::Rect content = detail::content(ui);
         constexpr int16_t gap = 6;
-        constexpr int16_t headerHeight = 24;
+        constexpr int16_t headerHeight = 40;
         constexpr int16_t saveWidth = 96;
-        constexpr int16_t actionHeight = 34;
-        if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back))) {
-            deleteConfirm_ = false;
-            screen = Screen::FocusTimers;
-        }
-        const int16_t saveX = static_cast<int16_t>(content.x + content.w - saveWidth);
-        ui.label({static_cast<int16_t>(content.x + 74), content.y,
-                  static_cast<int16_t>(saveX - content.x - 80), headerHeight},
-                 ui.text(UiText::FocusTimer), 2);
-        const bool save = ui.button({saveX, content.y, saveWidth, headerHeight},
-                                    ui.text(creating_ ? UiText::Add : UiText::Save),
-                                    writable_ && !deleteConfirm_ && focus::valid(draft_));
-
-        const int16_t bodyY = static_cast<int16_t>(content.y + headerHeight + gap);
-        const int16_t bodyHeight = static_cast<int16_t>(content.y + content.h - bodyY);
         const bool wide = content.w >= 480;
+        const bool confirming = deleteConfirm_;
+        ui::Rect backAction;
         ui::Rect name;
-        ui::Rect focusSlider;
-        ui::Rect breakSlider;
-        ui::Rect roundsSlider;
+        ui::Rect saveAction;
+        ui::Rect focusControl;
+        ui::Rect breakControl;
+        ui::Rect roundsControl;
+        ui::Rect deletePrompt;
         ui::Rect deleteAction;
         if (wide) {
-            constexpr int16_t detailsWidth = 200;
-            constexpr int16_t sliderGap = 4;
-            const int16_t controlsX = static_cast<int16_t>(content.x + detailsWidth + gap);
-            const int16_t controlsWidth = static_cast<int16_t>(content.w - detailsWidth - gap);
-            const int16_t sliderHeight = static_cast<int16_t>((bodyHeight - sliderGap * 2) / 3);
-            name = {content.x, bodyY, detailsWidth, 64};
-            focusSlider = {controlsX, bodyY, controlsWidth, sliderHeight};
-            breakSlider = {controlsX, static_cast<int16_t>(bodyY + sliderHeight + sliderGap), controlsWidth,
-                           sliderHeight};
-            roundsSlider = {controlsX, static_cast<int16_t>(bodyY + (sliderHeight + sliderGap) * 2), controlsWidth,
-                            sliderHeight};
-            deleteAction = {content.x, static_cast<int16_t>(content.y + content.h - actionHeight), detailsWidth,
-                            actionHeight};
+            constexpr int16_t rowHeight = 48;
+            constexpr int16_t backWidth = 64;
+            constexpr int16_t deleteWidth = 86;
+            ui::Row row{{content.x, content.y, content.w, rowHeight}, gap};
+            backAction = row.next(backWidth);
+            if (confirming) {
+                deletePrompt = row.next(static_cast<int16_t>(content.w - backWidth - deleteWidth - gap * 2));
+                deleteAction = row.next(deleteWidth);
+            } else {
+                const int16_t actionWidths = static_cast<int16_t>(backWidth + saveWidth
+                                                                  + (creating_ ? 0 : deleteWidth));
+                const int16_t actionGaps = static_cast<int16_t>(gap * (creating_ ? 2 : 3));
+                name = row.next(static_cast<int16_t>(content.w - actionWidths - actionGaps));
+                if (!creating_)
+                    deleteAction = row.next(deleteWidth);
+                saveAction = row.next(saveWidth);
+            }
+
+            const int16_t controlsY = static_cast<int16_t>(content.y + rowHeight + gap);
+            const int16_t controlWidth = static_cast<int16_t>((content.w - gap * 2) / 3);
+            const int16_t controlHeight = static_cast<int16_t>(content.y + content.h - controlsY);
+            focusControl = {content.x, controlsY, controlWidth, controlHeight};
+            breakControl = {static_cast<int16_t>(content.x + controlWidth + gap), controlsY, controlWidth,
+                            controlHeight};
+            roundsControl = {static_cast<int16_t>(content.x + (controlWidth + gap) * 2), controlsY, controlWidth,
+                             controlHeight};
         } else {
-            const int16_t sliderY = static_cast<int16_t>(bodyY + 40);
-            const int16_t sliderWidth = static_cast<int16_t>((content.w - gap * 2) / 3);
+            constexpr int16_t controlGap = 4;
+            const int16_t saveX = static_cast<int16_t>(content.x + content.w - saveWidth);
+            backAction = {content.x, content.y, 64, headerHeight};
+            saveAction = {saveX, content.y, saveWidth, headerHeight};
+            ui.label({static_cast<int16_t>(content.x + 74), content.y,
+                      static_cast<int16_t>(saveX - content.x - 80), headerHeight},
+                     ui.text(UiText::FocusTimer), 2);
+            const int16_t bodyY = static_cast<int16_t>(content.y + headerHeight + gap);
+            const int16_t controlsY = static_cast<int16_t>(bodyY + 40);
+            const int16_t deleteY = static_cast<int16_t>(content.y + content.h - 40);
+            const int16_t controlHeight = std::min<int16_t>(50, std::max<int16_t>(30, (deleteY - controlsY
+                                                                                      - controlGap * 3)
+                                                                                         / 3));
             name = {content.x, bodyY, content.w, 34};
-            focusSlider = {content.x, sliderY, sliderWidth, 50};
-            breakSlider = {static_cast<int16_t>(content.x + sliderWidth + gap), sliderY, sliderWidth, 50};
-            roundsSlider = {static_cast<int16_t>(content.x + (sliderWidth + gap) * 2), sliderY, sliderWidth, 50};
-            deleteAction = {content.x, static_cast<int16_t>(content.y + content.h - 30), content.w, 30};
+            focusControl = {content.x, controlsY, content.w, controlHeight};
+            breakControl = {content.x, static_cast<int16_t>(controlsY + controlHeight + controlGap), content.w,
+                            controlHeight};
+            roundsControl = {content.x, static_cast<int16_t>(controlsY + (controlHeight + controlGap) * 2),
+                             content.w, controlHeight};
+            if (confirming) {
+                const int16_t promptWidth = static_cast<int16_t>((content.w - gap) / 2);
+                deletePrompt = {content.x, deleteY, promptWidth, 40};
+                deleteAction = {static_cast<int16_t>(content.x + promptWidth + gap), deleteY,
+                                static_cast<int16_t>(content.w - promptWidth - gap), 40};
+            } else {
+                deleteAction = {content.x, deleteY, content.w, 40};
+            }
         }
 
-        if (ui.setting(name, ui.text(UiText::TimerName), draft_.name)) {
+        if (ui.button(backAction, ui.text(UiText::Back))) {
+            if (deleteConfirm_)
+                deleteConfirm_ = false;
+            else
+                screen = Screen::FocusTimers;
+        }
+
+        if (confirming) {
+            ui.label(deletePrompt, ui.text(UiText::AreYouSure), wide ? 2 : 1, ui::themes::ColorRole::Muted,
+                     ui::TextAlign::Center);
+        } else if (ui.setting(name, ui.text(UiText::TimerName), draft_.name)) {
             keyboard_ = {};
             screen = Screen::FocusNameEdit;
         }
 
-        if (const auto value = ui.slider(focusSlider, ui.text(UiText::FocusMinutes), draft_.focusMinutes, 1, 180, 1,
-                                         " min", ui::themes::ColorRole::Accent);
+        bool save = false;
+        if (confirming && !wide)
+            ui.tap(saveAction, false);
+        else if (!confirming)
+            save = ui.button(saveAction, ui.text(creating_ ? UiText::Add : UiText::Save),
+                             writable_ && focus::valid(draft_));
+
+        if (const auto value = ui.stepper(focusControl, ui.text(UiText::FocusMinutes), draft_.focusMinutes, 1, 180,
+                                          1, " min", ui::themes::ColorRole::Accent);
             value.changed)
             draft_.focusMinutes = static_cast<uint16_t>(value.value);
-        if (const auto value = ui.slider(breakSlider, ui.text(UiText::BreakMinutes), draft_.breakMinutes, 1, 60, 1,
-                                         " min", ui::themes::ColorRole::BreakAccent);
+        if (const auto value = ui.stepper(breakControl, ui.text(UiText::BreakMinutes), draft_.breakMinutes, 1, 60, 1,
+                                          " min", ui::themes::ColorRole::BreakAccent);
             value.changed)
             draft_.breakMinutes = static_cast<uint16_t>(value.value);
-        if (const auto value = ui.slider(roundsSlider, ui.text(UiText::Rounds), draft_.rounds, 1, 12);
+        if (const auto value = ui.stepper(roundsControl, ui.text(UiText::Rounds), draft_.rounds, 1, 12);
             value.changed)
             draft_.rounds = static_cast<uint8_t>(value.value);
 
-        if (!creating_) {
-            if (wide)
-                ui.label({deleteAction.x, static_cast<int16_t>(deleteAction.y - 26), deleteAction.w, 20},
-                         deleteConfirm_ ? ui.text(UiText::AreYouSure) : std::string_view{}, 2,
-                         ui::themes::ColorRole::Muted, ui::TextAlign::Center);
-            const int16_t actionWidth = static_cast<int16_t>((deleteAction.w - gap) / 2);
-            ui::Row row{deleteAction, gap};
-            const ui::Rect cancelAction = row.next(actionWidth);
-            const ui::Rect confirmAction = row.next(actionWidth);
-            if (deleteConfirm_) {
-                if (ui.button(cancelAction, ui.text(UiText::Back)))
-                    deleteConfirm_ = false;
+        if (!creating_
+            && ui.button(deleteAction, ui.text(UiText::Delete), writable_ && timers_.count > 1)) {
+            if (!deleteConfirm_) {
+                deleteConfirm_ = true;
             } else {
-                ui.tap(cancelAction, false);
-            }
-            if (ui.button(confirmAction, ui.text(UiText::Delete), writable_ && timers_.count > 1)) {
-                if (!deleteConfirm_) {
-                    deleteConfirm_ = true;
-                } else {
-                    focus::Timers updated = timers_;
-                    for (size_t index = editIndex_ + 1; index < updated.count; ++index)
-                        updated.items[index - 1] = std::move(updated.items[index]);
-                    --updated.count;
-                    if (persist(updated)) {
-                        timers_ = std::move(updated);
-                        deleteConfirm_ = false;
-                        screen = Screen::FocusTimers;
-                    }
+                focus::Timers updated = timers_;
+                for (size_t index = editIndex_ + 1; index < updated.count; ++index)
+                    updated.items[index - 1] = std::move(updated.items[index]);
+                --updated.count;
+                if (persist(updated)) {
+                    timers_ = std::move(updated);
+                    deleteConfirm_ = false;
+                    screen = Screen::FocusTimers;
                 }
             }
         }

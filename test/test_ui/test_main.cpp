@@ -124,6 +124,41 @@ void test_button_and_slider_consume_touch() {
     TEST_ASSERT_EQUAL(25, committed.value);
 }
 
+void test_stepper_taps_and_repeats() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx, &flush, &flushRegion);
+    auto colors = theme();
+    context.setTheme(colors);
+    enableTouch(context);
+
+    gContact = {true, 190, 20};
+    TEST_ASSERT_TRUE(context.pollTouch(10));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.stepper({0, 0, 200, 40}, "Focus", 25, 1, 180, 1, " min").changed);
+    context.endFrame();
+
+    gContact = {};
+    TEST_ASSERT_TRUE(context.pollTouch(20));
+    context.beginFrame(1);
+    const auto tapped = context.stepper({0, 0, 200, 40}, "Focus", 25, 1, 180, 1, " min");
+    context.endFrame();
+    TEST_ASSERT_TRUE(tapped.changed);
+    TEST_ASSERT_EQUAL(26, tapped.value);
+
+    gContact = {true, 190, 20};
+    TEST_ASSERT_TRUE(context.pollTouch(100));
+    context.beginFrame(1);
+    context.stepper({0, 0, 200, 40}, "Focus", 25, 1, 180, 1, " min");
+    context.endFrame();
+
+    TEST_ASSERT_TRUE(context.pollTouch(640));
+    context.beginFrame(1);
+    const auto held = context.stepper({0, 0, 200, 40}, "Focus", 25, 1, 180, 1, " min");
+    context.endFrame();
+    TEST_ASSERT_TRUE(held.changed);
+    TEST_ASSERT_EQUAL(27, held.value);
+}
+
 void test_disabled_button_ignores_touch() {
     Arduino_GFX gfx;
     ui::Context context(gfx, &flush, &flushRegion);
@@ -517,6 +552,7 @@ int main(int, char**) {
     RUN_TEST(test_unchanged_widget_does_not_draw_or_flush);
     RUN_TEST(test_changed_and_removed_widgets_redraw);
     RUN_TEST(test_button_and_slider_consume_touch);
+    RUN_TEST(test_stepper_taps_and_repeats);
     RUN_TEST(test_disabled_button_ignores_touch);
     RUN_TEST(test_tap_target_handles_touch_without_drawing);
     RUN_TEST(test_layout_cursors_are_deterministic);

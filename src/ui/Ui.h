@@ -153,9 +153,11 @@ namespace ui {
         void progress(Rect rect, int value, int minimum = 0, int maximum = 100);
         void steps(Rect rect, uint8_t current, uint8_t total,
                    ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);
-        SliderResult slider(Rect rect, int value, int minimum, int maximum, int step = 1);
+        SliderResult slider(Rect rect, int value, int minimum, int maximum, int step = 1,
+                            ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);
         SliderResult slider(Rect rect, std::string_view label, int value, int minimum, int maximum, int step = 1,
-                            std::string_view suffix = {});
+                            std::string_view suffix = {},
+                            ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);
         KeyboardAction keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state,
                                 bool masked = false);
         void dial(Rect rect, int value, int minimum, int maximum, std::string_view label = {});

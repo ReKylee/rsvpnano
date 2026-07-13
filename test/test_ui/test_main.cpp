@@ -247,6 +247,27 @@ void test_setting_gives_long_values_the_full_card_width() {
     TEST_ASSERT_EQUAL(16, gfx.textWrites);
 }
 
+void test_slider_redraws_with_its_active_color() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx, &flush, &flushRegion);
+    auto colors = theme();
+    colors.colors[static_cast<size_t>(ui::themes::ColorRole::Accent)] = 0x1111;
+    colors.colors[static_cast<size_t>(ui::themes::ColorRole::BreakAccent)] = 0x2222;
+    context.setTheme(colors);
+
+    context.beginFrame(3);
+    context.slider({0, 0, 200, 40}, "Focus", 25, 1, 180, 1, " min");
+    context.endFrame();
+
+    gfx.writes = 0;
+    context.beginFrame(3);
+    context.slider({0, 0, 200, 40}, "Focus", 25, 1, 180, 1, " min",
+                   ui::themes::ColorRole::BreakAccent);
+    context.endFrame();
+    TEST_ASSERT_GREATER_THAN(0, gfx.writes);
+    TEST_ASSERT_EQUAL_HEX16(0x2222, gfx.lastFillColor);
+}
+
 void test_keyboard_edits_and_submits() {
     Arduino_GFX gfx;
     ui::Context context(gfx, &flush, &flushRegion);
@@ -502,6 +523,7 @@ int main(int, char**) {
     RUN_TEST(test_labels_truncate_to_their_rectangles);
     RUN_TEST(test_labels_align_and_battery_owns_its_drawing);
     RUN_TEST(test_setting_gives_long_values_the_full_card_width);
+    RUN_TEST(test_slider_redraws_with_its_active_color);
     RUN_TEST(test_keyboard_edits_and_submits);
     RUN_TEST(test_orientation_owns_graphics_touch_and_hourglass_cache);
     RUN_TEST(test_focus_timer_text_does_not_redraw_hourglass);

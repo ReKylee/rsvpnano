@@ -1527,17 +1527,6 @@ Polish = "Usuń"
 Russian = "Удалить"
 
 [[strings]]
-key = "ConfirmDelete"
-context = "Action confirming deletion of a focus timer."
-English = "Confirm delete"
-Spanish = "Confirmar borrado"
-French = "Confirmer"
-German = "Löschen bestätigen"
-Romanian = "Confirmă ștergerea"
-Polish = "Potwierdź usunięcie"
-Russian = "Подтвердить удаление"
-
-[[strings]]
 key = "Break"
 context = "Focus timer break phase label."
 English = "Break"

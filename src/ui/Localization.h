@@ -149,7 +149,6 @@ enum class UiText : uint8_t {
 	Add,
 	Save,
 	Delete,
-	ConfirmDelete,
 	Break,
 	Paused,
 	Complete,

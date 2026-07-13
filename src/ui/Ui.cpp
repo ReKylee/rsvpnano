@@ -413,12 +413,13 @@ namespace ui {
         }
     }
 
-    SliderResult Context::slider(Rect rect, int value, int minimum, int maximum, int step) {
-        return slider(rect, {}, value, minimum, maximum, step, {});
+    SliderResult Context::slider(Rect rect, int value, int minimum, int maximum, int step,
+                                 ui::themes::ColorRole activeRole) {
+        return slider(rect, {}, value, minimum, maximum, step, {}, activeRole);
     }
 
     SliderResult Context::slider(Rect rect, std::string_view label, int value, int minimum, int maximum, int step,
-                                 std::string_view suffix) {
+                                 std::string_view suffix, ui::themes::ColorRole activeRole) {
         const size_t slot = nextSlot_;
         const Touch* event = touch();
         const bool labeled = !label.empty();
@@ -451,6 +452,7 @@ namespace ui {
         state = combine(state, static_cast<uint32_t>(minimum));
         state = combine(state, static_cast<uint32_t>(maximum));
         state = combine(state, static_cast<uint32_t>(step));
+        state = combine(state, static_cast<uint8_t>(activeRole));
         if (claim(Kind::Slider, rect, state).changed) {
             if (labeled) {
                 const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
@@ -467,7 +469,7 @@ namespace ui {
                              label, 2, color(ui::themes::ColorRole::Foreground));
                     drawText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 18), headerWidth,
                               16},
-                             valueView, 2, color(ui::themes::ColorRole::Accent), TextAlign::Right);
+                             valueView, 2, color(activeRole), TextAlign::Right);
                 } else {
                     uint8_t labelSize = visual.h >= 30 ? 2 : 1;
                     uint8_t valueSize = labelSize;
@@ -484,7 +486,7 @@ namespace ui {
                     drawText({static_cast<int16_t>(visual.x + 7), textY, labelWidth, 16}, label, labelSize,
                              color(ui::themes::ColorRole::Foreground));
                     drawText({static_cast<int16_t>(visual.x + visual.w - valueWidth - 7), textY, valueWidth, 16},
-                             valueView, valueSize, color(ui::themes::ColorRole::Accent), TextAlign::Right);
+                             valueView, valueSize, color(activeRole), TextAlign::Right);
                 }
             }
             gfx_.fillRect(track.x, track.y, track.w, track.h, color(ui::themes::ColorRole::ProgressTrack));
@@ -509,9 +511,9 @@ namespace ui {
                 }
             }
             gfx_.fillRect(track.x, track.y, static_cast<int16_t>(knobX - track.x + 1), track.h,
-                          color(ui::themes::ColorRole::Accent));
+                          color(activeRole));
             const int16_t knobRadius = labeled ? 5 : 7;
-            gfx_.fillCircle(knobX, trackCenterY, knobRadius, color(ui::themes::ColorRole::Accent));
+            gfx_.fillCircle(knobX, trackCenterY, knobRadius, color(activeRole));
             gfx_.drawCircle(knobX, trackCenterY, knobRadius, color(ui::themes::ColorRole::OnAccent));
         }
 

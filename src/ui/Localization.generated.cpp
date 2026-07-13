@@ -11,7 +11,7 @@ constexpr size_t kLanguageCount = static_cast<size_t>(UiLanguage::Count);
 constexpr size_t kTextCount = static_cast<size_t>(UiText::Count);
 constexpr size_t kDefaultLanguageIndex = 0;
 static_assert(kLanguageCount == 7, "UiLanguage count mismatch");
-static_assert(kTextCount == 171, "UiText count mismatch");
+static_assert(kTextCount == 170, "UiText count mismatch");
 
 constexpr std::array<std::string_view, kLanguageCount> kLanguageNames = {{
 	/* English  */ "English",
@@ -161,7 +161,6 @@ constexpr TextTable kTexts = {{
 		/* Add                      */ "Add",
 		/* Save                     */ "Save",
 		/* Delete                   */ "Delete",
-		/* ConfirmDelete            */ "Confirm delete",
 		/* Break                    */ "Break",
 		/* Paused                   */ "Paused",
 		/* Complete                 */ "Complete",
@@ -335,7 +334,6 @@ constexpr TextTable kTexts = {{
 		/* Add                      */ "A\u00F1adir",
 		/* Save                     */ "Guardar",
 		/* Delete                   */ "Eliminar",
-		/* ConfirmDelete            */ "Confirmar borrado",
 		/* Break                    */ "Descanso",
 		/* Paused                   */ "En pausa",
 		/* Complete                 */ "Completado",
@@ -509,7 +507,6 @@ constexpr TextTable kTexts = {{
 		/* Add                      */ "Ajouter",
 		/* Save                     */ "Enregistrer",
 		/* Delete                   */ "Supprimer",
-		/* ConfirmDelete            */ "Confirmer",
 		/* Break                    */ "Pause",
 		/* Paused                   */ "En pause",
 		/* Complete                 */ "Termin\u00E9",
@@ -683,7 +680,6 @@ constexpr TextTable kTexts = {{
 		/* Add                      */ "Neu",
 		/* Save                     */ "Speichern",
 		/* Delete                   */ "L\u00F6schen",
-		/* ConfirmDelete            */ "L\u00F6schen best\u00E4tigen",
 		/* Break                    */ "Pause",
 		/* Paused                   */ "Pausiert",
 		/* Complete                 */ "Fertig",
@@ -857,7 +853,6 @@ constexpr TextTable kTexts = {{
 		/* Add                      */ "Adaug\u0103",
 		/* Save                     */ "Salveaz\u0103",
 		/* Delete                   */ "\u0218terge",
-		/* ConfirmDelete            */ "Confirm\u0103 \u0219tergerea",
 		/* Break                    */ "Pauz\u0103",
 		/* Paused                   */ "\u00CEn pauz\u0103",
 		/* Complete                 */ "Finalizat",
@@ -1031,7 +1026,6 @@ constexpr TextTable kTexts = {{
 		/* Add                      */ "Dodaj",
 		/* Save                     */ "Zapisz",
 		/* Delete                   */ "Usu\u0144",
-		/* ConfirmDelete            */ "Potwierd\u017A usuni\u0119cie",
 		/* Break                    */ "Przerwa",
 		/* Paused                   */ "Wstrzymano",
 		/* Complete                 */ "Uko\u0144czono",
@@ -1205,7 +1199,6 @@ constexpr TextTable kTexts = {{
 		/* Add                      */ "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C",
 		/* Save                     */ "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C",
 		/* Delete                   */ "\u0423\u0434\u0430\u043B\u0438\u0442\u044C",
-		/* ConfirmDelete            */ "\u041F\u043E\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044C \u0443\u0434\u0430\u043B\u0435\u043D\u0438\u0435",
 		/* Break                    */ "\u041F\u0435\u0440\u0435\u0440\u044B\u0432",
 		/* Paused                   */ "\u041F\u0430\u0443\u0437\u0430",
 		/* Complete                 */ "\u0413\u043E\u0442\u043E\u0432\u043E",

@@ -18,31 +18,6 @@ static ReadingLoop makeReader(uint16_t wpm, std::vector<std::string> words) {
   return r;
 }
 
-class FakeWordSource : public BookWordSource {
- public:
-  explicit FakeWordSource(std::vector<std::string> words) : words_(std::move(words)) {}
-
-  size_t wordCount() const override { return words_.size(); }
-
-  std::string wordAt(size_t index) const override {
-    if (index >= words_.size()) {
-      return "";
-    }
-    return words_[index];
-  }
-
-  void prefetchAround(size_t index) const override {
-    lastPrefetchIndex = index;
-    ++prefetchCalls;
-  }
-
-  mutable size_t lastPrefetchIndex = static_cast<size_t>(-1);
-  mutable size_t prefetchCalls = 0;
-
- private:
-  std::vector<std::string> words_;
-};
-
 // Duration of the first word when the second word is the contextual next.
 static uint32_t duration(uint16_t wpm, const char *word, const char *next) {
   ReadingLoop r = makeReader(wpm, {word, next});
@@ -461,24 +436,6 @@ void test_word_at_returns_correct_word(void) {
   TEST_ASSERT_EQUAL_STRING("gamma", r.wordAt(2).c_str());
 }
 
-void test_word_source_streams_words_and_prefetches(void) {
-  FakeWordSource source({"alpha", "beta,", "Gamma"});
-  ReadingLoop r;
-  r.setWpm(300);
-  r.setWordSource(&source, 0);
-
-  TEST_ASSERT_EQUAL(3u, r.wordCount());
-  TEST_ASSERT_EQUAL_STRING("alpha", r.currentWord().c_str());
-  TEST_ASSERT_EQUAL(0u, source.lastPrefetchIndex);
-
-  r.seekTo(1);
-  TEST_ASSERT_EQUAL_STRING("beta,", r.currentWord().c_str());
-  TEST_ASSERT_EQUAL(1u, source.lastPrefetchIndex);
-  TEST_ASSERT_GREATER_OR_EQUAL(2u, source.prefetchCalls);
-
-  TEST_ASSERT_EQUAL_UINT32(290u, r.currentWordDurationMs());
-}
-
 // ---------------------------------------------------------------------------
 // wordPacingBonusMsAt: WPM-independent per-word bonus used by the time-estimate cache
 // ---------------------------------------------------------------------------
@@ -607,7 +564,6 @@ int main(void) {
   RUN_TEST(test_rewind_sentence_ignores_abbreviation_periods);
 
   RUN_TEST(test_word_at_returns_correct_word);
-  RUN_TEST(test_word_source_streams_words_and_prefetches);
 
   RUN_TEST(test_word_pacing_bonus_at_sum_matches_expected);
   RUN_TEST(test_word_pacing_bonus_at_is_invariant_to_wpm);

@@ -6,9 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "reader/BookWordSource.h"
-
-class IndexedBookStore : public BookWordSource {
+class IndexedBookStore {
 public:
     struct Header {
         uint32_t magic = 0;
@@ -49,9 +47,9 @@ public:
     void close();
     bool isOpen() const;
 
-    size_t wordCount() const override;
-    std::string wordAt(size_t index) const override;
-    void prefetchAround(size_t index) const override;
+    size_t wordCount() const;
+    std::string wordAt(size_t index) const;
+    void prefetchAround(size_t index) const;
 
     const std::string& indexPath() const {
         return indexPath_;

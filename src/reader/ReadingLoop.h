@@ -6,7 +6,7 @@
 #include <string_view>
 #include <vector>
 
-#include "reader/BookWordSource.h"
+class IndexedBookStore;
 
 class ReadingLoop {
 public:
@@ -24,7 +24,7 @@ public:
     void pause();
     bool update(uint32_t nowMs, bool allowCatchUp = true);
     void setWords(std::vector<std::string> words, uint32_t nowMs);
-    void setWordSource(BookWordSource* source, uint32_t nowMs);
+    void setBookStore(IndexedBookStore* store, uint32_t nowMs);
     void clearLoadedBook(uint32_t nowMs);
     void scrub(int steps);
     void seekTo(size_t wordIndex);
@@ -62,6 +62,6 @@ private:
     PacingConfig pacingConfig_;
     std::string currentWord_;
     std::vector<std::string> loadedWords_;
-    BookWordSource* wordSource_ = nullptr;
+    IndexedBookStore* bookStore_ = nullptr;
     bool playing_ = false;
 };

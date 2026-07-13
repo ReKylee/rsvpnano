@@ -152,7 +152,7 @@ namespace screens {
         book.path = loadedPath;
         book.fromStorage = true;
         book.lastSavedWordIndex = static_cast<size_t>(-1);
-        reader.setWordSource(&store, nowMs);
+        reader.setBookStore(&store, nowMs);
 
         const uint32_t savedWord = book.restore(preferences, store, reader);
         if (savedWord != ReadingProgress::kNoSavedWordIndex) {

@@ -1,4 +1,5 @@
 #include "reader/ReadingLoop.h"
+#include "storage/index/IndexedBookStore.h"
 
 #include <algorithm>
 #include <utility>
@@ -870,17 +871,17 @@ void ReadingLoop::begin(uint32_t nowMs) {
 
 void ReadingLoop::setWords(std::vector<std::string> words, uint32_t nowMs) {
     playing_ = false;
-    wordSource_ = nullptr;
+    bookStore_ = nullptr;
     loadedWords_ = std::move(words);
     currentIndex_ = 0;
     lastAdvanceMs_ = nowMs;
     setCurrentWordFromIndex();
 }
 
-void ReadingLoop::setWordSource(BookWordSource* source, uint32_t nowMs) {
+void ReadingLoop::setBookStore(IndexedBookStore* store, uint32_t nowMs) {
     playing_ = false;
     loadedWords_.clear();
-    wordSource_ = source;
+    bookStore_ = store;
     currentIndex_ = 0;
     lastAdvanceMs_ = nowMs;
     setCurrentWordFromIndex();
@@ -888,7 +889,7 @@ void ReadingLoop::setWordSource(BookWordSource* source, uint32_t nowMs) {
 
 void ReadingLoop::clearLoadedBook(uint32_t nowMs) {
     playing_ = false;
-    wordSource_ = nullptr;
+    bookStore_ = nullptr;
     loadedWords_.clear();
     currentIndex_ = 0;
     lastAdvanceMs_ = nowMs;
@@ -1127,15 +1128,15 @@ void ReadingLoop::setCurrentWordFromIndex() {
         return;
     }
 
-    if (wordSource_ != nullptr) {
-        wordSource_->prefetchAround(currentIndex_);
+    if (bookStore_ != nullptr) {
+        bookStore_->prefetchAround(currentIndex_);
     }
     currentWord_ = wordAt(currentIndex_);
 }
 
 size_t ReadingLoop::wordCount() const {
-    if (wordSource_ != nullptr) {
-        return wordSource_->wordCount();
+    if (bookStore_ != nullptr) {
+        return bookStore_->wordCount();
     }
     if (!loadedWords_.empty()) {
         return loadedWords_.size();
@@ -1144,8 +1145,8 @@ size_t ReadingLoop::wordCount() const {
 }
 
 std::string ReadingLoop::wordAt(size_t index) const {
-    if (wordSource_ != nullptr) {
-        return wordSource_->wordAt(index);
+    if (bookStore_ != nullptr) {
+        return bookStore_->wordAt(index);
     }
     if (!loadedWords_.empty()) {
         return loadedWords_[index];
@@ -1154,7 +1155,7 @@ std::string ReadingLoop::wordAt(size_t index) const {
 }
 
 bool ReadingLoop::usingLoadedBook() const {
-    return wordSource_ != nullptr || !loadedWords_.empty();
+    return bookStore_ != nullptr || !loadedWords_.empty();
 }
 
 bool ReadingLoop::nextWordStartsLowercaseAt(size_t wordIndex) const {

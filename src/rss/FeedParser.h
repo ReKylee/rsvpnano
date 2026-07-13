@@ -17,6 +17,9 @@ namespace feedparser {
         String body;
     };
 
+    bool hasCompleteFeed(const String& feedBody, size_t searchStart = 0);
+    bool advancePastItem(const String& feedBody, size_t& searchStart);
+
     // Parses the next <item> (RSS) or <entry> (Atom) starting at searchStart and
     // advances searchStart past it. Returns false when no further item is found or
     // the item has no usable body text.

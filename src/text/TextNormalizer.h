@@ -12,6 +12,8 @@ namespace RsvpText {
     };
 
     String normalizeDisplayText(const String& text, ParseStats* stats = nullptr);
+    bool decodeMarkupEntity(const String& entity, String& decoded);
+    String decodeMarkupEntities(const String& text);
     void trimAsciiWhitespace(String& text);
 
 } // namespace RsvpText

@@ -8,7 +8,7 @@
 #include "board/BoardPower.h"
 #include "board/BoardStorage.h"
 #include "board/BoardSystem.h"
-#include "rss/RssFeedManager.h"
+#include "rss/RssFeeds.h"
 #include "settings/Config.h"
 #include "settings/NvsSecurity.h"
 #include "settings/PreferenceSpecs.h"
@@ -391,9 +391,7 @@ void App::handleTouch(uint32_t nowMs) {
 void App::runRss() {
     readerScreen_.reader.pause();
     screens::status(immediateUi_, "RSS", immediateUi_.text(UiText::CheckingFeeds));
-    OtaUpdater ota;
-    RssFeedManager rss;
-    const RssFeedManager::Result result = rss.checkFeeds(ota.config(prefs_), prefs_, &App::renderStorageStatus, this);
+    const RssFeeds::Result result = RssFeeds::check(prefs_, &App::renderStorageStatus, this);
     storage_.refreshBooks();
     libraryScreen_.invalidate();
     screens::status(immediateUi_, "RSS", result.summary.c_str(), result.detail.c_str());

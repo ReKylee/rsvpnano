@@ -2,6 +2,10 @@
 
 #include "rss/FeedParser.h"
 
+void setUp() {}
+
+void tearDown() {}
+
 namespace {
 
 feedparser::FeedItem firstItem(const String &feed) {
@@ -55,6 +59,17 @@ void test_decodes_entities_and_strips_html() {
   const feedparser::FeedItem item = firstItem(feed);
   TEST_ASSERT_EQUAL_STRING("Tom & Jerry", item.title.c_str());
   TEST_ASSERT_EQUAL_STRING("Hello there", item.body.c_str());
+}
+
+void test_decodes_numeric_nested_and_extended_entities() {
+  const String feed =
+      "<rss><channel><item>"
+      "<title>A&#x2014;B &amp;amp; &OElig;uvre</title>"
+      "<description>Body.</description>"
+      "</item></channel></rss>";
+  const feedparser::FeedItem item = firstItem(feed);
+  const String expected = String("A - B & ") + static_cast<char>(0x80) + "uvre";
+  TEST_ASSERT_EQUAL_STRING(expected.c_str(), item.title.c_str());
 }
 
 void test_unwraps_cdata_in_body() {
@@ -120,6 +135,17 @@ void test_parses_complete_item_from_partial_feed() {
   TEST_ASSERT_EQUAL_STRING("b1", item.body.c_str());
 }
 
+void test_detects_complete_feed_and_advances_over_items() {
+  const String partial =
+      "<feed><entry><title>One</title><summary>Body</summary></entry>"
+      "<entry><title>Two</title>";
+  size_t cursor = 0;
+  TEST_ASSERT_TRUE(feedparser::advancePastItem(partial, cursor));
+  TEST_ASSERT_FALSE(feedparser::advancePastItem(partial, cursor));
+  TEST_ASSERT_FALSE(feedparser::hasCompleteFeed(partial));
+  TEST_ASSERT_TRUE(feedparser::hasCompleteFeed(partial + "</entry></feed>"));
+}
+
 void test_preserves_long_full_text_content() {
   String longBody;
   longBody.reserve(140000);
@@ -152,11 +178,13 @@ int main(void) {
   RUN_TEST(test_parses_rss_item_fields);
   RUN_TEST(test_parses_atom_entry_with_href_link);
   RUN_TEST(test_decodes_entities_and_strips_html);
+  RUN_TEST(test_decodes_numeric_nested_and_extended_entities);
   RUN_TEST(test_unwraps_cdata_in_body);
   RUN_TEST(test_falls_back_to_host_for_author);
   RUN_TEST(test_prefers_dc_creator_author);
   RUN_TEST(test_iterates_multiple_items_then_stops);
   RUN_TEST(test_parses_complete_item_from_partial_feed);
+  RUN_TEST(test_detects_complete_feed_and_advances_over_items);
   RUN_TEST(test_preserves_long_full_text_content);
   RUN_TEST(test_host_label_strips_scheme_and_www);
   return UNITY_END();

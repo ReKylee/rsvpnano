@@ -8,6 +8,9 @@
 #include <cstring>
 #include <string>
 
+inline void yield() {}
+inline void delay(unsigned long) {}
+
 class String {
   std::string s_;
 

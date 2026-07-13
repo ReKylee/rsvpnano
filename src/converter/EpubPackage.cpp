@@ -5,6 +5,7 @@
 
 #include "converter/EpubContentWriter.h"
 #include "text/AsciiText.h"
+#include "text/RsvpTokenizer.h"
 
 namespace EpubPackage {
     namespace {
@@ -42,6 +43,30 @@ namespace EpubPackage {
             }
 
             return decoded;
+        }
+
+        String normalizedTocLabel(const String& value) {
+            const String cleaned = EpubContent::plainTextFromXmlFragment(value);
+            String normalized;
+            normalized.reserve(cleaned.length());
+            for (size_t i = 0; i < cleaned.length(); ++i) {
+                if (RsvpText::isReadableTokenChar(cleaned[i])) {
+                    normalized += cleaned[i];
+                }
+            }
+            normalized.toLowerCase();
+            return normalized;
+        }
+
+        bool isContentTocTitle(const String& value, const String& bookTitle) {
+            const String cleaned = EpubContent::plainTextFromXmlFragment(value);
+            const String lowered = toLowerCopy(cleaned);
+            const String normalized = normalizedTocLabel(cleaned);
+            const String normalizedBookTitle = normalizedTocLabel(bookTitle);
+            return !cleaned.isEmpty() && lowered != "contents" && lowered != "cover" && lowered != "title page"
+                && normalized != "tableofcontents" && !normalized.isEmpty()
+                && (normalizedBookTitle.isEmpty() || normalized != normalizedBookTitle)
+                && (normalizedBookTitle.isEmpty() || !normalizedBookTitle.startsWith(normalized));
         }
 
         String collapseZipPath(const String& path) {
@@ -101,6 +126,23 @@ namespace EpubPackage {
             return collapseZipPath(path);
         }
 
+        TocEntry tocEntry(const String& tocPath, const String& href, const String& title) {
+            const int fragmentStart = href.indexOf('#');
+            String fragment = fragmentStart < 0 ? String("") : href.substring(fragmentStart + 1);
+            const int queryStart = fragment.indexOf('?');
+            if (queryStart >= 0) {
+                fragment = fragment.substring(0, queryStart);
+            }
+            fragment = percentDecodePath(fragment);
+            fragment.trim();
+
+            return {
+                resolveZipPath(directoryForPath(tocPath), href),
+                EpubContent::plainTextFromXmlFragment(title),
+                fragment,
+            };
+        }
+
         String attributeValue(const String& tag, const char* name) {
             const String key(name);
             int position = 0;
@@ -149,6 +191,25 @@ namespace EpubPackage {
             }
 
             return "";
+        }
+
+        bool attributeContainsToken(const String& tag, const char* attribute, const char* wanted) {
+            const String value = attributeValue(tag, attribute);
+            int position = 0;
+            while (static_cast<size_t>(position) < value.length()) {
+                while (static_cast<size_t>(position) < value.length() && AsciiText::isWhitespace(value[position])) {
+                    ++position;
+                }
+                int end = position;
+                while (static_cast<size_t>(end) < value.length() && !AsciiText::isWhitespace(value[end])) {
+                    ++end;
+                }
+                if (value.substring(position, end) == wanted) {
+                    return true;
+                }
+                position = end;
+            }
+            return false;
         }
 
     } // namespace
@@ -271,6 +332,16 @@ namespace EpubPackage {
         return "";
     }
 
+    String parsePackageVersion(const String& opfXml) {
+        const int position = opfXml.indexOf("<package");
+        if (position < 0) {
+            return "";
+        }
+
+        const int end = opfXml.indexOf('>', position);
+        return end < 0 ? String("") : attributeValue(opfXml.substring(position, end + 1), "version");
+    }
+
     std::vector<ManifestItem> parseManifestItems(const String& opfXml, const String& opfBaseDir) {
         std::vector<ManifestItem> items;
         int position = 0;
@@ -297,6 +368,7 @@ namespace EpubPackage {
             item.id = attributeValue(tag, "id");
             item.path = resolveZipPath(opfBaseDir, attributeValue(tag, "href"));
             item.mediaType = attributeValue(tag, "media-type");
+            item.properties = attributeValue(tag, "properties");
 
             if (!item.id.isEmpty() && !item.path.isEmpty()) {
                 items.push_back(item);
@@ -333,6 +405,88 @@ namespace EpubPackage {
         }
 
         return ids;
+    }
+
+    std::vector<TocEntry> parseNcxTocEntries(const String& xml, const String& tocPath, const String& bookTitle) {
+        std::vector<TocEntry> entries;
+        const String lowered = toLowerCopy(xml);
+        int position = 0;
+
+        while ((position = lowered.indexOf("<navpoint", position)) >= 0) {
+            const int next = lowered.indexOf("<navpoint", position + 9);
+            const int close = lowered.indexOf("</navpoint", position + 9);
+            const int sectionEnd = next >= 0 && (close < 0 || next < close) ? next : close;
+            if (sectionEnd < 0) {
+                break;
+            }
+
+            const int textStart = lowered.indexOf("<text", position);
+            const int contentStart = lowered.indexOf("<content", position);
+            if (textStart >= 0 && textStart < sectionEnd && contentStart >= 0 && contentStart < sectionEnd) {
+                const int textOpenEnd = lowered.indexOf('>', textStart);
+                const int textClose = lowered.indexOf("</text", textOpenEnd + 1);
+                const int contentEnd = lowered.indexOf('>', contentStart);
+                if (textOpenEnd >= 0 && textClose >= 0 && textClose < sectionEnd && contentEnd >= 0) {
+                    const String title = xml.substring(textOpenEnd + 1, textClose);
+                    const String href = attributeValue(xml.substring(contentStart, contentEnd + 1), "src");
+                    if (!href.isEmpty() && isContentTocTitle(title, bookTitle)) {
+                        entries.push_back(tocEntry(tocPath, href, title));
+                    }
+                }
+            }
+
+            position += 9;
+        }
+
+        return entries;
+    }
+
+    std::vector<TocEntry> parseNavTocEntries(const String& markup, const String& tocPath, const String& bookTitle) {
+        std::vector<TocEntry> entries;
+        const String lowered = toLowerCopy(markup);
+        int scanStart = 0;
+        int scanEnd = markup.length();
+        int navPosition = 0;
+
+        while ((navPosition = lowered.indexOf("<nav", navPosition)) >= 0) {
+            const int openEnd = lowered.indexOf('>', navPosition);
+            if (openEnd < 0) {
+                break;
+            }
+            const String navTag = lowered.substring(navPosition, openEnd + 1);
+            if (attributeContainsToken(navTag, "epub:type", "toc") || attributeContainsToken(navTag, "type", "toc")) {
+                scanStart = openEnd + 1;
+                const int close = lowered.indexOf("</nav", scanStart);
+                scanEnd = close < 0 ? markup.length() : close;
+                break;
+            }
+            navPosition = openEnd + 1;
+        }
+
+        int position = scanStart;
+
+        while ((position = lowered.indexOf("<a", position)) >= 0 && position < scanEnd) {
+            const int afterName = position + 2;
+            if (static_cast<size_t>(afterName) < markup.length() && !isTagNameBoundary(markup[afterName])) {
+                position = afterName;
+                continue;
+            }
+
+            const int openEnd = lowered.indexOf('>', position);
+            const int close = lowered.indexOf("</a", openEnd + 1);
+            if (openEnd < 0 || close < 0 || close > scanEnd) {
+                break;
+            }
+
+            const String href = attributeValue(markup.substring(position, openEnd + 1), "href");
+            const String title = markup.substring(openEnd + 1, close);
+            if (!href.isEmpty() && isContentTocTitle(title, bookTitle)) {
+                entries.push_back(tocEntry(tocPath, href, title));
+            }
+            position = close + 3;
+        }
+
+        return entries;
     }
 
     const ManifestItem* findManifestItem(const std::vector<ManifestItem>& items, const String& id) {

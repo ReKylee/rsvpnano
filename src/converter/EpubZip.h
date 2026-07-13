@@ -2,9 +2,11 @@
 
 #include <Arduino.h>
 #include <FS.h>
+#include <span>
 #include <vector>
 
 #include "converter/EpubConverter.h"
+#include "converter/EpubPackage.h"
 
 namespace EpubZip {
 
@@ -28,19 +30,25 @@ namespace EpubZip {
     public:
         bool open(const String& path);
         void close();
+        bool contains(const String& name) const;
         const ZipEntry* find(const String& name) const;
 
         bool extractToString(const String& name, String& output, size_t maxBytes);
         ContentExtractStatus extractContentToRsvp(const String& name, File& output, size_t& wordCount, size_t maxWords,
-                                                  String& lastChapterTitle, const EpubConverter::Options& options,
-                                                  size_t itemIndex, size_t itemCount);
+                                                  String& lastChapterTitle, size_t& chapterCount,
+                                                  std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
+                                                  const String& fallbackChapterTitle, const String& bookTitle,
+                                                  const EpubConverter::Options& options, size_t itemIndex,
+                                                  size_t itemCount);
 
     private:
         void logArchiveHints(const char* reason) const;
         bool readCentralDirectory();
         bool extractToString(const ZipEntry& entry, String& output, size_t maxBytes);
         ContentExtractStatus extractContentToRsvp(const ZipEntry& entry, File& output, size_t& wordCount,
-                                                  size_t maxWords, String& lastChapterTitle,
+                                                  size_t maxWords, String& lastChapterTitle, size_t& chapterCount,
+                                                  std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
+                                                  const String& fallbackChapterTitle, const String& bookTitle,
                                                   const EpubConverter::Options& options, size_t itemIndex,
                                                   size_t itemCount);
 

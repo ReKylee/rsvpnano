@@ -302,6 +302,13 @@ namespace EpubZip {
         entries_.clear();
     }
 
+    bool Archive::contains(const String& name) const {
+        const String lowered = toLowerCopy(normalizeZipName(name));
+        return std::any_of(entries_.begin(), entries_.end(), [&](const ZipEntry& entry) {
+            return toLowerCopy(entry.name) == lowered;
+        });
+    }
+
     const ZipEntry* Archive::find(const String& name) const {
         const String normalized = normalizeZipName(name);
         const auto exact = std::find_if(entries_.begin(), entries_.end(), [&](const ZipEntry& entry) {
@@ -337,7 +344,9 @@ namespace EpubZip {
     }
 
     ContentExtractStatus Archive::extractContentToRsvp(const String& name, File& output, size_t& wordCount,
-                                                       size_t maxWords, String& lastChapterTitle,
+                                                       size_t maxWords, String& lastChapterTitle, size_t& chapterCount,
+                                                       std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
+                                                       const String& fallbackChapterTitle, const String& bookTitle,
                                                        const EpubConverter::Options& options, size_t itemIndex,
                                                        size_t itemCount) {
         const ZipEntry* entry = find(name);
@@ -345,8 +354,8 @@ namespace EpubZip {
             Serial.printf("[epub-zip] Content entry not found: %s\n", name.c_str());
             return ContentExtractStatus::Failed;
         }
-        return extractContentToRsvp(*entry, output, wordCount, maxWords, lastChapterTitle, options, itemIndex,
-                                    itemCount);
+        return extractContentToRsvp(*entry, output, wordCount, maxWords, lastChapterTitle, chapterCount, tocEntries,
+                                    hasToc, fallbackChapterTitle, bookTitle, options, itemIndex, itemCount);
     }
 
     void Archive::logArchiveHints(const char* reason) const {
@@ -590,7 +599,9 @@ namespace EpubZip {
     }
 
     ContentExtractStatus Archive::extractContentToRsvp(const ZipEntry& entry, File& output, size_t& wordCount,
-                                                       size_t maxWords, String& lastChapterTitle,
+                                                       size_t maxWords, String& lastChapterTitle, size_t& chapterCount,
+                                                       std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
+                                                       const String& fallbackChapterTitle, const String& bookTitle,
                                                        const EpubConverter::Options& options, size_t itemIndex,
                                                        size_t itemCount) {
         Serial.printf("[epub-zip] Extract content: %s method=%u flags=0x%04x c=%lu u=%lu\n", entry.name.c_str(),
@@ -611,7 +622,8 @@ namespace EpubZip {
             return ContentExtractStatus::Failed;
         }
 
-        EpubContent::RsvpContentWriter writer(output, wordCount, maxWords, lastChapterTitle);
+        EpubContent::RsvpContentWriter writer(output, wordCount, maxWords, lastChapterTitle, chapterCount, tocEntries,
+                                               hasToc, fallbackChapterTitle, bookTitle);
         uint32_t totalOutputBytes = 0;
         uint32_t lastProgressBytes = 0;
         ContentExtractStatus result = ContentExtractStatus::Complete;

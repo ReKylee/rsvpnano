@@ -1,17 +1,21 @@
 #include "converter/EpubConverter.h"
 
 #include <algorithm>
+#include <iterator>
 #include "board/BoardStorage.h"
 
 #include "converter/EpubPackage.h"
 #include "converter/EpubZip.h"
 #include "storage/fs/StoragePaths.h"
+#include "text/AsciiText.h"
+#include "text/TextNormalizer.h"
 
 namespace {
 
     constexpr size_t kMaxOpfBytes = 256UL * 1024UL;
+    constexpr size_t kMaxTocBytes = 256UL * 1024UL;
     constexpr size_t kMaxContainerBytes = 32UL * 1024UL;
-    constexpr const char* kConverterVersion = "stream-v6";
+    constexpr const char* kConverterVersion = "stream-v7";
 
     using EpubPackage::basenameWithoutExtension;
     using EpubPackage::directoryForPath;
@@ -20,8 +24,13 @@ namespace {
     using EpubPackage::ManifestItem;
     using EpubPackage::parseDcMetadata;
     using EpubPackage::parseManifestItems;
+    using EpubPackage::parseNavTocEntries;
+    using EpubPackage::parseNcxTocEntries;
+    using EpubPackage::parsePackageVersion;
     using EpubPackage::parseRootfilePath;
     using EpubPackage::parseSpineIds;
+    using EpubPackage::TocEntry;
+    using EpubPackage::toLowerCopy;
 
     struct PackageDocuments {
         String opfXml;
@@ -138,6 +147,85 @@ namespace {
         }();
     }
 
+    bool hasProperty(const String& properties, const char* wanted) {
+        int position = 0;
+        while (static_cast<size_t>(position) < properties.length()) {
+            while (static_cast<size_t>(position) < properties.length()
+                   && AsciiText::isWhitespace(properties[position])) {
+                ++position;
+            }
+            int end = position;
+            while (static_cast<size_t>(end) < properties.length() && !AsciiText::isWhitespace(properties[end])) {
+                ++end;
+            }
+            if (properties.substring(position, end) == wanted) {
+                return true;
+            }
+            position = end;
+        }
+        return false;
+    }
+
+    std::vector<TocEntry> firstReadableToc(EpubZip::Archive& zip, const std::vector<const ManifestItem*>& items,
+                                           const String& bookTitle, bool navDocument) {
+        for (const ManifestItem* item : items) {
+            String markup;
+            if (!zip.extractToString(item->path, markup, kMaxTocBytes)) {
+                continue;
+            }
+            std::vector<TocEntry> entries = navDocument ? parseNavTocEntries(markup, item->path, bookTitle)
+                                                        : parseNcxTocEntries(markup, item->path, bookTitle);
+            if (!entries.empty()) {
+                return entries;
+            }
+        }
+        return {};
+    }
+
+    std::vector<TocEntry> readToc(EpubZip::Archive& zip, const String& opfXml, const String& opfBaseDir,
+                                  const String& bookTitle) {
+        const std::vector<ManifestItem> manifest = parseManifestItems(opfXml, opfBaseDir);
+        std::vector<const ManifestItem*> navDocuments;
+        std::vector<const ManifestItem*> ncxDocuments;
+
+        for (const ManifestItem& item : manifest) {
+            if (hasProperty(item.properties, "nav")) {
+                navDocuments.push_back(&item);
+            }
+            if (toLowerCopy(item.mediaType) == "application/x-dtbncx+xml") {
+                ncxDocuments.push_back(&item);
+            }
+        }
+
+        const bool epub3 = parsePackageVersion(opfXml).startsWith("3");
+        std::vector<TocEntry> entries = epub3 ? firstReadableToc(zip, navDocuments, bookTitle, true)
+                                              : firstReadableToc(zip, ncxDocuments, bookTitle, false);
+        if (!entries.empty()) {
+            return entries;
+        }
+        return epub3 ? firstReadableToc(zip, ncxDocuments, bookTitle, false)
+                     : firstReadableToc(zip, navDocuments, bookTitle, true);
+    }
+
+    String fallbackChapterTitle(const String& path) {
+        String title = basenameWithoutExtension(path);
+        title.replace("_", " ");
+        title.replace("-", " ");
+        title.trim();
+        if (!title.isEmpty() && title[0] >= 'a' && title[0] <= 'z') {
+            title[0] = static_cast<char>(title[0] - ('a' - 'A'));
+        }
+        return title;
+    }
+
+    String directiveValue(String value) {
+        value = RsvpText::normalizeDisplayText(value);
+        value.replace("\r", " ");
+        value.replace("\n", " ");
+        value.trim();
+        return value;
+    }
+
     void writeRsvpHeader(File& output, const String& epubPath, const String& opfXml) {
         const String title = [&]() {
             const String metadataTitle = parseDcMetadata(opfXml, "title");
@@ -146,16 +234,16 @@ namespace {
         const String author = parseDcMetadata(opfXml, "creator");
 
         output.println("@rsvp 1");
-        output.print("@converter ");
-        output.println(kConverterVersion);
         output.print("@title ");
-        output.println(title);
+        output.println(directiveValue(title));
         if (!author.isEmpty()) {
             output.print("@author ");
-            output.println(author);
+            output.println(directiveValue(author));
         }
         output.print("@source ");
-        output.println(epubPath);
+        output.println(directiveValue(epubPath));
+        output.print("@converter ");
+        output.println(kConverterVersion);
         output.println();
     }
 
@@ -167,8 +255,10 @@ namespace {
     }
 
     void streamReadingOrder(EpubZip::Archive& zip, File& output, const std::vector<String>& readingOrder,
-                            const EpubConverter::Options& options, size_t& wordCount) {
+                            const std::vector<TocEntry>& tocEntries, const String& bookTitle,
+                            const EpubConverter::Options& options, size_t& wordCount, size_t& chapterCount) {
         String lastChapterTitle;
+        const bool hasToc = !tocEntries.empty();
 
         const auto withinWordLimit = [&]() {
             return options.maxWords == 0 || wordCount < options.maxWords;
@@ -184,9 +274,17 @@ namespace {
 
             reportItemProgress("Extracting content", i);
 
-            const EpubZip::ContentExtractStatus extractStatus =
-                zip.extractContentToRsvp(readingOrder[i], output, wordCount, options.maxWords, lastChapterTitle,
-                                         options, i, readingOrder.size());
+            std::vector<TocEntry> documentTocEntries;
+            const String loweredPath = toLowerCopy(readingOrder[i]);
+            std::copy_if(tocEntries.begin(), tocEntries.end(), std::back_inserter(documentTocEntries),
+                         [&](const TocEntry& entry) {
+                             return toLowerCopy(entry.path) == loweredPath;
+                         });
+
+            const EpubZip::ContentExtractStatus extractStatus = zip.extractContentToRsvp(
+                readingOrder[i], output, wordCount, options.maxWords, lastChapterTitle, chapterCount,
+                documentTocEntries, hasToc, fallbackChapterTitle(readingOrder[i]), bookTitle, options, i,
+                readingOrder.size());
 
             reportItemProgress("Parsed content", i + 1);
 
@@ -223,6 +321,12 @@ namespace {
             return false;
         }
 
+        if (zip.contains("META-INF/encryption.xml")) {
+            Serial.println("[epub] Encrypted EPUB content is unsupported");
+            zip.close();
+            return false;
+        }
+
         const auto failWithClosedZip = [&]() {
             zip.close();
             return false;
@@ -240,6 +344,14 @@ namespace {
         }
         reportReadingOrderReady(options, readingOrder);
 
+        const String bookTitle = [&]() {
+            const String metadataTitle = parseDcMetadata(documents.opfXml, "title");
+            return metadataTitle.isEmpty() ? basenameWithoutExtension(epubPath) : metadataTitle;
+        }();
+        const std::vector<TocEntry> tocEntries =
+            readToc(zip, documents.opfXml, documents.opfBaseDir, bookTitle);
+        Serial.printf("[epub] Usable TOC entries: %u\n", static_cast<unsigned int>(tocEntries.size()));
+
         Board::Storage::filesystem().remove(tempPath);
         File output = Board::Storage::filesystem().open(tempPath, FILE_WRITE);
         if (!output) {
@@ -250,7 +362,8 @@ namespace {
         writeRsvpHeader(output, epubPath, documents.opfXml);
 
         size_t wordCount = 0;
-        streamReadingOrder(zip, output, readingOrder, options, wordCount);
+        size_t chapterCount = 0;
+        streamReadingOrder(zip, output, readingOrder, tocEntries, bookTitle, options, wordCount, chapterCount);
 
         const String finishingDetail = wordCountDetail(wordCount);
         reportProgress(options, "Finishing EPUB", finishingDetail.c_str(), 96);

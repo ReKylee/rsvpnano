@@ -358,7 +358,7 @@ void test_keyboard_edits_and_submits() {
     context.endFrame();
     TEST_ASSERT_EQUAL_STRING("q1", value.c_str());
 
-    gContact = {true, 90, 126};
+    gContact = {true, 180, 10};
     TEST_ASSERT_TRUE(context.pollTouch(7));
     context.beginFrame(3);
     context.keyboard({0, 0, 200, 140}, value, 8, keyboard);
@@ -384,17 +384,17 @@ void test_keyboard_edits_and_submits() {
     std::string password = "secret";
     ui::KeyboardState passwordKeyboard;
     context.beginFrame(4);
-    context.keyboard({0, 0, 200, 140}, password, 8, passwordKeyboard, true);
+    context.keyboard({0, 0, 200, 140}, password, 8, passwordKeyboard, "Password", true);
     context.endFrame();
     gContact = {true, 170, 10};
     TEST_ASSERT_TRUE(context.pollTouch(11));
     context.beginFrame(4);
-    context.keyboard({0, 0, 200, 140}, password, 8, passwordKeyboard, true);
+    context.keyboard({0, 0, 200, 140}, password, 8, passwordKeyboard, "Password", true);
     context.endFrame();
     gContact = {};
     TEST_ASSERT_TRUE(context.pollTouch(12));
     context.beginFrame(4);
-    context.keyboard({0, 0, 200, 140}, password, 8, passwordKeyboard, true);
+    context.keyboard({0, 0, 200, 140}, password, 8, passwordKeyboard, "Password", true);
     context.endFrame();
     TEST_ASSERT_TRUE(passwordKeyboard.passwordVisible);
 }

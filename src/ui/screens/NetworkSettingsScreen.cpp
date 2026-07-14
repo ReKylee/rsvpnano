@@ -187,14 +187,8 @@ namespace screens {
 
     bool NetworkScreen::drawWifiConnect(ui::Context& ui, Preferences& preferences, Screen& screen) {
         const ui::Rect content = detail::content(ui);
-        ui.label({content.x, content.y, content.w, 22},
-                 connectionFailed_ ? ui.text(UiText::ConnectionFailed) : std::string_view{ssid}, 2,
-                 connectionFailed_ ? ui::themes::ColorRole::Accent : ui::themes::ColorRole::Foreground,
-                 ui::TextAlign::Center);
-        const ui::KeyboardAction action =
-            ui.keyboard({content.x, static_cast<int16_t>(content.y + 24), content.w,
-                         static_cast<int16_t>(content.h - 24)},
-                        password_, 63, keyboard_, true);
+        const std::string_view label = connectionFailed_ ? ui.text(UiText::ConnectionFailed) : std::string_view{ssid};
+        const ui::KeyboardAction action = ui.keyboard(content, password_, 63, keyboard_, label, true);
         if (action == ui::KeyboardAction::Cancel) {
             screen = Screen::WifiScan;
             return false;
@@ -221,13 +215,9 @@ namespace screens {
 
     void NetworkScreen::drawEdit(ui::Context& ui, Preferences& preferences, Screen& screen) {
         const ui::Rect content = detail::content(ui);
-        ui.label({content.x, content.y, content.w, 22},
-                 ui.text(editField_ == EditField::Owner ? UiText::OtaOwner : UiText::ReleaseTag), 2,
-                 ui::themes::ColorRole::Foreground, ui::TextAlign::Center);
         const ui::KeyboardAction action =
-            ui.keyboard({content.x, static_cast<int16_t>(content.y + 24), content.w,
-                         static_cast<int16_t>(content.h - 24)},
-                        editValue_, 63, keyboard_);
+            ui.keyboard(content, editValue_, 63, keyboard_,
+                        ui.text(editField_ == EditField::Owner ? UiText::OtaOwner : UiText::ReleaseTag));
         if (action == ui::KeyboardAction::Cancel) {
             screen = Screen::NetworkSettings;
         } else if (action == ui::KeyboardAction::Submit) {

@@ -19,9 +19,9 @@ namespace ui {
     } // namespace
 
     KeyboardAction Context::keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state,
-                                     bool masked) {
-        constexpr int16_t gap = 3;
-        const int16_t inputHeight = std::min<int16_t>(32, std::max<int16_t>(24, rect.h / 5));
+                                     std::string_view label, bool masked) {
+        constexpr int16_t gap = 2;
+        const int16_t inputHeight = std::min<int16_t>(36, std::max<int16_t>(32, rect.h / 5));
         const int16_t rowHeight = std::max<int16_t>(1, static_cast<int16_t>((rect.h - inputHeight - gap * 4) / 4));
         const int16_t firstRowY = static_cast<int16_t>(rect.y + inputHeight + gap);
         const int16_t keyWidth = std::max<int16_t>(1, static_cast<int16_t>((rect.w - gap * 9) / 10));
@@ -31,8 +31,10 @@ namespace ui {
         std::fill_n(hidden.begin(), hiddenLength, '*');
         std::string_view shownValue = masked && !state.passwordVisible ? std::string_view{hidden.data(), hiddenLength}
                                                                        : std::string_view{value};
-        const int16_t revealWidth = masked ? std::clamp<int16_t>(rect.w / 7, 60, 72) : 0;
-        const int16_t valueWidth = static_cast<int16_t>(rect.w - (masked ? revealWidth + gap : 0));
+        const int16_t clearWidth = inputHeight;
+        const int16_t revealWidth = masked ? std::clamp<int16_t>(rect.w / 7, 72, 96) : 0;
+        const int16_t valueWidth = static_cast<int16_t>(rect.w - clearWidth - gap
+                                                        - (masked ? revealWidth + gap : 0));
         const size_t visibleCharacters = static_cast<size_t>(std::max<int16_t>(1, (valueWidth - 12) / 12));
         if (shownValue.size() > visibleCharacters) {
             size_t start = shownValue.size() - visibleCharacters;
@@ -41,17 +43,30 @@ namespace ui {
             shownValue.remove_prefix(start);
         }
         const Rect input{rect.x, rect.y, valueWidth, inputHeight};
-        if (redraw(input, signature(shownValue))) {
+        if (redraw(input, signature(shownValue, signature(label)))) {
             const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
             gfx_.fillRoundRect(input.x, input.y, input.w, input.h, 5, surface);
             gfx_.drawRoundRect(input.x, input.y, input.w, input.h, 5, color(ui::themes::ColorRole::Outline));
-            drawText({static_cast<int16_t>(input.x + 6), input.y, static_cast<int16_t>(input.w - 12), input.h},
-                     shownValue.empty() ? std::string_view{"_"} : shownValue, 2,
-                     color(ui::themes::ColorRole::Accent));
+            if (label.empty()) {
+                drawText({static_cast<int16_t>(input.x + 6), input.y, static_cast<int16_t>(input.w - 12), input.h},
+                         shownValue.empty() ? std::string_view{"_"} : shownValue, 2,
+                         color(ui::themes::ColorRole::Accent));
+            } else {
+                drawText({static_cast<int16_t>(input.x + 6), static_cast<int16_t>(input.y + 2),
+                          static_cast<int16_t>(input.w - 12), 8}, label, 1,
+                         color(ui::themes::ColorRole::Muted));
+                drawText({static_cast<int16_t>(input.x + 6), static_cast<int16_t>(input.y + 11),
+                          static_cast<int16_t>(input.w - 12), static_cast<int16_t>(input.h - 11)},
+                         shownValue.empty() ? std::string_view{"_"} : shownValue, 2,
+                         color(ui::themes::ColorRole::Accent));
+            }
             markDirty(input);
         }
+        const int16_t clearX = static_cast<int16_t>(rect.x + valueWidth + gap);
+        if (button({clearX, rect.y, clearWidth, inputHeight}, "X", !value.empty()))
+            value.clear();
         if (masked
-            && button({static_cast<int16_t>(rect.x + valueWidth + gap), rect.y, revealWidth, inputHeight},
+            && button({static_cast<int16_t>(clearX + clearWidth + gap), rect.y, revealWidth, inputHeight},
                       text(state.passwordVisible ? UiText::Hide : UiText::Show))) {
             state.passwordVisible = !state.passwordVisible;
         }
@@ -124,12 +139,11 @@ namespace ui {
         }
 
         const int16_t controlsY = static_cast<int16_t>(thirdRowY + rowHeight + gap);
-        const int16_t availableWidth = static_cast<int16_t>(rect.w - gap * 4);
-        const int16_t modeWidth = static_cast<int16_t>(availableWidth * 3 / 19);
-        const int16_t spaceWidth = static_cast<int16_t>(availableWidth * 5 / 19);
-        const int16_t clearWidth = static_cast<int16_t>(availableWidth * 3 / 19);
-        const int16_t backWidth = static_cast<int16_t>(availableWidth * 4 / 19);
-        const int16_t okWidth = static_cast<int16_t>(availableWidth - modeWidth - spaceWidth - clearWidth - backWidth);
+        const int16_t availableWidth = static_cast<int16_t>(rect.w - gap * 3);
+        const int16_t modeWidth = static_cast<int16_t>(availableWidth * 3 / 18);
+        const int16_t spaceWidth = static_cast<int16_t>(availableWidth * 7 / 18);
+        const int16_t backWidth = static_cast<int16_t>(availableWidth * 4 / 18);
+        const int16_t okWidth = static_cast<int16_t>(availableWidth - modeWidth - spaceWidth - backWidth);
         ui::Row controls{{rect.x, controlsY, rect.w, rowHeight}, gap};
         constexpr std::array<std::string_view, 3> modeLabels = {"ABC", "123", "#+="};
         if (button(controls.next(modeWidth), modeLabels[static_cast<uint8_t>(state.mode)])) {
@@ -138,8 +152,6 @@ namespace ui {
         }
         if (button(controls.next(spaceWidth), text(UiText::Space)))
             append(" ");
-        if (button(controls.next(clearWidth), text(UiText::Clear)))
-            value.clear();
         const bool cancel = button(controls.next(backWidth), text(UiText::Back));
         const bool submit = button(controls.next(okWidth), "OK");
         return submit ? KeyboardAction::Submit : cancel ? KeyboardAction::Cancel : KeyboardAction::None;

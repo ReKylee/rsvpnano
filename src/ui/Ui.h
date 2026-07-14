@@ -162,7 +162,7 @@ namespace ui {
                              std::string_view suffix = {},
                              ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);
         KeyboardAction keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state,
-                                bool masked = false);
+                                std::string_view label = {}, bool masked = false);
         void dial(Rect rect, int value, int minimum, int maximum, std::string_view label = {});
         void hourglass(Rect rect, uint16_t progressPermille, bool paused = false, bool complete = false,
                        ui::themes::ColorRole sandRole = ui::themes::ColorRole::Accent, bool reversed = false,

@@ -320,11 +320,8 @@ namespace screens {
 
     void FocusScreen::drawNameEditor(ui::Context& ui, Screen& screen) {
         const ui::Rect content = detail::content(ui);
-        ui.label({content.x, content.y, content.w, 22}, ui.text(UiText::TimerName), 2,
-                 ui::themes::ColorRole::Foreground, ui::TextAlign::Center);
         const ui::KeyboardAction action =
-            ui.keyboard({content.x, static_cast<int16_t>(content.y + 24), content.w,
-                         static_cast<int16_t>(content.h - 24)}, draft_.name, focus::kMaxTimerNameBytes, keyboard_);
+            ui.keyboard(content, draft_.name, focus::kMaxTimerNameBytes, keyboard_, ui.text(UiText::TimerName));
         if (action == ui::KeyboardAction::Cancel || action == ui::KeyboardAction::Submit)
             screen = Screen::FocusEditor;
     }

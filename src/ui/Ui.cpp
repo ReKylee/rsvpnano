@@ -278,11 +278,19 @@ namespace ui {
                      color(enabled ? ui::themes::ColorRole::Foreground : ui::themes::ColorRole::Muted),
                      TextAlign::Center, textLines);
             if (hasDetail) {
-                const int16_t detailWidth = static_cast<int16_t>((textRect.w - 8) / 2);
                 const int16_t detailY = static_cast<int16_t>(rect.y + rect.h - 20);
-                drawText({textRect.x, detailY, detailWidth, 16}, detailLeft, 2, color(ui::themes::ColorRole::Muted));
-                drawText({static_cast<int16_t>(textRect.x + textRect.w - detailWidth), detailY, detailWidth, 16},
-                         detailRight, 2, color(ui::themes::ColorRole::Muted), TextAlign::Right);
+                if (detailLeft.empty() || detailRight.empty()) {
+                    drawText({textRect.x, detailY, textRect.w, 16},
+                             detailLeft.empty() ? detailRight : detailLeft, 2,
+                             color(ui::themes::ColorRole::Muted),
+                             detailLeft.empty() ? TextAlign::Right : TextAlign::Left);
+                } else {
+                    const int16_t detailWidth = static_cast<int16_t>((textRect.w - 8) / 2);
+                    drawText({textRect.x, detailY, detailWidth, 16}, detailLeft, 2,
+                             color(ui::themes::ColorRole::Muted));
+                    drawText({static_cast<int16_t>(textRect.x + textRect.w - detailWidth), detailY, detailWidth, 16},
+                             detailRight, 2, color(ui::themes::ColorRole::Muted), TextAlign::Right);
+                }
             }
             if (icon != Icon::None)
                 drawIcon({static_cast<int16_t>(rect.x + rect.w - iconWidth), rect.y, iconWidth, rect.h}, icon,

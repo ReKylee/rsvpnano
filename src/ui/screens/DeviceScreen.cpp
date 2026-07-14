@@ -9,27 +9,43 @@ namespace screens {
                   settings::NvsEncryptionState encryptionState, Screen& screen) {
         if (const Action action = detail::navigation(ui, Screen::Device, screen); action != Action::None)
             return action;
-        ui::Grid grid{detail::tabContent(ui), static_cast<uint8_t>(ui.width() >= 400 ? 3 : ui.width() >= 240 ? 2 : 1),
-                      54, 8};
-        std::string storage{ui.text(storageReady ? UiText::StorageReady : UiText::StorageUnavailable)};
-        storage += " · ";
-        storage += std::to_string(bookCount);
-        storage += " ";
-        storage += ui.text(UiText::Items);
+        const ui::Rect content = detail::tabContent(ui);
+        constexpr int16_t gap = 4;
 
-        std::string encryption{ui.text(UiText::StorageEncryption)};
-        encryption += " · ";
-        encryption += ui.text(encryptionState == settings::NvsEncryptionState::Enabled ? UiText::On
-                            : encryptionState == settings::NvsEncryptionState::Available && storageReady
-                                ? UiText::Off
-                                : UiText::Unavailable);
+        std::string items{std::to_string(bookCount)};
+        items += " ";
+        items += ui.text(UiText::Items);
+        const std::string_view encryptionStatus =
+            ui.text(encryptionState == settings::NvsEncryptionState::Enabled ? UiText::On
+                        : encryptionState == settings::NvsEncryptionState::Available && storageReady
+                            ? UiText::Off
+                            : UiText::Unavailable);
 
-        if (ui.button(grid.next(), storage))
+        ui::Rect storageButton;
+        ui::Rect encryptionButton;
+        ui::Grid actions;
+        if (content.w >= 280) {
+            constexpr int16_t statusHeight = 60;
+            const int16_t statusWidth = static_cast<int16_t>((content.w - gap) / 2);
+            storageButton = {content.x, content.y, statusWidth, statusHeight};
+            encryptionButton = {static_cast<int16_t>(content.x + statusWidth + gap), content.y,
+                                static_cast<int16_t>(content.w - statusWidth - gap), statusHeight};
+            const int16_t actionsY = static_cast<int16_t>(content.y + statusHeight + gap);
+            const int16_t actionsHeight = static_cast<int16_t>(content.y + content.h - actionsY);
+            actions = {{content.x, actionsY, content.w, actionsHeight}, 2,
+                       static_cast<int16_t>((actionsHeight - gap) / 2), gap};
+        } else {
+            ui::Grid all{content, 1, static_cast<int16_t>((content.h - gap * 5) / 6), gap};
+            storageButton = all.next();
+            encryptionButton = all.next();
+            actions = all;
+        }
+
+        if (ui.setting(storageButton, ui.text(storageReady ? UiText::StorageReady : UiText::StorageUnavailable),
+                       items))
             return Action::StorageStatus;
-        if (ui.button(grid.next(), ui.text(UiText::UsbTransfer)))
-            return Action::UsbTransfer;
-        const ui::Rect encryptionButton = grid.next();
-        if (ui.button(encryptionButton, encryption) && storageReady
+        if (ui.setting(encryptionButton, ui.text(UiText::StorageEncryption), encryptionStatus)
+            && storageReady
             && encryptionState == settings::NvsEncryptionState::Available) {
             encryptionAcknowledged = false;
             screen = Screen::StorageEncryption;
@@ -40,52 +56,54 @@ namespace screens {
             encryptionAcknowledged = false;
             screen = Screen::StorageEncryption;
         }
-        if (ui.button(grid.next(), ui.text(UiText::CompanionSync))) {
+        if (ui.button(actions.next(), ui.text(UiText::UsbTransfer), true, ui::Icon::None, 2))
+            return Action::UsbTransfer;
+        if (ui.button(actions.next(), ui.text(UiText::CompanionSync), true, ui::Icon::None, 2)) {
             screen = Screen::Sync;
             return Action::CompanionSync;
         }
-        if (ui.button(grid.next(), ui.text(UiText::RefreshRss)))
+        if (ui.button(actions.next(), ui.text(UiText::RefreshRss), true, ui::Icon::None, 2))
             return Action::RssRefresh;
-        if (ui.button(grid.next(), ui.text(UiText::OtaUpdate)))
+        if (ui.button(actions.next(), ui.text(UiText::OtaUpdate), true, ui::Icon::None, 2))
             screen = Screen::Ota;
         return Action::None;
     }
 
     Action storageEncryption(ui::Context& ui, settings::NvsEncryptionState encryptionState, Screen& screen) {
-        if (const Action action = detail::navigation(ui, Screen::StorageEncryption, screen); action != Action::None) {
-            encryptionAcknowledged = false;
-            return action;
-        }
         if (screen != Screen::StorageEncryption) {
             encryptionAcknowledged = false;
             return Action::None;
         }
 
-        ui::Column content{detail::tabContent(ui), 2};
-        ui.label(content.next(18), ui.text(UiText::StorageEncryption), 2, ui::themes::ColorRole::Foreground,
-                 ui::TextAlign::Center);
-        ui.label(content.next(24), ui.text(UiText::StorageEncryptionExplanation), 1,
-                 ui::themes::ColorRole::Foreground,
-                 ui::TextAlign::Center, 2);
-        ui.label(content.next(24), ui.text(UiText::StorageEncryptionPermanent), 1, ui::themes::ColorRole::Muted,
-                 ui::TextAlign::Center, 2);
-        ui.label(content.next(24), ui.text(UiText::StorageEncryptionReset), 1, ui::themes::ColorRole::Muted,
-                 ui::TextAlign::Center, 2);
-        if (ui.toggle(content.next(24), ui.text(UiText::IUnderstand), encryptionAcknowledged))
-            encryptionAcknowledged = !encryptionAcknowledged;
+        const ui::Rect content = detail::content(ui);
+        constexpr int16_t gap = 8;
+        constexpr int16_t actionsWidth = 230;
+        const ui::Rect explanation{content.x, content.y,
+                                   static_cast<int16_t>(content.w - actionsWidth - gap), content.h};
+        const ui::Rect actionArea{static_cast<int16_t>(explanation.x + explanation.w + gap), content.y,
+                                  actionsWidth, content.h};
 
-        const ui::Rect actions = content.next(28);
-        const int16_t buttonWidth = static_cast<int16_t>((actions.w - 8) / 2);
-        ui::Row row{actions, 8};
-        const ui::Rect back = encryptionAcknowledged ? row.next(buttonWidth) : actions;
-        if (ui.button(back, ui.text(UiText::Back))) {
-            encryptionAcknowledged = false;
-            screen = Screen::Device;
-        }
-        if (encryptionAcknowledged && ui.button(row.next(buttonWidth), ui.text(UiText::EnableProtection),
-                      encryptionState == settings::NvsEncryptionState::Available)) {
+        ui::Column notes{explanation, 3};
+        ui.label(notes.next(50), ui.text(UiText::StorageEncryptionExplanation), 2,
+                 ui::themes::ColorRole::Foreground, ui::TextAlign::Left, 3);
+        ui.label(notes.next(50), ui.text(UiText::StorageEncryptionPermanent), 2,
+                 ui::themes::ColorRole::Accent, ui::TextAlign::Left, 3);
+        ui.label(notes.next(50), ui.text(UiText::StorageEncryptionReset), 2,
+                 ui::themes::ColorRole::Foreground, ui::TextAlign::Left, 3);
+
+        ui::Column actions{actionArea, 1};
+        ui.label(actions.next(32), ui.text(UiText::StorageEncryption), 2,
+                 ui::themes::ColorRole::Foreground, ui::TextAlign::Left, 2);
+        if (ui.toggle(actions.next(40), ui.text(UiText::IUnderstand), encryptionAcknowledged))
+            encryptionAcknowledged = !encryptionAcknowledged;
+        if (ui.button(actions.next(40), ui.text(UiText::EnableProtection),
+                      encryptionAcknowledged && encryptionState == settings::NvsEncryptionState::Available)) {
             encryptionAcknowledged = false;
             return Action::EnableStorageEncryption;
+        }
+        if (ui.button(actions.next(40), ui.text(UiText::Back))) {
+            encryptionAcknowledged = false;
+            screen = Screen::Device;
         }
         return Action::None;
     }

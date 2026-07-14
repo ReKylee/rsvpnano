@@ -1327,6 +1327,17 @@ Polish = "Szyfrowanie pamięci"
 Russian = "Шифрование хранилища"
 
 [[strings]]
+key = "Encryption"
+context = "Short label for storage encryption on the Device screen."
+English = "Encryption"
+Spanish = "Cifrado"
+French = "Chiffrement"
+German = "Verschlüsselung"
+Romanian = "Criptare"
+Polish = "Szyfrowanie"
+Russian = "Шифрование"
+
+[[strings]]
 key = "StorageEncryptionExplanation"
 context = "Explanation that the NVS partition is encrypted with a device-only key."
 English = "Uses a device-only key. Copied NVS settings cannot be read elsewhere."
@@ -1358,6 +1369,17 @@ German = "SD-Einstellungen kehren nach Neustart zurück. Das WLAN-Passwort muss 
 Romanian = "Setările SD revin după repornire. Parola Wi-Fi trebuie introdusă din nou."
 Polish = "Ustawienia SD wrócą po restarcie. Hasło Wi-Fi trzeba wpisać ponownie."
 Russian = "Настройки SD вернутся после перезапуска. Пароль Wi-Fi нужно ввести снова."
+
+[[strings]]
+key = "TapToContinue"
+context = "Instruction for advancing from an informational screen."
+English = "Tap to continue"
+Spanish = "Toca para continuar"
+French = "Touchez pour continuer"
+German = "Zum Fortfahren tippen"
+Romanian = "Atinge pentru a continua"
+Polish = "Dotknij, aby kontynuować"
+Russian = "Нажмите, чтобы продолжить"
 
 [[strings]]
 key = "IUnderstand"

@@ -27,7 +27,7 @@ private:
     void handleTouch(uint32_t nowMs);
     void runRss();
     void enterUsbTransfer(uint32_t nowMs);
-    void exitUsbTransfer();
+    void exitUsbTransfer(screens::Screen destination = screens::Screen::Reader);
     void runOtaCheck(bool install);
     void enterStandby(uint32_t nowMs);
     void exitStandby(uint32_t nowMs);

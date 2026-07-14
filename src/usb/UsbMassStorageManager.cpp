@@ -95,6 +95,8 @@ void UsbMassStorageManager::end() {
 #if RSVP_USB_MSC_ENABLED
     msc_.mediaPresent(false);
     msc_.end();
+    if (tud_inited())
+        tud_disconnect();
 #endif
     endSdCard();
     active_ = false;

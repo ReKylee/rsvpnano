@@ -301,6 +301,12 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
         exitUsbTransfer();
         return;
     }
+    if (usbTransfer_.active()
+        && (Input::hasAction(event.actions, Input::ActionBack)
+            || Input::hasAction(event.actions, Input::ActionOpenMenu))) {
+        exitUsbTransfer(screens::Screen::Read);
+        return;
+    }
     if (screen_ == screens::Screen::FocusSession
         && (Input::hasAction(event.actions, Input::ActionBack)
             || Input::hasAction(event.actions, Input::ActionSelect))) {
@@ -422,11 +428,11 @@ void App::enterUsbTransfer(uint32_t nowMs) {
 #endif
 }
 
-void App::exitUsbTransfer() {
+void App::exitUsbTransfer(screens::Screen destination) {
     usbTransfer_.end();
     storage_.refreshBooks();
     libraryScreen_.invalidate();
-    screen_ = screens::Screen::Reader;
+    screen_ = destination;
     renderScreen(millis());
 }
 

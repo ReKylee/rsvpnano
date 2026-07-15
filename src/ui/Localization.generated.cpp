@@ -11,7 +11,7 @@ constexpr size_t kLanguageCount = static_cast<size_t>(UiLanguage::Count);
 constexpr size_t kTextCount = static_cast<size_t>(UiText::Count);
 constexpr size_t kDefaultLanguageIndex = 0;
 static_assert(kLanguageCount == 7, "UiLanguage count mismatch");
-static_assert(kTextCount == 172, "UiText count mismatch");
+static_assert(kTextCount == 173, "UiText count mismatch");
 
 constexpr std::array<std::string_view, kLanguageCount> kLanguageNames = {{
 	/* English  */ "English",
@@ -104,6 +104,7 @@ constexpr TextTable kTexts = {{
 		/* Screensaver              */ "Screensaver",
 		/* Maze                     */ "Maze",
 		/* Voronoi                  */ "Voronoi",
+		/* Reaction                 */ "Reaction",
 		/* ScreenOff                */ "Screen off",
 		/* Life                     */ "Life",
 		/* AdditionalDelaySection   */ "ADDITIONAL DELAY",
@@ -279,6 +280,7 @@ constexpr TextTable kTexts = {{
 		/* Screensaver              */ "Salvapantallas",
 		/* Maze                     */ "Laberinto",
 		/* Voronoi                  */ "Voronoi",
+		/* Reaction                 */ "Reacci\u00F3n",
 		/* ScreenOff                */ "Pantalla apagada",
 		/* Life                     */ "Vida",
 		/* AdditionalDelaySection   */ "RETRASO ADICIONAL",
@@ -454,6 +456,7 @@ constexpr TextTable kTexts = {{
 		/* Screensaver              */ "\u00C9conomiseur",
 		/* Maze                     */ "Labyrinthe",
 		/* Voronoi                  */ "Vorono\u00EF",
+		/* Reaction                 */ "R\u00E9action",
 		/* ScreenOff                */ "\u00C9cran \u00E9teint",
 		/* Life                     */ "Vie",
 		/* AdditionalDelaySection   */ "D\u00C9LAI SUPPL\u00C9MENTAIRE",
@@ -629,6 +632,7 @@ constexpr TextTable kTexts = {{
 		/* Screensaver              */ "Bildschirmschoner",
 		/* Maze                     */ "Labyrinth",
 		/* Voronoi                  */ "Voronoi",
+		/* Reaction                 */ "Reaktion",
 		/* ScreenOff                */ "Bildschirm aus",
 		/* Life                     */ "Leben",
 		/* AdditionalDelaySection   */ "ZUSATZPAUSE",
@@ -804,6 +808,7 @@ constexpr TextTable kTexts = {{
 		/* Screensaver              */ "Protector ecran",
 		/* Maze                     */ "Labirint",
 		/* Voronoi                  */ "Voronoi",
+		/* Reaction                 */ "Reac\u021Bie",
 		/* ScreenOff                */ "Ecran oprit",
 		/* Life                     */ "Via\u021B\u0103",
 		/* AdditionalDelaySection   */ "\u00CENT\u00C2RZIERE SUPLIMENTAR\u0102",
@@ -979,6 +984,7 @@ constexpr TextTable kTexts = {{
 		/* Screensaver              */ "Wygaszacz",
 		/* Maze                     */ "Labirynt",
 		/* Voronoi                  */ "Voronoi",
+		/* Reaction                 */ "Reakcja",
 		/* ScreenOff                */ "Ekran wy\u0142\u0105czony",
 		/* Life                     */ "\u017Bycie",
 		/* AdditionalDelaySection   */ "DODATKOWE OP\u00D3\u0179NIENIE",
@@ -1154,6 +1160,7 @@ constexpr TextTable kTexts = {{
 		/* Screensaver              */ "\u0417\u0430\u0441\u0442\u0430\u0432\u043A\u0430",
 		/* Maze                     */ "\u041B\u0430\u0431\u0438\u0440\u0438\u043D\u0442",
 		/* Voronoi                  */ "\u0412\u043E\u0440\u043E\u043D\u043E\u0439",
+		/* Reaction                 */ "\u0420\u0435\u0430\u043A\u0446\u0438\u044F",
 		/* ScreenOff                */ "\u042D\u043A\u0440\u0430\u043D \u0432\u044B\u043A\u043B\u044E\u0447\u0435\u043D",
 		/* Life                     */ "\u0416\u0438\u0437\u043D\u044C",
 		/* AdditionalDelaySection   */ "\u0414\u041E\u041F\u041E\u041B\u041D\u0418\u0422\u0415\u041B\u042C\u041D\u0410\u042F \u0417\u0410\u0414\u0415\u0420\u0416\u041A\u0410",

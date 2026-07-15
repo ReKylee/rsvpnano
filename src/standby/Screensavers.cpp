@@ -24,6 +24,14 @@ namespace standby {
         return *reinterpret_cast<const MazeScreensaver*>(&storage_);
     }
 
+    ReactionScreensaver& ScreensaverSlot::reaction() {
+        return *reinterpret_cast<ReactionScreensaver*>(&storage_);
+    }
+
+    const ReactionScreensaver& ScreensaverSlot::reaction() const {
+        return *reinterpret_cast<const ReactionScreensaver*>(&storage_);
+    }
+
     VoronoiScreensaver& ScreensaverSlot::voronoi() {
         return *reinterpret_cast<VoronoiScreensaver*>(&storage_);
     }
@@ -48,6 +56,10 @@ namespace standby {
             new (&storage_) VoronoiScreensaver();
             voronoi().reset(columns, rows);
             break;
+        case Kind::Reaction:
+            new (&storage_) ReactionScreensaver();
+            reaction().reset(columns, rows);
+            break;
         case Kind::ScreenOff:
             break;
         case Kind::Life:
@@ -69,6 +81,9 @@ namespace standby {
             break;
         case Kind::Voronoi:
             voronoi().~VoronoiScreensaver();
+            break;
+        case Kind::Reaction:
+            reaction().~ReactionScreensaver();
             break;
         case Kind::ScreenOff:
             break;
@@ -94,6 +109,9 @@ namespace standby {
         case Kind::Voronoi:
             voronoi().seed(rngSeed);
             break;
+        case Kind::Reaction:
+            reaction().seed(rngSeed);
+            break;
         case Kind::ScreenOff:
             break;
         case Kind::Life:
@@ -115,6 +133,9 @@ namespace standby {
         case Kind::Voronoi:
             voronoi().step();
             break;
+        case Kind::Reaction:
+            reaction().step();
+            break;
         case Kind::ScreenOff:
             break;
         case Kind::Life:
@@ -134,6 +155,8 @@ namespace standby {
             return maze().frame();
         case Kind::Voronoi:
             return voronoi().frame();
+        case Kind::Reaction:
+            return reaction().frame();
         case Kind::ScreenOff:
             return {};
         case Kind::Life:

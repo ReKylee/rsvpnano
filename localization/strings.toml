@@ -890,6 +890,17 @@ Polish = "Voronoi"
 Russian = "Вороной"
 
 [[strings]]
+key = "Reaction"
+context = "Belousov-Zhabotinsky-inspired reaction screensaver option."
+English = "Reaction"
+Spanish = "Reacción"
+French = "Réaction"
+German = "Reaktion"
+Romanian = "Reacție"
+Polish = "Reakcja"
+Russian = "Реакция"
+
+[[strings]]
 key = "ScreenOff"
 context = "Standby option that turns the display off."
 English = "Screen off"

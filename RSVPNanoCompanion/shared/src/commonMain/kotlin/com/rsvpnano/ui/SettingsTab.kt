@@ -579,6 +579,7 @@ private fun DisplaySettings(
                     NanoSettingsSchema.SCREENSAVER_LIFE.toString() to "Life",
                     NanoSettingsSchema.SCREENSAVER_MAZE.toString() to "Maze",
                     NanoSettingsSchema.SCREENSAVER_VORONOI.toString() to "Voronoi",
+                    NanoSettingsSchema.SCREENSAVER_REACTION.toString() to "Reaction",
                     NanoSettingsSchema.SCREENSAVER_SCREEN_OFF.toString() to "Screen off",
                 ),
                 onSelected = { mode ->

@@ -311,7 +311,7 @@ Settings are grouped by how people actually use the device.
 - Left/right handed layout.
 - Reader controls layout, including an option to put rewind in the top-right corner.
 - Language.
-- Screen saver: Life, Maze, Voronoi, or Screen off.
+- Screen saver: Life, Maze, Voronoi, Reaction, or Screen off.
 - Standby timer.
 - Footer and battery label behavior.
 - Optional battery, chapter, and book percentage labels while actively reading.

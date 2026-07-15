@@ -27,7 +27,7 @@ namespace {
     constexpr uint16_t kDisplayColorA = 0x0000;
     constexpr uint16_t kDisplayColorB = 0xFFFF;
 
-    ui::Context gDisplay(Board::Display::gfx(), &Board::Display::flush, &Board::Display::flushRegion);
+    ui::Context gDisplay(Board::Display::gfx());
     ui::themes::Theme gTheme = ui::themes::defaultTheme();
     bool gDisplayReady = false;
 

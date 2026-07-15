@@ -5,6 +5,7 @@
 
 #include "standby/LifeScreensaver.h"
 #include "standby/MazeScreensaver.h"
+#include "standby/ReactionScreensaver.h"
 #include "standby/ScreensaverTypes.h"
 #include "standby/VoronoiScreensaver.h"
 
@@ -32,12 +33,15 @@ namespace standby {
         }
 
     private:
-        using Storage = std::aligned_union_t<0, LifeScreensaver, MazeScreensaver, VoronoiScreensaver>;
+        using Storage = std::aligned_union_t<0, LifeScreensaver, MazeScreensaver, ReactionScreensaver,
+                                             VoronoiScreensaver>;
 
         LifeScreensaver& life();
         const LifeScreensaver& life() const;
         MazeScreensaver& maze();
         const MazeScreensaver& maze() const;
+        ReactionScreensaver& reaction();
+        const ReactionScreensaver& reaction() const;
         VoronoiScreensaver& voronoi();
         const VoronoiScreensaver& voronoi() const;
 

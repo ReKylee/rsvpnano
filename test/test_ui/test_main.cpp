@@ -4,17 +4,8 @@
 
 namespace {
 
-    int gFlushes = 0;
-    int gRegionFlushes = 0;
     ui::TouchContact gContact;
 
-    void flush() {
-        ++gFlushes;
-    }
-    bool flushRegion(uint16_t, uint16_t, uint16_t, uint16_t) {
-        ++gRegionFlushes;
-        return true;
-    }
     bool beginTouch() {
         return true;
     }
@@ -42,14 +33,13 @@ namespace {
 } // namespace
 
 void setUp() {
-    gFlushes = gRegionFlushes = 0;
     gContact = {};
 }
 void tearDown() {}
 
 void test_unchanged_widget_does_not_draw_or_flush() {
     Arduino_GFX gfx;
-    ui::Context context(gfx, &flush, &flushRegion);
+    ui::Context context(gfx);
     auto colors = theme();
     context.setTheme(colors);
     context.beginFrame(1);
@@ -57,17 +47,17 @@ void test_unchanged_widget_does_not_draw_or_flush() {
     context.endFrame();
 
     gfx.writes = 0;
-    gRegionFlushes = 0;
+    gfx.flushes = 0;
     context.beginFrame(1);
     context.button({0, 0, 80, 24}, "Open");
     context.endFrame();
     TEST_ASSERT_EQUAL(0, gfx.writes);
-    TEST_ASSERT_EQUAL(0, gRegionFlushes);
+    TEST_ASSERT_EQUAL(0, gfx.flushes);
 }
 
 void test_changed_and_removed_widgets_redraw() {
     Arduino_GFX gfx;
-    ui::Context context(gfx, &flush, &flushRegion);
+    ui::Context context(gfx);
     auto colors = theme();
     context.setTheme(colors);
     context.beginFrame(1);
@@ -76,17 +66,17 @@ void test_changed_and_removed_widgets_redraw() {
     context.endFrame();
 
     gfx.writes = 0;
-    gRegionFlushes = 0;
+    gfx.flushes = 0;
     context.beginFrame(1);
     context.button({0, 0, 80, 24}, "Changed");
     context.endFrame();
     TEST_ASSERT_GREATER_THAN(0, gfx.writes);
-    TEST_ASSERT_EQUAL(1, gRegionFlushes);
+    TEST_ASSERT_EQUAL(1, gfx.flushes);
 }
 
 void test_button_and_slider_consume_touch() {
     Arduino_GFX gfx;
-    ui::Context context(gfx, &flush, &flushRegion);
+    ui::Context context(gfx);
     auto colors = theme();
     context.setTheme(colors);
     enableTouch(context);
@@ -94,14 +84,14 @@ void test_button_and_slider_consume_touch() {
     context.button({0, 0, 80, 24}, "Tap");
     context.endFrame();
     gfx.writes = 0;
-    gRegionFlushes = 0;
+    gfx.flushes = 0;
     gContact = {true, 20, 10};
     TEST_ASSERT_TRUE(context.pollTouch(1));
     context.beginFrame(1);
     TEST_ASSERT_FALSE(context.button({0, 0, 80, 24}, "Tap"));
     context.endFrame();
     TEST_ASSERT_EQUAL(0, gfx.writes);
-    TEST_ASSERT_EQUAL(0, gRegionFlushes);
+    TEST_ASSERT_EQUAL(0, gfx.flushes);
     gContact = {};
     TEST_ASSERT_TRUE(context.pollTouch(2));
     context.beginFrame(1);
@@ -126,7 +116,7 @@ void test_button_and_slider_consume_touch() {
 
 void test_stepper_taps_and_repeats() {
     Arduino_GFX gfx;
-    ui::Context context(gfx, &flush, &flushRegion);
+    ui::Context context(gfx);
     auto colors = theme();
     context.setTheme(colors);
     enableTouch(context);
@@ -161,7 +151,7 @@ void test_stepper_taps_and_repeats() {
 
 void test_disabled_button_ignores_touch() {
     Arduino_GFX gfx;
-    ui::Context context(gfx, &flush, &flushRegion);
+    ui::Context context(gfx);
     auto colors = theme();
     context.setTheme(colors);
     enableTouch(context);
@@ -183,7 +173,7 @@ void test_disabled_button_ignores_touch() {
 
 void test_tap_target_handles_touch_without_drawing() {
     Arduino_GFX gfx;
-    ui::Context context(gfx, &flush, &flushRegion);
+    ui::Context context(gfx);
     auto colors = theme();
     context.setTheme(colors);
     enableTouch(context);
@@ -192,7 +182,7 @@ void test_tap_target_handles_touch_without_drawing() {
     context.tap({0, 0, 80, 24});
     context.endFrame();
     gfx.writes = 0;
-    gRegionFlushes = 0;
+    gfx.flushes = 0;
 
     gContact = {true, 20, 10};
     TEST_ASSERT_TRUE(context.pollTouch(1));
@@ -205,12 +195,12 @@ void test_tap_target_handles_touch_without_drawing() {
     TEST_ASSERT_TRUE(context.tap({0, 0, 80, 24}));
     context.endFrame();
     TEST_ASSERT_EQUAL(0, gfx.writes);
-    TEST_ASSERT_EQUAL(0, gRegionFlushes);
+    TEST_ASSERT_EQUAL(0, gfx.flushes);
 
     context.beginFrame(10);
     context.endFrame();
     TEST_ASSERT_EQUAL(0, gfx.writes);
-    TEST_ASSERT_EQUAL(0, gRegionFlushes);
+    TEST_ASSERT_EQUAL(0, gfx.flushes);
 }
 
 void test_layout_cursors_are_deterministic() {
@@ -225,7 +215,7 @@ void test_layout_cursors_are_deterministic() {
 
 void test_labels_truncate_to_their_rectangles() {
     Arduino_GFX gfx;
-    ui::Context context(gfx, &flush, &flushRegion);
+    ui::Context context(gfx);
     auto colors = theme();
     context.setTheme(colors);
     context.beginFrame(1);
@@ -248,7 +238,7 @@ void test_labels_truncate_to_their_rectangles() {
 
 void test_labels_align_and_battery_owns_its_drawing() {
     Arduino_GFX gfx;
-    ui::Context context(gfx, &flush, &flushRegion);
+    ui::Context context(gfx);
     auto colors = theme();
     context.setTheme(colors);
     context.beginFrame(1);
@@ -268,7 +258,7 @@ void test_labels_align_and_battery_owns_its_drawing() {
 
 void test_setting_gives_long_values_the_full_card_width() {
     Arduino_GFX gfx;
-    ui::Context context(gfx, &flush, &flushRegion);
+    ui::Context context(gfx);
     auto colors = theme();
     context.setTheme(colors);
     context.beginFrame(1);
@@ -290,7 +280,7 @@ void test_setting_gives_long_values_the_full_card_width() {
 
 void test_slider_redraws_with_its_active_color() {
     Arduino_GFX gfx;
-    ui::Context context(gfx, &flush, &flushRegion);
+    ui::Context context(gfx);
     auto colors = theme();
     colors.colors[ui::themes::ColorRole::Accent] = 0x1111;
     colors.colors[ui::themes::ColorRole::BreakAccent] = 0x2222;
@@ -310,7 +300,7 @@ void test_slider_redraws_with_its_active_color() {
 
 void test_keyboard_edits_and_submits() {
     Arduino_GFX gfx;
-    ui::Context context(gfx, &flush, &flushRegion);
+    ui::Context context(gfx);
     auto colors = theme();
     context.setTheme(colors);
     enableTouch(context);
@@ -400,7 +390,7 @@ void test_keyboard_edits_and_submits() {
 
 void test_orientation_owns_graphics_touch_and_hourglass_cache() {
     Arduino_GFX gfx(320, 172);
-    ui::Context context(gfx, &flush, &flushRegion);
+    ui::Context context(gfx);
     auto colors = theme();
     context.setTheme(colors);
     enableTouch(context);
@@ -415,12 +405,12 @@ void test_orientation_owns_graphics_touch_and_hourglass_cache() {
     context.hourglass({10, 10, 80, 120}, 250);
     context.endFrame();
     gfx.writes = 0;
-    gRegionFlushes = 0;
+    gfx.flushes = 0;
     context.beginFrame(5);
     context.hourglass({10, 10, 80, 120}, 250);
     context.endFrame();
     TEST_ASSERT_EQUAL(0, gfx.writes);
-    TEST_ASSERT_EQUAL(0, gRegionFlushes);
+    TEST_ASSERT_EQUAL(0, gfx.flushes);
 
     context.beginFrame(5);
     context.hourglass({10, 10, 80, 120}, 260);
@@ -471,7 +461,7 @@ void test_orientation_owns_graphics_touch_and_hourglass_cache() {
 
 void test_focus_timer_text_does_not_redraw_hourglass() {
     Arduino_GFX gfx(640, 172);
-    ui::Context context(gfx, &flush, &flushRegion);
+    ui::Context context(gfx);
     auto colors = theme();
     context.setTheme(colors);
 
@@ -506,7 +496,7 @@ void test_focus_timer_text_does_not_redraw_hourglass() {
 
 void test_steps_follow_the_long_axis() {
     Arduino_GFX gfx;
-    ui::Context context(gfx, &flush, &flushRegion);
+    ui::Context context(gfx);
     auto colors = theme();
     context.setTheme(colors);
 
@@ -521,7 +511,7 @@ void test_steps_follow_the_long_axis() {
 
 void test_hourglass_source_follows_glass_and_fallen_sand_settles_at_base() {
     Arduino_GFX gfx(640, 172);
-    ui::Context context(gfx, &flush, &flushRegion);
+    ui::Context context(gfx);
     auto colors = theme();
     context.setTheme(colors);
 

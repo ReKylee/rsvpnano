@@ -92,6 +92,7 @@ enum class UiText : uint8_t {
 	Screensaver,
 	Maze,
 	Voronoi,
+	Reaction,
 	ScreenOff,
 	Life,
 	AdditionalDelaySection,

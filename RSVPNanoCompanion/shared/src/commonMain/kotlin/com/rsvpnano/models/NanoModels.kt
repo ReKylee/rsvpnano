@@ -332,6 +332,7 @@ object NanoSettingsSchema {
     const val SCREENSAVER_MAZE = 1
     const val SCREENSAVER_VORONOI = 2
     const val SCREENSAVER_SCREEN_OFF = 3
+    const val SCREENSAVER_REACTION = 4
     const val TYPEFACE_DEFAULT = "literata"
 
     const val WPM_MIN = 10
@@ -386,7 +387,8 @@ object NanoSettingsSchema {
         when (value) {
             SCREENSAVER_MAZE,
             SCREENSAVER_VORONOI,
-            SCREENSAVER_SCREEN_OFF
+            SCREENSAVER_SCREEN_OFF,
+            SCREENSAVER_REACTION
             -> value
             else -> SCREENSAVER_LIFE
         }

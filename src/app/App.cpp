@@ -256,6 +256,9 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
         powerOff(nowMs);
         return;
     case screens::Action::CompanionSync:
+        immediateUi_.invalidate();
+        screens::status(immediateUi_, immediateUi_.text(UiText::CompanionSync),
+                        immediateUi_.text(UiText::Connecting));
         sync_.begin(prefs_);
         renderScreen(nowMs);
         return;

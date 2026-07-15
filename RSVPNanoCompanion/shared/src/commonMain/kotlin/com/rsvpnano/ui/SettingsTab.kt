@@ -1,11 +1,5 @@
 package com.rsvpnano.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,6 +18,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -41,7 +36,6 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -66,7 +60,7 @@ private enum class SettingsCategory(
     val label: String,
     val icon: ImageVector,
 ) {
-    Connection("Connection", Icons.Outlined.Wifi),
+    Device("Device", Icons.Outlined.Wifi),
     Reading("Reading", Icons.AutoMirrored.Outlined.MenuBook),
     Display("Display", Icons.Outlined.Palette),
     Typography("Typography", Icons.Outlined.TextFields),
@@ -76,33 +70,33 @@ private enum class SettingsCategory(
 @Composable
 fun SettingsTab(
     uiState: CompanionUiState,
-    onRefresh: () -> Unit,
-    onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
-    onWifiSsidChange: (String) -> Unit,
-    onWifiPasswordChange: (String) -> Unit,
-    onSaveWifi: () -> Unit,
-    onClearWifi: () -> Unit,
-    onForgetRememberedNano: () -> Unit,
+    presenter: CompanionPresenter,
+    onFirmwareNotificationsChange: (Boolean) -> Unit,
     hasPermissions: Boolean,
     onGrantPermissions: () -> Unit,
-    onRefreshThemeCatalog: () -> Unit,
-    onSelectCatalogTheme: (String) -> Unit,
-    onInstallOnlineTheme: () -> Unit,
     onUploadTheme: () -> Unit,
-    onRefreshFontCatalog: () -> Unit,
-    onSelectCatalogFont: (String) -> Unit,
-    onSelectCatalogFontSize: (String) -> Unit,
-    onInstallOnlineFont: () -> Unit,
     onUploadFont: () -> Unit,
 ) {
-    var category by remember { mutableStateOf(SettingsCategory.Connection) }
+    var category by remember { mutableStateOf(SettingsCategory.Device) }
+    val content: @Composable (Modifier) -> Unit = { modifier ->
+        SettingsContent(
+            category = category,
+            uiState = uiState,
+            presenter = presenter,
+            onFirmwareNotificationsChange = onFirmwareNotificationsChange,
+            hasPermissions = hasPermissions,
+            onGrantPermissions = onGrantPermissions,
+            onUploadTheme = onUploadTheme,
+            onUploadFont = onUploadFont,
+            modifier = modifier,
+        )
+    }
 
     PullRefreshBox(
         isRefreshing = uiState.isRefreshing,
-        onRefresh = onRefresh,
+        onRefresh = presenter::refresh,
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                 if (maxWidth >= 720.dp) {
                     Row(modifier = Modifier.fillMaxSize()) {
                         SettingsRail(
@@ -110,29 +104,7 @@ fun SettingsTab(
                             onSelected = { category = it },
                         )
                         VerticalDivider()
-                        SettingsContent(
-                            category = category,
-                            uiState = uiState,
-                            bottomPadding = if (uiState.showSettingsSaveStatus) 72.dp else 24.dp,
-                            onUpdateSettings = onUpdateSettings,
-                            onWifiSsidChange = onWifiSsidChange,
-                            onWifiPasswordChange = onWifiPasswordChange,
-                            onSaveWifi = onSaveWifi,
-                            onClearWifi = onClearWifi,
-                            onForgetRememberedNano = onForgetRememberedNano,
-                            hasPermissions = hasPermissions,
-                            onGrantPermissions = onGrantPermissions,
-                            onRefreshThemeCatalog = onRefreshThemeCatalog,
-                            onSelectCatalogTheme = onSelectCatalogTheme,
-                            onInstallOnlineTheme = onInstallOnlineTheme,
-                            onUploadTheme = onUploadTheme,
-                            onRefreshFontCatalog = onRefreshFontCatalog,
-                            onSelectCatalogFont = onSelectCatalogFont,
-                            onSelectCatalogFontSize = onSelectCatalogFontSize,
-                            onInstallOnlineFont = onInstallOnlineFont,
-                            onUploadFont = onUploadFont,
-                            modifier = Modifier.weight(1f),
-                        )
+                        content(Modifier.weight(1f))
                     }
                 } else {
                     Column(modifier = Modifier.fillMaxSize()) {
@@ -154,52 +126,9 @@ fun SettingsTab(
                                 )
                             }
                         }
-                        SettingsContent(
-                            category = category,
-                            uiState = uiState,
-                            bottomPadding = if (uiState.showSettingsSaveStatus) 72.dp else 24.dp,
-                            onUpdateSettings = onUpdateSettings,
-                            onWifiSsidChange = onWifiSsidChange,
-                            onWifiPasswordChange = onWifiPasswordChange,
-                            onSaveWifi = onSaveWifi,
-                            onClearWifi = onClearWifi,
-                            onForgetRememberedNano = onForgetRememberedNano,
-                            hasPermissions = hasPermissions,
-                            onGrantPermissions = onGrantPermissions,
-                            onRefreshThemeCatalog = onRefreshThemeCatalog,
-                            onSelectCatalogTheme = onSelectCatalogTheme,
-                            onInstallOnlineTheme = onInstallOnlineTheme,
-                            onUploadTheme = onUploadTheme,
-                            onRefreshFontCatalog = onRefreshFontCatalog,
-                            onSelectCatalogFont = onSelectCatalogFont,
-                            onSelectCatalogFontSize = onSelectCatalogFontSize,
-                            onInstallOnlineFont = onInstallOnlineFont,
-                            onUploadFont = onUploadFont,
-                            modifier = Modifier.weight(1f),
-                        )
+                        content(Modifier.weight(1f))
                     }
                 }
-            }
-
-            AnimatedVisibility(
-                visible = uiState.showSettingsSaveStatus,
-                modifier = Modifier.align(Alignment.BottomCenter),
-                enter = fadeIn(animationSpec = tween(durationMillis = 160)) +
-                    slideInVertically(
-                        animationSpec = tween(durationMillis = 180),
-                        initialOffsetY = { it / 2 },
-                    ),
-                exit = fadeOut(animationSpec = tween(durationMillis = 140)) +
-                    slideOutVertically(
-                        animationSpec = tween(durationMillis = 160),
-                        targetOffsetY = { it / 2 },
-                    ),
-            ) {
-                SettingsSaveStatus(
-                    uiState = uiState,
-                    modifier = Modifier.padding(bottom = 8.dp),
-                )
-            }
         }
     }
 }
@@ -225,36 +154,25 @@ private fun SettingsRail(
 private fun SettingsContent(
     category: SettingsCategory,
     uiState: CompanionUiState,
-    bottomPadding: androidx.compose.ui.unit.Dp,
-    onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
-    onWifiSsidChange: (String) -> Unit,
-    onWifiPasswordChange: (String) -> Unit,
-    onSaveWifi: () -> Unit,
-    onClearWifi: () -> Unit,
-    onForgetRememberedNano: () -> Unit,
+    presenter: CompanionPresenter,
+    onFirmwareNotificationsChange: (Boolean) -> Unit,
     hasPermissions: Boolean,
     onGrantPermissions: () -> Unit,
-    onRefreshThemeCatalog: () -> Unit,
-    onSelectCatalogTheme: (String) -> Unit,
-    onInstallOnlineTheme: () -> Unit,
     onUploadTheme: () -> Unit,
-    onRefreshFontCatalog: () -> Unit,
-    onSelectCatalogFont: (String) -> Unit,
-    onSelectCatalogFontSize: (String) -> Unit,
-    onInstallOnlineFont: () -> Unit,
     onUploadFont: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         when (category) {
-            SettingsCategory.Connection -> ConnectionSettings(
+            SettingsCategory.Device -> DeviceSettings(
                 uiState = uiState,
-                bottomPadding = bottomPadding,
-                onWifiSsidChange = onWifiSsidChange,
-                onWifiPasswordChange = onWifiPasswordChange,
-                onSaveWifi = onSaveWifi,
-                onClearWifi = onClearWifi,
-                onForgetRememberedNano = onForgetRememberedNano,
+                onWifiSsidChange = presenter::setWifiSsidDraft,
+                onWifiPasswordChange = presenter::setWifiPasswordDraft,
+                onSaveWifi = presenter::saveWifiSettings,
+                onClearWifi = presenter::clearWifiSettings,
+                onForgetRememberedNano = presenter::forgetRememberedNano,
+                onUpdateSettings = presenter::updateSettings,
+                onFirmwareNotificationsChange = onFirmwareNotificationsChange,
                 hasPermissions = hasPermissions,
                 onGrantPermissions = onGrantPermissions,
             )
@@ -262,28 +180,25 @@ private fun SettingsContent(
             SettingsCategory.Reading -> ReadingSettings(
                 settings = uiState.settings,
                 isConnected = uiState.isConnected,
-                bottomPadding = bottomPadding,
-                onUpdateSettings = onUpdateSettings,
+                onUpdateSettings = presenter::updateSettings,
             )
 
             SettingsCategory.Display -> DisplaySettings(
                 uiState = uiState,
-                bottomPadding = bottomPadding,
-                onUpdateSettings = onUpdateSettings,
-                onRefreshThemeCatalog = onRefreshThemeCatalog,
-                onSelectCatalogTheme = onSelectCatalogTheme,
-                onInstallOnlineTheme = onInstallOnlineTheme,
+                onUpdateSettings = presenter::updateSettings,
+                onRefreshThemeCatalog = presenter::refreshThemeCatalog,
+                onSelectCatalogTheme = presenter::setSelectedCatalogThemeId,
+                onInstallOnlineTheme = presenter::installSelectedOnlineTheme,
                 onUploadTheme = onUploadTheme,
             )
 
             SettingsCategory.Typography -> TypographySettings(
                 uiState = uiState,
-                bottomPadding = bottomPadding,
-                onUpdateSettings = onUpdateSettings,
-                onRefreshFontCatalog = onRefreshFontCatalog,
-                onSelectCatalogFont = onSelectCatalogFont,
-                onSelectCatalogFontSize = onSelectCatalogFontSize,
-                onInstallOnlineFont = onInstallOnlineFont,
+                onUpdateSettings = presenter::updateSettings,
+                onRefreshFontCatalog = presenter::refreshFontCatalog,
+                onSelectCatalogFont = presenter::setSelectedCatalogFontId,
+                onSelectCatalogFontSize = presenter::setSelectedCatalogFontSize,
+                onInstallOnlineFont = presenter::installSelectedOnlineFont,
                 onUploadFont = onUploadFont,
             )
         }
@@ -292,14 +207,13 @@ private fun SettingsContent(
 
 @Composable
 private fun SettingsPage(
-    bottomPadding: androidx.compose.ui.unit.Dp,
     content: @Composable () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .widthIn(max = 760.dp),
-        contentPadding = PaddingValues(start = 20.dp, top = 8.dp, end = 20.dp, bottom = bottomPadding),
+        contentPadding = PaddingValues(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 24.dp),
     ) {
         item {
             Column {
@@ -310,18 +224,19 @@ private fun SettingsPage(
 }
 
 @Composable
-private fun ConnectionSettings(
+private fun DeviceSettings(
     uiState: CompanionUiState,
-    bottomPadding: androidx.compose.ui.unit.Dp,
     onWifiSsidChange: (String) -> Unit,
     onWifiPasswordChange: (String) -> Unit,
     onSaveWifi: () -> Unit,
     onClearWifi: () -> Unit,
     onForgetRememberedNano: () -> Unit,
+    onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
+    onFirmwareNotificationsChange: (Boolean) -> Unit,
     hasPermissions: Boolean,
     onGrantPermissions: () -> Unit,
 ) {
-    SettingsPage(bottomPadding = bottomPadding) {
+    SettingsPage {
         SettingsSection(
             title = "Reader",
             subtitle = "The app finds the Nano on shared Wi-Fi, then offers its direct network when needed.",
@@ -402,6 +317,73 @@ private fun ConnectionSettings(
                 }
             }
         }
+
+        SettingsSection(
+            title = "Firmware updates",
+            subtitle = "Use the Nano's release source and notify when its exact OTA image is available.",
+        ) {
+            val settings = uiState.settings
+            if (settings != null && uiState.isConnected) {
+                var ownerDraft by remember(settings.updates.owner) { mutableStateOf(settings.updates.owner) }
+                var tagDraft by remember(settings.updates.tag) { mutableStateOf(settings.updates.tag) }
+                SettingsStatusRow(
+                    icon = Icons.Outlined.SystemUpdate,
+                    title = "Installed firmware",
+                    body = buildString {
+                        append(uiState.firmwareVersion.ifBlank { "Version unavailable" })
+                        if (uiState.otaAsset.isNotBlank()) append("\nOTA image: ${uiState.otaAsset}")
+                    },
+                )
+                OutlinedTextField(
+                    value = ownerDraft,
+                    onValueChange = { ownerDraft = it.take(63) },
+                    label = { Text("GitHub owner") },
+                    supportingText = { Text("You can also use owner/repository.") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = tagDraft,
+                    onValueChange = { tagDraft = it.take(63) },
+                    label = { Text("Release tag") },
+                    supportingText = { Text("Leave blank to follow the latest release.") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Button(
+                    onClick = {
+                        onUpdateSettings {
+                            it.withUpdateOwner(ownerDraft.trim())
+                                .withUpdateTag(tagDraft.trim())
+                        }
+                    },
+                    enabled = ownerDraft.isNotBlank() &&
+                        (ownerDraft.trim() != settings.updates.owner || tagDraft.trim() != settings.updates.tag),
+                ) {
+                    Text("Save release source")
+                }
+                SwitchRow(
+                    label = "Check on the Nano",
+                    description = "Let the reader check this source automatically when it has internet access.",
+                    checked = settings.updates.autoCheck,
+                    onCheckedChange = { enabled ->
+                        onUpdateSettings { it.withAutomaticUpdateChecks(enabled) }
+                    },
+                )
+            } else {
+                SettingsStatusRow(
+                    icon = Icons.Outlined.SystemUpdate,
+                    title = "Connect to configure releases",
+                    body = "The source, current version, and OTA image come directly from your Nano.",
+                )
+            }
+            SwitchRow(
+                label = "Update notifications",
+                description = "Allow the app to check about once a day and notify once per release.",
+                checked = uiState.firmwareNotificationsEnabled,
+                onCheckedChange = onFirmwareNotificationsChange,
+            )
+        }
     }
 }
 
@@ -409,10 +391,9 @@ private fun ConnectionSettings(
 private fun ReadingSettings(
     settings: NanoSettings?,
     isConnected: Boolean,
-    bottomPadding: androidx.compose.ui.unit.Dp,
     onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
 ) {
-    SettingsPage(bottomPadding = bottomPadding) {
+    SettingsPage {
         if (settings == null) {
             UnavailableSettings(isConnected)
             return@SettingsPage
@@ -499,14 +480,13 @@ private fun PacingSlider(
 @Composable
 private fun DisplaySettings(
     uiState: CompanionUiState,
-    bottomPadding: androidx.compose.ui.unit.Dp,
     onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
     onRefreshThemeCatalog: () -> Unit,
     onSelectCatalogTheme: (String) -> Unit,
     onInstallOnlineTheme: () -> Unit,
     onUploadTheme: () -> Unit,
 ) {
-    SettingsPage(bottomPadding = bottomPadding) {
+    SettingsPage {
         val settings = uiState.settings
         if (settings == null) {
             UnavailableSettings(uiState.isConnected)
@@ -680,7 +660,6 @@ private fun DisplaySettings(
 @Composable
 private fun TypographySettings(
     uiState: CompanionUiState,
-    bottomPadding: androidx.compose.ui.unit.Dp,
     onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
     onRefreshFontCatalog: () -> Unit,
     onSelectCatalogFont: (String) -> Unit,
@@ -688,7 +667,7 @@ private fun TypographySettings(
     onInstallOnlineFont: () -> Unit,
     onUploadFont: () -> Unit,
 ) {
-    SettingsPage(bottomPadding = bottomPadding) {
+    SettingsPage {
         val settings = uiState.settings
         if (settings == null) {
             UnavailableSettings(uiState.isConnected)
@@ -826,34 +805,4 @@ private fun UnavailableSettings(isConnected: Boolean) {
         style = MaterialTheme.typography.bodyLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-}
-
-@Composable
-private fun SettingsSaveStatus(
-    uiState: CompanionUiState,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        shadowElevation = 6.dp,
-        shape = MaterialTheme.shapes.small,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = if (uiState.isSavingSettings) Icons.Outlined.Sync else Icons.Outlined.CheckCircle,
-                contentDescription = null,
-            )
-            Text(
-                text = if (uiState.isSavingSettings) "Saving settings..." else "Saved and applied on Nano",
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1,
-            )
-        }
-    }
 }

@@ -9,6 +9,5 @@ import com.rsvpnano.models.PendingUpload
 interface PendingUploadStore {
     suspend fun loadAll(): List<PendingUpload>
     suspend fun saveAll(items: List<PendingUpload>)
-    suspend fun add(item: PendingUpload)
     suspend fun remove(id: String)
 }

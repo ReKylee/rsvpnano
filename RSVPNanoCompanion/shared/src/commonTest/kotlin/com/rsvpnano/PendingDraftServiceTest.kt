@@ -23,13 +23,7 @@ class PendingDraftServiceTest {
 
         service.saveDraft(item)
         assertEquals(listOf("Draft"), service.loadDrafts().map { it.title })
-        assertEquals(true, service.needsArticleFetch(item))
-
-        service.updateDraft(item, title = "Updated", body = "Article body")
-        assertEquals("Updated", service.loadDrafts().single().title)
-        assertEquals("Article body", service.loadDrafts().single().body)
-
-        service.deleteDrafts(listOf("1"))
+        service.deleteDraft(item)
         assertEquals(emptyList(), service.loadDrafts())
     }
 
@@ -38,10 +32,6 @@ class PendingDraftServiceTest {
 
         override suspend fun saveAll(items: List<PendingUpload>) {
             this.items = items
-        }
-
-        override suspend fun add(item: PendingUpload) {
-            items = listOf(item) + items
         }
 
         override suspend fun remove(id: String) {

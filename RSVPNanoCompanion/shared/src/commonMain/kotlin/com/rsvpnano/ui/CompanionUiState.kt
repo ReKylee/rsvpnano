@@ -32,11 +32,13 @@ data class CompanionUiState(
     val rssFeedDraft: String = "",
     val connectionState: NanoConnectionState = NanoConnectionState.Disconnected,
     val rememberedNano: RememberedNano? = null,
+    val firmwareVersion: String = "",
+    val otaAsset: String = "",
+    val firmwareNotificationsEnabled: Boolean = false,
     val discoveredNanos: List<NanoEndpoint> = emptyList(),
     val canRememberCurrentNano: Boolean = false,
     val isRefreshing: Boolean = false,
     val isSavingSettings: Boolean = false,
-    val settingsSaveStatus: String? = null,
     val bookJob: BookJob? = null,
     val themeCatalog: List<NanoThemeCatalogItem> = emptyList(),
     val themeCatalogUrl: String = "",
@@ -61,9 +63,6 @@ data class CompanionUiState(
 
     val isRequestingNanoNetwork: Boolean
         get() = connectionState.isRequesting
-
-    val showSettingsSaveStatus: Boolean
-        get() = isSavingSettings || settingsSaveStatus != null
 
     val currentNano: RememberedNano?
         get() = connectionState.currentNano

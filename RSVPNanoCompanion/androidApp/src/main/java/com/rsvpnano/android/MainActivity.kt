@@ -7,8 +7,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import com.rsvpnano.app.createAndroidSharedApp
 import com.rsvpnano.android.ui.CompanionApp
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -20,10 +18,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         incomingShareIntent.value = intent.takeIf { it.isAndroidShareIntent() }
         setContent {
-            val sharedApp = remember { createAndroidSharedApp(filesDir) }
             val shareIntent by incomingShareIntent.collectAsState()
             CompanionApp(
-                sharedApp = sharedApp,
                 shareIntent = shareIntent,
                 onShareIntentHandled = { clearIncomingShareIntent() },
             )

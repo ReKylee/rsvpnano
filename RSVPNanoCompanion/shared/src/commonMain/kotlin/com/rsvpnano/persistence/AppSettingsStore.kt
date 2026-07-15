@@ -4,21 +4,14 @@ import com.rsvpnano.models.CompanionAppSettings
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
-/**
- * Shared storage for the remembered Nano.
- */
+/** Shared companion preferences and cached device state. */
 interface AppSettingsStore {
     suspend fun load(): CompanionAppSettings
     suspend fun save(settings: CompanionAppSettings)
 }
 
-interface AppSettingsStorage {
-    suspend fun readText(): String?
-    suspend fun writeText(value: String)
-}
-
 class JsonAppSettingsStore(
-    private val storage: AppSettingsStorage,
+    private val storage: TextStorage,
     private val json: Json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true

@@ -19,12 +19,12 @@
 #include "storage/index/ReadingProgress.h"
 #include "text/AsciiText.h"
 #include "ui/Localization.h"
+#include "update/OtaUpdater.h"
 
 namespace {
 
     namespace pref = settings::prefs;
 
-    constexpr uint32_t kCompanionWifiTimeoutMs = 5000;
     constexpr size_t kMaxMetadataLineChars = 160;
     constexpr size_t kMaxSettingsPatchBytes = 8192;
     constexpr size_t kMaxRssFeedsPatchBytes = 4096;
@@ -230,9 +230,8 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 </main>
 <script>
 const $=id=>document.getElementById(id);let settings=null;let themeCatalog=[];let themeCatalogUrl='';let fontCatalog=[];let fontCatalogUrl='';
-const THEME_CATALOG_URLS=['https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/themes/index.json','https://raw.githubusercontent.com/ReKylee/rsvpnano/main/themes/index.json'];
-const FONT_CATALOG_URLS=['https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/src/fonts/index.json','https://raw.githubusercontent.com/ReKylee/rsvpnano/main/src/fonts/index.json'];
 function status(msg){$('status').textContent=msg}
+function catalogUrl(path){const u=(settings&&settings.updates)||{};let owner=String(u.owner||'').trim(),repo='rsvpnano',tag=String(u.tag||'').trim();const apply=v=>{const p=v.trim().split('/');if(p.length!==2||!p[0]||!p[1])return false;owner=p[0];repo=p[1];return true};apply(owner);const at=tag.indexOf('@');if(at>0&&at<tag.length-1){const r=tag.slice(0,at).trim();tag=tag.slice(at+1).trim();if(!apply(r)&&r)repo=r}if(!owner||!repo)throw new Error('Configure a GitHub release owner first.');return 'https://raw.githubusercontent.com/'+[owner,repo,tag||'main'].map(encodeURIComponent).join('/')+'/'+path}
 async function api(path,opts){const r=await fetch(path,opts);const t=await r.text();let j={};try{j=t?JSON.parse(t):{}}catch(e){throw new Error(t||'Bad response')}if(!r.ok)throw new Error((j.error&&j.error.message)||r.statusText);return j.data}
 function bytes(n){return n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB'}
 function safeName(s){return (s||'article').replace(/[^a-z0-9._ -]+/gi,'-').replace(/\s+/g,' ').trim().slice(0,72)||'article'}
@@ -246,14 +245,14 @@ async function uploadBlob(blob,name,category){const fd=new FormData();fd.append(
 async function uploadPicked(inputId,category){const f=$(inputId).files[0];if(!f){status('Choose a file first.');return}try{await uploadBlob(f,f.name,category);$(inputId).value='';await refresh();status('Uploaded '+f.name)}catch(e){status('Upload failed: '+e.message)}}
 async function uploadThemeBlob(blob,name){const fd=new FormData();fd.append('file',blob,name);await api('/api/v1/appearance/themes?name='+encodeURIComponent(name),{method:'POST',body:fd})}
 async function uploadPickedTheme(){const f=$('themeFileInput').files[0];if(!f){status('Choose a theme file first.');return}try{await uploadThemeBlob(f,f.name);$('themeFileInput').value='';await loadSettings();status('Uploaded theme '+f.name)}catch(e){status('Theme upload failed: '+e.message)}}
-async function loadThemeCatalog(){for(const url of THEME_CATALOG_URLS){try{themeCatalog=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Catalog unavailable');return r.json()});themeCatalogUrl=url;$('onlineThemeId').innerHTML=themeCatalog.map(t=>`<option value="${html(t.id)}">${html(t.name)}</option>`).join('');return}catch(e){}}$('onlineThemeId').innerHTML='<option value="">Catalog unavailable</option>'}
-async function installOnlineTheme(){const id=val('onlineThemeId');const theme=themeCatalog.find(t=>t.id===id);if(!theme){status('Choose an online theme first.');return}try{const url=new URL(theme.file,themeCatalogUrl||THEME_CATALOG_URLS[0]).toString();const blob=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Theme unavailable');return r.blob()});await uploadThemeBlob(blob,theme.file);settings=await api('/api/v1/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({display:{themeId:theme.id}})});await loadSettings();status('Installed '+theme.name)}catch(e){status('Online theme install failed: '+e.message)}}
+async function loadThemeCatalog(){try{themeCatalogUrl=catalogUrl('themes/index.json');themeCatalog=await fetch(themeCatalogUrl,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Catalog unavailable');return r.json()});$('onlineThemeId').innerHTML=themeCatalog.map(t=>`<option value="${html(t.id)}">${html(t.name)}</option>`).join('')}catch(e){$('onlineThemeId').innerHTML='<option value="">Catalog unavailable</option>'}}
+async function installOnlineTheme(){const id=val('onlineThemeId');const theme=themeCatalog.find(t=>t.id===id);if(!theme){status('Choose an online theme first.');return}try{const url=new URL(theme.file,themeCatalogUrl).toString();const blob=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Theme unavailable');return r.blob()});await uploadThemeBlob(blob,theme.file);settings=await api('/api/v1/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({display:{themeId:theme.id}})});await loadSettings();status('Installed '+theme.name)}catch(e){status('Online theme install failed: '+e.message)}}
 function fontFamilyFromName(name){return safeName(String(name||'font').replace(/\.rfont4$/i,'').replace(/[-_ ]?(large|medium|small)$/i,''))||'font'}
 async function uploadFontBlob(blob,family,size,name){const fd=new FormData();fd.append('file',blob,name||size+'.rfont4');await api('/api/v1/appearance/fonts?family='+encodeURIComponent(family)+'&size='+encodeURIComponent(size)+'&name='+encodeURIComponent(name||size+'.rfont4'),{method:'POST',body:fd})}
 async function uploadPickedFont(){const f=$('fontFileInput').files[0];if(!f){status('Choose a font file first.');return}const family=$('fontFamilyName').value.trim()||fontFamilyFromName(f.name);const size=val('fontUploadSize');try{await uploadFontBlob(f,family,size,f.name);$('fontFileInput').value='';$('fontFamilyName').value='';await loadSettings();status('Uploaded '+family+' '+size)}catch(e){status('Font upload failed: '+e.message)}}
-async function loadFontCatalog(){for(const url of FONT_CATALOG_URLS){try{fontCatalog=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Catalog unavailable');return r.json()});fontCatalogUrl=url;$('onlineFontId').innerHTML=fontCatalog.map(f=>`<option value="${html(f.id)}">${html(f.name)}</option>`).join('');return}catch(e){}}$('onlineFontId').innerHTML='<option value="">Catalog unavailable</option>'}
+async function loadFontCatalog(){try{fontCatalogUrl=catalogUrl('src/fonts/index.json');fontCatalog=await fetch(fontCatalogUrl,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Catalog unavailable');return r.json()});$('onlineFontId').innerHTML=fontCatalog.map(f=>`<option value="${html(f.id)}">${html(f.name)}</option>`).join('')}catch(e){$('onlineFontId').innerHTML='<option value="">Catalog unavailable</option>'}}
 function onlineFontFile(font,size){if(font.files&&font.files[size])return font.files[size];return font.file||''}
-async function installOnlineFont(){const id=val('onlineFontId');const size=val('onlineFontSize');const font=fontCatalog.find(f=>f.id===id);if(!font){status('Choose an online font first.');return}const file=onlineFontFile(font,size);if(!file){status('This online font is missing '+size+'.');return}try{const url=new URL(file,fontCatalogUrl||FONT_CATALOG_URLS[0]).toString();const blob=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Font unavailable');return r.blob()});await uploadFontBlob(blob,font.name||font.id,size,file.split('/').pop()||size+'.rfont4');await loadSettings();status('Installed '+(font.name||font.id)+' '+size)}catch(e){status('Online font install failed: '+e.message)}}
+async function installOnlineFont(){const id=val('onlineFontId');const size=val('onlineFontSize');const font=fontCatalog.find(f=>f.id===id);if(!font){status('Choose an online font first.');return}const file=onlineFontFile(font,size);if(!file){status('This online font is missing '+size+'.');return}try{const url=new URL(file,fontCatalogUrl).toString();const blob=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Font unavailable');return r.blob()});await uploadFontBlob(blob,font.name||font.id,size,file.split('/').pop()||size+'.rfont4');await loadSettings();status('Installed '+(font.name||font.id)+' '+size)}catch(e){status('Online font install failed: '+e.message)}}
 async function syncArticle(){const f=articleFile();if(!$('articleBody').value.trim()){status('Paste article text first.');return}try{await uploadBlob(f.blob,f.name,'article');localStorage.removeItem('rsvpArticleDraft');await refresh();status('Synced '+f.name)}catch(e){status('Article sync failed: '+e.message)}}
 function saveDraft(){localStorage.setItem('rsvpArticleDraft',JSON.stringify({title:$('articleTitle').value,author:$('articleAuthor').value,body:$('articleBody').value}));status('Draft saved in this browser.')}
 function loadDraft(){try{const d=JSON.parse(localStorage.getItem('rsvpArticleDraft')||'{}');$('articleTitle').value=d.title||'';$('articleAuthor').value=d.author||'';$('articleBody').value=d.body||''}catch(e){}}
@@ -759,7 +758,7 @@ bool CompanionSyncManager::startStation() {
     statusLine1_ = "Connecting to Wi-Fi";
     statusLine2_ = ssid;
     const std::string password = settings::load<pref::WifiPassword>(*preferences_);
-    if (!net::connectStation(ssid.c_str(), password.c_str(), nullptr, kCompanionWifiTimeoutMs)) {
+    if (!net::connectStation(ssid.c_str(), password.c_str())) {
         Serial.printf("[sync] station failed ssid=%s; starting access point\n", ssid.c_str());
         net::disconnect();
         return false;
@@ -832,8 +831,11 @@ void CompanionSyncManager::stopServer() {
 
 void CompanionSyncManager::handleInfo() {
     const String mode = networkMode_ == NetworkMode::Station ? "station" : "access_point";
+    const OtaUpdater updater;
     const String body = String("{") + "\"name\":\"RSVP Nano\"," + "\"mode\":\"" + mode + "\"," + "\"networkSsid\":\""
-                      + jsonEscape(String(networkSsid_.c_str())) + "\"," + "\"apiVersion\":1" + "}";
+                      + jsonEscape(String(networkSsid_.c_str())) + "\"," + "\"firmwareVersion\":\""
+                      + jsonEscape(updater.currentVersion()) + "\",\"otaAsset\":\""
+                      + jsonEscape(Board::Config::OTA_ASSET_NAME) + "\"," + "\"apiVersion\":1" + "}";
     sendData(200, body);
 }
 
@@ -1492,6 +1494,7 @@ String CompanionSyncManager::settingsJson() {
     const uint8_t anchor = settings::load<pref::TypographyAnchor>(*preferences_);
     const uint8_t guideWidth = settings::load<pref::TypographyGuideWidth>(*preferences_);
     const uint8_t guideGap = settings::load<pref::TypographyGuideGap>(*preferences_);
+    const OtaUpdater::Config ota = OtaUpdater{}.config(*preferences_);
     ThemeStore themeStore;
     themeStore.loadFromSd(fontCatalog);
     const std::string savedThemeId = settings::load<pref::ThemeId>(*preferences_);
@@ -1545,6 +1548,11 @@ String CompanionSyncManager::settingsJson() {
     body += ",\"anchorPercent\":" + String(anchor);
     body += ",\"guideWidth\":" + String(guideWidth);
     body += ",\"guideGap\":" + String(guideGap);
+    body += "}";
+    body += ",\"updates\":{";
+    body += "\"owner\":\"" + jsonEscape(ota.githubOwner) + "\"";
+    body += ",\"tag\":\"" + jsonEscape(ota.githubTag) + "\"";
+    body += ",\"autoCheck\":" + String(ota.autoCheck ? "true" : "false");
     body += "}";
     const auto themes = themeStore.themes();
     body += ",\"themeCount\":" + String(themes.size());
@@ -1639,12 +1647,16 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
         uint8_t anchorPercent;
         uint8_t guideWidth;
         uint8_t guideGap;
+        std::string otaOwner;
+        std::string otaTag;
+        bool otaAutoCheck;
     };
 
     FontCatalog fontCatalog;
     fontCatalog.loadFromSd();
     ThemeStore themeStore;
     themeStore.loadFromSd(fontCatalog);
+    const OtaUpdater::Config ota = OtaUpdater{}.config(*preferences_);
     const std::string savedThemeId = settings::load<pref::ThemeId>(*preferences_);
     if (!savedThemeId.empty())
         themeStore.selectById(savedThemeId);
@@ -1675,6 +1687,9 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
         settings::load<pref::TypographyAnchor>(*preferences_),
         settings::load<pref::TypographyGuideWidth>(*preferences_),
         settings::load<pref::TypographyGuideGap>(*preferences_),
+        ota.githubOwner.c_str(),
+        ota.githubTag.c_str(),
+        ota.autoCheck,
     };
     Values next = current;
     int intValue = 0;
@@ -1838,6 +1853,25 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
         }
         next.guideGap = static_cast<uint8_t>(intValue);
     }
+    if (readJsonString(body, "owner", stringValue)) {
+        stringValue.trim();
+        if (stringValue.isEmpty() || stringValue.length() > 63) {
+            error = "owner must contain between 1 and 63 characters";
+            return false;
+        }
+        next.otaOwner = stringValue.c_str();
+    }
+    if (readJsonString(body, "tag", stringValue)) {
+        stringValue.trim();
+        if (stringValue.length() > 63) {
+            error = "tag must not exceed 63 characters";
+            return false;
+        }
+        next.otaTag = stringValue.c_str();
+    }
+    if (readJsonBool(body, "autoCheck", boolValue)) {
+        next.otaAutoCheck = boolValue;
+    }
 
     const auto save = [&](const Values& values) {
         bool ok = true;
@@ -1864,6 +1898,9 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
         ok = settings::save<pref::TypographyAnchor>(*preferences_, values.anchorPercent) && ok;
         ok = settings::save<pref::TypographyGuideWidth>(*preferences_, values.guideWidth) && ok;
         ok = settings::save<pref::TypographyGuideGap>(*preferences_, values.guideGap) && ok;
+        ok = settings::save<pref::OtaOwner>(*preferences_, values.otaOwner) && ok;
+        ok = settings::save<pref::OtaTag>(*preferences_, values.otaTag) && ok;
+        ok = settings::save<pref::OtaAuto>(*preferences_, values.otaAutoCheck) && ok;
         return ok;
     };
 

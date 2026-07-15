@@ -5,20 +5,16 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.window.ComposeUIViewController
-import com.rsvpnano.app.IosNanoWifiConnector
-import com.rsvpnano.app.createIosSharedApp
+import com.rsvpnano.app.createIosCompanionPresenter
 import kotlinx.coroutines.MainScope
 import platform.UIKit.UIViewController
+import platform.UserNotifications.UNAuthorizationOptionAlert
+import platform.UserNotifications.UNAuthorizationOptionSound
+import platform.UserNotifications.UNUserNotificationCenter
 
 fun RsvpNanoComposeViewController(): UIViewController = ComposeUIViewController {
     val presenter = remember {
-        val sharedApp = createIosSharedApp()
-        CompanionPresenter(
-            sharedApp = sharedApp,
-            nanoNetworkController = IosNanoWifiConnector(),
-            settingsStore = sharedApp.appSettingsStore,
-            scope = MainScope(),
-        )
+        createIosCompanionPresenter(MainScope())
     }
     RsvpNanoComposeApp(presenter)
 }
@@ -28,45 +24,19 @@ private fun RsvpNanoComposeApp(presenter: CompanionPresenter) {
     val uiState by presenter.uiState.collectAsState()
     RsvpNanoSharedApp(
         uiState = uiState,
+        presenter = presenter,
         hasPermissions = true,
-        onRefresh = presenter::refresh,
         onConnect = presenter::connectNanoScan,
-        onShowHelp = presenter::showHelpNotice,
-        onUpdateSettings = presenter::updateSettings,
-        onWifiSsidChange = presenter::setWifiSsidDraft,
-        onWifiPasswordChange = presenter::setWifiPasswordDraft,
-        onSaveWifi = presenter::saveWifiSettings,
-        onClearWifi = presenter::clearWifiSettings,
-        onRememberCurrentNano = presenter::rememberCurrentNano,
-        onForgetRememberedNano = presenter::forgetRememberedNano,
-        onSelectNano = presenter::selectDiscoveredNano,
-        onCancelNanoSelection = presenter::cancelNanoSelection,
+        onFirmwareNotificationsChange = { enabled ->
+            if (!enabled) {
+                presenter.setFirmwareNotificationsEnabled(false)
+            } else {
+                UNUserNotificationCenter.currentNotificationCenter()
+                    .requestAuthorizationWithOptions(UNAuthorizationOptionAlert or UNAuthorizationOptionSound) { granted, _ ->
+                        presenter.setFirmwareNotificationsEnabled(granted)
+                    }
+            }
+        },
         onGrantPermissions = presenter::requestWifiPermissions,
-        needsArticleFetch = presenter::needsArticleFetch,
-        onEditDraft = presenter::editDraft,
-        onCancelDraftEdit = presenter::cancelDraftEdit,
-        onDraftTitleChange = presenter::setDraftTitle,
-        onDraftSourceChange = presenter::setDraftSourceUrl,
-        onDraftBodyChange = presenter::setDraftBody,
-        onSaveTextDraft = presenter::saveTextDraft,
-        onSaveLinkDraft = presenter::saveLinkDraft,
-        onDeleteDraft = presenter::deleteDraft,
-        onSyncArticles = presenter::syncSavedArticles,
-        onDeleteBook = presenter::deleteDeviceBook,
-        onSetBookPosition = presenter::setBookPosition,
-        onPickBook = presenter::uploadSelectedFile,
-        onRssFeedChange = presenter::setRssFeedDraft,
-        onAddRssFeed = presenter::addRssFeed,
-        onRefreshRssFeeds = presenter::refreshRssFeeds,
-        onDeleteFeed = presenter::deleteRssFeed,
-        onRefreshThemeCatalog = presenter::refreshThemeCatalog,
-        onSelectCatalogTheme = presenter::setSelectedCatalogThemeId,
-        onInstallOnlineTheme = presenter::installSelectedOnlineTheme,
-        onPickTheme = presenter::uploadThemeFile,
-        onRefreshFontCatalog = presenter::refreshFontCatalog,
-        onSelectCatalogFont = presenter::setSelectedCatalogFontId,
-        onSelectCatalogFontSize = presenter::setSelectedCatalogFontSize,
-        onInstallOnlineFont = presenter::installSelectedOnlineFont,
-        onPickFont = presenter::uploadFontFile,
     )
 }

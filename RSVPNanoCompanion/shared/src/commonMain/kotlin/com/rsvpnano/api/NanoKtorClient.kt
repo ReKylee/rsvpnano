@@ -9,6 +9,7 @@ import com.rsvpnano.models.NanoFontCatalogItem
 import com.rsvpnano.models.NanoUploadResponse
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.NanoWifiUpdate
+import com.rsvpnano.models.FirmwareRelease
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.onUpload
@@ -30,6 +31,7 @@ import io.ktor.http.isSuccess
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 
 class NanoKtorClient(
     private val httpClient: HttpClient,
@@ -39,6 +41,29 @@ class NanoKtorClient(
         explicitNulls = false
     },
 ) : NanoClient {
+    override suspend fun fetchFirmwareRelease(owner: String, repository: String, tag: String): FirmwareRelease {
+        val url = URLBuilder("https://api.github.com").apply {
+            appendPathSegments("repos", owner, repository, "releases")
+            if (tag.isBlank()) {
+                appendPathSegments("latest")
+            } else {
+                appendPathSegments("tags", tag)
+            }
+        }.build()
+        val response = httpClient.get(url) {
+            headers.append(HttpHeaders.Accept, "application/vnd.github+json")
+            headers.append(HttpHeaders.UserAgent, "RSVP-Nano-Companion")
+        }
+        if (!response.status.isSuccess()) {
+            throw NanoClientError("Firmware release lookup returned HTTP ${response.status}")
+        }
+        val release = json.decodeFromString(GithubRelease.serializer(), response.body<String>())
+        return FirmwareRelease(
+            version = release.tagName,
+            assets = release.assets.map(GithubAsset::name),
+        )
+    }
+
     override suspend fun fetchInfo(baseUrl: String): NanoInfo =
         requestData(baseUrl, "api/v1/device", NanoInfo.serializer())
 
@@ -301,4 +326,13 @@ class NanoKtorClient(
         val id: String,
         val wordIndex: Int,
     )
+
+    @Serializable
+    private data class GithubRelease(
+        @SerialName("tag_name") val tagName: String,
+        val assets: List<GithubAsset> = emptyList(),
+    )
+
+    @Serializable
+    private data class GithubAsset(val name: String)
 }

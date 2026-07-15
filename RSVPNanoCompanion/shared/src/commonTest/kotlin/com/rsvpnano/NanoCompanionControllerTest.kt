@@ -2,7 +2,6 @@ package com.rsvpnano
 
 import com.rsvpnano.api.NanoClient
 import com.rsvpnano.app.NanoCompanionController
-import com.rsvpnano.app.NanoDeviceSyncService
 import com.rsvpnano.app.PendingDraftService
 import com.rsvpnano.converters.RsvpBookFile
 import com.rsvpnano.models.NanoBook
@@ -33,7 +32,7 @@ class NanoCompanionControllerTest {
 
         assertEquals("Nano", snapshot.device.info?.name)
         assertEquals(listOf("https://device.example/feed"), snapshot.rssFeeds)
-        assertEquals(listOf("https://device.example/feed"), snapshot.syncedRssFeeds)
+        assertEquals(listOf("https://device.example/feed"), snapshot.rssFeeds)
         assertEquals(1, snapshot.drafts.size)
     }
 
@@ -63,28 +62,10 @@ class NanoCompanionControllerTest {
         val added = existing.copy(id = "2", title = "Second")
 
         val saved = controller.saveDraft(added)
-        val updated = controller.updateDraft(added, title = "Updated", body = "Updated body")
         val deleted = controller.deleteDraft(existing)
 
-        assertEquals(listOf("Second", "Example"), saved.drafts.map { it.title })
-        assertEquals(listOf("Updated", "Example"), updated.drafts.map { it.title })
-        assertEquals(listOf("Updated"), deleted.drafts.map { it.title })
-    }
-
-    @Test
-    fun deleteDraftsRemovesMatchingIds() = runBlocking {
-        val pendingStore = InMemoryPendingStore(
-            listOf(
-                samplePendingUpload().copy(id = "1"),
-                samplePendingUpload().copy(id = "2"),
-                samplePendingUpload().copy(id = "3"),
-            )
-        )
-        val controller = controller(pendingStore, RecordingNanoClient())
-
-        val snapshot = controller.deleteDrafts(listOf("1", "3"))
-
-        assertEquals(listOf("2"), snapshot.drafts.map { it.id })
+        assertEquals(listOf("Second", "Example"), saved.map { it.title })
+        assertEquals(listOf("Second"), deleted.map { it.title })
     }
 
     @Test
@@ -98,9 +79,7 @@ class NanoCompanionControllerTest {
         )
 
         assertEquals(listOf("https://local.example/feed"), client.savedFeeds)
-        assertEquals(listOf("https://local.example/feed"), snapshot.syncedRssFeeds)
-        assertEquals(listOf("https://local.example/feed"), snapshot.rssFeeds)
-        assertEquals(true, snapshot.didSyncDevice)
+        assertEquals(listOf("https://local.example/feed"), snapshot)
     }
 
     @Test
@@ -122,7 +101,7 @@ class NanoCompanionControllerTest {
 
         assertEquals("Manual.rsvp", client.uploadedFilename)
         assertEquals("book", client.uploadedCategory)
-        assertEquals(listOf(sampleBook(id = "Manual.rsvp", title = "Manual")), snapshot.books)
+        assertEquals(listOf(sampleBook(id = "Manual.rsvp", title = "Manual")), snapshot)
     }
 
     @Test
@@ -141,7 +120,7 @@ class NanoCompanionControllerTest {
         )
 
         assertEquals(listOf("b00000001", "b00000002"), client.deletedFilenames)
-        assertEquals(emptyList(), snapshot.books)
+        assertEquals(emptyList(), snapshot)
     }
 
     @Test
@@ -166,7 +145,7 @@ class NanoCompanionControllerTest {
 
         assertEquals("b12345678", client.savedPositionId)
         assertEquals(250, client.savedPositionWordIndex)
-        assertEquals(listOf(book), snapshot.books)
+        assertEquals(listOf(book), snapshot)
     }
 
     @Test
@@ -198,8 +177,8 @@ class NanoCompanionControllerTest {
         val cleared = controller.clearWifiSettings(baseUrl = "http://device.local")
 
         assertEquals("Home" to "secret", client.savedWifi)
-        assertEquals(NanoWifiSettings(configured = true, ssid = "Home", passwordSet = true), saved.wifiSettings)
-        assertEquals(NanoWifiSettings(configured = false, ssid = "", passwordSet = false), cleared.wifiSettings)
+        assertEquals(NanoWifiSettings(configured = true, ssid = "Home", passwordSet = true), saved)
+        assertEquals(NanoWifiSettings(configured = false, ssid = "", passwordSet = false), cleared)
     }
 
     private fun controller(
@@ -210,7 +189,6 @@ class NanoCompanionControllerTest {
             draftService = PendingDraftService(
                 repository = PendingUploadRepository(pendingStore),
             ),
-            deviceSyncService = NanoDeviceSyncService(client),
             client = client,
         )
     }
@@ -303,10 +281,6 @@ class NanoCompanionControllerTest {
 
         override suspend fun saveAll(items: List<PendingUpload>) {
             this.items = items
-        }
-
-        override suspend fun add(item: PendingUpload) {
-            items = listOf(item) + items
         }
 
         override suspend fun remove(id: String) {

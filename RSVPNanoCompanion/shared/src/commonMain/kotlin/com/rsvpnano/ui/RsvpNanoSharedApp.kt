@@ -53,9 +53,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rsvpnano.app.CompanionNotice
 import com.rsvpnano.app.NanoEndpoint
-import com.rsvpnano.models.NanoBook
-import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.PendingUpload
+import com.rsvpnano.models.needsArticleFetch
 import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.readBytes
 import io.github.vinceglb.filekit.dialogs.FileKitType
@@ -71,46 +70,11 @@ enum class CompanionTab(val label: String, val icon: ImageVector) {
 @Composable
 fun RsvpNanoSharedApp(
     uiState: CompanionUiState,
+    presenter: CompanionPresenter,
     hasPermissions: Boolean,
-    onRefresh: () -> Unit,
     onConnect: () -> Unit,
-    onShowHelp: () -> Unit,
-    onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
-    onWifiSsidChange: (String) -> Unit,
-    onWifiPasswordChange: (String) -> Unit,
-    onSaveWifi: () -> Unit,
-    onClearWifi: () -> Unit,
-    onRememberCurrentNano: () -> Unit,
-    onForgetRememberedNano: () -> Unit,
-    onSelectNano: (NanoEndpoint) -> Unit,
-    onCancelNanoSelection: () -> Unit,
+    onFirmwareNotificationsChange: (Boolean) -> Unit,
     onGrantPermissions: () -> Unit,
-    needsArticleFetch: (PendingUpload) -> Boolean,
-    onEditDraft: (PendingUpload) -> Unit,
-    onCancelDraftEdit: () -> Unit,
-    onDraftTitleChange: (String) -> Unit,
-    onDraftSourceChange: (String) -> Unit,
-    onDraftBodyChange: (String) -> Unit,
-    onSaveTextDraft: () -> Unit,
-    onSaveLinkDraft: () -> Unit,
-    onDeleteDraft: (PendingUpload) -> Unit,
-    onSyncArticles: () -> Unit,
-    onDeleteBook: (NanoBook) -> Unit,
-    onSetBookPosition: (NanoBook, Int) -> Unit,
-    onPickBook: (displayName: String, data: ByteArray) -> Unit,
-    onRssFeedChange: (String) -> Unit,
-    onAddRssFeed: () -> Unit,
-    onRefreshRssFeeds: () -> Unit,
-    onDeleteFeed: (String) -> Unit,
-    onRefreshThemeCatalog: () -> Unit,
-    onSelectCatalogTheme: (String) -> Unit,
-    onInstallOnlineTheme: () -> Unit,
-    onPickTheme: (displayName: String, data: ByteArray) -> Unit,
-    onRefreshFontCatalog: () -> Unit,
-    onSelectCatalogFont: (String) -> Unit,
-    onSelectCatalogFontSize: (String) -> Unit,
-    onInstallOnlineFont: () -> Unit,
-    onPickFont: (displayName: String, data: ByteArray) -> Unit,
 ) {
     val colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
     MaterialTheme(colorScheme = colorScheme) {
@@ -126,7 +90,7 @@ fun RsvpNanoSharedApp(
         ) { file ->
             if (file != null) {
                 scope.launch {
-                    onPickBook(file.name, file.readBytes())
+                    presenter.uploadSelectedFile(file.name, file.readBytes())
                 }
             }
         }
@@ -135,7 +99,7 @@ fun RsvpNanoSharedApp(
         ) { file ->
             if (file != null) {
                 scope.launch {
-                    onPickTheme(file.name, file.readBytes())
+                    presenter.uploadThemeFile(file.name, file.readBytes())
                 }
             }
         }
@@ -144,7 +108,7 @@ fun RsvpNanoSharedApp(
         ) { file ->
             if (file != null) {
                 scope.launch {
-                    onPickFont(file.name, file.readBytes())
+                    presenter.uploadFontFile(file.name, file.readBytes())
                 }
             }
         }
@@ -158,10 +122,10 @@ fun RsvpNanoSharedApp(
 
         LaunchedEffect(selectedTab) {
             if (selectedTab == CompanionTab.Settings && uiState.themeCatalog.isEmpty()) {
-                onRefreshThemeCatalog()
+                presenter.refreshThemeCatalog()
             }
             if (selectedTab == CompanionTab.Settings && uiState.fontCatalog.isEmpty()) {
-                onRefreshFontCatalog()
+                presenter.refreshFontCatalog()
             }
         }
 
@@ -171,7 +135,7 @@ fun RsvpNanoSharedApp(
                     TopAppBar(
                         title = { Text(text = "RSVP Nano") },
                         actions = {
-                            IconButton(onClick = onShowHelp) {
+                            IconButton(onClick = presenter::showHelpNotice) {
                                 Icon(imageVector = Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help")
                             }
                         },
@@ -181,7 +145,7 @@ fun RsvpNanoSharedApp(
                     )
                     SharedConnectionBar(
                         uiState = uiState,
-                        onRememberCurrentNano = onRememberCurrentNano,
+                        onRememberCurrentNano = presenter::rememberCurrentNano,
                     )
                 }
             },
@@ -232,38 +196,26 @@ fun RsvpNanoSharedApp(
                 when (selectedTab) {
                     CompanionTab.Library -> LibraryTab(
                         uiState = uiState,
-                        onRefresh = onRefresh,
-                        needsArticleFetch = needsArticleFetch,
+                        onRefresh = presenter::refresh,
+                        needsArticleFetch = PendingUpload::needsArticleFetch,
                         onEditDraft = {
-                            onEditDraft(it)
+                            presenter.editDraft(it)
                             showArticleDialog = true
                         },
-                        onDeleteDraft = onDeleteDraft,
-                        onSyncArticles = onSyncArticles,
-                        onDeleteBook = onDeleteBook,
-                        onSetBookPosition = onSetBookPosition,
+                        onDeleteDraft = presenter::deleteDraft,
+                        onSyncArticles = presenter::syncSavedArticles,
+                        onDeleteBook = presenter::deleteDeviceBook,
+                        onSetBookPosition = presenter::setBookPosition,
                         onShowUpload = { showAddPicker = true },
                     )
 
                     CompanionTab.Settings -> SettingsTab(
                         uiState = uiState,
-                        onRefresh = onRefresh,
-                        onUpdateSettings = onUpdateSettings,
-                        onWifiSsidChange = onWifiSsidChange,
-                        onWifiPasswordChange = onWifiPasswordChange,
-                        onSaveWifi = onSaveWifi,
-                        onClearWifi = onClearWifi,
-                        onForgetRememberedNano = onForgetRememberedNano,
+                        presenter = presenter,
+                        onFirmwareNotificationsChange = onFirmwareNotificationsChange,
                         hasPermissions = hasPermissions,
                         onGrantPermissions = onGrantPermissions,
-                        onRefreshThemeCatalog = onRefreshThemeCatalog,
-                        onSelectCatalogTheme = onSelectCatalogTheme,
-                        onInstallOnlineTheme = onInstallOnlineTheme,
                         onUploadTheme = { themePicker.launch() },
-                        onRefreshFontCatalog = onRefreshFontCatalog,
-                        onSelectCatalogFont = onSelectCatalogFont,
-                        onSelectCatalogFontSize = onSelectCatalogFontSize,
-                        onInstallOnlineFont = onInstallOnlineFont,
                         onUploadFont = { fontPicker.launch() },
                     )
                 }
@@ -290,8 +242,8 @@ fun RsvpNanoSharedApp(
             if (uiState.discoveredNanos.isNotEmpty()) {
                 NanoPickerDialog(
                     nanos = uiState.discoveredNanos,
-                    onSelect = onSelectNano,
-                    onDismiss = onCancelNanoSelection,
+                    onSelect = presenter::selectDiscoveredNano,
+                    onDismiss = presenter::cancelNanoSelection,
                 )
             }
 
@@ -300,18 +252,18 @@ fun RsvpNanoSharedApp(
                     uiState = uiState,
                     onDismiss = {
                         showArticleDialog = false
-                        onCancelDraftEdit()
+                        presenter.cancelDraftEdit()
                     },
-                    onTitleChange = onDraftTitleChange,
-                    onSourceChange = onDraftSourceChange,
-                    onBodyChange = onDraftBodyChange,
+                    onTitleChange = presenter::setDraftTitle,
+                    onSourceChange = presenter::setDraftSourceUrl,
+                    onBodyChange = presenter::setDraftBody,
                     onSaveText = {
                         showArticleDialog = false
-                        onSaveTextDraft()
+                        presenter.saveTextDraft()
                     },
                     onSaveLink = {
                         showArticleDialog = false
-                        onSaveLinkDraft()
+                        presenter.saveLinkDraft()
                     },
                 )
             }
@@ -320,10 +272,10 @@ fun RsvpNanoSharedApp(
                 RssFeedsDialog(
                     uiState = uiState,
                     onDismiss = { showRssDialog = false },
-                    onFeedChange = onRssFeedChange,
-                    onAddFeed = onAddRssFeed,
-                    onRefreshFeeds = onRefreshRssFeeds,
-                    onDeleteFeed = onDeleteFeed,
+                    onFeedChange = presenter::setRssFeedDraft,
+                    onAddFeed = presenter::addRssFeed,
+                    onRefreshFeeds = presenter::refreshRssFeeds,
+                    onDeleteFeed = presenter::deleteRssFeed,
                 )
             }
         }

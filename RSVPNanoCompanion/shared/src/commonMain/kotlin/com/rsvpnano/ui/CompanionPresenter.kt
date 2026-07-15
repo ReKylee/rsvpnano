@@ -1,25 +1,26 @@
 package com.rsvpnano.ui
 
 import com.rsvpnano.app.CompanionNotice
-import com.rsvpnano.app.CompanionThemeCatalogSnapshot
-import com.rsvpnano.app.CompanionFontCatalogSnapshot
+import com.rsvpnano.app.FirmwareUpdates
+import com.rsvpnano.app.NanoCompanionController
 import com.rsvpnano.app.NanoConnectionState
 import com.rsvpnano.app.NanoConnectionTransport
-import com.rsvpnano.app.NanoDeviceSyncService
 import com.rsvpnano.app.NanoEndpoint
 import com.rsvpnano.app.NanoWifiConnector
 import com.rsvpnano.app.NanoWifiEvent
 import com.rsvpnano.app.NanoWifiIdentity
 import com.rsvpnano.app.NanoWifiRequestResult
 import com.rsvpnano.app.NanoWifiSnapshot
-import com.rsvpnano.app.RsvpSharedApp
 import com.rsvpnano.app.SharedAppUtils
+import com.rsvpnano.app.releaseSource
+import com.rsvpnano.app.rawContentUrl
 import com.rsvpnano.converters.ImportPreparation
 import com.rsvpnano.converters.RsvpConverter
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.RememberedNano
+import com.rsvpnano.models.needsArticleFetch
 import com.rsvpnano.persistence.AppSettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -36,18 +37,16 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 class CompanionPresenter(
-    private val sharedApp: RsvpSharedApp,
+    private val companionController: NanoCompanionController,
+    private val firmwareUpdates: FirmwareUpdates,
     private val nanoNetworkController: NanoWifiConnector,
     private val settingsStore: AppSettingsStore,
     private val scope: CoroutineScope,
 ) {
-    private val deviceSyncService: NanoDeviceSyncService = sharedApp.deviceSyncService
-    private val companionController = sharedApp.companionController
     private val _uiState = MutableStateFlow(CompanionUiState(notice = CompanionNotice.Neutral("Loading shared data...")))
     val uiState: StateFlow<CompanionUiState> = _uiState
     private var pendingSettingsSave: NanoSettings? = null
     private var settingsSaveJob: Job? = null
-    private var settingsSaveStatusJob: Job? = null
     private var recheckJob: Job? = null
     private var connectionCheckJob: Job? = null
     private var articleFetchJob: Job? = null
@@ -62,6 +61,7 @@ class CompanionPresenter(
             updateState { 
                 it.copy(
                     rememberedNano = appSettings.rememberedNano,
+                    firmwareNotificationsEnabled = appSettings.firmwareNotificationsEnabled,
                 )
             }
         }
@@ -180,11 +180,11 @@ class CompanionPresenter(
             val startedAt = currentTimeMillis()
             updateState { it.copy(isRefreshing = true, notice = CompanionNotice.Neutral("Refreshing...")) }
             runCatching {
-                val local = withContext(Dispatchers.Default) { companionController.refreshLocal() }
+                val drafts = withContext(Dispatchers.Default) { companionController.refreshLocal() }
                 updateState {
                     it.copy(
-                        drafts = local.drafts,
-                        notice = CompanionNotice.Neutral("Loaded ${local.drafts.size} drafts."),
+                        drafts = drafts,
+                        notice = CompanionNotice.Neutral("Loaded ${drafts.size} drafts."),
                     )
                 }
                 if (!current.isConnected) {
@@ -209,16 +209,19 @@ class CompanionPresenter(
     fun refreshThemeCatalog() {
         scope.launch {
             setNotice(CompanionNotice.Attention("Loading online themes..."))
-            runCatching { fetchFirstThemeCatalog() }
-                .onSuccess { (catalogUrl, snapshot) ->
+            runCatching {
+                val catalogUrl = catalogUrl("themes/index.json")
+                catalogUrl to companionController.fetchThemeCatalog(catalogUrl)
+            }
+                .onSuccess { (catalogUrl, themes) ->
                     updateState {
-                        val selected = it.selectedCatalogThemeId.takeIf { id -> snapshot.themes.any { theme -> theme.id == id } }
-                            ?: snapshot.themes.firstOrNull()?.id.orEmpty()
+                        val selected = it.selectedCatalogThemeId.takeIf { id -> themes.any { theme -> theme.id == id } }
+                            ?: themes.firstOrNull()?.id.orEmpty()
                         it.copy(
-                            themeCatalog = snapshot.themes,
+                            themeCatalog = themes,
                             themeCatalogUrl = catalogUrl,
                             selectedCatalogThemeId = selected,
-                            notice = CompanionNotice.Success("Loaded ${snapshot.themes.size} online themes."),
+                            notice = CompanionNotice.Success("Loaded ${themes.size} online themes."),
                         )
                     }
                 }
@@ -231,16 +234,19 @@ class CompanionPresenter(
     fun refreshFontCatalog() {
         scope.launch {
             setNotice(CompanionNotice.Attention("Loading online fonts..."))
-            runCatching { fetchFirstFontCatalog() }
-                .onSuccess { (catalogUrl, snapshot) ->
+            runCatching {
+                val catalogUrl = catalogUrl("src/fonts/index.json")
+                catalogUrl to companionController.fetchFontCatalog(catalogUrl)
+            }
+                .onSuccess { (catalogUrl, fonts) ->
                     updateState {
-                        val selected = it.selectedCatalogFontId.takeIf { id -> snapshot.fonts.any { font -> font.id == id } }
-                            ?: snapshot.fonts.firstOrNull()?.id.orEmpty()
+                        val selected = it.selectedCatalogFontId.takeIf { id -> fonts.any { font -> font.id == id } }
+                            ?: fonts.firstOrNull()?.id.orEmpty()
                         it.copy(
-                            fontCatalog = snapshot.fonts,
+                            fontCatalog = fonts,
                             fontCatalogUrl = catalogUrl,
                             selectedCatalogFontId = selected,
-                            notice = CompanionNotice.Success("Loaded ${snapshot.fonts.size} online fonts."),
+                            notice = CompanionNotice.Success("Loaded ${fonts.size} online fonts."),
                         )
                     }
                 }
@@ -317,16 +323,21 @@ class CompanionPresenter(
         }
 
         val nextSettings = transform(currentSettings)
-        settingsSaveStatusJob?.cancel()
         updateState {
             it.copy(
                 settings = nextSettings,
                 isSavingSettings = true,
-                settingsSaveStatus = "Saving changes...",
                 notice = CompanionNotice.Neutral("Saving reader settings..."),
             )
         }
         enqueueSettingsSave(nextSettings)
+    }
+
+    fun setFirmwareNotificationsEnabled(enabled: Boolean) {
+        scope.launch {
+            firmwareUpdates.setNotificationsEnabled(enabled)
+            updateState { it.copy(firmwareNotificationsEnabled = enabled) }
+        }
     }
 
     private fun enqueueSettingsSave(settings: NanoSettings) {
@@ -342,7 +353,7 @@ class CompanionPresenter(
                 val baseUrl = current.baseUrl
                 if (!ensureReaderReachable("saving settings")) {
                     pendingSettingsSave = null
-                    updateState { it.copy(isSavingSettings = false, settingsSaveStatus = null) }
+                    updateState { it.copy(isSavingSettings = false) }
                     break
                 }
 
@@ -350,26 +361,23 @@ class CompanionPresenter(
                 if (result.isFailure) {
                     val error = result.exceptionOrNull()
                     pendingSettingsSave = null
-                    updateState { it.copy(isSavingSettings = false, settingsSaveStatus = null) }
+                    updateState { it.copy(isSavingSettings = false) }
                     markDisconnected(error?.message ?: "Reader disconnected before saving settings.")
                     break
                 }
 
                 val snapshot = result.getOrThrow()
+                firmwareUpdates.rememberDevice(current.firmwareVersion, current.otaAsset, snapshot.settings)
                 updateState { state ->
                     if (pendingSettingsSave == null && state.settings == settingsToSave) {
                         state.copy(
                             settings = snapshot.settings,
                             isSavingSettings = false,
-                            settingsSaveStatus = "Saved and applied on Nano.",
                             notice = CompanionNotice.Success("Reader settings applied."),
                         )
                     } else {
                         state
                     }
-                }
-                if (pendingSettingsSave == null) {
-                    scheduleSettingsSaveStatusClear()
                 }
             }
         }
@@ -390,8 +398,7 @@ class CompanionPresenter(
             setNotice(CompanionNotice.Attention("Saving Wi-Fi settings..."))
             if (!ensureReaderReachable("saving Wi-Fi")) return@launch
             runCatching { withNanoApi { companionController.saveWifiSettings(state.baseUrl, ssid, state.wifiPasswordDraft) } }
-                .onSuccess { snapshot ->
-                    val wifi = snapshot.wifiSettings
+                .onSuccess { wifi ->
                     updateState {
                         it.copy(
                             wifiSettings = wifi,
@@ -415,8 +422,7 @@ class CompanionPresenter(
             setNotice(CompanionNotice.Attention("Clearing Wi-Fi settings..."))
             if (!ensureReaderReachable("clearing Wi-Fi")) return@launch
             runCatching { withNanoApi { companionController.clearWifiSettings(state.baseUrl) } }
-                .onSuccess { snapshot ->
-                    val wifi = snapshot.wifiSettings
+                .onSuccess { wifi ->
                     updateState {
                         it.copy(
                             wifiSettings = wifi,
@@ -451,10 +457,10 @@ class CompanionPresenter(
                         feeds = state.rssFeeds + feed,
                     )
                 }
-            }.onSuccess { snapshot ->
+            }.onSuccess { feeds ->
                 updateState {
                     it.copy(
-                        rssFeeds = snapshot.rssFeeds,
+                        rssFeeds = feeds,
                         rssFeedDraft = "",
                         notice = CompanionNotice.Success("RSS feed saved on Nano."),
                     )
@@ -482,10 +488,10 @@ class CompanionPresenter(
                         feeds = nextFeeds,
                     )
                 }
-            }.onSuccess { snapshot ->
+            }.onSuccess { feeds ->
                 updateState {
                     it.copy(
-                        rssFeeds = snapshot.rssFeeds,
+                        rssFeeds = feeds,
                         notice = CompanionNotice.Success("RSS feed removed from Nano."),
                     )
                 }
@@ -505,7 +511,7 @@ class CompanionPresenter(
                 return@launch
             }
             val existing = state.editingDraftId?.let { id -> state.drafts.firstOrNull { it.id == id } }
-            val snapshot = withContext(Dispatchers.Default) {
+            val drafts = withContext(Dispatchers.Default) {
                 companionController.saveDraft(
                     ImportPreparation.pendingUploadForText(
                         id = existing?.id ?: newId(),
@@ -518,7 +524,7 @@ class CompanionPresenter(
                 )
             }
             clearDraftEditor(
-                drafts = snapshot.drafts,
+                drafts = drafts,
                 notice = if (existing == null) CompanionNotice.Success("Text draft saved locally.") else CompanionNotice.Success("Text draft updated."),
             )
         }
@@ -565,7 +571,7 @@ class CompanionPresenter(
     fun fetchPendingArticlesWhenOnline() {
         if (articleFetchJob?.isActive == true) return
         articleFetchJob = scope.launch {
-            val pending = current.drafts.filter(companionController::needsArticleFetch)
+            val pending = current.drafts.filter(PendingUpload::needsArticleFetch)
             if (pending.isEmpty()) return@launch
 
             var drafts = current.drafts
@@ -704,7 +710,7 @@ class CompanionPresenter(
     fun deleteDraft(draft: PendingUpload) {
         scope.launch {
             val drafts = withContext(Dispatchers.Default) {
-                companionController.deleteDraft(draft).drafts
+                companionController.deleteDraft(draft)
             }
             if (current.editingDraftId == draft.id) {
                 clearDraftEditor(drafts = drafts, notice = CompanionNotice.Success("Draft deleted."))
@@ -727,8 +733,8 @@ class CompanionPresenter(
                 withNanoApi {
                     companionController.refreshRssFeeds(baseUrl = state.baseUrl)
                 }
-            }.onSuccess { rss ->
-                updateState { it.copy(rssFeeds = rss.rssFeeds, notice = CompanionNotice.Success("RSS feeds loaded from Nano.")) }
+            }.onSuccess { feeds ->
+                updateState { it.copy(rssFeeds = feeds, notice = CompanionNotice.Success("RSS feeds loaded from Nano.")) }
             }.onFailure { error ->
                 markDisconnected(error.message ?: "Reader disconnected before refreshing RSS feeds.")
             }
@@ -742,7 +748,7 @@ class CompanionPresenter(
                 setNotice(CompanionNotice.Error("Connect to your Nano before syncing saved articles."))
                 return@launch
             }
-            val readyDrafts = state.drafts.filterNot(companionController::needsArticleFetch)
+            val readyDrafts = state.drafts.filterNot(PendingUpload::needsArticleFetch)
             if (readyDrafts.isEmpty()) {
                 setNotice(CompanionNotice.Error("No fetched articles are ready. Share links while online, or paste article text before syncing."))
                 return@launch
@@ -782,8 +788,8 @@ class CompanionPresenter(
             if (!ensureReaderReachable("deleting books")) return@launch
             runCatching {
                 withNanoApi { companionController.deleteBooks(state.baseUrl, listOf(book.id)) }
-            }.onSuccess { snapshot ->
-                updateState { it.copy(books = snapshot.books, notice = CompanionNotice.Success("Deleted $title.")) }
+            }.onSuccess { books ->
+                updateState { it.copy(books = books, notice = CompanionNotice.Success("Deleted $title.")) }
             }.onFailure { error -> markDisconnected(error.message ?: "Reader disconnected before deleting books.") }
         }
     }
@@ -800,8 +806,8 @@ class CompanionPresenter(
             if (!ensureReaderReachable("setting book position")) return@launch
             runCatching {
                 withNanoApi { companionController.setBookPosition(state.baseUrl, book, wordIndex) }
-            }.onSuccess { snapshot ->
-                updateState { it.copy(books = snapshot.books, notice = CompanionNotice.Success("Saved position for $title.")) }
+            }.onSuccess { books ->
+                updateState { it.copy(books = books, notice = CompanionNotice.Success("Saved position for $title.")) }
             }.onFailure { error -> markDisconnected(error.message ?: "Reader disconnected before setting book position.") }
         }
     }
@@ -855,11 +861,11 @@ class CompanionPresenter(
                         },
                     )
                 }
-            }.onSuccess { snapshot ->
+            }.onSuccess { books ->
                 val uploadedName = current.bookJob?.name ?: jobName
                 updateState {
                     it.copy(
-                        books = snapshot.books,
+                        books = books,
                         bookJob = null,
                         notice = CompanionNotice.Success("Uploaded $uploadedName."),
                     )
@@ -920,7 +926,7 @@ class CompanionPresenter(
             }
 
             setNotice(CompanionNotice.Attention("Downloading ${theme.name}..."))
-            val catalogUrl = state.themeCatalogUrl.ifBlank { THEME_CATALOG_URLS.first() }
+            val catalogUrl = state.themeCatalogUrl.ifBlank { catalogUrl("themes/index.json") }
             val themeFile = runCatching {
                 companionController.downloadTheme(catalogUrl, theme)
             }.onFailure { error ->
@@ -1010,7 +1016,7 @@ class CompanionPresenter(
             }
 
             setNotice(CompanionNotice.Attention("Downloading ${font.name} $size..."))
-            val catalogUrl = state.fontCatalogUrl.ifBlank { FONT_CATALOG_URLS.first() }
+            val catalogUrl = state.fontCatalogUrl.ifBlank { catalogUrl("src/fonts/index.json") }
             val fontFile = runCatching {
                 companionController.downloadFont(catalogUrl, font, size)
             }.onFailure { error ->
@@ -1042,8 +1048,6 @@ class CompanionPresenter(
             }
         }
     }
-
-    fun needsArticleFetch(draft: PendingUpload): Boolean = companionController.needsArticleFetch(draft)
 
     private fun clearDraftEditor(
         drafts: List<PendingUpload> = current.drafts,
@@ -1180,6 +1184,8 @@ class CompanionPresenter(
             it.copy(
                 books = device.books,
                 settings = device.settings,
+                firmwareVersion = device.info?.firmwareVersion.orEmpty(),
+                otaAsset = device.info?.otaAsset.orEmpty(),
                 wifiSettings = device.wifiSettings,
                 wifiSsidDraft = device.wifiSettings?.ssid.orEmpty(),
                 wifiPasswordDraft = "",
@@ -1191,6 +1197,9 @@ class CompanionPresenter(
                 notice = CompanionNotice.Success("Connected to $deviceName. ${device.summaryText}"),
             )
         }
+        if (device.info != null && device.settings != null) {
+            firmwareUpdates.rememberDevice(device.info, device.settings)
+        }
         if (device.info != null && device.settings == null) {
             fetchMissingSettings(baseUrl)
         }
@@ -1200,6 +1209,7 @@ class CompanionPresenter(
         runCatching {
             withNanoApi { companionController.refreshSettings(baseUrl) }
         }.onSuccess { snapshot ->
+            firmwareUpdates.rememberDevice(current.firmwareVersion, current.otaAsset, snapshot.settings)
             updateState {
                 it.copy(
                     settings = snapshot.settings,
@@ -1220,28 +1230,15 @@ class CompanionPresenter(
             it.copy(
                 books = emptyList(),
                 settings = null,
+                firmwareVersion = "",
+                otaAsset = "",
                 wifiSettings = null,
                 connectionState = NanoConnectionState.Disconnected,
                 discoveredNanos = emptyList(),
                 isSavingSettings = false,
-                settingsSaveStatus = null,
                 bookJob = null,
                 notice = CompanionNotice.Error(status),
             )
-        }
-    }
-
-    private fun scheduleSettingsSaveStatusClear() {
-        settingsSaveStatusJob?.cancel()
-        settingsSaveStatusJob = scope.launch {
-            delay(3_200)
-            updateState {
-                if (it.isSavingSettings) {
-                    it
-                } else {
-                    it.copy(settingsSaveStatus = null)
-                }
-            }
         }
     }
 
@@ -1253,28 +1250,11 @@ class CompanionPresenter(
         return nanoNetworkController.withNanoNetwork(block)
     }
 
-    private suspend fun fetchFirstThemeCatalog(): Pair<String, CompanionThemeCatalogSnapshot> {
-        var lastError: Throwable? = null
-        for (url in THEME_CATALOG_URLS) {
-            val result = runCatching { companionController.fetchThemeCatalog(url) }
-            if (result.isSuccess) {
-                return url to result.getOrThrow()
-            }
-            lastError = result.exceptionOrNull()
-        }
-        throw lastError ?: IllegalStateException("Online theme catalog could not be loaded.")
-    }
-
-    private suspend fun fetchFirstFontCatalog(): Pair<String, CompanionFontCatalogSnapshot> {
-        var lastError: Throwable? = null
-        for (url in FONT_CATALOG_URLS) {
-            val result = runCatching { companionController.fetchFontCatalog(url) }
-            if (result.isSuccess) {
-                return url to result.getOrThrow()
-            }
-            lastError = result.exceptionOrNull()
-        }
-        throw lastError ?: IllegalStateException("Online font catalog could not be loaded.")
+    private fun catalogUrl(path: String): String {
+        val settings = current.settings ?: error("Connect to your Nano before loading catalogs.")
+        val source = releaseSource(settings.updates.owner, settings.updates.tag)
+            ?: error("Configure a GitHub release owner on your Nano first.")
+        return source.rawContentUrl(path)
     }
 
     private fun themeUploadError(error: Throwable): String {
@@ -1346,14 +1326,6 @@ class CompanionPresenter(
 
     private companion object {
         const val MIN_REFRESH_INDICATOR_MS = 650L
-        val THEME_CATALOG_URLS = listOf(
-            "https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/themes/index.json",
-            "https://raw.githubusercontent.com/ReKylee/rsvpnano/main/themes/index.json",
-        )
-        val FONT_CATALOG_URLS = listOf(
-            "https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/src/fonts/index.json",
-            "https://raw.githubusercontent.com/ReKylee/rsvpnano/main/src/fonts/index.json",
-        )
     }
 }
 

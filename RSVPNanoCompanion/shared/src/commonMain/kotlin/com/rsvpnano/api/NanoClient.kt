@@ -8,12 +8,15 @@ import com.rsvpnano.models.NanoThemeCatalogItem
 import com.rsvpnano.models.NanoFontCatalogItem
 import com.rsvpnano.models.NanoUploadResponse
 import com.rsvpnano.models.NanoWifiSettings
+import com.rsvpnano.models.FirmwareRelease
 
 /**
  * Lightweight API client interface for device interactions. Implement with Ktor in commonMain
  * or provide a platform-backed implementation if preferred.
  */
 interface NanoClient {
+    suspend fun fetchFirmwareRelease(owner: String, repository: String, tag: String): FirmwareRelease =
+        throw NanoClientError("Firmware release lookup is not supported by this client.")
     suspend fun fetchInfo(baseUrl: String): NanoInfo
     suspend fun listBooks(baseUrl: String): List<NanoBook>
     suspend fun fetchSettings(baseUrl: String): NanoSettings

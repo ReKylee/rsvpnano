@@ -1,63 +1,64 @@
 package com.rsvpnano.app
 
-import com.rsvpnano.api.NanoClient
 import com.rsvpnano.api.NanoKtorClient
 import com.rsvpnano.api.ArticleFetchClient
 import com.rsvpnano.persistence.JsonAppSettingsStore
 import com.rsvpnano.persistence.OkioTextStorage
+import com.rsvpnano.persistence.PendingUploadJsonStore
+import com.rsvpnano.persistence.PendingUploadRepository
+import com.rsvpnano.ui.CompanionPresenter
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.darwin.Darwin
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.CoroutineScope
 import okio.Path
 import okio.Path.Companion.toPath
 import platform.Foundation.NSFileManager
 
 private const val DefaultAppGroupIdentifier = "group.com.rsvpnano.companion"
 
-/**
- * Creates shared dependencies for the iOS app and share extension.
- *
- * Keeping this wiring in `iosMain` avoids duplicating storage setup in Swift adapters.
- */
-fun createIosSharedDependencies(
-    appGroupIdentifier: String = DefaultAppGroupIdentifier,
-): RsvpSharedDependencies {
+fun createIosCompanionPresenter(scope: CoroutineScope): CompanionPresenter {
     val httpClient = createIosHttpClient()
     val nanoClient = NanoKtorClient(httpClient = httpClient)
-    val root = appGroupRootPath(appGroupIdentifier)
-    return RsvpSharedDependencies(
-        pendingUploadStorage = OkioTextStorage(root.resolve("PendingUploads/drafts.json")),
-        appSettingsStore = JsonAppSettingsStore(OkioTextStorage(root.resolve("Settings/companion_settings.json"))),
-        articleFetchClient = ArticleFetchClient(httpClient = httpClient),
-        nanoClient = nanoClient,
+    val root = appGroupRootPath(DefaultAppGroupIdentifier)
+    val settingsStore = createIosSettingsStore(root)
+    return CompanionPresenter(
+        companionController = NanoCompanionController(createIosDraftService(root, httpClient), nanoClient),
+        firmwareUpdates = FirmwareUpdates(nanoClient, settingsStore),
+        nanoNetworkController = IosNanoWifiConnector(),
+        settingsStore = settingsStore,
+        scope = scope,
     )
 }
 
-fun createIosSharedApp(
-    appGroupIdentifier: String = DefaultAppGroupIdentifier,
-): RsvpSharedApp {
-    return createIosSharedDependencies(appGroupIdentifier).createApp()
-}
-
-fun createIosNanoClient(): NanoClient {
-    return NanoKtorClient(httpClient = createIosHttpClient())
-}
-
-fun createIosDeviceSyncService(): NanoDeviceSyncService {
-    return NanoDeviceSyncService(createIosNanoClient())
+fun iosFirmwareUpdates(): FirmwareUpdates {
+    val settingsStore = createIosSettingsStore(appGroupRootPath(DefaultAppGroupIdentifier))
+    return FirmwareUpdates(NanoKtorClient(createIosHttpClient()), settingsStore)
 }
 
 fun createIosCompanionController(
     appGroupIdentifier: String = DefaultAppGroupIdentifier,
 ): NanoCompanionController {
-    return createIosSharedDependencies(appGroupIdentifier).createCompanionController()
+    val httpClient = createIosHttpClient()
+    val root = appGroupRootPath(appGroupIdentifier)
+    return NanoCompanionController(
+        draftService = createIosDraftService(root, httpClient),
+        client = NanoKtorClient(httpClient),
+    )
 }
 
-fun createIosArticleFetchClient(): ArticleFetchClient {
-    return ArticleFetchClient(createIosHttpClient())
-}
+private fun createIosDraftService(root: Path, httpClient: HttpClient): PendingDraftService =
+    PendingDraftService(
+        repository = PendingUploadRepository(
+            PendingUploadJsonStore(OkioTextStorage(root.resolve("PendingUploads/drafts.json"))),
+        ),
+        articleFetchClient = ArticleFetchClient(httpClient),
+    )
+
+private fun createIosSettingsStore(root: Path): JsonAppSettingsStore =
+    JsonAppSettingsStore(OkioTextStorage(root.resolve("Settings/companion_settings.json")))
 
 private fun createIosHttpClient(): HttpClient {
     return HttpClient(Darwin) {

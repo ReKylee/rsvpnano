@@ -67,6 +67,8 @@ data class NanoInfo(
     val apiVersion: Int,
     val mode: String? = null,
     val networkSsid: String? = null,
+    val firmwareVersion: String = "",
+    val otaAsset: String = "",
 )
 
 @Serializable
@@ -142,6 +144,7 @@ data class NanoSettings(
     val reading: Reading,
     val display: Display,
     val typography: Typography,
+    val updates: Updates = Updates(),
     val themeCount: Int = 0,
     val themes: List<NanoTheme> = emptyList(),
     val fontCount: Int = 0,
@@ -187,6 +190,13 @@ data class NanoSettings(
         val anchorPercent: Int,
         val guideWidth: Int,
         val guideGap: Int,
+    )
+
+    @Serializable
+    data class Updates(
+        val owner: String = "",
+        val tag: String = "",
+        val autoCheck: Boolean = false,
     )
 
     @Serializable
@@ -295,6 +305,15 @@ data class NanoSettings(
 
     fun withGuideGap(value: Int): NanoSettings =
         copy(typography = typography.copy(guideGap = NanoSettingsSchema.coerceGuideGap(value)))
+
+    fun withUpdateOwner(value: String): NanoSettings =
+        copy(updates = updates.copy(owner = value))
+
+    fun withUpdateTag(value: String): NanoSettings =
+        copy(updates = updates.copy(tag = value))
+
+    fun withAutomaticUpdateChecks(value: Boolean): NanoSettings =
+        copy(updates = updates.copy(autoCheck = value))
 }
 
 object NanoSettingsSchema {
@@ -402,4 +421,25 @@ data class RememberedNano(
 @Serializable
 data class CompanionAppSettings(
     val rememberedNano: RememberedNano? = null,
+    val firmwareNotificationsEnabled: Boolean = false,
+    val firmwareUpdateTarget: FirmwareUpdateTarget? = null,
+    val lastNotifiedFirmwareVersion: String? = null,
+)
+
+@Serializable
+data class FirmwareUpdateTarget(
+    val currentVersion: String,
+    val otaAsset: String,
+    val owner: String,
+    val tag: String,
+)
+
+data class FirmwareRelease(
+    val version: String,
+    val assets: List<String>,
+)
+
+data class FirmwareUpdate(
+    val currentVersion: String,
+    val availableVersion: String,
 )

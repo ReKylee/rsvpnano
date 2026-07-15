@@ -8,28 +8,6 @@ import kotlin.test.assertEquals
 
 class PendingUploadRepositoryTest {
     @Test
-    fun updatePreservesItemIdentityAndCreatesNormalizedDrafts() = kotlinx.coroutines.runBlocking {
-        val store = InMemoryPendingStore(
-            listOf(
-                PendingUpload(
-                    id = "1",
-                    title = "Old",
-                    sourceUrl = "https://example.com/story",
-                    body = "Old body",
-                    createdAt = "2026-05-17T10:00:00Z",
-                ),
-            ),
-        )
-        val repository = PendingUploadRepository(store)
-
-        repository.update(store.items.first(), title = "Updated", body = "New body")
-
-        assertEquals("Updated", store.items.first().title)
-        assertEquals("New body", store.items.first().body)
-        assertEquals("1", store.items.first().id)
-    }
-
-    @Test
     fun saveReplacesExistingItemById() = kotlinx.coroutines.runBlocking {
         val original = PendingUpload(
             id = "1",
@@ -90,10 +68,6 @@ class PendingUploadRepositoryTest {
 
         override suspend fun saveAll(items: List<PendingUpload>) {
             this.items = items
-        }
-
-        override suspend fun add(item: PendingUpload) {
-            items = listOf(item) + items
         }
 
         override suspend fun remove(id: String) {

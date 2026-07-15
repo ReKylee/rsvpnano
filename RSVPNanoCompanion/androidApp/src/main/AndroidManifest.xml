@@ -11,6 +11,8 @@
         android:usesPermissionFlags="neverForLocation" />
     <application
         android:label="RSVP Nano"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:allowBackup="true"
         android:theme="@style/Theme.RSVPNanoCompanion"
         android:usesCleartextTraffic="true"

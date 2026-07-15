@@ -13,25 +13,27 @@ namespace screens::detail {
             return Action::None;
         }
 
-        if (ui.tab({0, 0, kRailWidth, 53}, ui.text(UiText::Read),
+        const int16_t tabHeight = static_cast<int16_t>(ui.height() / 4);
+        ui::Column tabs{{0, 0, kRailWidth, ui.height()}};
+        if (ui.tab(tabs.next(tabHeight), ui.text(UiText::Read),
                    active == Screen::Read || active == Screen::Library || active == Screen::Chapters,
                    ui::Icon::Books)) {
             screen = Screen::Read;
         }
-        if (ui.tab({0, 53, kRailWidth, 53}, ui.text(UiText::Settings),
+        if (ui.tab(tabs.next(tabHeight), ui.text(UiText::Settings),
                    active == Screen::Settings || active == Screen::ReadingSettings || active == Screen::InterfaceSettings
                        || active == Screen::PacingSettings || active == Screen::TypographySettings
                        || active == Screen::ReaderSettings || active == Screen::NetworkSettings,
                    ui::Icon::Edit)) {
             screen = Screen::Settings;
         }
-        if (ui.tab({0, 106, kRailWidth, 34}, ui.text(UiText::Device),
+        if (ui.tab(tabs.next(tabHeight), ui.text(UiText::Device),
                    active == Screen::Device || active == Screen::StorageEncryption || active == Screen::Sync
                        || active == Screen::Ota,
                    ui::Icon::Device)) {
             screen = Screen::Device;
         }
-        if (ui.tab({0, 140, kRailWidth, static_cast<int16_t>(ui.height() - 140)}, ui.text(UiText::Focus),
+        if (ui.tab(tabs.next(static_cast<int16_t>(ui.height() - tabHeight * 3)), ui.text(UiText::Focus),
                    active == Screen::FocusTimers || active == Screen::FocusEditor
                        || active == Screen::FocusNameEdit || active == Screen::FocusSession,
                    ui::Icon::Hourglass)) {

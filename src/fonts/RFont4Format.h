@@ -2,9 +2,12 @@
 
 #include <Arduino.h>
 
+#include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 namespace RFont4 {
 
@@ -84,32 +87,44 @@ namespace RFont4 {
         int8_t xAdjust = 0;
     };
 
-    inline bool hasFontExtension(const String& path) {
-        String lowered = path;
-        lowered.toLowerCase();
-        return lowered.endsWith(kExtension);
+    inline bool equalIgnoreCase(std::string_view left, std::string_view right) {
+        return left.size() == right.size()
+            && std::equal(left.begin(), left.end(), right.begin(), [](unsigned char a, unsigned char b) {
+                   return std::tolower(a) == std::tolower(b);
+               });
     }
 
-    inline int sizeIndexForId(String id) {
-        id.trim();
-        id.toLowerCase();
+    inline bool whitespace(unsigned char character) {
+        return std::isspace(character);
+    }
+
+    inline bool hasFontExtension(std::string_view path) {
+        const std::string_view extension{kExtension};
+        return path.size() >= extension.size()
+            && equalIgnoreCase(path.substr(path.size() - extension.size()), extension);
+    }
+
+    inline size_t sizeIndexForId(std::string_view id) {
+        while (!id.empty() && whitespace(id.front()))
+            id.remove_prefix(1);
+        while (!id.empty() && whitespace(id.back()))
+            id.remove_suffix(1);
         for (size_t i = 0; i < kSizeIds.size(); ++i) {
-            if (id == kSizeIds[i]) {
-                return static_cast<int>(i);
-            }
+            if (equalIgnoreCase(id, kSizeIds[i]))
+                return i;
         }
-        return -1;
+        return kSizeCount;
     }
 
-    inline const char* sizeId(uint8_t index) {
+    inline const char* sizeId(size_t index) {
         return index < kSizeIds.size() ? kSizeIds[index] : kSizeIds[0];
     }
 
-    inline const char* sizeLabel(uint8_t index) {
+    inline const char* sizeLabel(size_t index) {
         return index < kSizeLabels.size() ? kSizeLabels[index] : kSizeLabels[0];
     }
 
-    inline String sizeFilename(uint8_t index) {
+    inline String sizeFilename(size_t index) {
         return String(sizeId(index)) + kExtension;
     }
 

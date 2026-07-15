@@ -85,7 +85,7 @@ namespace screens {
 
     } // namespace
 
-    ReaderScreen::ReaderScreen(Arduino_GFX& gfx) : gfx_(gfx), text_(gfx) {}
+    ReaderScreen::ReaderScreen(Arduino_GFX& gfx) : gfx_(gfx), text_(&gfx) {}
 
     void BatteryState::update(uint32_t nowMs, bool force) {
         if (!force && nowMs - lastSampleMs < kBatterySampleMs)
@@ -99,9 +99,8 @@ namespace screens {
         }
     }
 
-    void ReaderScreen::begin(Preferences& preferences, uint32_t nowMs) {
+    void ReaderScreen::begin(Preferences& preferences, const ui::themes::Theme& theme, uint32_t nowMs) {
         text_.begin();
-        fonts.loadFromSd();
         auto& config = session.settings;
         config.fontSizeIndex = settings::load<settings::prefs::ReaderFontSizeIndex>(preferences);
         config.phantomWords = settings::load<settings::prefs::PhantomWords>(preferences);
@@ -119,16 +118,24 @@ namespace screens {
         config.chapterVisibleWhileReading = settings::load<settings::prefs::ReaderChapterVisible>(preferences);
         config.progressVisibleWhileReading = settings::load<settings::prefs::ReaderProgressVisible>(preferences);
 
-        const std::string savedTypefaceId = settings::load<settings::prefs::ReaderTypefaceId>(preferences);
-        if (savedTypefaceId.empty() || !fonts.indexForId(savedTypefaceId.c_str(), config.typefaceIndex))
-            config.typefaceIndex = 0;
-        config.font = fonts.loadFont(config.typefaceIndex, config.fontSizeIndex);
+        applyTheme(theme);
         reader.setWpm(settings::load<settings::prefs::Wpm>(preferences));
         reader.setPacingConfig({settings::load<settings::prefs::PacingLongWordDelay>(preferences),
                                 settings::load<settings::prefs::PacingComplexWordDelay>(preferences),
                                 settings::load<settings::prefs::PacingPunctuationDelay>(preferences)});
         battery.label = config.batteryLabel;
         battery.update(nowMs, true);
+    }
+
+    void ReaderScreen::applyTheme(const ui::themes::Theme& theme) {
+        auto& config = session.settings;
+        const auto families = fonts.families();
+        const auto selected = std::ranges::find_if(families, [&theme](const FontCatalog::Family& family) {
+            return family.id == theme.typeface;
+        });
+        const size_t familyIndex = selected == families.end() ? 0 : selected - families.begin();
+        font_ = fonts.load(familyIndex, config.fontSizeIndex);
+        ++fontRevision_;
     }
 
     bool ReaderScreen::openBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, size_t index,
@@ -190,17 +197,15 @@ namespace screens {
         const std::string after = settings.phantomWords ? phantomAfter(reader, settings.fontSizeIndex) : "";
         const ChapterMarker* chapter = book.metadata.chapterAt(reader.currentIndex());
         const std::string_view chapterLabel = chapter != nullptr && !chapter->title.empty()
-                                                  ? std::string_view{chapter->title}
-                                                  : std::string_view{bookTitle};
+                                                ? std::string_view{chapter->title}
+                                                : std::string_view{bookTitle};
         const uint8_t progress = ReadingProgress::percent(reader.currentIndex(), reader.wordCount());
         std::string footer;
         if (reading || settings.footerMetric == FooterMetric::Percentage) {
             footer = std::to_string(progress) + "%";
-        }
-        else {
-            size_t remainingWords = reader.wordCount() > reader.currentIndex()
-                                      ? reader.wordCount() - reader.currentIndex()
-                                      : 0;
+        } else {
+            size_t remainingWords =
+                reader.wordCount() > reader.currentIndex() ? reader.wordCount() - reader.currentIndex() : 0;
             if (settings.footerMetric == FooterMetric::ChapterTime) {
                 for (const ChapterMarker& marker: book.metadata.chapters) {
                     if (marker.wordIndex > reader.currentIndex()) {
@@ -209,11 +214,10 @@ namespace screens {
                     }
                 }
             }
-            const uint32_t minutes = reader.wpm() == 0 ? 0
-                                                       : static_cast<uint32_t>((remainingWords + reader.wpm() - 1)
-                                                                               / reader.wpm());
-            footer = ui.text(settings.footerMetric == FooterMetric::ChapterTime ? UiText::ChapterShort
-                                                                                : UiText::BookShort);
+            const uint32_t minutes =
+                reader.wpm() == 0 ? 0 : static_cast<uint32_t>((remainingWords + reader.wpm() - 1) / reader.wpm());
+            footer =
+                ui.text(settings.footerMetric == FooterMetric::ChapterTime ? UiText::ChapterShort : UiText::BookShort);
             footer += ' ';
             footer += minutes >= 60 ? std::to_string(minutes / 60) + "h" : std::to_string(minutes) + "m";
         }
@@ -221,14 +225,14 @@ namespace screens {
         BatteryModel batteryModel = battery.view();
         batteryModel.label = settings.batteryLabel;
 
-        font_ = settings.font;
         typography_ = settings.typography;
         const ui::Rect readingArea{0, 36, ui.width(), static_cast<int16_t>(std::max<int16_t>(0, ui.height() - 72))};
         if (ui.redraw(readingArea, frameSignature(before, reader.currentWord(), after, overlay, settings))) {
             Arduino_GFX& gfx = ui.gfx();
             background_ = ui.color(ui::themes::ColorRole::Background);
             text_.setFont(font_);
-            text_.setColors(ui.color(ui::themes::ColorRole::Foreground), ui.color(ui::themes::ColorRole::Background));
+            text_.setTextColor(ui.color(ui::themes::ColorRole::Foreground),
+                               ui.color(ui::themes::ColorRole::Background));
 
             const std::string& word = reader.currentWord();
             const int focus = focusIndex(word);
@@ -250,8 +254,8 @@ namespace screens {
             }
             const int16_t anchor = static_cast<int16_t>((ui.width() * typography_.anchor) / 100);
             const int16_t x = static_cast<int16_t>(anchor - focusCenter);
-            const int16_t inkTop = font_.inkTop;
-            const int16_t inkBottom = font_.inkBottom;
+            const int16_t inkTop = font_->wordInkTop;
+            const int16_t inkBottom = font_->wordInkBottom;
             const int16_t baseline = static_cast<int16_t>(((ui.height() - (inkBottom - inkTop + 1)) / 2) - inkTop);
             const int16_t guideTop = static_cast<int16_t>(baseline + inkTop - 6);
             const int16_t guideBottom = static_cast<int16_t>(baseline + inkBottom + 6);
@@ -296,18 +300,15 @@ namespace screens {
         const bool showBattery = !reading || settings.batteryVisibleWhileReading;
         const int16_t footerWidth = showProgress ? static_cast<int16_t>(footer.size() * 12) : 0;
         const int16_t footerX = settings.leftHanded ? 18 : static_cast<int16_t>(ui.width() - 18 - footerWidth);
-        const int16_t chapterX = settings.leftHanded && showProgress ? static_cast<int16_t>(footerX + footerWidth + 24)
-                                                                     : 18;
-        const int16_t chapterWidth = showProgress
-                                       ? static_cast<int16_t>(ui.width() - 60 - footerWidth)
-                                       : static_cast<int16_t>(ui.width() - 36);
+        const int16_t chapterX =
+            settings.leftHanded && showProgress ? static_cast<int16_t>(footerX + footerWidth + 24) : 18;
+        const int16_t chapterWidth =
+            showProgress ? static_cast<int16_t>(ui.width() - 60 - footerWidth) : static_cast<int16_t>(ui.width() - 36);
         ui.label({chapterX, static_cast<int16_t>(ui.height() - 26), chapterWidth, 16},
-                 showChapter ? chapterLabel.empty() ? ui.text(UiText::Start) : chapterLabel : std::string_view{},
-                 2, ui::themes::ColorRole::Muted,
-                 settings.leftHanded ? ui::TextAlign::Right : ui::TextAlign::Left);
+                 showChapter ? chapterLabel.empty() ? ui.text(UiText::Start) : chapterLabel : std::string_view{}, 2,
+                 ui::themes::ColorRole::Muted, settings.leftHanded ? ui::TextAlign::Right : ui::TextAlign::Left);
         ui.label({footerX, static_cast<int16_t>(ui.height() - 26), footerWidth, 16}, footer, 2,
-                 ui::themes::ColorRole::Muted,
-                 settings.leftHanded ? ui::TextAlign::Left : ui::TextAlign::Right);
+                 ui::themes::ColorRole::Muted, settings.leftHanded ? ui::TextAlign::Left : ui::TextAlign::Right);
 
         char batteryText[12];
         if (batteryModel.label == BatteryLabel::Voltage && batteryModel.voltage > 0)
@@ -319,19 +320,16 @@ namespace screens {
                 std::snprintf(batteryText, sizeof(batteryText), "%luh", static_cast<unsigned long>(minutes / 60));
             else
                 std::snprintf(batteryText, sizeof(batteryText), "%lum", static_cast<unsigned long>(minutes));
-        }
-        else
+        } else
             std::snprintf(batteryText, sizeof(batteryText), "%u%%", static_cast<unsigned int>(batteryModel.percent));
         const std::string_view batteryLabel{batteryText};
         const ui::Rect batteryArea = batteryRect(ui.width());
-        ui.battery(batteryArea,
-                   showBattery ? batteryModel.percent : 0, showBattery && batteryModel.charging,
+        ui.battery(batteryArea, showBattery ? batteryModel.percent : 0, showBattery && batteryModel.charging,
                    showBattery ? batteryLabel : std::string_view{});
     }
 
     bool ReaderScreen::batteryTapped(const ui::Touch& touch) const {
-        return ui::hasTouch(touch, ui::TouchTap)
-            && ui::contains(batteryRect(gfx_.width()), touch.x, touch.y);
+        return ui::hasTouch(touch, ui::TouchTap) && ui::contains(batteryRect(gfx_.width()), touch.x, touch.y);
     }
 
     bool ReaderScreen::previousSentenceTapped(uint16_t x) const {
@@ -624,7 +622,7 @@ namespace screens {
     int16_t ReaderScreen::textWidth(std::string_view value) const {
         text_.setFont(font_);
         if (typography_.tracking == 0)
-            return text_.advance(value);
+            return text_.textAdvance(value);
         int16_t width = 0;
         for (size_t index = 0; index < value.length();) {
             uint16_t codepoint = 0;
@@ -638,9 +636,9 @@ namespace screens {
 
     void ReaderScreen::drawText(std::string_view value, int16_t x, int16_t baseline, uint16_t color) {
         text_.setFont(font_);
-        text_.setColors(color, background_);
+        text_.setTextColor(color, background_);
         if (typography_.tracking == 0) {
-            text_.draw(value, x, baseline);
+            text_.drawString(value, x, baseline);
             return;
         }
         for (size_t index = 0; index < value.length();) {
@@ -656,9 +654,10 @@ namespace screens {
         for (size_t index = 0; index < word.length(); ++glyph) {
             uint16_t codepoint = 0;
             nextCodepoint(word, index, codepoint);
-            text_.setColors(typography_.focusHighlight && glyph == focus ? ui.color(ui::themes::ColorRole::Accent)
-                                                                         : ui.color(ui::themes::ColorRole::Foreground),
-                            ui.color(ui::themes::ColorRole::Background));
+            text_.setTextColor(typography_.focusHighlight && glyph == focus
+                                   ? ui.color(ui::themes::ColorRole::Accent)
+                                   : ui.color(ui::themes::ColorRole::Foreground),
+                               ui.color(ui::themes::ColorRole::Background));
             text_.drawCodepoint(codepoint, x, baseline);
             x = static_cast<int16_t>(x + text_.glyphAdvance(codepoint) + typography_.tracking);
         }
@@ -676,9 +675,7 @@ namespace screens {
         value = ui::Context::combine(value, settings.typography.guideGap);
         value = ui::Context::combine(value, settings.typography.focusHighlight);
         value = ui::Context::combine(value, settings.leftHanded);
-        value = ui::Context::combine(value, static_cast<uint8_t>(settings.font.kind));
-        value = ui::Context::combine(value, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(settings.font.alpha4)));
-        value = ui::Context::combine(value, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(settings.font.gfx)));
+        value = ui::Context::combine(value, fontRevision_);
         return value;
     }
 

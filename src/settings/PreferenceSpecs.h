@@ -46,8 +46,6 @@ namespace settings {
 
         struct ReaderFontSizeIndex : Bounded<"font_size", uint8_t, 0, 0, 2> {};
 
-        struct ReaderTypefaceId : StringSetting<"font_id"> {};
-
         struct TypographyFocusHighlight : Scalar<"type_hlt", bool, true> {};
 
         struct TypographyTracking : Bounded<"type_trk", int8_t, 0, -2, 3> {};

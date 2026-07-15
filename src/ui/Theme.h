@@ -11,15 +11,10 @@ namespace ui::themes {
     inline constexpr std::string_view kDefaultThemeId = "default";
     inline constexpr std::string_view kThemeMagic = "@rtheme";
     inline constexpr std::string_view kThemeExtension = ".rtheme";
+    inline constexpr std::string_view kDefaultTypefaceId = "literata";
     constexpr size_t kColorRoleCount = 16;
 
-    enum class ReaderTypeface : uint8_t {
-        Standard = 0,
-        OpenDyslexic = 1,
-        AtkinsonHyperlegible = 2,
-    };
-
-    enum class ColorRole : uint8_t {
+    enum ColorRole : size_t {
         Background = 0,
         Foreground,
         Muted,
@@ -42,22 +37,20 @@ namespace ui::themes {
         std::string id;
         std::string name;
         std::array<uint16_t, kColorRoleCount> colors = {};
-        ReaderTypeface typeface = ReaderTypeface::Standard;
+        std::string typeface = std::string{kDefaultTypefaceId};
         bool builtIn = false;
-        bool lowBrightness = false;
     };
 
     constexpr uint16_t rgb565(uint8_t red, uint8_t green, uint8_t blue) {
-        return static_cast<uint16_t>(((red & 0xF8U) << 8) | ((green & 0xFCU) << 3) | (blue >> 3));
+        return ((red & 0xF8U) << 8) | ((green & 0xFCU) << 3) | (blue >> 3);
     }
 
-    std::string_view colorRoleName(ColorRole role);
-    int colorRoleIndexForName(std::string_view name);
-    std::string_view readerTypefaceName(ReaderTypeface typeface);
-    bool readerTypefaceForName(std::string_view name, ReaderTypeface& typeface);
+    std::string_view colorRoleName(size_t role);
+    size_t colorRoleIndexForName(std::string_view name);
     Theme defaultTheme();
     bool hasThemeExtension(std::string_view path);
     std::string themeIdFromPath(std::string_view path);
-    bool parseThemeText(std::string_view text, std::string_view id, Theme& theme, std::string& error);
+    bool parseThemeText(std::string_view text, std::string_view id, Theme& theme, std::string& error,
+                        bool* hasTypefaceValue = nullptr);
 
 } // namespace ui::themes

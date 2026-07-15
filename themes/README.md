@@ -8,8 +8,7 @@ Theme files are plain text:
 ```ini
 @rtheme
 name=Catppuccin Mocha
-typeface=standard
-low_brightness=false
+typeface=literata
 
 background=#1e1e2e
 foreground=#cdd6f4
@@ -29,6 +28,5 @@ phantom=#6c7086
 progress_track=#313244
 ```
 
-Required color roles are RGB values written as `#RRGGBB`. `typeface` is required and can be
-`standard`, `atkinson`, or `open_dyslexic`. `low_brightness=true` makes the theme use
-the night-mode brightness table.
+Required color roles are RGB values written as `#RRGGBB`. `typeface` is a font catalog family ID;
+missing or invalid values are replaced with the embedded `literata` font.

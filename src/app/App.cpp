@@ -43,8 +43,9 @@ void App::begin() {
     storage_.begin();
     if (storage_.mounted())
         settings::reconcile(prefs_, Board::Storage::filesystem());
-    readerScreen_.begin(prefs_, bootMs_);
-    interfaceScreen_.begin(immediateUi_, prefs_, &Board::Display::setBrightness);
+    readerScreen_.fonts.loadFromSd();
+    interfaceScreen_.begin(immediateUi_, prefs_, readerScreen_.fonts, &Board::Display::setBrightness);
+    readerScreen_.begin(prefs_, interfaceScreen_.themes.selected(), bootMs_);
     networkScreen_.begin(prefs_);
     focusScreen_.begin(storage_.mounted() ? &Board::Storage::filesystem() : nullptr);
     readerScreen_.loadInitialBook(immediateUi_, storage_, prefs_, bootMs_);
@@ -82,9 +83,8 @@ void App::update(uint32_t nowMs) {
 
     readerScreen_.battery.update(nowMs);
     readerScreen_.update(prefs_, nowMs);
-    if (sync_.active()) {
-        sync_.update();
-    }
+    if (sync_.active() && sync_.update())
+        reloadSettings(nowMs);
     if (screen_ == screens::Screen::FocusSession) {
         if (focusScreen_.update(nowMs))
             Board::Audio::beep();
@@ -163,7 +163,8 @@ void App::renderScreen(uint32_t nowMs) {
     }
     case screens::Screen::InterfaceSettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        interfaceScreen_.draw(immediateUi_, prefs_, kStandbyMs, &Board::Display::setBrightness, screen_);
+        if (interfaceScreen_.draw(immediateUi_, prefs_, kStandbyMs, &Board::Display::setBrightness, screen_))
+            readerScreen_.applyTheme(interfaceScreen_.themes.selected());
         break;
     }
     case screens::Screen::PacingSettings: {
@@ -173,7 +174,9 @@ void App::renderScreen(uint32_t nowMs) {
     }
     case screens::Screen::TypographySettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        screens::typographySettings(immediateUi_, readerScreen_.session.settings, readerScreen_.fonts, prefs_, screen_);
+        if (screens::typographySettings(immediateUi_, readerScreen_.session.settings, readerScreen_.fonts,
+                                        interfaceScreen_.themes, prefs_, screen_))
+            readerScreen_.applyTheme(interfaceScreen_.themes.selected());
         break;
     }
     case screens::Screen::ReaderSettings:
@@ -263,8 +266,8 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
         enterUsbTransfer(nowMs);
         return;
     case screens::Action::StorageStatus: {
-        const std::string entries = std::to_string(storage_.bookCount()) + " "
-                                  + std::string(immediateUi_.text(UiText::LibraryEntries));
+        const std::string entries =
+            std::to_string(storage_.bookCount()) + " " + std::string(immediateUi_.text(UiText::LibraryEntries));
         screens::status(immediateUi_, immediateUi_.text(UiText::Storage),
                         immediateUi_.text(storage_.mounted() ? UiText::SdReady : UiText::SdUnavailable), entries);
         delay(1200);
@@ -274,8 +277,7 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
     case screens::Action::EnableStorageEncryption:
         screens::status(immediateUi_, immediateUi_.text(UiText::StorageEncryption),
                         immediateUi_.text(UiText::EnablingEncryption));
-        if (!storage_.mounted()
-            || !settings::enableNvsEncryption(prefs_, Board::Storage::filesystem())) {
+        if (!storage_.mounted() || !settings::enableNvsEncryption(prefs_, Board::Storage::filesystem())) {
             screens::status(immediateUi_, immediateUi_.text(UiText::StorageEncryption),
                             immediateUi_.text(UiText::Unavailable));
             delay(1200);
@@ -326,10 +328,7 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
     if (Input::hasAction(event.actions, Input::ActionOpenMenu) || Input::hasAction(event.actions, Input::ActionBack)) {
         if (sync_.active()) {
             sync_.end();
-            readerScreen_.begin(prefs_, nowMs);
-            interfaceScreen_.begin(immediateUi_, prefs_, &Board::Display::setBrightness);
-            networkScreen_.begin(prefs_);
-            networkScreen_.autoCheckPending = false;
+            reloadSettings(nowMs);
             screen_ = screens::Screen::Device;
             renderScreen(nowMs);
         } else if (screen_ != screens::Screen::Reader) {
@@ -347,10 +346,8 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
                     networkScreen_.closeWifi();
                 screen_ = screens::Screen::NetworkSettings;
             } else if (screen_ == screens::Screen::ReadingSettings || screen_ == screens::Screen::InterfaceSettings
-                       || screen_ == screens::Screen::PacingSettings
-                       || screen_ == screens::Screen::TypographySettings
-                       || screen_ == screens::Screen::ReaderSettings
-                       || screen_ == screens::Screen::NetworkSettings) {
+                       || screen_ == screens::Screen::PacingSettings || screen_ == screens::Screen::TypographySettings
+                       || screen_ == screens::Screen::ReaderSettings || screen_ == screens::Screen::NetworkSettings) {
                 screen_ = screens::Screen::Settings;
             } else if (screen_ == screens::Screen::FocusNameEdit) {
                 screen_ = screens::Screen::FocusEditor;
@@ -434,6 +431,14 @@ void App::exitUsbTransfer(screens::Screen destination) {
     libraryScreen_.invalidate();
     screen_ = destination;
     renderScreen(millis());
+}
+
+void App::reloadSettings(uint32_t nowMs) {
+    readerScreen_.fonts.loadFromSd();
+    interfaceScreen_.begin(immediateUi_, prefs_, readerScreen_.fonts, &Board::Display::setBrightness);
+    readerScreen_.begin(prefs_, interfaceScreen_.themes.selected(), nowMs);
+    networkScreen_.begin(prefs_);
+    networkScreen_.autoCheckPending = false;
 }
 
 void App::runOtaCheck(bool install) {

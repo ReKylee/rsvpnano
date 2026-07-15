@@ -3,8 +3,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "ui/fonts/Font.h"
-
 enum class PauseMode : uint8_t {
     SentenceEnd,
     Instant,
@@ -34,10 +32,8 @@ struct ReaderTypography {
 };
 
 struct ReaderSettings {
-    ui::fonts::Font font;
     ReaderTypography typography;
     uint8_t fontSizeIndex = 0;
-    uint8_t typefaceIndex = 0;
     PauseMode pauseMode = PauseMode::SentenceEnd;
     FooterMetric footerMetric = FooterMetric::Percentage;
     BatteryLabel batteryLabel = BatteryLabel::Percentage;

@@ -20,7 +20,6 @@ namespace {
         return std::string("@rtheme\n"
                            "name=Valid Theme\n"
                            "typeface=atkinson\n"
-                           "low_brightness=true\n"
                            "background=#000000\n"
                            "foreground=#ffffff\n"
                            "muted=#888888\n"
@@ -70,11 +69,9 @@ void test_parses_valid_theme() {
     const ui::themes::Theme theme = parseValidTheme();
     TEST_ASSERT_EQUAL_STRING("valid", theme.id.c_str());
     TEST_ASSERT_EQUAL_STRING("Valid Theme", theme.name.c_str());
-    TEST_ASSERT_EQUAL_UINT16(0x0000, theme.colors[static_cast<size_t>(ui::themes::ColorRole::Background)]);
-    TEST_ASSERT_EQUAL_UINT16(0xFFFF, theme.colors[static_cast<size_t>(ui::themes::ColorRole::Foreground)]);
-    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(ui::themes::ReaderTypeface::AtkinsonHyperlegible),
-                            static_cast<uint8_t>(theme.typeface));
-    TEST_ASSERT_TRUE(theme.lowBrightness);
+    TEST_ASSERT_EQUAL_UINT16(0x0000, theme.colors[ui::themes::ColorRole::Background]);
+    TEST_ASSERT_EQUAL_UINT16(0xFFFF, theme.colors[ui::themes::ColorRole::Foreground]);
+    TEST_ASSERT_EQUAL_STRING("atkinson", theme.typeface.c_str());
 }
 
 void test_accepts_rgb565_literal() {
@@ -83,7 +80,7 @@ void test_accepts_rgb565_literal() {
     ui::themes::Theme theme;
     std::string error;
     TEST_ASSERT_TRUE_MESSAGE(ui::themes::parseThemeText(text, "rgb565", theme, error), error.c_str());
-    TEST_ASSERT_EQUAL_UINT16(0x07E0, theme.colors[static_cast<size_t>(ui::themes::ColorRole::Accent)]);
+    TEST_ASSERT_EQUAL_UINT16(0x07E0, theme.colors[ui::themes::ColorRole::Accent]);
 }
 
 void test_rejects_missing_magic() {
@@ -113,31 +110,36 @@ void test_rejects_missing_role() {
     TEST_ASSERT_EQUAL_STRING("missing color progress_track", error.c_str());
 }
 
-void test_rejects_missing_typeface() {
+void test_missing_typeface_uses_embedded_default() {
     std::string text = validThemeText();
     replaceText(text, "typeface=atkinson\n", "");
     ui::themes::Theme theme;
     std::string error;
-    TEST_ASSERT_FALSE(ui::themes::parseThemeText(text, "missing-typeface", theme, error));
-    TEST_ASSERT_EQUAL_STRING("missing typeface", error.c_str());
+    bool hasTypefaceValue = true;
+    TEST_ASSERT_TRUE_MESSAGE(ui::themes::parseThemeText(text, "missing-typeface", theme, error, &hasTypefaceValue),
+                             error.c_str());
+    TEST_ASSERT_FALSE(hasTypefaceValue);
+    TEST_ASSERT_EQUAL_STRING("literata", theme.typeface.c_str());
+
+    text = validThemeText();
+    replaceText(text, "typeface=atkinson", "typeface=");
+    hasTypefaceValue = true;
+    TEST_ASSERT_TRUE_MESSAGE(ui::themes::parseThemeText(text, "empty-typeface", theme, error, &hasTypefaceValue),
+                             error.c_str());
+    TEST_ASSERT_FALSE(hasTypefaceValue);
+    TEST_ASSERT_EQUAL_STRING("literata", theme.typeface.c_str());
 }
 
-void test_rejects_invalid_typeface() {
+void test_accepts_catalog_typeface_id() {
     std::string text = validThemeText();
     replaceText(text, "typeface=atkinson", "typeface=comic_sans");
     ui::themes::Theme theme;
     std::string error;
-    TEST_ASSERT_FALSE(ui::themes::parseThemeText(text, "invalid-typeface", theme, error));
-    TEST_ASSERT_EQUAL_STRING("typeface must be standard, open_dyslexic, or atkinson", error.c_str());
-}
-
-void test_rejects_inherit_typeface() {
-    std::string text = validThemeText();
-    replaceText(text, "typeface=atkinson", "typeface=inherit");
-    ui::themes::Theme theme;
-    std::string error;
-    TEST_ASSERT_FALSE(ui::themes::parseThemeText(text, "inherit-typeface", theme, error));
-    TEST_ASSERT_EQUAL_STRING("typeface must be standard, open_dyslexic, or atkinson", error.c_str());
+    bool hasTypefaceValue = false;
+    TEST_ASSERT_TRUE_MESSAGE(ui::themes::parseThemeText(text, "catalog-typeface", theme, error, &hasTypefaceValue),
+                             error.c_str());
+    TEST_ASSERT_TRUE(hasTypefaceValue);
+    TEST_ASSERT_EQUAL_STRING("comic_sans", theme.typeface.c_str());
 }
 
 void test_rejects_bad_color() {
@@ -155,15 +157,6 @@ void test_unknown_key_is_ignored() {
     ui::themes::Theme theme;
     std::string error;
     TEST_ASSERT_TRUE_MESSAGE(ui::themes::parseThemeText(text, "unknown", theme, error), error.c_str());
-}
-
-void test_rejects_bad_low_brightness() {
-    std::string text = validThemeText();
-    replaceText(text, "low_brightness=true", "low_brightness=maybe");
-    ui::themes::Theme theme;
-    std::string error;
-    TEST_ASSERT_FALSE(ui::themes::parseThemeText(text, "bad-low-brightness", theme, error));
-    TEST_ASSERT_EQUAL_STRING("low_brightness must be true or false", error.c_str());
 }
 
 void test_theme_id_from_path() {
@@ -215,13 +208,11 @@ int main(void) {
     RUN_TEST(test_accepts_rgb565_literal);
     RUN_TEST(test_rejects_missing_magic);
     RUN_TEST(test_rejects_versioned_magic);
-    RUN_TEST(test_rejects_missing_typeface);
-    RUN_TEST(test_rejects_invalid_typeface);
-    RUN_TEST(test_rejects_inherit_typeface);
+    RUN_TEST(test_missing_typeface_uses_embedded_default);
+    RUN_TEST(test_accepts_catalog_typeface_id);
     RUN_TEST(test_rejects_missing_role);
     RUN_TEST(test_rejects_bad_color);
     RUN_TEST(test_unknown_key_is_ignored);
-    RUN_TEST(test_rejects_bad_low_brightness);
     RUN_TEST(test_theme_id_from_path);
     RUN_TEST(test_repo_themes_parse);
     RUN_TEST(test_theme_catalog_references_existing_files);

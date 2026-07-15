@@ -1,6 +1,9 @@
 #include "ui/Theme.h"
 
 #include <algorithm>
+#include <cctype>
+
+#include "text/AsciiText.h"
 
 namespace ui::themes {
     namespace {
@@ -16,12 +19,12 @@ namespace ui::themes {
             0x4208, 0x8410, 0x8410, 0xF800, 0x8410, 0x8410,
         };
 
-        constexpr char lower(char value) {
-            return value >= 'A' && value <= 'Z' ? static_cast<char>(value - 'A' + 'a') : value;
+        char lower(unsigned char value) {
+            return std::tolower(value);
         }
 
-        constexpr bool whitespace(char value) {
-            return value == ' ' || value == '\t' || value == '\r' || value == '\n';
+        bool whitespace(unsigned char value) {
+            return std::isspace(value);
         }
 
         std::string_view trim(std::string_view value) {
@@ -43,55 +46,20 @@ namespace ui::themes {
             return value.size() >= suffix.size() && equalIgnoreCase(value.substr(value.size() - suffix.size()), suffix);
         }
 
-        bool hex(char value) {
-            return (value >= '0' && value <= '9') || (lower(value) >= 'a' && lower(value) <= 'f');
-        }
-
-        uint8_t hexValue(char value) {
-            return value >= '0' && value <= '9' ? static_cast<uint8_t>(value - '0')
-                                                : static_cast<uint8_t>(10 + lower(value) - 'a');
-        }
-
-        bool parseHexByte(std::string_view value, size_t offset, uint8_t& out) {
-            if (offset + 1 >= value.size() || !hex(value[offset]) || !hex(value[offset + 1]))
-                return false;
-            out = static_cast<uint8_t>((hexValue(value[offset]) << 4U) | hexValue(value[offset + 1]));
-            return true;
-        }
-
         bool parseColor(std::string_view value, uint16_t& out) {
-            if (value.size() == 7 && value.front() == '#') {
-                uint8_t red = 0, green = 0, blue = 0;
-                if (!parseHexByte(value, 1, red) || !parseHexByte(value, 3, green) || !parseHexByte(value, 5, blue))
-                    return false;
-                out = rgb565(red, green, blue);
-                return true;
-            }
-            if (value.size() != 6 || value[0] != '0' || lower(value[1]) != 'x')
+            const bool rgb = value.size() == 7 && value.front() == '#';
+            if (rgb)
+                value.remove_prefix(1);
+            else if (value.size() == 6 && value[0] == '0' && lower(value[1]) == 'x')
+                value.remove_prefix(2);
+            else
                 return false;
-            uint16_t parsed = 0;
-            for (const char digit: value.substr(2)) {
-                if (!hex(digit))
-                    return false;
-                parsed = static_cast<uint16_t>((parsed << 4U) | hexValue(digit));
-            }
-            out = parsed;
-            return true;
-        }
 
-        bool parseBool(std::string_view value, bool& out) {
-            value = trim(value);
-            if (equalIgnoreCase(value, "true") || equalIgnoreCase(value, "yes") || value == "1"
-                || equalIgnoreCase(value, "on")) {
-                out = true;
-                return true;
-            }
-            if (equalIgnoreCase(value, "false") || equalIgnoreCase(value, "no") || value == "0"
-                || equalIgnoreCase(value, "off")) {
-                out = false;
-                return true;
-            }
-            return false;
+            uint32_t parsed = 0;
+            if (!AsciiText::parseUnsigned(value, parsed, 16))
+                return false;
+            out = rgb ? rgb565(parsed >> 16U, parsed >> 8U, parsed) : parsed;
+            return true;
         }
 
         std::string_view nextLine(std::string_view& text) {
@@ -125,51 +93,20 @@ namespace ui::themes {
 
     } // namespace
 
-    std::string_view colorRoleName(ColorRole role) {
-        const size_t index = static_cast<size_t>(role);
-        return index < kColorRoleNames.size() ? kColorRoleNames[index] : std::string_view{};
+    std::string_view colorRoleName(size_t role) {
+        return role < kColorRoleNames.size() ? kColorRoleNames[role] : std::string_view{};
     }
 
-    int colorRoleIndexForName(std::string_view name) {
+    size_t colorRoleIndexForName(std::string_view name) {
         name = trim(name);
         const auto found = std::find_if(kColorRoleNames.begin(), kColorRoleNames.end(), [name](std::string_view role) {
             return equalIgnoreCase(name, role);
         });
-        return found == kColorRoleNames.end() ? -1 : static_cast<int>(found - kColorRoleNames.begin());
-    }
-
-    std::string_view readerTypefaceName(ReaderTypeface typeface) {
-        switch (typeface) {
-        case ReaderTypeface::OpenDyslexic:
-            return "open_dyslexic";
-        case ReaderTypeface::AtkinsonHyperlegible:
-            return "atkinson";
-        default:
-            return "standard";
-        }
-    }
-
-    bool readerTypefaceForName(std::string_view name, ReaderTypeface& typeface) {
-        name = trim(name);
-        if (equalIgnoreCase(name, "standard")) {
-            typeface = ReaderTypeface::Standard;
-            return true;
-        }
-        if (equalIgnoreCase(name, "atkinson") || equalIgnoreCase(name, "atkinson_hyperlegible")
-            || equalIgnoreCase(name, "atkinson-hyperlegible")) {
-            typeface = ReaderTypeface::AtkinsonHyperlegible;
-            return true;
-        }
-        if (equalIgnoreCase(name, "opendyslexic") || equalIgnoreCase(name, "open_dyslexic")
-            || equalIgnoreCase(name, "open-dyslexic")) {
-            typeface = ReaderTypeface::OpenDyslexic;
-            return true;
-        }
-        return false;
+        return found - kColorRoleNames.begin();
     }
 
     Theme defaultTheme() {
-        return {std::string{kDefaultThemeId}, "Default", kDefaultThemeColors, ReaderTypeface::Standard, true, false};
+        return {std::string{kDefaultThemeId}, "Default", kDefaultThemeColors, std::string{kDefaultTypefaceId}, true};
     }
 
     bool hasThemeExtension(std::string_view path) {
@@ -187,7 +124,10 @@ namespace ui::themes {
         return id;
     }
 
-    bool parseThemeText(std::string_view text, std::string_view id, Theme& theme, std::string& error) {
+    bool parseThemeText(std::string_view text, std::string_view id, Theme& theme, std::string& error,
+                        bool* hasTypefaceValue) {
+        if (hasTypefaceValue != nullptr)
+            *hasTypefaceValue = false;
         if (!consumeMagic(text, error))
             return false;
 
@@ -196,7 +136,6 @@ namespace ui::themes {
         parsed.name = id;
         std::array<bool, kColorRoleCount> seen{};
         bool hasName = false;
-        bool hasTypeface = false;
 
         while (!text.empty()) {
             std::string_view line = trim(nextLine(text));
@@ -218,23 +157,13 @@ namespace ui::themes {
                 continue;
             }
             if (equalIgnoreCase(key, "typeface")) {
-                if (!readerTypefaceForName(value, parsed.typeface)) {
-                    error = "typeface must be standard, open_dyslexic, or atkinson";
-                    return false;
-                }
-                hasTypeface = true;
+                if (hasTypefaceValue != nullptr)
+                    *hasTypefaceValue = !value.empty();
+                parsed.typeface = value.empty() ? std::string{kDefaultTypefaceId} : std::string{value};
                 continue;
             }
-            if (equalIgnoreCase(key, "low_brightness")) {
-                if (!parseBool(value, parsed.lowBrightness)) {
-                    error = "low_brightness must be true or false";
-                    return false;
-                }
-                continue;
-            }
-
-            const int roleIndex = colorRoleIndexForName(key);
-            if (roleIndex < 0)
+            const size_t roleIndex = colorRoleIndexForName(key);
+            if (roleIndex == kColorRoleCount)
                 continue;
             uint16_t color = 0;
             if (!parseColor(value, color)) {
@@ -242,16 +171,12 @@ namespace ui::themes {
                 error.append(key);
                 return false;
             }
-            parsed.colors[static_cast<size_t>(roleIndex)] = color;
-            seen[static_cast<size_t>(roleIndex)] = true;
+            parsed.colors[roleIndex] = color;
+            seen[roleIndex] = true;
         }
 
         if (!hasName) {
             error = "missing name";
-            return false;
-        }
-        if (!hasTypeface) {
-            error = "missing typeface";
             return false;
         }
         const auto missing = std::find(seen.begin(), seen.end(), false);

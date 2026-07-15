@@ -237,7 +237,7 @@ namespace settings {
             Schema<pref::Wpm, pref::BrightnessIndex, pref::ThemeId, pref::UiLanguage, pref::Handedness,
                    pref::PhantomWords, pref::ChapterScrollReversed, pref::FooterMetricMode, pref::BatteryLabelMode,
                    pref::ScreensaverMode, pref::ReaderBatteryVisible, pref::ReaderChapterVisible,
-                   pref::ReaderProgressVisible, pref::ReaderFontSizeIndex, pref::ReaderTypefaceId,
+                   pref::ReaderProgressVisible, pref::ReaderFontSizeIndex,
                    pref::TypographyFocusHighlight, pref::TypographyTracking, pref::TypographyAnchor,
                    pref::TypographyGuideWidth, pref::TypographyGuideGap, pref::PacingLongWordDelay,
                    pref::PacingComplexWordDelay, pref::PacingPunctuationDelay, pref::PauseMode,

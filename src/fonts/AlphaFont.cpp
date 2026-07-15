@@ -1,3 +1,3 @@
-#include "ui/fonts/AlphaFont.h"
+#include "fonts/AlphaFont.h"
 
 // Template implementation is header-only.

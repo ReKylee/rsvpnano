@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include "ui/fonts/AlphaFont.h"
+#include "fonts/AlphaFont.h"
 
 namespace ui::fonts {
 

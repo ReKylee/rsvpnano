@@ -6,83 +6,52 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
+#include <string>
+#include <string_view>
 #include <vector>
 
+#include "fonts/AlphaFont.h"
 #include "fonts/RFont4Format.h"
-#include "ui/fonts/Font.h"
 
 class FontCatalog {
 public:
     struct Family {
-        String id;
-        String label;
-        std::array<String, RFont4::kSizeCount> paths;
+        std::string id;
+        std::string label;
+        std::array<std::string, RFont4::kSizeCount> paths;
         bool builtIn = false;
     };
 
     FontCatalog();
-    FontCatalog(const FontCatalog&) = delete;
-    FontCatalog& operator=(const FontCatalog&) = delete;
 
-    void reset();
     void loadFromSd();
-
-    uint8_t typefaceCount() const;
-    const char* typefaceLabel(uint8_t index) const;
-    String typefaceId(uint8_t index) const;
-    bool hasSize(uint8_t typefaceIndex, uint8_t sizeIndex) const;
-    bool indexForId(const String& id, uint8_t& index) const;
-
-    ui::fonts::Font loadFont(uint8_t typefaceIndex, uint8_t sizeIndex);
-    ui::fonts::Font currentFont() const;
-
-    static constexpr uint8_t sizeCount() {
-        return static_cast<uint8_t>(RFont4::kSizeCount);
-    }
-    static const char* sizeLabel(uint8_t index) {
-        return RFont4::sizeLabel(index);
-    }
-    static ui::fonts::Font fallbackFont(uint8_t sizeIndex);
-    static String normalizeId(const String& value);
-    static bool validateFontFile(const String& path, String& error);
-
-    const std::vector<Family>& families() const {
+    std::span<const Family> families() const {
         return families_;
     }
+    const Family* find(std::string_view id) const;
+    const ui::fonts::AlphaFont* load(size_t familyIndex, size_t sizeIndex);
+
+    static bool validateFontFile(const String& path, String& error);
 
 private:
-    class RuntimeFont {
-    public:
-        bool load(const String& path, String& error);
-        void clear();
-        const ui::fonts::AlphaFont* font() const;
-
-    private:
-        bool readHeader(File& file, RFont4::Header& header, String& error) const;
-        bool readBytes(File& file, uint32_t offset, uint8_t* target, size_t bytes, String& error) const;
-        bool loadRecords(File& file, const RFont4::Header& header, String& error);
-        void rebuildFont(const RFont4::Header& header);
-
-        String name_;
-        std::vector<uint8_t> bitmap_;
-        std::vector<ui::fonts::AlphaGlyph> glyphs_;
-        std::vector<ui::fonts::AlphaRow> rows_;
-        std::vector<ui::fonts::AlphaSpan> spans_;
-        std::array<uint8_t, RFont4::kPageMapBytes> pageMap_ = {};
-        std::vector<uint16_t> pageTableData_;
-        std::vector<const uint16_t*> pageTablePointers_;
-        std::vector<ui::fonts::AlphaKerningPair> kerningPairs_;
-        ui::fonts::AlphaFont font_;
-        bool valid_ = false;
-    };
-
-    size_t safeTypefaceIndex(uint8_t index) const;
-    uint8_t safeSizeIndex(uint8_t index) const;
-    bool loadRuntimeFont(const String& path);
+    void reset();
+    bool loadRuntimeFont(const std::string& path);
+    void clearRuntimeFont();
+    bool loadRecords(File& file, const RFont4::Header& header, String& error);
+    static std::string normalizeId(std::string_view value);
 
     std::vector<Family> families_;
-    RuntimeFont loaded_;
-    uint8_t loadedTypefaceIndex_ = 0xFF;
-    uint8_t loadedSizeIndex_ = 0xFF;
-    String loadError_;
+    std::string runtimeName_;
+    std::vector<uint8_t> bitmap_;
+    std::vector<ui::fonts::AlphaGlyph> glyphs_;
+    std::vector<ui::fonts::AlphaRow> rows_;
+    std::vector<ui::fonts::AlphaSpan> spans_;
+    std::array<uint8_t, RFont4::kPageMapBytes> pageMap_ = {};
+    std::vector<uint16_t> pageTableData_;
+    std::vector<const uint16_t*> pageTablePointers_;
+    std::vector<ui::fonts::AlphaKerningPair> kerningPairs_;
+    ui::fonts::AlphaFont runtimeFont_;
+    size_t loadedFamilyIndex_ = RFont4::kSizeCount;
+    size_t loadedSizeIndex_ = RFont4::kSizeCount;
 };

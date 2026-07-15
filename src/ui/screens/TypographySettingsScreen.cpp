@@ -7,8 +7,14 @@
 namespace screens {
     namespace pref = settings::prefs;
 
-    void typographySettings(ui::Context& ui, ReaderSettings& config, FontCatalog& fonts, Preferences& preferences,
-                            Screen& screen) {
+    bool typographySettings(ui::Context& ui, ReaderSettings& config, FontCatalog& fonts, ThemeStore& themes,
+                            Preferences& preferences, Screen& screen) {
+        const auto families = fonts.families();
+        const auto selected = std::ranges::find_if(families, [&themes](const FontCatalog::Family& family) {
+            return family.id == themes.selected().typeface;
+        });
+        size_t familyIndex = selected == families.end() ? 0 : selected - families.begin();
+        bool fontChanged = false;
         const ui::Rect content = detail::content(ui);
         if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
             screen = Screen::Settings;
@@ -19,17 +25,17 @@ namespace screens {
                  ui.text(UiText::Typography), 2);
         if (ui.button({resetX, content.y, resetWidth, 24}, ui.text(UiText::Reset))) {
             config.fontSizeIndex = pref::ReaderFontSizeIndex::defaultValue();
-            config.typefaceIndex = 0;
             config.typography = {};
 
             settings::save<pref::ReaderFontSizeIndex>(preferences, config.fontSizeIndex);
-            settings::save<pref::ReaderTypefaceId>(preferences, fonts.typefaceId(config.typefaceIndex).c_str());
+            if (themes.setSelectedTypeface(families.front().id, fonts))
+                familyIndex = 0;
             settings::save<pref::TypographyFocusHighlight>(preferences, config.typography.focusHighlight);
             settings::save<pref::TypographyTracking>(preferences, config.typography.tracking);
             settings::save<pref::TypographyAnchor>(preferences, config.typography.anchor);
             settings::save<pref::TypographyGuideWidth>(preferences, config.typography.guideWidth);
             settings::save<pref::TypographyGuideGap>(preferences, config.typography.guideGap);
-            config.font = fonts.loadFont(config.typefaceIndex, config.fontSizeIndex);
+            fontChanged = true;
         }
 
         constexpr int16_t gap = 6;
@@ -42,18 +48,18 @@ namespace screens {
         const int16_t typefaceWidth = static_cast<int16_t>(content.w - fontSizeWidth - focusWidth - gap * 2);
         ui::Row font{{content.x, fontY, content.w, 34}, gap};
 
-        if (ui.setting(font.next(fontSizeWidth), ui.text(UiText::FontSize),
-                       FontCatalog::sizeLabel(config.fontSizeIndex), ui::SettingLayout::Inline)) {
+        if (ui.setting(font.next(fontSizeWidth), ui.text(UiText::FontSize), RFont4::sizeLabel(config.fontSizeIndex),
+                       ui::SettingLayout::Inline)) {
             config.fontSizeIndex = settings::cycle<pref::ReaderFontSizeIndex>(preferences);
-            config.font = fonts.loadFont(config.typefaceIndex, config.fontSizeIndex);
+            fontChanged = true;
         }
 
-        if (ui.setting(font.next(typefaceWidth), ui.text(UiText::Typeface), fonts.typefaceLabel(config.typefaceIndex))) {
-            if (fonts.typefaceCount() == 0)
-                return;
-            config.typefaceIndex = static_cast<uint8_t>((config.typefaceIndex + 1U) % fonts.typefaceCount());
-            settings::save<pref::ReaderTypefaceId>(preferences, fonts.typefaceId(config.typefaceIndex).c_str());
-            config.font = fonts.loadFont(config.typefaceIndex, config.fontSizeIndex);
+        if (ui.setting(font.next(typefaceWidth), ui.text(UiText::Typeface), families[familyIndex].label.c_str())) {
+            const size_t next = (familyIndex + 1) % families.size();
+            if (themes.setSelectedTypeface(families[next].id, fonts)) {
+                familyIndex = next;
+                fontChanged = true;
+            }
         }
 
         if (ui.toggle(font.next(focusWidth), ui.text(UiText::Focus), config.typography.focusHighlight)) {
@@ -64,33 +70,34 @@ namespace screens {
         ui.separator({content.x, geometryY, content.w, 10}, ui.text(UiText::GeometrySection));
         ui::Grid geometry{{content.x, static_cast<int16_t>(geometryY + 12), content.w,
                            static_cast<int16_t>(content.y + content.h - geometryY - 12)},
-                          2, 32, 4};
-        if (const auto value = ui.slider(geometry.next(), ui.text(UiText::Tracking), config.typography.tracking, -2,
-                                         3, 1, " px");
+                          2,
+                          32,
+                          4};
+        if (const auto value =
+                ui.slider(geometry.next(), ui.text(UiText::Tracking), config.typography.tracking, -2, 3, 1, " px");
             value.changed) {
             config.typography.tracking = static_cast<int8_t>(value.value);
             settings::save<pref::TypographyTracking>(preferences, config.typography.tracking);
         }
-        if (const auto value = ui.slider(geometry.next(), ui.text(UiText::Anchor), config.typography.anchor, 30, 40,
-                                         1, "%");
+        if (const auto value =
+                ui.slider(geometry.next(), ui.text(UiText::Anchor), config.typography.anchor, 30, 40, 1, "%");
             value.changed) {
             config.typography.anchor = static_cast<uint8_t>(value.value);
             settings::save<pref::TypographyAnchor>(preferences, config.typography.anchor);
         }
         if (const auto value =
-                ui.slider(geometry.next(), ui.text(UiText::GuideWidth), config.typography.guideWidth, 12, 30, 2,
-                          " px");
+                ui.slider(geometry.next(), ui.text(UiText::GuideWidth), config.typography.guideWidth, 12, 30, 2, " px");
             value.changed) {
             config.typography.guideWidth = static_cast<uint8_t>(value.value);
             settings::save<pref::TypographyGuideWidth>(preferences, config.typography.guideWidth);
         }
-        if (const auto value = ui.slider(geometry.next(), ui.text(UiText::GuideGap), config.typography.guideGap, 2,
-                                         8, 1, " px");
+        if (const auto value =
+                ui.slider(geometry.next(), ui.text(UiText::GuideGap), config.typography.guideGap, 2, 8, 1, " px");
             value.changed) {
             config.typography.guideGap = static_cast<uint8_t>(value.value);
             settings::save<pref::TypographyGuideGap>(preferences, config.typography.guideGap);
         }
-
+        return fontChanged;
     }
 
 } // namespace screens

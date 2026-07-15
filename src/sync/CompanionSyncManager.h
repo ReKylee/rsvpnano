@@ -12,7 +12,7 @@ class Preferences;
 class CompanionSyncManager {
 public:
     bool begin(Preferences& preferences);
-    void update();
+    bool update();
     void end();
     bool active() const;
     std::string_view statusLine1() const;
@@ -65,6 +65,8 @@ private:
     void handleFonts();
     void handleFontUpload();
     void handleNotFound();
+    void sendData(int status, const String& json);
+    void sendError(int status, const char* code, const String& message, const char* field = nullptr);
     String settingsJson();
     bool applySettingsJson(const String& body, String& error);
     String wifiJson();
@@ -79,7 +81,6 @@ private:
                          uint32_t& wordIndex, uint8_t& percent);
     String bookIdForPath(const String& path) const;
     bool resolveBookId(const String& id, String& path) const;
-    bool resolveBookName(const String& requested, String& path) const;
     void finishUpload(bool success);
 
     static CompanionSyncManager* instance_;
@@ -97,4 +98,5 @@ private:
     NetworkMode networkMode_ = NetworkMode::None;
     bool active_ = false;
     bool serverStarted_ = false;
+    bool settingsChanged_ = false;
 };

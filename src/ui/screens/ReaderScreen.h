@@ -1,14 +1,13 @@
 #pragma once
 
+#include <Preferences.h>
+#include "fonts/AlphaFont.h"
 #include "fonts/FontCatalog.h"
 #include "reader/ReaderSettings.h"
 #include "reader/ReadingLoop.h"
 #include "storage/index/IndexedBookStore.h"
 #include "storage/index/ReadingProgress.h"
 #include "ui/Ui.h"
-#include "ui/fonts/Font.h"
-
-#include <Preferences.h>
 
 namespace screens {
 
@@ -43,7 +42,8 @@ namespace screens {
         FontCatalog fonts;
         BatteryState battery;
 
-        void begin(Preferences& preferences, uint32_t nowMs);
+        void begin(Preferences& preferences, const ui::themes::Theme& theme, uint32_t nowMs);
+        void applyTheme(const ui::themes::Theme& theme);
         bool openBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, size_t index, uint32_t nowMs);
         void loadInitialBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, uint32_t nowMs);
         void draw(ui::Context& ui, const StorageManager& storage, uint32_t nowMs);
@@ -78,8 +78,9 @@ namespace screens {
         void finishPause(Preferences& preferences, uint32_t nowMs);
 
         Arduino_GFX& gfx_;
-        mutable ui::fonts::TextRenderer<640> text_;
-        ui::fonts::Font font_;
+        mutable ui::fonts::AlphaTextRenderer<640> text_;
+        const ui::fonts::AlphaFont* font_ = nullptr;
+        uint32_t fontRevision_ = 0;
         ReaderTypography typography_;
         uint16_t background_ = 0;
         bool touching_ = false;

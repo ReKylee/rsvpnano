@@ -35,7 +35,7 @@ namespace {
     ui::themes::Theme theme() {
         ui::themes::Theme value;
         value.colors.fill(0xFFFF);
-        value.colors[static_cast<size_t>(ui::themes::ColorRole::Background)] = 0;
+        value.colors[ui::themes::ColorRole::Background] = 0;
         return value;
     }
 
@@ -292,8 +292,8 @@ void test_slider_redraws_with_its_active_color() {
     Arduino_GFX gfx;
     ui::Context context(gfx, &flush, &flushRegion);
     auto colors = theme();
-    colors.colors[static_cast<size_t>(ui::themes::ColorRole::Accent)] = 0x1111;
-    colors.colors[static_cast<size_t>(ui::themes::ColorRole::BreakAccent)] = 0x2222;
+    colors.colors[ui::themes::ColorRole::Accent] = 0x1111;
+    colors.colors[ui::themes::ColorRole::BreakAccent] = 0x2222;
     context.setTheme(colors);
 
     context.beginFrame(3);
@@ -302,8 +302,7 @@ void test_slider_redraws_with_its_active_color() {
 
     gfx.writes = 0;
     context.beginFrame(3);
-    context.slider({0, 0, 200, 40}, "Focus", 25, 1, 180, 1, " min",
-                   ui::themes::ColorRole::BreakAccent);
+    context.slider({0, 0, 200, 40}, "Focus", 25, 1, 180, 1, " min", ui::themes::ColorRole::BreakAccent);
     context.endFrame();
     TEST_ASSERT_GREATER_THAN(0, gfx.writes);
     TEST_ASSERT_EQUAL_HEX16(0x2222, gfx.lastFillColor);

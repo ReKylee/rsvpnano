@@ -157,10 +157,10 @@ namespace ui {
         invalid_ = true;
     }
 
-    void Context::label(Rect rect, std::string_view text, uint8_t textSize, ui::themes::ColorRole role,
-                        TextAlign align, uint8_t textLines) {
+    void Context::label(Rect rect, std::string_view text, uint8_t textSize, ui::themes::ColorRole role, TextAlign align,
+                        uint8_t textLines) {
         uint32_t state = combine(signature(text), textSize);
-        state = combine(state, static_cast<uint8_t>(role));
+        state = combine(state, role);
         state = combine(state, static_cast<uint8_t>(align));
         state = combine(state, textLines);
         if (!claim(Kind::Label, rect, state).changed) {
@@ -179,8 +179,7 @@ namespace ui {
         const int16_t lineX = static_cast<int16_t>(rect.x + textWidth + 6);
         if (lineX < rect.x + rect.w)
             gfx_.drawFastHLine(lineX, static_cast<int16_t>(rect.y + rect.h / 2),
-                               static_cast<int16_t>(rect.x + rect.w - lineX),
-                               blend(ui::themes::ColorRole::Muted, 96));
+                               static_cast<int16_t>(rect.x + rect.w - lineX), blend(ui::themes::ColorRole::Muted, 96));
         markDirty(rect);
     }
 
@@ -233,8 +232,7 @@ namespace ui {
             const int16_t switchX = static_cast<int16_t>(rect.x + rect.w - switchWidth - 7);
             const int16_t switchY = static_cast<int16_t>(rect.y + (rect.h - 16) / 2);
             gfx_.fillRoundRect(switchX, switchY, switchWidth, 16, 8,
-                               color(enabled ? ui::themes::ColorRole::Accent
-                                             : ui::themes::ColorRole::ProgressTrack));
+                               color(enabled ? ui::themes::ColorRole::Accent : ui::themes::ColorRole::ProgressTrack));
             gfx_.fillCircle(static_cast<int16_t>(switchX + (enabled ? switchWidth - 8 : 8)),
                             static_cast<int16_t>(switchY + 8), 6, color(ui::themes::ColorRole::Foreground));
             drawText({static_cast<int16_t>(rect.x + 7), rect.y,
@@ -264,8 +262,7 @@ namespace ui {
             const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
             gfx_.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
             gfx_.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5,
-                               color(enabled ? ui::themes::ColorRole::Outline
-                                             : ui::themes::ColorRole::ProgressTrack));
+                               color(enabled ? ui::themes::ColorRole::Outline : ui::themes::ColorRole::ProgressTrack));
             if (enabled && rect.w > 16 && rect.h >= 28)
                 gfx_.fillRect(static_cast<int16_t>(rect.x + 8), static_cast<int16_t>(rect.y + rect.h - 3),
                               static_cast<int16_t>(rect.w - 16), 2, color(ui::themes::ColorRole::Accent));
@@ -280,8 +277,7 @@ namespace ui {
             if (hasDetail) {
                 const int16_t detailY = static_cast<int16_t>(rect.y + rect.h - 20);
                 if (detailLeft.empty() || detailRight.empty()) {
-                    drawText({textRect.x, detailY, textRect.w, 16},
-                             detailLeft.empty() ? detailRight : detailLeft, 2,
+                    drawText({textRect.x, detailY, textRect.w, 16}, detailLeft.empty() ? detailRight : detailLeft, 2,
                              color(ui::themes::ColorRole::Muted),
                              detailLeft.empty() ? TextAlign::Right : TextAlign::Left);
                 } else {
@@ -395,7 +391,7 @@ namespace ui {
     void Context::steps(Rect rect, uint8_t current, uint8_t total, ui::themes::ColorRole activeRole) {
         current = std::min(current, total);
         uint32_t state = combine(current, total);
-        state = combine(state, static_cast<uint8_t>(activeRole));
+        state = combine(state, activeRole);
         if (!claim(Kind::Steps, rect, state).changed)
             return;
 
@@ -407,8 +403,8 @@ namespace ui {
         const int16_t radius = std::max<int16_t>(2, std::min<int16_t>(4, static_cast<int16_t>((crossSize - 2) / 2)));
         const int16_t spacing = static_cast<int16_t>(radius * 2 + 5);
         const int16_t length = static_cast<int16_t>((total - 1) * spacing + radius * 2);
-        const int16_t first = static_cast<int16_t>((vertical ? rect.y : rect.x)
-                                                   + ((vertical ? rect.h : rect.w) - length) / 2 + radius);
+        const int16_t first =
+            static_cast<int16_t>((vertical ? rect.y : rect.x) + ((vertical ? rect.h : rect.w) - length) / 2 + radius);
         const int16_t center = static_cast<int16_t>((vertical ? rect.x : rect.y) + crossSize / 2);
         for (uint8_t index = 0; index < total; ++index) {
             const int16_t position = static_cast<int16_t>(first + index * spacing);
@@ -460,13 +456,12 @@ namespace ui {
         state = combine(state, static_cast<uint32_t>(minimum));
         state = combine(state, static_cast<uint32_t>(maximum));
         state = combine(state, static_cast<uint32_t>(step));
-        state = combine(state, static_cast<uint8_t>(activeRole));
+        state = combine(state, activeRole);
         if (claim(Kind::Slider, rect, state).changed) {
             if (labeled) {
                 const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
                 gfx_.fillRoundRect(visual.x, visual.y, visual.w, visual.h, 5, surface);
-                gfx_.drawRoundRect(visual.x, visual.y, visual.w, visual.h, 5,
-                                   color(ui::themes::ColorRole::Outline));
+                gfx_.drawRoundRect(visual.x, visual.y, visual.w, visual.h, 5, color(ui::themes::ColorRole::Outline));
                 char valueText[24];
                 std::snprintf(valueText, sizeof(valueText), "%d%.*s", result.value, static_cast<int>(suffix.size()),
                               suffix.data());
@@ -475,8 +470,7 @@ namespace ui {
                 if (visual.h >= 44) {
                     drawText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 2), headerWidth, 16},
                              label, 2, color(ui::themes::ColorRole::Foreground));
-                    drawText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 18), headerWidth,
-                              16},
+                    drawText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 18), headerWidth, 16},
                              valueView, 2, color(activeRole), TextAlign::Right);
                 } else {
                     uint8_t labelSize = visual.h >= 30 ? 2 : 1;
@@ -488,8 +482,7 @@ namespace ui {
                     }
                     if (static_cast<size_t>(headerWidth) < label.size() * 6U * labelSize + valueWidth + 8U)
                         labelSize = 1;
-                    const int16_t labelWidth =
-                        std::max<int16_t>(0, static_cast<int16_t>(headerWidth - valueWidth - 8));
+                    const int16_t labelWidth = std::max<int16_t>(0, static_cast<int16_t>(headerWidth - valueWidth - 8));
                     const int16_t textY = static_cast<int16_t>(visual.y + 2);
                     drawText({static_cast<int16_t>(visual.x + 7), textY, labelWidth, 16}, label, labelSize,
                              color(ui::themes::ColorRole::Foreground));
@@ -510,16 +503,17 @@ namespace ui {
                 const int tickStride = std::max(1, (intervalCount + 9) / 10);
                 for (int interval = 0;; interval = std::min(interval + tickStride, intervalCount)) {
                     const int tickValue = std::min(minimum + interval * step, maximum);
-                    const int16_t tickX = static_cast<int16_t>(
-                        track.x + (static_cast<int32_t>(track.w - 1) * (tickValue - minimum)) / (maximum - minimum));
+                    const int16_t tickX =
+                        static_cast<int16_t>(track.x
+                                             + (static_cast<int32_t>(track.w - 1) * (tickValue - minimum))
+                                                   / (maximum - minimum));
                     gfx_.drawFastVLine(tickX, static_cast<int16_t>(trackCenterY - 3), 7,
                                        color(ui::themes::ColorRole::Outline));
                     if (interval == intervalCount)
                         break;
                 }
             }
-            gfx_.fillRect(track.x, track.y, static_cast<int16_t>(knobX - track.x + 1), track.h,
-                          color(activeRole));
+            gfx_.fillRect(track.x, track.y, static_cast<int16_t>(knobX - track.x + 1), track.h, color(activeRole));
             const int16_t knobRadius = labeled ? 5 : 7;
             gfx_.fillCircle(knobX, trackCenterY, knobRadius, color(activeRole));
             gfx_.drawCircle(knobX, trackCenterY, knobRadius, color(ui::themes::ColorRole::OnAccent));
@@ -543,7 +537,7 @@ namespace ui {
         if (event != nullptr && hasTouch(*event, TouchStart) && slot < kSlotCapacity) {
             const int8_t direction = contains(decrement, event->x, event->y) ? -1
                                    : contains(increment, event->x, event->y) ? 1
-                                                                            : 0;
+                                                                             : 0;
             if (direction != 0) {
                 capturedSlot_ = slot;
                 capturedScalarInitialValue_ = std::clamp(value, minimum, maximum);
@@ -557,16 +551,15 @@ namespace ui {
             const Rect target = capturedStepperDirection_ < 0 ? decrement : increment;
             const bool overTarget = event != nullptr && contains(target, event->x, event->y);
             if (overTarget && event != nullptr && hasTouch(*event, TouchRelease) && hasTouch(*event, TouchTap)) {
-                capturedScalarValue_ = std::clamp(capturedScalarInitialValue_ + capturedStepperDirection_ * safeStep,
-                                                  minimum, maximum);
+                capturedScalarValue_ =
+                    std::clamp(capturedScalarInitialValue_ + capturedStepperDirection_ * safeStep, minimum, maximum);
             } else if (overTarget && touchActive_
                        && touchLastPollMs_ - touchStartedAtMs_ >= touchSource_.timing.holdMs) {
                 constexpr uint32_t repeatMs = 120;
-                const uint32_t repeats =
-                    (touchLastPollMs_ - touchStartedAtMs_ - touchSource_.timing.holdMs) / repeatMs;
+                const uint32_t repeats = (touchLastPollMs_ - touchStartedAtMs_ - touchSource_.timing.holdMs) / repeatMs;
                 const int delta = safeStep * (1 + static_cast<int>(repeats));
-                capturedScalarValue_ = std::clamp(capturedScalarInitialValue_ + capturedStepperDirection_ * delta,
-                                                  minimum, maximum);
+                capturedScalarValue_ =
+                    std::clamp(capturedScalarInitialValue_ + capturedStepperDirection_ * delta, minimum, maximum);
             }
             result.value = capturedScalarValue_;
             result.changed = result.value != value;
@@ -580,7 +573,7 @@ namespace ui {
         state = combine(state, static_cast<uint32_t>(result.value));
         state = combine(state, static_cast<uint32_t>(minimum));
         state = combine(state, static_cast<uint32_t>(maximum));
-        state = combine(state, static_cast<uint8_t>(activeRole));
+        state = combine(state, activeRole);
         if (claim(Kind::Stepper, rect, state).changed) {
             const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
             const uint16_t outline = color(ui::themes::ColorRole::Outline);
@@ -603,8 +596,8 @@ namespace ui {
             if (rect.h >= 44) {
                 drawText({middle.x, static_cast<int16_t>(middle.y + 2), middle.w, 16}, label, 2,
                          color(ui::themes::ColorRole::Foreground), TextAlign::Center);
-                drawText({middle.x, static_cast<int16_t>(middle.y + 20), middle.w,
-                          static_cast<int16_t>(middle.h - 20)}, valueText, 2, color(activeRole), TextAlign::Center);
+                drawText({middle.x, static_cast<int16_t>(middle.y + 20), middle.w, static_cast<int16_t>(middle.h - 20)},
+                         valueText, 2, color(activeRole), TextAlign::Center);
             } else {
                 const int16_t valueWidth = std::min<int16_t>(middle.w / 2, textWidth(valueText, 2));
                 drawText({middle.x, middle.y, static_cast<int16_t>(middle.w - valueWidth - 6), middle.h}, label, 2,
@@ -641,12 +634,12 @@ namespace ui {
         }
     }
 
-    void Context::hourglass(Rect rect, uint16_t progress, bool paused, bool complete,
-                            ui::themes::ColorRole sandRole, bool reversed, std::string_view time) {
+    void Context::hourglass(Rect rect, uint16_t progress, bool paused, bool complete, ui::themes::ColorRole sandRole,
+                            bool reversed, std::string_view time) {
         progress = std::min<uint16_t>(progress, 1000);
         uint32_t state = combine(progress, paused);
         state = combine(state, complete);
-        state = combine(state, static_cast<uint8_t>(sandRole));
+        state = combine(state, sandRole);
         state = combine(state, reversed);
         const bool visualChanged = claim(Kind::Custom, rect, state).changed;
         const auto drawTime = [&] {
@@ -698,8 +691,8 @@ namespace ui {
                 profile[step] = static_cast<int16_t>(chamberHeight - (chamberHeight - waist) * curve / 100);
             }
             const auto halfAt = [&](int16_t offsetFromBase) {
-                const int32_t scaled = static_cast<int32_t>(std::clamp<int16_t>(offsetFromBase, 0, chamberWidth))
-                                     * segments;
+                const int32_t scaled =
+                    static_cast<int32_t>(std::clamp<int16_t>(offsetFromBase, 0, chamberWidth)) * segments;
                 const int16_t step = static_cast<int16_t>(scaled / chamberWidth);
                 if (step >= segments)
                     return profile[segments];
@@ -744,27 +737,26 @@ namespace ui {
                     break;
                 ++sourceColumns;
             }
-            const int16_t receivedColumns = static_cast<int16_t>(
-                (static_cast<uint32_t>(pileWidth) * progress + 999U) / 1000U);
+            const int16_t receivedColumns =
+                static_cast<int16_t>((static_cast<uint32_t>(pileWidth) * progress + 999U) / 1000U);
             const int16_t leftGlassEdge = static_cast<int16_t>(left + capWidth / 2 + 2);
             const int16_t rightGlassEdge = static_cast<int16_t>(right - capWidth / 2 - 2);
             for (int16_t column = 1; column <= sourceColumns; ++column) {
                 const int16_t half = halfAt(static_cast<int16_t>(chamberWidth - column));
-                const int16_t x = reversed ? static_cast<int16_t>(centerX + column)
-                                           : static_cast<int16_t>(centerX - column);
+                const int16_t x =
+                    reversed ? static_cast<int16_t>(centerX + column) : static_cast<int16_t>(centerX - column);
                 gfx_.drawFastVLine(x, static_cast<int16_t>(centerY - half + 3),
                                    std::max<int16_t>(1, static_cast<int16_t>(half * 2 - 5)), ink);
             }
             const int16_t receivedBaseHalf = receivedColumns == 0 ? 0 : chamberHeight;
-            const int16_t plateauColumns = receivedColumns == 0
-                                             ? 0
-                                             : std::max<int16_t>(1, static_cast<int16_t>(receivedColumns / 6));
+            const int16_t plateauColumns =
+                receivedColumns == 0 ? 0 : std::max<int16_t>(1, static_cast<int16_t>(receivedColumns / 6));
             const int16_t slopeColumns = std::max<int16_t>(1, static_cast<int16_t>(receivedColumns - plateauColumns));
             for (int16_t column = 1; column <= receivedColumns; ++column) {
-                const int16_t pileHalf = column <= plateauColumns
-                                           ? receivedBaseHalf
-                                           : static_cast<int16_t>(receivedBaseHalf * (receivedColumns - column)
-                                                                  / slopeColumns);
+                const int16_t pileHalf =
+                    column <= plateauColumns
+                        ? receivedBaseHalf
+                        : static_cast<int16_t>(receivedBaseHalf * (receivedColumns - column) / slopeColumns);
                 const int16_t half = std::min(halfAt(column), pileHalf);
                 const int16_t x = reversed ? static_cast<int16_t>(leftGlassEdge + column)
                                            : static_cast<int16_t>(rightGlassEdge - column);
@@ -774,8 +766,8 @@ namespace ui {
             if (!paused && progress > 0 && progress < 1000) {
                 if (reversed) {
                     const int16_t streamX = static_cast<int16_t>(left + receivedColumns + 1);
-                    gfx_.drawFastHLine(streamX, centerY,
-                                       std::max<int16_t>(1, static_cast<int16_t>(centerX - streamX)), ink);
+                    gfx_.drawFastHLine(streamX, centerY, std::max<int16_t>(1, static_cast<int16_t>(centerX - streamX)),
+                                       ink);
                 } else {
                     gfx_.drawFastHLine(static_cast<int16_t>(centerX + 1), centerY,
                                        std::max<int16_t>(1,
@@ -809,15 +801,15 @@ namespace ui {
         const int16_t topRows = static_cast<int16_t>(chamberHeight * (1000 - progress) / 1000);
         for (int16_t row = 0; row < topRows; ++row) {
             const int16_t y = static_cast<int16_t>(centerY - 2 - row);
-            const int16_t half = std::max<int16_t>(1, static_cast<int16_t>((right - left) * (row + 1)
-                                                                           / (2 * chamberHeight)));
+            const int16_t half =
+                std::max<int16_t>(1, static_cast<int16_t>((right - left) * (row + 1) / (2 * chamberHeight)));
             gfx_.drawFastHLine(static_cast<int16_t>(centerX - half), y, static_cast<int16_t>(half * 2 + 1), ink);
         }
         const int16_t bottomRows = static_cast<int16_t>(chamberHeight * progress / 1000);
         for (int16_t row = 0; row < bottomRows; ++row) {
             const int16_t y = static_cast<int16_t>(bottom - 2 - row);
-            const int16_t half = std::max<int16_t>(1, static_cast<int16_t>((right - left) * (bottomRows - row)
-                                                                           / (2 * chamberHeight)));
+            const int16_t half =
+                std::max<int16_t>(1, static_cast<int16_t>((right - left) * (bottomRows - row) / (2 * chamberHeight)));
             gfx_.drawFastHLine(static_cast<int16_t>(centerX - half), y, static_cast<int16_t>(half * 2 + 1), ink);
         }
         if (!paused && progress > 0 && progress < 1000)
@@ -835,7 +827,7 @@ namespace ui {
         if (theme_ == nullptr) {
             return role == ui::themes::ColorRole::Background ? kFallbackBlack : kFallbackWhite;
         }
-        return theme_->colors[static_cast<size_t>(role)];
+        return theme_->colors[role];
     }
 
     uint16_t Context::blend(ui::themes::ColorRole role, uint8_t alpha) const {

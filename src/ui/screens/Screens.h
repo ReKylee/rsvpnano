@@ -3,8 +3,8 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
-#include <span>
 #include <array>
+#include <span>
 #include <string>
 
 #include "book/BookMetadata.h"
@@ -82,13 +82,13 @@ namespace screens {
         InterfaceSettings config;
         ThemeStore themes;
 
-        void begin(ui::Context& ui, Preferences& preferences, void (*setBrightness)(uint8_t));
-        void draw(ui::Context& ui, Preferences& preferences, std::span<const uint32_t> standbyDurations,
+        void begin(ui::Context& ui, Preferences& preferences, const FontCatalog& fonts, void (*setBrightness)(uint8_t));
+        bool draw(ui::Context& ui, Preferences& preferences, std::span<const uint32_t> standbyDurations,
                   void (*setBrightness)(uint8_t), Screen& screen);
     };
     void pacingSettings(ui::Context& ui, ReadingLoop& reader, Preferences& preferences, Screen& screen);
-    void typographySettings(ui::Context& ui, ReaderSettings& settings, FontCatalog& fonts, Preferences& preferences,
-                            Screen& screen);
+    bool typographySettings(ui::Context& ui, ReaderSettings& settings, FontCatalog& fonts, ThemeStore& themes,
+                            Preferences& preferences, Screen& screen);
     void readerSettings(ui::Context& ui, ReaderSettings& settings, Preferences& preferences, Screen& screen);
     class NetworkScreen {
     public:
@@ -135,8 +135,8 @@ namespace screens {
         WifiScanState scanState_ = WifiScanState::Idle;
         bool connectionFailed_ = false;
     };
-    Action device(ui::Context& ui, bool storageReady, size_t bookCount,
-                  settings::NvsEncryptionState encryptionState, Screen& screen);
+    Action device(ui::Context& ui, bool storageReady, size_t bookCount, settings::NvsEncryptionState encryptionState,
+                  Screen& screen);
     Action storageEncryption(ui::Context& ui, settings::NvsEncryptionState encryptionState, Screen& screen);
     Action sync(ui::Context& ui, Screen& screen);
     Action ota(ui::Context& ui, Screen& screen);

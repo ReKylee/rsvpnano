@@ -26,6 +26,7 @@ private:
     void handleInput(const Input::Event& event, uint32_t nowMs);
     void handleTouch(uint32_t nowMs);
     void runRss();
+    void reloadSettings(uint32_t nowMs);
     void enterUsbTransfer(uint32_t nowMs);
     void exitUsbTransfer(screens::Screen destination = screens::Screen::Reader);
     void runOtaCheck(bool install);

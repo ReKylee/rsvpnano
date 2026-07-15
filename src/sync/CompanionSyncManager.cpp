@@ -187,7 +187,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <label><input id="readingProgress" type="checkbox" style="width:auto"> Show book percent while reading</label>
 </div>
 <div class="card"><h2>Typography</h2>
-<label>Typeface</label><select id="typeface"><option value="standard">Standard</option><option value="open_dyslexic">OpenDyslexic</option><option value="atkinson">Atkinson</option></select>
+<label>Typeface</label><select id="typeface"><option value="literata">Literata</option></select>
 <label>Font size <span id="fontSizeValue"></span></label><input id="fontSizeIndex" type="range" min="0" max="2">
 <label>Tracking <span id="trackingValue"></span></label><input id="tracking" type="range" min="-2" max="3">
 <label>Anchor <span id="anchorValue"></span></label><input id="anchorPercent" type="range" min="30" max="40">
@@ -232,23 +232,23 @@ const $=id=>document.getElementById(id);let settings=null;let themeCatalog=[];le
 const THEME_CATALOG_URLS=['https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/themes/index.json','https://raw.githubusercontent.com/ReKylee/rsvpnano/main/themes/index.json'];
 const FONT_CATALOG_URLS=['https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/src/fonts/index.json','https://raw.githubusercontent.com/ReKylee/rsvpnano/main/src/fonts/index.json'];
 function status(msg){$('status').textContent=msg}
-async function api(path,opts){const r=await fetch(path,opts);const t=await r.text();let j={};try{j=t?JSON.parse(t):{}}catch(e){throw new Error(t||'Bad response')}if(!r.ok||j.ok===false)throw new Error(j.error||r.statusText);return j}
+async function api(path,opts){const r=await fetch(path,opts);const t=await r.text();let j={};try{j=t?JSON.parse(t):{}}catch(e){throw new Error(t||'Bad response')}if(!r.ok)throw new Error((j.error&&j.error.message)||r.statusText);return j.data}
 function bytes(n){return n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB'}
 function safeName(s){return (s||'article').replace(/[^a-z0-9._ -]+/gi,'-').replace(/\s+/g,' ').trim().slice(0,72)||'article'}
 function escRsvp(s){return (s||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').trim()}
 function articleFile(){const title=$('articleTitle').value.trim()||'Untitled Article';const author=$('articleAuthor').value.trim();const body=escRsvp($('articleBody').value);let out='@rsvp 1\n@title '+title+'\n';if(author)out+='@author '+author+'\n';out+='@para\n'+body+'\n';return {name:safeName(title)+'.rsvp',blob:new Blob([out],{type:'text/plain'})}}
 function html(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function renderList(id,items){$(id).innerHTML=items.length?items.map(b=>`<div class="item"><div class="item-title">${html(b.title||b.name)}</div><div class="item-meta">${html([b.author,b.name,bytes(b.bytes),b.progressPercent!=null?b.progressPercent+'% read':null].filter(Boolean).join(' - '))}</div><p><button class="danger" data-delete="${html(encodeURIComponent(b.name))}">Delete</button></p></div>`).join(''):'<span class="muted">Nothing here yet.</span>';document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>delBook(decodeURIComponent(b.dataset.delete)))}
-async function refresh(){try{const info=await api('/api/info');$('infoBox').innerHTML=`${info.name}<br><span class="muted">${info.mode} - ${info.networkSsid||''}</span><br>Pairing code: <strong>${info.pairingCode}</strong>`;const data=await api('/api/books');renderList('booksList',data.books.filter(b=>b.category!=='article'&&!String(b.name).startsWith('articles/')));renderList('articlesList',data.books.filter(b=>b.category==='article'||String(b.name).startsWith('articles/')));status('Connected to RSVP Nano.')}catch(e){status('Connection problem: '+e.message)}}
-async function delBook(name){if(!confirm('Delete '+name+'?'))return;try{await api('/api/books?name='+encodeURIComponent(name),{method:'DELETE'});await refresh();status('Deleted '+name)}catch(e){status('Delete failed: '+e.message)}}
-async function uploadBlob(blob,name,category){const fd=new FormData();fd.append('file',blob,name);await api('/api/books?name='+encodeURIComponent(name)+'&category='+encodeURIComponent(category),{method:'POST',body:fd})}
+function renderList(id,items){$(id).innerHTML=items.length?items.map(b=>`<div class="item"><div class="item-title">${html(b.metadata.title||b.name)}</div><div class="item-meta">${html([b.metadata.author,b.metadata.wordCount?b.metadata.wordCount+' words':null,b.metadata.chapterCount?b.metadata.chapterCount+' chapters':null,bytes(b.bytes),b.reading?b.reading.percent+'% read':null].filter(Boolean).join(' - '))}</div><p><button class="danger" data-delete="${html(encodeURIComponent(b.id))}">Delete</button></p></div>`).join(''):'<span class="muted">Nothing here yet.</span>';document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>delBook(decodeURIComponent(b.dataset.delete)))}
+async function refresh(){try{const info=await api('/api/v1/device');$('infoBox').innerHTML=`${info.name}<br><span class="muted">${info.mode} - ${info.networkSsid||''}</span><br>Pairing code: <strong>${info.pairingCode}</strong>`;const data=await api('/api/v1/library');renderList('booksList',data.books.filter(b=>b.category!=='article'));renderList('articlesList',data.books.filter(b=>b.category==='article'));status('Connected to RSVP Nano.')}catch(e){status('Connection problem: '+e.message)}}
+async function delBook(id){if(!confirm('Delete this item?'))return;try{await api('/api/v1/library?id='+encodeURIComponent(id),{method:'DELETE'});await refresh();status('Deleted')}catch(e){status('Delete failed: '+e.message)}}
+async function uploadBlob(blob,name,category){const fd=new FormData();fd.append('file',blob,name);await api('/api/v1/library?name='+encodeURIComponent(name)+'&category='+encodeURIComponent(category),{method:'POST',body:fd})}
 async function uploadPicked(inputId,category){const f=$(inputId).files[0];if(!f){status('Choose a file first.');return}try{await uploadBlob(f,f.name,category);$(inputId).value='';await refresh();status('Uploaded '+f.name)}catch(e){status('Upload failed: '+e.message)}}
-async function uploadThemeBlob(blob,name){const fd=new FormData();fd.append('file',blob,name);await api('/api/themes?name='+encodeURIComponent(name),{method:'POST',body:fd})}
+async function uploadThemeBlob(blob,name){const fd=new FormData();fd.append('file',blob,name);await api('/api/v1/appearance/themes?name='+encodeURIComponent(name),{method:'POST',body:fd})}
 async function uploadPickedTheme(){const f=$('themeFileInput').files[0];if(!f){status('Choose a theme file first.');return}try{await uploadThemeBlob(f,f.name);$('themeFileInput').value='';await loadSettings();status('Uploaded theme '+f.name)}catch(e){status('Theme upload failed: '+e.message)}}
 async function loadThemeCatalog(){for(const url of THEME_CATALOG_URLS){try{themeCatalog=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Catalog unavailable');return r.json()});themeCatalogUrl=url;$('onlineThemeId').innerHTML=themeCatalog.map(t=>`<option value="${html(t.id)}">${html(t.name)}</option>`).join('');return}catch(e){}}$('onlineThemeId').innerHTML='<option value="">Catalog unavailable</option>'}
-async function installOnlineTheme(){const id=val('onlineThemeId');const theme=themeCatalog.find(t=>t.id===id);if(!theme){status('Choose an online theme first.');return}try{const url=new URL(theme.file,themeCatalogUrl||THEME_CATALOG_URLS[0]).toString();const blob=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Theme unavailable');return r.blob()});await uploadThemeBlob(blob,theme.file);settings=await api('/api/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({display:{themeId:theme.id}})});await loadSettings();status('Installed '+theme.name)}catch(e){status('Online theme install failed: '+e.message)}}
+async function installOnlineTheme(){const id=val('onlineThemeId');const theme=themeCatalog.find(t=>t.id===id);if(!theme){status('Choose an online theme first.');return}try{const url=new URL(theme.file,themeCatalogUrl||THEME_CATALOG_URLS[0]).toString();const blob=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Theme unavailable');return r.blob()});await uploadThemeBlob(blob,theme.file);settings=await api('/api/v1/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({display:{themeId:theme.id}})});await loadSettings();status('Installed '+theme.name)}catch(e){status('Online theme install failed: '+e.message)}}
 function fontFamilyFromName(name){return safeName(String(name||'font').replace(/\.rfont4$/i,'').replace(/[-_ ]?(large|medium|small)$/i,''))||'font'}
-async function uploadFontBlob(blob,family,size,name){const fd=new FormData();fd.append('file',blob,name||size+'.rfont4');await api('/api/fonts?family='+encodeURIComponent(family)+'&size='+encodeURIComponent(size)+'&name='+encodeURIComponent(name||size+'.rfont4'),{method:'POST',body:fd})}
+async function uploadFontBlob(blob,family,size,name){const fd=new FormData();fd.append('file',blob,name||size+'.rfont4');await api('/api/v1/appearance/fonts?family='+encodeURIComponent(family)+'&size='+encodeURIComponent(size)+'&name='+encodeURIComponent(name||size+'.rfont4'),{method:'POST',body:fd})}
 async function uploadPickedFont(){const f=$('fontFileInput').files[0];if(!f){status('Choose a font file first.');return}const family=$('fontFamilyName').value.trim()||fontFamilyFromName(f.name);const size=val('fontUploadSize');try{await uploadFontBlob(f,family,size,f.name);$('fontFileInput').value='';$('fontFamilyName').value='';await loadSettings();status('Uploaded '+family+' '+size)}catch(e){status('Font upload failed: '+e.message)}}
 async function loadFontCatalog(){for(const url of FONT_CATALOG_URLS){try{fontCatalog=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Catalog unavailable');return r.json()});fontCatalogUrl=url;$('onlineFontId').innerHTML=fontCatalog.map(f=>`<option value="${html(f.id)}">${html(f.name)}</option>`).join('');return}catch(e){}}$('onlineFontId').innerHTML='<option value="">Catalog unavailable</option>'}
 function onlineFontFile(font,size){if(font.files&&font.files[size])return font.files[size];return font.file||''}
@@ -260,18 +260,20 @@ function val(id){const e=$(id);return e.type==='checkbox'?e.checked:e.value}
 function setVal(id,v){const e=$(id);if(e.type==='checkbox')e.checked=!!v;else e.value=v}
 function setThemeOptions(){const themes=(settings&&settings.themes)||[];$('themeId').innerHTML=themes.map(t=>`<option value="${html(t.id)}">${html(t.name)}</option>`).join('')||'<option value="default">Default</option>'}
 function setFontOptions(){const fonts=(settings&&settings.fonts)||[];$('typeface').innerHTML=fonts.map(f=>`<option value="${html(f.id)}">${html(f.name)}</option>`).join('')||'<option value="literata">Literata</option>'}
+function selectThemeFont(){const theme=((settings&&settings.themes)||[]).find(t=>t.id===val('themeId'));if(theme)setVal('typeface',theme.typeface)}
 function snapWpm(v){v=Math.max(10,Math.min(1000,Math.round(+v||300)));return v<=100?Math.max(10,Math.min(100,Math.round(v/10)*10)):Math.min(1000,100+Math.round((v-100)/25)*25)}
 function updateLabels(){['wpm','longWordMs','complexWordMs','punctuationMs','brightnessIndex','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>{const l=$(id+'Value')||$(id.replace('Index','')+'Value');if(l)l.textContent=id==='brightnessIndex'?(5+(+$(id).value*5))+'%':$(id).value+(id==='wpm'?' WPM':id.includes('Ms')?' ms':'')})}
-async function loadSettings(){try{settings=await api('/api/settings');setThemeOptions();setFontOptions();if(!themeCatalog.length)loadThemeCatalog();if(!fontCatalog.length)loadFontCatalog();setVal('pauseMode',settings.reading.pauseMode);setVal('wpm',snapWpm(settings.reading.wpm));setVal('longWordMs',settings.reading.pacing.longWordMs);setVal('complexWordMs',settings.reading.pacing.complexWordMs);setVal('punctuationMs',settings.reading.pacing.punctuationMs);setVal('themeId',settings.display.themeId||'default');setVal('brightnessIndex',settings.display.brightnessIndex);setVal('handedness',settings.display.handedness);setVal('footerMetric',settings.display.footerMetric);setVal('batteryLabel',settings.display.batteryLabel);setVal('readingBattery',settings.display.readingBattery);setVal('readingChapter',settings.display.readingChapter);setVal('readingProgress',settings.display.readingProgress);setVal('typeface',settings.typography.typeface);setVal('fontSizeIndex',settings.display.fontSizeIndex);setVal('tracking',settings.typography.tracking);setVal('anchorPercent',settings.typography.anchorPercent);setVal('guideWidth',settings.typography.guideWidth);setVal('guideGap',settings.typography.guideGap);setVal('focusHighlight',settings.typography.focusHighlight);setVal('phantomWords',settings.display.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
-async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const payload={reading:{wpm:+val('wpm'),pauseMode:val('pauseMode'),pacing:{longWordMs:+val('longWordMs'),complexWordMs:+val('complexWordMs'),punctuationMs:+val('punctuationMs')}},display:{themeId:val('themeId'),brightnessIndex:+val('brightnessIndex'),handedness:val('handedness'),footerMetric:val('footerMetric'),batteryLabel:val('batteryLabel'),readingBattery:val('readingBattery'),readingChapter:val('readingChapter'),readingProgress:val('readingProgress'),phantomWords:val('phantomWords'),fontSizeIndex:+val('fontSizeIndex')},typography:{typeface:val('typeface'),focusHighlight:val('focusHighlight'),tracking:+val('tracking'),anchorPercent:+val('anchorPercent'),guideWidth:+val('guideWidth'),guideGap:+val('guideGap')}};try{settings=await api('/api/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});status('Settings saved. Exit sync mode to apply all reader changes.')}catch(e){status('Settings save failed: '+e.message)}}
-async function loadWifi(){try{const w=await api('/api/wifi');$('wifiSsid').value=w.ssid||'';$('wifiPassword').value='';$('wifiCurrent').textContent=w.configured?'Saved network: '+w.ssid:'No home Wi-Fi saved.'}catch(e){status('Wi-Fi load failed: '+e.message)}}
-async function saveWifi(){const ssid=$('wifiSsid').value.trim();if(!ssid){status('Enter a Wi-Fi SSID first.');return}try{const w=await api('/api/wifi',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password:$('wifiPassword').value})});$('wifiPassword').value='';$('wifiCurrent').textContent='Saved network: '+w.ssid;status('Wi-Fi saved for RSS and OTA.')}catch(e){status('Wi-Fi save failed: '+e.message)}}
-async function forgetWifi(){if(!confirm('Forget saved Wi-Fi?'))return;try{await api('/api/wifi',{method:'DELETE'});$('wifiSsid').value='';$('wifiPassword').value='';$('wifiCurrent').textContent='No home Wi-Fi saved.';status('Wi-Fi credentials cleared.')}catch(e){status('Forget Wi-Fi failed: '+e.message)}}
-async function loadRss(){try{const r=await api('/api/rss-feeds');$('rssFeeds').value=(r.feeds||[]).join('\n');status('RSS feeds loaded.')}catch(e){status('RSS load failed: '+e.message)}}
-async function saveRss(){const feeds=$('rssFeeds').value.split(/\n+/).map(s=>s.trim()).filter(Boolean);try{await api('/api/rss-feeds',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({feeds})});status('RSS feeds saved.')}catch(e){status('RSS save failed: '+e.message)}}
+async function loadSettings(){try{settings=await api('/api/v1/settings');setThemeOptions();setFontOptions();if(!themeCatalog.length)loadThemeCatalog();if(!fontCatalog.length)loadFontCatalog();setVal('pauseMode',settings.reading.pauseMode);setVal('wpm',snapWpm(settings.reading.wpm));setVal('longWordMs',settings.reading.pacing.longWordMs);setVal('complexWordMs',settings.reading.pacing.complexWordMs);setVal('punctuationMs',settings.reading.pacing.punctuationMs);setVal('themeId',settings.display.themeId||'default');setVal('brightnessIndex',settings.display.brightnessIndex);setVal('handedness',settings.display.handedness);setVal('footerMetric',settings.display.footerMetric);setVal('batteryLabel',settings.display.batteryLabel);setVal('readingBattery',settings.display.readingBattery);setVal('readingChapter',settings.display.readingChapter);setVal('readingProgress',settings.display.readingProgress);setVal('typeface',settings.typography.typeface);setVal('fontSizeIndex',settings.display.fontSizeIndex);setVal('tracking',settings.typography.tracking);setVal('anchorPercent',settings.typography.anchorPercent);setVal('guideWidth',settings.typography.guideWidth);setVal('guideGap',settings.typography.guideGap);setVal('focusHighlight',settings.typography.focusHighlight);setVal('phantomWords',settings.display.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
+async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const payload={reading:{wpm:+val('wpm'),pauseMode:val('pauseMode'),pacing:{longWordMs:+val('longWordMs'),complexWordMs:+val('complexWordMs'),punctuationMs:+val('punctuationMs')}},display:{themeId:val('themeId'),brightnessIndex:+val('brightnessIndex'),handedness:val('handedness'),footerMetric:val('footerMetric'),batteryLabel:val('batteryLabel'),readingBattery:val('readingBattery'),readingChapter:val('readingChapter'),readingProgress:val('readingProgress'),phantomWords:val('phantomWords'),fontSizeIndex:+val('fontSizeIndex')},typography:{typeface:val('typeface'),focusHighlight:val('focusHighlight'),tracking:+val('tracking'),anchorPercent:+val('anchorPercent'),guideWidth:+val('guideWidth'),guideGap:+val('guideGap')}};try{settings=await api('/api/v1/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});status('Settings saved and applied.')}catch(e){status('Settings save failed: '+e.message)}}
+async function loadWifi(){try{const w=await api('/api/v1/network');$('wifiSsid').value=w.ssid||'';$('wifiPassword').value='';$('wifiCurrent').textContent=w.configured?'Saved network: '+w.ssid:'No home Wi-Fi saved.'}catch(e){status('Wi-Fi load failed: '+e.message)}}
+async function saveWifi(){const ssid=$('wifiSsid').value.trim();if(!ssid){status('Enter a Wi-Fi SSID first.');return}try{const w=await api('/api/v1/network',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password:$('wifiPassword').value})});$('wifiPassword').value='';$('wifiCurrent').textContent='Saved network: '+w.ssid;status('Wi-Fi saved for RSS and OTA.')}catch(e){status('Wi-Fi save failed: '+e.message)}}
+async function forgetWifi(){if(!confirm('Forget saved Wi-Fi?'))return;try{await api('/api/v1/network',{method:'DELETE'});$('wifiSsid').value='';$('wifiPassword').value='';$('wifiCurrent').textContent='No home Wi-Fi saved.';status('Wi-Fi credentials cleared.')}catch(e){status('Forget Wi-Fi failed: '+e.message)}}
+async function loadRss(){try{const r=await api('/api/v1/feeds');$('rssFeeds').value=(r.feeds||[]).join('\n');status('RSS feeds loaded.')}catch(e){status('RSS load failed: '+e.message)}}
+async function saveRss(){const feeds=$('rssFeeds').value.split(/\n+/).map(s=>s.trim()).filter(Boolean);try{await api('/api/v1/feeds',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({feeds})});status('RSS feeds saved.')}catch(e){status('RSS save failed: '+e.message)}}
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.tab).classList.add('active');if(b.dataset.tab==='settings'){loadSettings();loadWifi()}if(b.dataset.tab==='rss')loadRss()});
 $('wpm').oninput=()=>{setVal('wpm',snapWpm(val('wpm')));updateLabels()};
 ['longWordMs','complexWordMs','punctuationMs','brightnessIndex','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>$(id).oninput=updateLabels);
+$('themeId').onchange=selectThemeFont;
 $('refreshBooksButton').onclick=refresh;$('refreshArticlesButton').onclick=refresh;$('uploadBookButton').onclick=()=>uploadPicked('bookFileInput','book');$('uploadArticleButton').onclick=()=>uploadPicked('articleFileInput','article');$('uploadThemeButton').onclick=uploadPickedTheme;$('installOnlineThemeButton').onclick=installOnlineTheme;$('uploadFontButton').onclick=uploadPickedFont;$('installOnlineFontButton').onclick=installOnlineFont;$('syncArticleButton').onclick=syncArticle;$('saveDraftButton').onclick=saveDraft;$('saveSettingsButton').onclick=saveSettings;$('saveWifiButton').onclick=saveWifi;$('forgetWifiButton').onclick=forgetWifi;$('saveRssButton').onclick=saveRss;$('reloadRssButton').onclick=loadRss;
 loadDraft();refresh();
 </script>
@@ -594,11 +596,14 @@ bool CompanionSyncManager::begin(Preferences& preferences) {
     return true;
 }
 
-void CompanionSyncManager::update() {
+bool CompanionSyncManager::update() {
     if (!active_ || !serverStarted_) {
-        return;
+        return false;
     }
     server_.handleClient();
+    const bool changed = settingsChanged_;
+    settingsChanged_ = false;
+    return changed;
 }
 
 void CompanionSyncManager::end() {
@@ -748,21 +753,20 @@ bool CompanionSyncManager::startAccessPoint() {
 
 bool CompanionSyncManager::startServer() {
     server_.on("/", HTTP_GET, handleRootStatic);
-    server_.on("/api/info", HTTP_GET, handleInfoStatic);
-    server_.on("/api/books", HTTP_GET, handleBooksListStatic);
-    server_.on("/api/books", HTTP_DELETE, handleBookDeleteStatic);
-    server_.on("/api/books", HTTP_POST, handleBooksStatic, handleBookUploadStatic);
-    server_.on("/api/books/position", HTTP_PATCH, handleBookPositionStatic);
-    server_.on("/api/themes", HTTP_POST, handleThemesStatic, handleThemeUploadStatic);
-    server_.on("/api/fonts", HTTP_POST, handleFontsStatic, handleFontUploadStatic);
-    server_.on("/api/settings", HTTP_GET, handleSettingsStatic);
-    server_.on("/api/settings", HTTP_PATCH, handleSettingsStatic);
-    server_.on("/api/settings", HTTP_PUT, handleSettingsStatic);
-    server_.on("/api/wifi", HTTP_GET, handleWifiStatic);
-    server_.on("/api/wifi", HTTP_PUT, handleWifiStatic);
-    server_.on("/api/wifi", HTTP_DELETE, handleWifiStatic);
-    server_.on("/api/rss-feeds", HTTP_GET, handleRssFeedsStatic);
-    server_.on("/api/rss-feeds", HTTP_PUT, handleRssFeedsStatic);
+    server_.on("/api/v1/device", HTTP_GET, handleInfoStatic);
+    server_.on("/api/v1/library", HTTP_GET, handleBooksListStatic);
+    server_.on("/api/v1/library", HTTP_DELETE, handleBookDeleteStatic);
+    server_.on("/api/v1/library", HTTP_POST, handleBooksStatic, handleBookUploadStatic);
+    server_.on("/api/v1/library/position", HTTP_PATCH, handleBookPositionStatic);
+    server_.on("/api/v1/appearance/themes", HTTP_POST, handleThemesStatic, handleThemeUploadStatic);
+    server_.on("/api/v1/appearance/fonts", HTTP_POST, handleFontsStatic, handleFontUploadStatic);
+    server_.on("/api/v1/settings", HTTP_GET, handleSettingsStatic);
+    server_.on("/api/v1/settings", HTTP_PATCH, handleSettingsStatic);
+    server_.on("/api/v1/network", HTTP_GET, handleWifiStatic);
+    server_.on("/api/v1/network", HTTP_PUT, handleWifiStatic);
+    server_.on("/api/v1/network", HTTP_DELETE, handleWifiStatic);
+    server_.on("/api/v1/feeds", HTTP_GET, handleRssFeedsStatic);
+    server_.on("/api/v1/feeds", HTTP_PUT, handleRssFeedsStatic);
     server_.onNotFound(handleNotFoundStatic);
     server_.begin();
     serverStarted_ = true;
@@ -786,9 +790,9 @@ void CompanionSyncManager::handleInfo() {
     const String mode = networkMode_ == NetworkMode::Station ? "station" : "access_point";
     const String body = String("{") + "\"name\":\"RSVP Nano\"," + "\"mode\":\"" + mode + "\"," + "\"baseUrl\":\""
                       + jsonEscape(String(baseUrl().c_str())) + "\"," + "\"networkSsid\":\""
-                      + jsonEscape(String(networkSsid_.c_str())) + "\"," + "\"pairingCode\":\""
-                      + pairingCode_.c_str() + "\"," + "\"uploadPath\":\"/api/books\"" + "}";
-    server_.send(200, "application/json", body);
+                      + jsonEscape(String(networkSsid_.c_str())) + "\"," + "\"pairingCode\":\"" + pairingCode_.c_str()
+                      + "\"," + "\"apiVersion\":1,\"uploadPath\":\"/api/v1/library\"" + "}";
+    sendData(200, body);
 }
 
 void CompanionSyncManager::handleRoot() {
@@ -801,6 +805,7 @@ void CompanionSyncManager::handleBooksList() {
     body.reserve(1024);
     body += "{\"books\":[";
     bool first = true;
+    const uint16_t wpm = settings::load<pref::Wpm>(*preferences_);
 
     const auto appendDirectory = [&](const char* directoryPath) {
         File dir = Board::Storage::filesystem().open(directoryPath);
@@ -819,28 +824,35 @@ void CompanionSyncManager::handleBooksList() {
                 String lowered = name;
                 lowered.toLowerCase();
                 if (isSupportedBookName(lowered)) {
-                    const RsvpMetadata metadata = readRsvpMetadata(path);
+                    const RsvpMetadata sourceMetadata = readRsvpMetadata(path);
                     BookMetadata indexedMetadata;
                     IndexedBookStore::Header indexHeader;
                     const bool hasIndexedMetadata = IndexedBook::readMetadata(path, indexedMetadata, &indexHeader);
                     uint8_t progressPercent = 0;
                     uint32_t wordIndex = 0;
-                    const bool hasProgress =
-                        hasIndexedMetadata
-                        && progressForPath(path, indexHeader.sourceSize, indexHeader.sourceFingerprint,
-                                           indexHeader.wordCount, wordIndex, progressPercent);
+                    if (hasIndexedMetadata)
+                        progressForPath(path, indexHeader.sourceSize, indexHeader.sourceFingerprint,
+                                        indexHeader.wordCount, wordIndex, progressPercent);
                     if (!first) {
                         body += ",";
                     }
                     first = false;
                     body += "{\"id\":\"" + jsonEscape(bookIdForPath(path)) + "\",\"name\":\""
                           + jsonEscape(relativeLibraryName(path)) + "\",\"category\":\"" + libraryCategoryForPath(path)
-                          + "\",\"title\":\"" + jsonEscape(metadata.title) + "\",\"author\":\""
-                          + jsonEscape(metadata.author) + "\",\"bytes\":" + String(static_cast<uint32_t>(entry.size()));
+                          + "\",\"bytes\":" + String(static_cast<uint32_t>(entry.size())) + ",\"metadata\":{"
+                          + "\"title\":\""
+                          + jsonEscape(hasIndexedMetadata && !indexedMetadata.title.empty()
+                                           ? String(indexedMetadata.title.c_str())
+                                           : sourceMetadata.title)
+                          + "\",\"author\":\""
+                          + jsonEscape(hasIndexedMetadata && !indexedMetadata.author.empty()
+                                           ? String(indexedMetadata.author.c_str())
+                                           : sourceMetadata.author)
+                          + "\",\"wordCount\":" + String(hasIndexedMetadata ? indexHeader.wordCount : 0)
+                          + ",\"chapterCount\":"
+                          + String(hasIndexedMetadata ? static_cast<uint32_t>(indexedMetadata.chapters.size()) : 0)
+                          + ",\"chapters\":[";
                     if (hasIndexedMetadata) {
-                        body += ",\"sourceSize\":" + String(indexHeader.sourceSize)
-                              + ",\"sourceFingerprint\":" + String(indexHeader.sourceFingerprint)
-                              + ",\"wordCount\":" + String(indexHeader.wordCount) + ",\"chapters\":[";
                         for (size_t i = 0; i < indexedMetadata.chapters.size(); ++i) {
                             if (i > 0) {
                                 body += ",";
@@ -849,11 +861,33 @@ void CompanionSyncManager::handleBooksList() {
                                   + "\",\"wordIndex\":"
                                   + String(static_cast<uint32_t>(indexedMetadata.chapters[i].wordIndex)) + "}";
                         }
-                        body += "]";
                     }
-                    if (hasProgress) {
-                        body +=
-                            ",\"wordIndex\":" + String(wordIndex) + ",\"progressPercent\":" + String(progressPercent);
+                    body += "]},\"source\":";
+                    if (hasIndexedMetadata) {
+                        body += "{\"size\":" + String(indexHeader.sourceSize)
+                              + ",\"fingerprint\":" + String(indexHeader.sourceFingerprint) + "},\"reading\":{";
+                        size_t chapterIndex = 0;
+                        bool hasChapter = false;
+                        for (size_t i = 0; i < indexedMetadata.chapters.size(); ++i) {
+                            if (indexedMetadata.chapters[i].wordIndex > wordIndex)
+                                break;
+                            chapterIndex = i;
+                            hasChapter = true;
+                        }
+                        const uint32_t remainingWords =
+                            indexHeader.wordCount > wordIndex + 1 ? indexHeader.wordCount - wordIndex - 1 : 0;
+                        body += "\"wordIndex\":" + String(wordIndex) + ",\"percent\":" + String(progressPercent)
+                              + ",\"remainingWords\":" + String(remainingWords) + ",\"estimatedMinutes\":"
+                              + String(wpm == 0 ? 0 : (remainingWords + wpm - 1) / wpm) + ",\"currentChapter\":";
+                        if (hasChapter) {
+                            body += "{\"number\":" + String(static_cast<uint32_t>(chapterIndex + 1)) + ",\"title\":\""
+                                  + jsonEscape(indexedMetadata.chapters[chapterIndex].title.c_str()) + "\"}";
+                        } else {
+                            body += "null";
+                        }
+                        body += "}";
+                    } else {
+                        body += "null,\"reading\":null";
                     }
                     body += "}";
                 }
@@ -870,33 +904,34 @@ void CompanionSyncManager::handleBooksList() {
     appendDirectory(StoragePaths::kArticleFilesPath);
 
     body += "]}";
-    server_.send(200, "application/json", body);
+    sendData(200, body);
 }
 
 void CompanionSyncManager::handleSettings() {
     if (server_.method() == HTTP_GET) {
-        server_.send(200, "application/json", settingsJson());
+        sendData(200, settingsJson());
         return;
     }
 
     const String body = server_.arg("plain");
     if (body.length() > kMaxSettingsPatchBytes) {
-        server_.send(413, "application/json", "{\"ok\":false,\"error\":\"Settings payload too large\"}");
+        sendError(413, "payload_too_large", "Settings payload exceeds 8 KB");
         return;
     }
 
     String error;
     if (!applySettingsJson(body, error)) {
-        server_.send(400, "application/json", String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
+        sendError(422, "invalid_setting", error);
         return;
     }
 
-    server_.send(200, "application/json", settingsJson());
+    settingsChanged_ = true;
+    sendData(200, settingsJson());
 }
 
 void CompanionSyncManager::handleWifi() {
     if (server_.method() == HTTP_GET) {
-        server_.send(200, "application/json", wifiJson());
+        sendData(200, wifiJson());
         return;
     }
 
@@ -905,47 +940,47 @@ void CompanionSyncManager::handleWifi() {
         settings::reset<pref::WifiPassword>(*preferences_);
         statusLine1_ = "Wi-Fi cleared";
         statusLine2_ = "";
-        server_.send(200, "application/json", wifiJson());
+        sendData(200, wifiJson());
         return;
     }
 
     String error;
     if (!applyWifiJson(server_.arg("plain"), error)) {
-        server_.send(400, "application/json", String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
+        sendError(422, "invalid_network", error);
         return;
     }
 
     statusLine1_ = "Wi-Fi saved";
     statusLine2_ = settings::load<pref::WifiSsid>(*preferences_);
-    server_.send(200, "application/json", wifiJson());
+    sendData(200, wifiJson());
 }
 
 void CompanionSyncManager::handleRssFeeds() {
     if (server_.method() == HTTP_GET) {
-        server_.send(200, "application/json", rssFeedsJson());
+        sendData(200, rssFeedsJson());
         return;
     }
 
     String error;
     if (!writeRssFeedsJson(server_.arg("plain"), error)) {
-        server_.send(400, "application/json", String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
+        sendError(422, "invalid_feed", error);
         return;
     }
 
     statusLine1_ = "RSS feeds saved";
     statusLine2_ = StoragePaths::kRssConfigPath;
-    server_.send(200, "application/json", rssFeedsJson());
+    sendData(200, rssFeedsJson());
 }
 
 void CompanionSyncManager::handleBooks() {
     finishUpload(uploadError_.isEmpty());
     if (!uploadError_.isEmpty()) {
-        server_.send(400, "application/json", String("{\"ok\":false,\"error\":\"") + jsonEscape(uploadError_) + "\"}");
+        sendError(422, "invalid_upload", uploadError_);
         uploadError_ = "";
         return;
     }
 
-    server_.send(201, "application/json", String("{\"ok\":true,\"path\":\"") + jsonEscape(uploadFinalPath_) + "\"}");
+    sendData(201, String("{\"path\":\"") + jsonEscape(uploadFinalPath_) + "\"}");
     uploadFinalPath_ = "";
 }
 
@@ -957,8 +992,7 @@ void CompanionSyncManager::handleThemes() {
     if (!uploadError_.isEmpty()) {
         Board::Storage::filesystem().remove(uploadTmpPath_);
         const int status = uploadError_.indexOf("already exists") >= 0 ? 409 : 400;
-        server_.send(status, "application/json",
-                     String("{\"ok\":false,\"error\":\"") + jsonEscape(uploadError_) + "\"}");
+        sendError(status, status == 409 ? "already_exists" : "invalid_upload", uploadError_);
         uploadError_ = "";
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
@@ -966,7 +1000,7 @@ void CompanionSyncManager::handleThemes() {
     }
 
     if (uploadTmpPath_.isEmpty() || uploadFinalPath_.isEmpty()) {
-        server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing theme upload\"}");
+        sendError(400, "missing_upload", "Theme file is required", "file");
         return;
     }
 
@@ -979,7 +1013,7 @@ void CompanionSyncManager::handleThemes() {
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
-        server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid theme size\"}");
+        sendError(422, "invalid_size", "Theme file must be between 1 byte and 4 KB", "file");
         return;
     }
 
@@ -991,8 +1025,7 @@ void CompanionSyncManager::handleThemes() {
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
-        server_.send(400, "application/json",
-                     String("{\"ok\":false,\"error\":\"") + jsonEscape(String(error.c_str())) + "\"}");
+        sendError(422, "invalid_theme", error.c_str(), "file");
         return;
     }
 
@@ -1000,7 +1033,7 @@ void CompanionSyncManager::handleThemes() {
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
-        server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Theme already exists\"}");
+        sendError(409, "already_exists", "Theme already exists", "name");
         return;
     }
 
@@ -1008,16 +1041,15 @@ void CompanionSyncManager::handleThemes() {
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
-        server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Theme save failed\"}");
+        sendError(500, "storage_error", "Theme could not be saved");
         return;
     }
 
     statusLine1_ = "Theme received";
     statusLine2_ = uploadFinalPath_.c_str();
     Serial.printf("[sync] theme ready %s\n", uploadFinalPath_.c_str());
-    server_.send(201, "application/json",
-                 String("{\"ok\":true,\"path\":\"") + jsonEscape(uploadFinalPath_) + "\",\"id\":\""
-                     + jsonEscape(String(id.c_str())) + "\"}");
+    sendData(201, String("{\"path\":\"") + jsonEscape(uploadFinalPath_) + "\",\"id\":\""
+                      + jsonEscape(String(id.c_str())) + "\"}");
     uploadTmpPath_ = "";
     uploadFinalPath_ = "";
 }
@@ -1030,8 +1062,7 @@ void CompanionSyncManager::handleFonts() {
     if (!uploadError_.isEmpty()) {
         Board::Storage::filesystem().remove(uploadTmpPath_);
         const int status = uploadError_.indexOf("already exists") >= 0 ? 409 : 400;
-        server_.send(status, "application/json",
-                     String("{\"ok\":false,\"error\":\"") + jsonEscape(uploadError_) + "\"}");
+        sendError(status, status == 409 ? "already_exists" : "invalid_upload", uploadError_);
         uploadError_ = "";
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
@@ -1039,7 +1070,7 @@ void CompanionSyncManager::handleFonts() {
     }
 
     if (uploadTmpPath_.isEmpty() || uploadFinalPath_.isEmpty()) {
-        server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing font upload\"}");
+        sendError(400, "missing_upload", "Font file is required", "file");
         return;
     }
 
@@ -1052,7 +1083,7 @@ void CompanionSyncManager::handleFonts() {
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
-        server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid font size\"}");
+        sendError(422, "invalid_size", "Font file must be between 1 byte and 2 MB", "file");
         return;
     }
 
@@ -1061,7 +1092,7 @@ void CompanionSyncManager::handleFonts() {
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
-        server_.send(400, "application/json", String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
+        sendError(422, "invalid_font", error, "file");
         return;
     }
 
@@ -1069,7 +1100,7 @@ void CompanionSyncManager::handleFonts() {
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
-        server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Font size already exists\"}");
+        sendError(409, "already_exists", "Font size already exists", "size");
         return;
     }
 
@@ -1077,14 +1108,14 @@ void CompanionSyncManager::handleFonts() {
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
-        server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Font save failed\"}");
+        sendError(500, "storage_error", "Font could not be saved");
         return;
     }
 
     statusLine1_ = "Font received";
     statusLine2_ = uploadFinalPath_.c_str();
     Serial.printf("[sync] font ready %s\n", uploadFinalPath_.c_str());
-    server_.send(201, "application/json", String("{\"ok\":true,\"path\":\"") + jsonEscape(uploadFinalPath_) + "\"}");
+    sendData(201, String("{\"path\":\"") + jsonEscape(uploadFinalPath_) + "\"}");
     uploadTmpPath_ = "";
     uploadFinalPath_ = "";
 }
@@ -1108,8 +1139,8 @@ void CompanionSyncManager::handleFontUpload() {
 
         String sizeId = server_.arg("size");
         sizeId.toLowerCase();
-        const int sizeIndex = RFont4::sizeIndexForId(sizeId);
-        if (sizeIndex < 0) {
+        const size_t sizeIndex = RFont4::sizeIndexForId(sizeId.c_str());
+        if (sizeIndex == RFont4::kSizeCount) {
             uploadError_ = "Font size must be large, medium, or small";
             return;
         }
@@ -1118,7 +1149,7 @@ void CompanionSyncManager::handleFontUpload() {
         if (filename.isEmpty()) {
             filename = sanitizeFilename(upload.filename);
         }
-        if (!RFont4::hasFontExtension(filename)) {
+        if (!RFont4::hasFontExtension(filename.c_str())) {
             filename += RFont4::kExtension;
         }
         if (!ensureFontFamilyDirectory(family)) {
@@ -1126,8 +1157,7 @@ void CompanionSyncManager::handleFontUpload() {
             return;
         }
 
-        uploadFinalPath_ = String(StoragePaths::kFontsPath) + "/" + family + "/"
-                         + RFont4::sizeFilename(static_cast<uint8_t>(sizeIndex));
+        uploadFinalPath_ = String(StoragePaths::kFontsPath) + "/" + family + "/" + RFont4::sizeFilename(sizeIndex);
         if (StorageFiles::fileExists(uploadFinalPath_.c_str())) {
             uploadError_ = "Font size already exists";
             return;
@@ -1141,7 +1171,7 @@ void CompanionSyncManager::handleFontUpload() {
         }
         uploadError_ = "";
         statusLine1_ = "Receiving font";
-        statusLine2_ = (family + " " + RFont4::sizeId(static_cast<uint8_t>(sizeIndex))).c_str();
+        statusLine2_ = (family + " " + RFont4::sizeId(sizeIndex)).c_str();
         Serial.printf("[sync] font upload start %s\n", uploadFinalPath_.c_str());
         return;
     }
@@ -1187,90 +1217,70 @@ void CompanionSyncManager::handleFontUpload() {
 void CompanionSyncManager::handleBookDelete() {
     String path;
     const String id = server_.arg("id");
-    if (!id.isEmpty()) {
-        if (!resolveBookId(id, path)) {
-            server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Book not found\"}");
-            return;
-        }
-    } else {
-        String requested = server_.arg("name");
-        requested.trim();
-        if (requested.isEmpty()) {
-            server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing book id\"}");
-            return;
-        }
-        if (!resolveBookName(requested, path)) {
-            server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Book not found\"}");
-            return;
-        }
+    if (id.isEmpty()) {
+        sendError(400, "missing_field", "Book id is required", "id");
+        return;
+    }
+    if (!resolveBookId(id, path)) {
+        sendError(404, "book_not_found", "Book not found", "id");
+        return;
     }
 
     if (!Board::Storage::filesystem().remove(path)) {
-        server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Delete failed\"}");
+        sendError(500, "storage_error", "Book could not be deleted");
         return;
     }
 
     statusLine1_ = "Book deleted";
     statusLine2_ = relativeLibraryName(path).c_str();
     Serial.printf("[sync] deleted %s\n", path.c_str());
-    server_.send(200, "application/json", String("{\"ok\":true,\"path\":\"") + jsonEscape(path) + "\"}");
+    sendData(200, String("{\"id\":\"") + jsonEscape(id) + "\",\"deleted\":true}");
 }
 
 void CompanionSyncManager::handleBookPosition() {
     const String body = server_.arg("plain");
     if (body.length() > 512) {
-        server_.send(413, "application/json", "{\"ok\":false,\"error\":\"Position payload too large\"}");
+        sendError(413, "payload_too_large", "Position payload exceeds 512 bytes");
         return;
     }
 
     String id;
-    uint32_t requestedSourceSize = 0;
-    uint32_t requestedSourceFingerprint = 0;
-    uint32_t requestedWordCount = 0;
     uint32_t requestedWordIndex = 0;
-    if (!readJsonString(body, "id", id) || !readJsonUInt32(body, "sourceSize", requestedSourceSize)
-        || !readJsonUInt32(body, "sourceFingerprint", requestedSourceFingerprint)
-        || !readJsonUInt32(body, "wordCount", requestedWordCount)
-        || !readJsonUInt32(body, "wordIndex", requestedWordIndex)) {
-        server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing position fields\"}");
+    if (!readJsonString(body, "id", id) || !readJsonUInt32(body, "wordIndex", requestedWordIndex)) {
+        sendError(400, "missing_field", "Book id and wordIndex are required");
         return;
     }
 
     String path;
     if (!resolveBookId(id, path)) {
-        server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Book not found\"}");
+        sendError(404, "book_not_found", "Book not found", "id");
         return;
     }
 
     BookMetadata metadata;
     IndexedBookStore::Header header;
     if (!IndexedBook::readMetadata(path, metadata, &header)) {
-        server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Book index unavailable\"}");
+        sendError(409, "index_unavailable", "Book must be indexed on the reader before changing position");
         return;
     }
     if (header.wordCount == 0) {
-        server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Book has no words\"}");
-        return;
-    }
-    if (requestedSourceSize != header.sourceSize || requestedSourceFingerprint != header.sourceFingerprint
-        || requestedWordCount != header.wordCount) {
-        server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Book identity changed\"}");
+        sendError(409, "empty_book", "Book has no readable words");
         return;
     }
 
     const uint32_t wordIndex = std::min<uint32_t>(requestedWordIndex, header.wordCount - 1);
     if (!ReadingProgress::writePositionSidecar(path, {header.sourceSize, header.sourceFingerprint, header.wordCount},
                                                wordIndex)) {
-        server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Progress save failed\"}");
+        sendError(500, "storage_error", "Reading position could not be saved");
         return;
     }
 
-    ReadingProgress::cachePosition(*preferences_, path,
-                                   {header.sourceSize, header.sourceFingerprint, header.wordCount}, wordIndex);
+    ReadingProgress::cachePosition(*preferences_, path, {header.sourceSize, header.sourceFingerprint, header.wordCount},
+                                   wordIndex);
     statusLine1_ = "Position saved";
     statusLine2_ = relativeLibraryName(path).c_str();
-    server_.send(200, "application/json",
-                 String("{\"ok\":true,\"id\":\"") + jsonEscape(id) + "\",\"wordIndex\":" + String(wordIndex) + "}");
+    sendData(200, String("{\"id\":\"") + jsonEscape(id) + "\",\"wordIndex\":" + String(wordIndex)
+                      + ",\"percent\":" + String(ReadingProgress::percent(wordIndex, header.wordCount)) + "}");
 }
 
 void CompanionSyncManager::handleBookUpload() {
@@ -1399,7 +1409,22 @@ void CompanionSyncManager::handleThemeUpload() {
 }
 
 void CompanionSyncManager::handleNotFound() {
-    server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Not found\"}");
+    sendError(404, "not_found", "API route not found");
+}
+
+void CompanionSyncManager::sendData(int status, const String& json) {
+    server_.sendHeader("Cache-Control", "no-store");
+    server_.send(status, "application/json", String("{\"data\":") + json + "}");
+}
+
+void CompanionSyncManager::sendError(int status, const char* code, const String& message, const char* field) {
+    String body =
+        String("{\"error\":{\"code\":\"") + jsonEscape(code) + "\",\"message\":\"" + jsonEscape(message) + "\"";
+    if (field != nullptr && *field != '\0')
+        body += String(",\"field\":\"") + jsonEscape(field) + "\"";
+    body += "}}";
+    server_.sendHeader("Cache-Control", "no-store");
+    server_.send(status, "application/json", body);
 }
 
 String CompanionSyncManager::settingsJson() {
@@ -1421,16 +1446,12 @@ String CompanionSyncManager::settingsJson() {
     const uint8_t fontSize = settings::load<pref::ReaderFontSizeIndex>(*preferences_);
     FontCatalog fontCatalog;
     fontCatalog.loadFromSd();
-    uint8_t typeface = 0;
-    const std::string savedTypefaceId = settings::load<pref::ReaderTypefaceId>(*preferences_);
-    if (savedTypefaceId.empty() || !fontCatalog.indexForId(savedTypefaceId.c_str(), typeface))
-        typeface = 0;
     const int tracking = settings::load<pref::TypographyTracking>(*preferences_);
     const uint8_t anchor = settings::load<pref::TypographyAnchor>(*preferences_);
     const uint8_t guideWidth = settings::load<pref::TypographyGuideWidth>(*preferences_);
     const uint8_t guideGap = settings::load<pref::TypographyGuideGap>(*preferences_);
     ThemeStore themeStore;
-    themeStore.loadFromSd();
+    themeStore.loadFromSd(fontCatalog);
     const std::string savedThemeId = settings::load<pref::ThemeId>(*preferences_);
     if (!savedThemeId.empty()) {
         themeStore.selectById(savedThemeId);
@@ -1439,7 +1460,7 @@ String CompanionSyncManager::settingsJson() {
 
     String body;
     body.reserve(3600);
-    body += "{\"ok\":true,\"version\":1";
+    body += "{\"version\":1,\"applied\":true";
     body += ",\"reading\":{";
     body += "\"wpm\":" + String(wpm);
     body += ",\"pauseMode\":\"";
@@ -1460,19 +1481,21 @@ String CompanionSyncManager::settingsJson() {
     body += ",\"batteryLabel\":\"";
     body += enumLabel(static_cast<uint8_t>(batteryLabel), batteryLabelLabels, 3);
     body += "\"";
-    body += ",\"readingBattery\":"
-          + String(settings::load<pref::ReaderBatteryVisible>(*preferences_) ? "true" : "false");
-    body += ",\"readingChapter\":"
-          + String(settings::load<pref::ReaderChapterVisible>(*preferences_) ? "true" : "false");
-    body += ",\"readingProgress\":"
-          + String(settings::load<pref::ReaderProgressVisible>(*preferences_) ? "true" : "false");
+    body +=
+        ",\"readingBattery\":" + String(settings::load<pref::ReaderBatteryVisible>(*preferences_) ? "true" : "false");
+    body +=
+        ",\"readingChapter\":" + String(settings::load<pref::ReaderChapterVisible>(*preferences_) ? "true" : "false");
+    body +=
+        ",\"readingProgress\":" + String(settings::load<pref::ReaderProgressVisible>(*preferences_) ? "true" : "false");
     body += ",\"language\":" + String(static_cast<uint8_t>(language));
+    body += ",\"screensaver\":" + String(static_cast<uint8_t>(settings::load<pref::ScreensaverMode>(*preferences_)));
+    body += ",\"standbyTimerIndex\":" + String(settings::load<pref::StandbyTimerIndex>(*preferences_));
     body += ",\"phantomWords\":" + String(settings::load<pref::PhantomWords>(*preferences_) ? "true" : "false");
     body += ",\"fontSizeIndex\":" + String(fontSize);
     body += "}";
     body += ",\"typography\":{";
     body += "\"typeface\":\"";
-    body += jsonEscape(fontCatalog.typefaceId(typeface));
+    body += jsonEscape(String(selectedTheme.typeface.c_str()));
     body += "\"";
     body += ",\"focusHighlight\":"
           + String(settings::load<pref::TypographyFocusHighlight>(*preferences_) ? "true" : "false");
@@ -1481,7 +1504,7 @@ String CompanionSyncManager::settingsJson() {
     body += ",\"guideWidth\":" + String(guideWidth);
     body += ",\"guideGap\":" + String(guideGap);
     body += "}";
-    const std::vector<ui::themes::Theme>& themes = themeStore.themes();
+    const auto themes = themeStore.themes();
     body += ",\"themeCount\":" + String(themes.size());
     body += ",\"themes\":[";
     for (size_t i = 0; i < themes.size(); ++i) {
@@ -1491,21 +1514,18 @@ String CompanionSyncManager::settingsJson() {
         body += "{\"id\":\"" + jsonEscape(String(themes[i].id.c_str())) + "\"";
         body += ",\"name\":\"" + jsonEscape(String(themes[i].name.c_str())) + "\"";
         body += ",\"builtIn\":" + String(themes[i].builtIn ? "true" : "false");
-        body += ",\"typeface\":\"";
-        const std::string_view typefaceName = ui::themes::readerTypefaceName(themes[i].typeface);
-        body.concat(typefaceName.data(), typefaceName.size());
-        body += "\"}";
+        body += ",\"typeface\":\"" + jsonEscape(String(themes[i].typeface.c_str())) + "\"}";
     }
     body += "]";
-    const std::vector<FontCatalog::Family>& fonts = fontCatalog.families();
+    const auto fonts = fontCatalog.families();
     body += ",\"fontCount\":" + String(fonts.size());
     body += ",\"fonts\":[";
     for (size_t i = 0; i < fonts.size(); ++i) {
         if (i > 0) {
             body += ",";
         }
-        body += "{\"id\":\"" + jsonEscape(fonts[i].id) + "\"";
-        body += ",\"name\":\"" + jsonEscape(fonts[i].label) + "\"";
+        body += "{\"id\":\"" + jsonEscape(String(fonts[i].id.c_str())) + "\"";
+        body += ",\"name\":\"" + jsonEscape(String(fonts[i].label.c_str())) + "\"";
         body += ",\"builtIn\":" + String(fonts[i].builtIn ? "true" : "false");
         body += ",\"sizes\":[";
         for (size_t size = 0; size < RFont4::kSizeCount; ++size) {
@@ -1513,11 +1533,12 @@ String CompanionSyncManager::settingsJson() {
                 body += ",";
             }
             body += "{\"id\":\"";
-            body += RFont4::sizeId(static_cast<uint8_t>(size));
+            body += RFont4::sizeId(size);
             body += "\",\"name\":\"";
-            body += RFont4::sizeLabel(static_cast<uint8_t>(size));
+            body += RFont4::sizeLabel(size);
             body += "\",\"available\":";
-            body += fontCatalog.hasSize(static_cast<uint8_t>(i), static_cast<uint8_t>(size)) ? "true" : "false";
+            const bool available = fonts[i].builtIn || !fonts[i].paths[size].empty();
+            body += available ? "true" : "false";
             body += "}";
         }
         body += "]}";
@@ -1551,17 +1572,79 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
     static const char* const batteryLabelLabels[] = {"percent", "time_remaining", "voltage"};
     static const char* const pauseModeLabels[] = {"sentence_end", "instant"};
 
+    struct Values {
+        uint16_t wpm;
+        ::PauseMode pauseMode;
+        uint16_t longWordMs;
+        uint16_t complexWordMs;
+        uint16_t punctuationMs;
+        uint8_t brightnessIndex;
+        std::string themeId;
+        bool leftHanded;
+        FooterMetric footerMetric;
+        BatteryLabel batteryLabel;
+        bool readingBattery;
+        bool readingChapter;
+        bool readingProgress;
+        UiLanguage language;
+        standby::Kind screensaver;
+        uint8_t standbyTimerIndex;
+        bool phantomWords;
+        uint8_t fontSizeIndex;
+        std::string typefaceId;
+        bool focusHighlight;
+        int8_t tracking;
+        uint8_t anchorPercent;
+        uint8_t guideWidth;
+        uint8_t guideGap;
+    };
+
+    FontCatalog fontCatalog;
+    fontCatalog.loadFromSd();
+    ThemeStore themeStore;
+    themeStore.loadFromSd(fontCatalog);
+    const std::string savedThemeId = settings::load<pref::ThemeId>(*preferences_);
+    if (!savedThemeId.empty())
+        themeStore.selectById(savedThemeId);
+    const ui::themes::Theme& currentTheme = themeStore.selected();
+
+    const Values current{
+        settings::load<pref::Wpm>(*preferences_),
+        settings::load<pref::PauseMode>(*preferences_),
+        settings::load<pref::PacingLongWordDelay>(*preferences_),
+        settings::load<pref::PacingComplexWordDelay>(*preferences_),
+        settings::load<pref::PacingPunctuationDelay>(*preferences_),
+        settings::load<pref::BrightnessIndex>(*preferences_),
+        currentTheme.id,
+        settings::load<pref::Handedness>(*preferences_),
+        settings::load<pref::FooterMetricMode>(*preferences_),
+        settings::load<pref::BatteryLabelMode>(*preferences_),
+        settings::load<pref::ReaderBatteryVisible>(*preferences_),
+        settings::load<pref::ReaderChapterVisible>(*preferences_),
+        settings::load<pref::ReaderProgressVisible>(*preferences_),
+        settings::load<pref::UiLanguage>(*preferences_),
+        settings::load<pref::ScreensaverMode>(*preferences_),
+        settings::load<pref::StandbyTimerIndex>(*preferences_),
+        settings::load<pref::PhantomWords>(*preferences_),
+        settings::load<pref::ReaderFontSizeIndex>(*preferences_),
+        currentTheme.typeface,
+        settings::load<pref::TypographyFocusHighlight>(*preferences_),
+        settings::load<pref::TypographyTracking>(*preferences_),
+        settings::load<pref::TypographyAnchor>(*preferences_),
+        settings::load<pref::TypographyGuideWidth>(*preferences_),
+        settings::load<pref::TypographyGuideGap>(*preferences_),
+    };
+    Values next = current;
     int intValue = 0;
     bool boolValue = false;
     String stringValue;
-    bool themeTypefaceApplied = false;
 
     if (readJsonInt(body, "wpm", intValue)) {
         if (intValue < pref::Wpm::minValue() || intValue > pref::Wpm::maxValue()) {
             error = "wpm must be between 10 and 1000";
             return false;
         }
-        settings::save<pref::Wpm>(*preferences_, static_cast<uint16_t>(intValue));
+        next.wpm = static_cast<uint16_t>(intValue);
     }
     if (readJsonString(body, "pauseMode", stringValue)) {
         const int value = enumValue(stringValue, pauseModeLabels, 2);
@@ -1569,15 +1652,14 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
             error = "pauseMode must be sentence_end or instant";
             return false;
         }
-        settings::save<pref::PauseMode>(*preferences_, static_cast<::PauseMode>(value));
+        next.pauseMode = static_cast<::PauseMode>(value);
     }
     if (readJsonInt(body, "longWordMs", intValue)) {
-        if (intValue < pref::PacingLongWordDelay::minValue()
-            || intValue > pref::PacingLongWordDelay::maxValue()) {
+        if (intValue < pref::PacingLongWordDelay::minValue() || intValue > pref::PacingLongWordDelay::maxValue()) {
             error = "longWordMs must be between 0 and 600";
             return false;
         }
-        settings::save<pref::PacingLongWordDelay>(*preferences_, static_cast<uint16_t>(intValue));
+        next.longWordMs = static_cast<uint16_t>(intValue);
     }
     if (readJsonInt(body, "complexWordMs", intValue)) {
         if (intValue < pref::PacingComplexWordDelay::minValue()
@@ -1585,7 +1667,7 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
             error = "complexWordMs must be between 0 and 600";
             return false;
         }
-        settings::save<pref::PacingComplexWordDelay>(*preferences_, static_cast<uint16_t>(intValue));
+        next.complexWordMs = static_cast<uint16_t>(intValue);
     }
     if (readJsonInt(body, "punctuationMs", intValue)) {
         if (intValue < pref::PacingPunctuationDelay::minValue()
@@ -1593,32 +1675,23 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
             error = "punctuationMs must be between 0 and 600";
             return false;
         }
-        settings::save<pref::PacingPunctuationDelay>(*preferences_, static_cast<uint16_t>(intValue));
+        next.punctuationMs = static_cast<uint16_t>(intValue);
     }
     if (readJsonInt(body, "brightnessIndex", intValue)) {
         if (intValue < 0 || intValue >= static_cast<int>(kBrightnessCount)) {
             error = "brightnessIndex must be between 0 and 19";
             return false;
         }
-        settings::save<pref::BrightnessIndex>(*preferences_, static_cast<uint8_t>(intValue));
+        next.brightnessIndex = static_cast<uint8_t>(intValue);
     }
     if (readJsonString(body, "themeId", stringValue)) {
-        ThemeStore themeStore;
-        themeStore.loadFromSd();
         if (!themeStore.selectById({stringValue.c_str(), stringValue.length()})) {
             error = "themeId does not match an available theme";
             return false;
         }
         const ui::themes::Theme& theme = themeStore.selected();
-        settings::save<pref::ThemeId>(*preferences_, theme.id);
-        FontCatalog fontCatalog;
-        fontCatalog.loadFromSd();
-        uint8_t themeTypeface = 0;
-        const std::string_view typefaceName = ui::themes::readerTypefaceName(theme.typeface);
-        if (fontCatalog.indexForId(String(typefaceName.data(), typefaceName.size()), themeTypeface)) {
-            settings::save<pref::ReaderTypefaceId>(*preferences_, fontCatalog.typefaceId(themeTypeface).c_str());
-            themeTypefaceApplied = true;
-        }
+        next.themeId = theme.id;
+        next.typefaceId = theme.typeface;
     }
     if (readJsonString(body, "handedness", stringValue)) {
         const int value = enumValue(stringValue, handednessLabels, 2);
@@ -1626,7 +1699,7 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
             error = "handedness must be right or left";
             return false;
         }
-        settings::save<pref::Handedness>(*preferences_, value != 0);
+        next.leftHanded = value != 0;
     }
     if (readJsonString(body, "footerMetric", stringValue)) {
         const int value = enumValue(stringValue, footerMetricLabels, 3);
@@ -1634,7 +1707,7 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
             error = "footerMetric must be percentage, chapter_time, or book_time";
             return false;
         }
-        settings::save<pref::FooterMetricMode>(*preferences_, static_cast<FooterMetric>(value));
+        next.footerMetric = static_cast<FooterMetric>(value);
     }
     if (readJsonString(body, "batteryLabel", stringValue)) {
         const int value = enumValue(stringValue, batteryLabelLabels, 3);
@@ -1642,85 +1715,138 @@ bool CompanionSyncManager::applySettingsJson(const String& body, String& error) 
             error = "batteryLabel must be percent, time_remaining, or voltage";
             return false;
         }
-        settings::save<pref::BatteryLabelMode>(*preferences_, static_cast<BatteryLabel>(value));
+        next.batteryLabel = static_cast<BatteryLabel>(value);
     }
     if (readJsonBool(body, "readingBattery", boolValue)) {
-        settings::save<pref::ReaderBatteryVisible>(*preferences_, boolValue);
+        next.readingBattery = boolValue;
     }
     if (readJsonBool(body, "readingChapter", boolValue)) {
-        settings::save<pref::ReaderChapterVisible>(*preferences_, boolValue);
+        next.readingChapter = boolValue;
     }
     if (readJsonBool(body, "readingProgress", boolValue)) {
-        settings::save<pref::ReaderProgressVisible>(*preferences_, boolValue);
+        next.readingProgress = boolValue;
     }
     if (readJsonInt(body, "language", intValue)) {
         if (intValue < 0 || intValue >= static_cast<int>(pref::UiLanguage::count())) {
             error = "language is out of range";
             return false;
         }
-        settings::save<pref::UiLanguage>(*preferences_, static_cast<UiLanguage>(intValue));
+        next.language = static_cast<UiLanguage>(intValue);
+    }
+    if (readJsonInt(body, "screensaver", intValue)) {
+        if (intValue < 0 || intValue >= static_cast<int>(standby::Kind::Count)) {
+            error = "screensaver is out of range";
+            return false;
+        }
+        next.screensaver = static_cast<standby::Kind>(intValue);
+    }
+    if (readJsonInt(body, "standbyTimerIndex", intValue)) {
+        if (intValue < pref::StandbyTimerIndex::minValue() || intValue > pref::StandbyTimerIndex::maxValue()) {
+            error = "standbyTimerIndex is out of range";
+            return false;
+        }
+        next.standbyTimerIndex = static_cast<uint8_t>(intValue);
     }
     if (readJsonBool(body, "phantomWords", boolValue)) {
-        settings::save<pref::PhantomWords>(*preferences_, boolValue);
+        next.phantomWords = boolValue;
     }
     if (readJsonInt(body, "fontSizeIndex", intValue)) {
-        if (intValue < 0 || intValue >= FontCatalog::sizeCount()) {
+        if (intValue < 0 || intValue >= RFont4::kSizeCount) {
             error = "fontSizeIndex must be between 0 and 2";
             return false;
         }
-        settings::save<pref::ReaderFontSizeIndex>(*preferences_, static_cast<uint8_t>(intValue));
+        next.fontSizeIndex = static_cast<uint8_t>(intValue);
     }
-    if (!themeTypefaceApplied && readJsonString(body, "typeface", stringValue)) {
-        FontCatalog fontCatalog;
-        fontCatalog.loadFromSd();
-        uint8_t value = 0;
-        if (!fontCatalog.indexForId(stringValue, value)) {
+    if (readJsonString(body, "typeface", stringValue)) {
+        const FontCatalog::Family* family = fontCatalog.find(stringValue.c_str());
+        if (family == nullptr) {
             error = "typeface does not match an available font";
             return false;
         }
-        settings::save<pref::ReaderTypefaceId>(*preferences_, fontCatalog.typefaceId(value).c_str());
+        next.typefaceId = family->id;
     }
     if (readJsonBool(body, "focusHighlight", boolValue)) {
-        settings::save<pref::TypographyFocusHighlight>(*preferences_, boolValue);
+        next.focusHighlight = boolValue;
     }
     if (readJsonInt(body, "tracking", intValue)) {
         if (intValue < pref::TypographyTracking::minValue() || intValue > pref::TypographyTracking::maxValue()) {
             error = "tracking is out of range";
             return false;
         }
-        settings::save<pref::TypographyTracking>(*preferences_, static_cast<int8_t>(intValue));
+        next.tracking = static_cast<int8_t>(intValue);
     }
     if (readJsonInt(body, "anchorPercent", intValue)) {
         if (intValue < pref::TypographyAnchor::minValue() || intValue > pref::TypographyAnchor::maxValue()) {
             error = "anchorPercent is out of range";
             return false;
         }
-        settings::save<pref::TypographyAnchor>(*preferences_, static_cast<uint8_t>(intValue));
+        next.anchorPercent = static_cast<uint8_t>(intValue);
     }
     if (readJsonInt(body, "guideWidth", intValue)) {
-        if (intValue < pref::TypographyGuideWidth::minValue()
-            || intValue > pref::TypographyGuideWidth::maxValue()) {
+        if (intValue < pref::TypographyGuideWidth::minValue() || intValue > pref::TypographyGuideWidth::maxValue()) {
             error = "guideWidth is out of range";
             return false;
         }
-        settings::save<pref::TypographyGuideWidth>(*preferences_, static_cast<uint8_t>(intValue));
+        next.guideWidth = static_cast<uint8_t>(intValue);
     }
     if (readJsonInt(body, "guideGap", intValue)) {
         if (intValue < pref::TypographyGuideGap::minValue() || intValue > pref::TypographyGuideGap::maxValue()) {
             error = "guideGap is out of range";
             return false;
         }
-        settings::save<pref::TypographyGuideGap>(*preferences_, static_cast<uint8_t>(intValue));
+        next.guideGap = static_cast<uint8_t>(intValue);
     }
 
-    return true;
+    const auto save = [&](const Values& values) {
+        bool ok = true;
+        ok = settings::save<pref::Wpm>(*preferences_, values.wpm) && ok;
+        ok = settings::save<pref::PauseMode>(*preferences_, values.pauseMode) && ok;
+        ok = settings::save<pref::PacingLongWordDelay>(*preferences_, values.longWordMs) && ok;
+        ok = settings::save<pref::PacingComplexWordDelay>(*preferences_, values.complexWordMs) && ok;
+        ok = settings::save<pref::PacingPunctuationDelay>(*preferences_, values.punctuationMs) && ok;
+        ok = settings::save<pref::BrightnessIndex>(*preferences_, values.brightnessIndex) && ok;
+        ok = settings::save<pref::ThemeId>(*preferences_, values.themeId) && ok;
+        ok = settings::save<pref::Handedness>(*preferences_, values.leftHanded) && ok;
+        ok = settings::save<pref::FooterMetricMode>(*preferences_, values.footerMetric) && ok;
+        ok = settings::save<pref::BatteryLabelMode>(*preferences_, values.batteryLabel) && ok;
+        ok = settings::save<pref::ReaderBatteryVisible>(*preferences_, values.readingBattery) && ok;
+        ok = settings::save<pref::ReaderChapterVisible>(*preferences_, values.readingChapter) && ok;
+        ok = settings::save<pref::ReaderProgressVisible>(*preferences_, values.readingProgress) && ok;
+        ok = settings::save<pref::UiLanguage>(*preferences_, values.language) && ok;
+        ok = settings::save<pref::ScreensaverMode>(*preferences_, values.screensaver) && ok;
+        ok = settings::save<pref::StandbyTimerIndex>(*preferences_, values.standbyTimerIndex) && ok;
+        ok = settings::save<pref::PhantomWords>(*preferences_, values.phantomWords) && ok;
+        ok = settings::save<pref::ReaderFontSizeIndex>(*preferences_, values.fontSizeIndex) && ok;
+        ok = settings::save<pref::TypographyFocusHighlight>(*preferences_, values.focusHighlight) && ok;
+        ok = settings::save<pref::TypographyTracking>(*preferences_, values.tracking) && ok;
+        ok = settings::save<pref::TypographyAnchor>(*preferences_, values.anchorPercent) && ok;
+        ok = settings::save<pref::TypographyGuideWidth>(*preferences_, values.guideWidth) && ok;
+        ok = settings::save<pref::TypographyGuideGap>(*preferences_, values.guideGap) && ok;
+        return ok;
+    };
+
+    if (!themeStore.selectById(next.themeId)) {
+        error = "themeId does not match an available theme";
+        return false;
+    }
+    const std::string previousTypeface = themeStore.selected().typeface;
+    if (!themeStore.setSelectedTypeface(next.typefaceId, fontCatalog)) {
+        error = "Theme typeface could not be saved";
+        return false;
+    }
+    if (save(next))
+        return true;
+
+    themeStore.setSelectedTypeface(previousTypeface, fontCatalog);
+    save(current);
+    error = "Settings could not be saved";
+    return false;
 }
 
 String CompanionSyncManager::wifiJson() {
     const std::string ssid = settings::load<pref::WifiSsid>(*preferences_);
-    return String("{\"ok\":true,\"configured\":") + (ssid.empty() ? "false" : "true") + ",\"ssid\":\""
-         + jsonEscape(ssid.c_str()) + "\",\"passwordSet\":"
-         + (settings::load<pref::WifiPassword>(*preferences_).empty() ? "false" : "true") + "}";
+    return String("{\"configured\":") + (ssid.empty() ? "false" : "true") + ",\"ssid\":\"" + jsonEscape(ssid.c_str())
+         + "\",\"passwordSet\":" + (settings::load<pref::WifiPassword>(*preferences_).empty() ? "false" : "true") + "}";
 }
 
 bool CompanionSyncManager::applyWifiJson(const String& body, String& error) {
@@ -1759,7 +1885,7 @@ bool CompanionSyncManager::applyWifiJson(const String& body, String& error) {
 String CompanionSyncManager::rssFeedsJson() {
     String body;
     body.reserve(256);
-    body += "{\"ok\":true,\"feeds\":[";
+    body += "{\"feeds\":[";
     File file = Board::Storage::filesystem().open(StoragePaths::kRssConfigPath);
     bool first = true;
     if (file && !file.isDirectory()) {
@@ -2056,52 +2182,6 @@ bool CompanionSyncManager::resolveBookId(const String& id, String& path) const {
     }
 
     return false;
-}
-
-bool CompanionSyncManager::resolveBookName(const String& requested, String& path) const {
-    String filename = requested;
-    const int separator = requested.indexOf('/');
-    if (separator >= 0) {
-        const String directory = requested.substring(0, separator);
-        filename = sanitizeFilename(requested.substring(separator + 1));
-        if (filename.isEmpty() || requested.indexOf("..") >= 0 || (directory != "books" && directory != "articles")) {
-            return false;
-        }
-        path = String(StoragePaths::kBooksPath) + "/" + directory + "/" + filename;
-    } else {
-        filename = sanitizeFilename(requested);
-        path = String(StoragePaths::kBooksPath) + "/" + filename;
-    }
-
-    String lowered = filename;
-    lowered.toLowerCase();
-    if (!isSupportedBookName(lowered)) {
-        return false;
-    }
-
-    File file = Board::Storage::filesystem().open(path);
-    if ((!file || file.isDirectory()) && separator < 0) {
-        if (file) {
-            file.close();
-        }
-        path = String(StoragePaths::kBookFilesPath) + "/" + filename;
-        file = Board::Storage::filesystem().open(path);
-    }
-    if ((!file || file.isDirectory()) && separator < 0) {
-        if (file) {
-            file.close();
-        }
-        path = String(StoragePaths::kArticleFilesPath) + "/" + filename;
-        file = Board::Storage::filesystem().open(path);
-    }
-    if (!file || file.isDirectory()) {
-        if (file) {
-            file.close();
-        }
-        return false;
-    }
-    file.close();
-    return true;
 }
 
 void CompanionSyncManager::finishUpload(bool success) {

@@ -7,7 +7,8 @@
 namespace screens {
     namespace pref = settings::prefs;
 
-    void InterfaceScreen::begin(ui::Context& ui, Preferences& preferences, void (*setBrightness)(uint8_t)) {
+    void InterfaceScreen::begin(ui::Context& ui, Preferences& preferences, const FontCatalog& fonts,
+                                void (*setBrightness)(uint8_t)) {
         config.brightnessIndex = settings::load<pref::BrightnessIndex>(preferences);
         config.standbyIndex = settings::load<pref::StandbyTimerIndex>(preferences);
         config.language = settings::load<pref::UiLanguage>(preferences);
@@ -15,7 +16,7 @@ namespace screens {
         if (setBrightness != nullptr)
             setBrightness(static_cast<uint8_t>((config.brightnessIndex + 1U) * 5U));
 
-        themes.loadFromSd();
+        themes.loadFromSd(fonts);
         const std::string savedThemeId = settings::load<pref::ThemeId>(preferences);
         if (!savedThemeId.empty())
             themes.selectById(savedThemeId);
@@ -23,8 +24,10 @@ namespace screens {
         ui.setLanguage(config.language);
     }
 
-    void InterfaceScreen::draw(ui::Context& ui, Preferences& preferences, std::span<const uint32_t> standbyDurations,
-                             void (*setBrightness)(uint8_t), Screen& screen) {
+    bool InterfaceScreen::draw(ui::Context& ui, Preferences& preferences,
+                               std::span<const uint32_t> standbyDurations, void (*setBrightness)(uint8_t),
+                               Screen& screen) {
+        bool themeChanged = false;
         const ui::Rect content = detail::content(ui);
         if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
             screen = Screen::Settings;
@@ -59,6 +62,7 @@ namespace screens {
             themes.selectNext();
             settings::save<pref::ThemeId>(preferences, themes.selected().id);
             ui.setTheme(themes.selected());
+            themeChanged = true;
         }
 
         if (ui.setting({content.x, secondRowY, halfWidth, 32}, ui.text(UiText::Language),
@@ -85,6 +89,7 @@ namespace screens {
                        ui.text(UiText::Screensaver), ui.text(screensaver), ui::SettingLayout::Inline)) {
             config.screensaver = settings::cycle<pref::ScreensaverMode>(preferences);
         }
+        return themeChanged;
     }
 
 } // namespace screens

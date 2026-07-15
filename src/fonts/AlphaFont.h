@@ -53,7 +53,7 @@ namespace ui::fonts {
         const AlphaSpan* spans = nullptr;
         const uint8_t* pageMap = nullptr;
         const uint16_t* const* pageTables = nullptr;
-        uint8_t pageTableCount = 0;
+        uint16_t pageTableCount = 0;
         const AlphaKerningPair* kerningPairs = nullptr;
         uint16_t kerningPairCount = 0;
         int8_t wordInkTop = 0;

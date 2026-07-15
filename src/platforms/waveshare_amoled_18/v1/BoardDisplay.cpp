@@ -33,18 +33,6 @@ namespace Board::Display {
         return gPanel;
     }
 
-    void flush() {
-        gPanel.flush();
-    }
-
-    bool flushRegion(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
-        (void) x;
-        (void) y;
-        (void) width;
-        (void) height;
-        gPanel.flush();
-        return true;
-    }
     void holdBacklightOffForDeepSleep() {}
     ui::Orientation defaultUiOrientation() {
         return WaveshareAmoled18::DisplayWiring::kDefaultUiOrientation;

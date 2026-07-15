@@ -19,8 +19,7 @@ namespace screens {
         }
     } // namespace
 
-    void StandbyScreen::begin(ui::Context& ui, uint32_t nowMs, size_t bookIndex, size_t wordIndex,
-                              standby::Kind kind) {
+    void StandbyScreen::begin(ui::Context& ui, uint32_t nowMs, size_t bookIndex, size_t wordIndex, standby::Kind kind) {
         kind_ = kind;
         columns_ =
             std::clamp<uint16_t>(ceilDiv(std::max<int16_t>(1, ui.width()), kCellSize), 1, standby::kMaxStandbyColumns);
@@ -70,8 +69,7 @@ namespace screens {
         const auto drawRun = [&](size_t first, size_t last, uint16_t color) {
             const uint16_t x = static_cast<uint16_t>(first % columns_);
             const uint16_t y = static_cast<uint16_t>(first / columns_);
-            gfx.fillRect(static_cast<int16_t>(originX + x * kCellSize),
-                         static_cast<int16_t>(originY + y * kCellSize),
+            gfx.fillRect(static_cast<int16_t>(originX + x * kCellSize), static_cast<int16_t>(originY + y * kCellSize),
                          static_cast<int16_t>((last - first + 1U) * kCellSize), kCellSize, color);
         };
         if (frame.fullRedraw || !frame.dirtyCells.valid()) {
@@ -101,13 +99,8 @@ namespace screens {
             if (frame.dimCells.valid())
                 drawCells(frame.dimCells, dim);
             drawCells(frame.cells, bright);
-            ui.markDirty({0, 0, ui.width(), ui.height()});
-        }
-        else {
-            uint16_t minX = columns_;
-            uint16_t minY = rows_;
-            uint16_t maxX = 0;
-            uint16_t maxY = 0;
+            ui.markDrawn();
+        } else {
             size_t runStart = cellCount;
             size_t runEnd = 0;
             uint16_t runColor = 0;
@@ -119,15 +112,11 @@ namespace screens {
                     const size_t index = wordIndex * standby::kPackedBitsPerWord + bit;
                     if (index >= cellCount)
                         break;
-                    const uint16_t x = static_cast<uint16_t>(index % columns_);
-                    const uint16_t y = static_cast<uint16_t>(index / columns_);
-                    const uint16_t color = (frame.cells.words[wordIndex] & mask) != 0
-                                             ? bright
+                    const uint16_t color = (frame.cells.words[wordIndex] & mask) != 0 ? bright
                                          : frame.dimCells.valid() && (frame.dimCells.words[wordIndex] & mask) != 0
                                              ? dim
                                              : ui.color(ui::themes::ColorRole::Background);
-                    if (runStart < cellCount
-                        && (index != runEnd + 1U || index % columns_ == 0 || color != runColor)) {
+                    if (runStart < cellCount && (index != runEnd + 1U || index % columns_ == 0 || color != runColor)) {
                         drawRun(runStart, runEnd, runColor);
                         runStart = cellCount;
                     }
@@ -136,20 +125,13 @@ namespace screens {
                         runColor = color;
                     }
                     runEnd = index;
-                    minX = std::min(minX, x);
-                    minY = std::min(minY, y);
-                    maxX = std::max(maxX, x);
-                    maxY = std::max(maxY, y);
                     bits &= bits - 1U;
                 }
             }
-            if (runStart < cellCount)
+            if (runStart < cellCount) {
                 drawRun(runStart, runEnd, runColor);
-            if (minX < columns_)
-                ui.markDirty({static_cast<int16_t>(originX + minX * kCellSize),
-                              static_cast<int16_t>(originY + minY * kCellSize),
-                              static_cast<int16_t>((maxX - minX + 1U) * kCellSize),
-                              static_cast<int16_t>((maxY - minY + 1U) * kCellSize)});
+                ui.markDrawn();
+            }
         }
         ui.endFrame();
     }

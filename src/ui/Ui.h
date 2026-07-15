@@ -8,8 +8,8 @@
 #include <string>
 #include <string_view>
 
-#include "ui/Theme.h"
 #include "ui/Localization.h"
+#include "ui/Theme.h"
 #include "ui/Touch.h"
 
 namespace ui {
@@ -118,15 +118,15 @@ namespace ui {
     class Context {
     public:
         static constexpr size_t kSlotCapacity = 64;
-        using Flush = void (*)();
-        using FlushRegion = bool (*)(uint16_t x, uint16_t y, uint16_t width, uint16_t height);
 
-        explicit Context(Arduino_GFX& gfx, Flush flush, FlushRegion flushRegion = nullptr);
+        explicit Context(Arduino_GFX& gfx);
 
         void setTheme(const ui::themes::Theme& theme);
         void setLanguage(UiLanguage language);
         void setOrientation(Orientation orientation);
-        Orientation orientation() const { return touchOrientation_; }
+        Orientation orientation() const {
+            return touchOrientation_;
+        }
         std::string_view text(UiText key) const;
         void setTouchSource(TouchSource source, uint32_t nowMs);
         bool pollTouch(uint32_t nowMs);
@@ -145,8 +145,8 @@ namespace ui {
                      SettingLayout layout = SettingLayout::Stacked);
         bool toggle(Rect rect, std::string_view label, bool enabled);
         bool tap(Rect rect, bool enabled = true);
-        bool button(Rect rect, std::string_view text, bool enabled = true, Icon icon = Icon::None, uint8_t textLines = 1,
-                    std::string_view detailLeft = {}, std::string_view detailRight = {});
+        bool button(Rect rect, std::string_view text, bool enabled = true, Icon icon = Icon::None,
+                    uint8_t textLines = 1, std::string_view detailLeft = {}, std::string_view detailRight = {});
         bool iconButton(Rect rect, Icon icon);
         bool tab(Rect rect, std::string_view text, bool active, Icon icon = Icon::None);
         void battery(Rect rect, uint8_t percent, bool charging, std::string_view label);
@@ -168,7 +168,7 @@ namespace ui {
                        ui::themes::ColorRole sandRole = ui::themes::ColorRole::Accent, bool reversed = false,
                        std::string_view time = {});
         bool redraw(Rect rect, uint32_t signature);
-        void markDirty(Rect rect);
+        void markDrawn();
         void drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
                       TextAlign align = TextAlign::Left, uint8_t maxLines = 1);
 
@@ -237,8 +237,6 @@ namespace ui {
         bool updateTouch(const TouchContact& contact, uint32_t nowMs);
 
         Arduino_GFX& gfx_;
-        Flush flush_ = nullptr;
-        FlushRegion flushRegion_ = nullptr;
         const ui::themes::Theme* theme_ = nullptr;
         UiLanguage language_ = UiLanguage::English;
         TouchSource touchSource_{};
@@ -268,8 +266,6 @@ namespace ui {
         uint8_t screen_ = 0xFF;
         bool invalid_ = true;
         bool drew_ = false;
-        Rect dirty_{};
-        bool hasDirty_ = false;
     };
 
 } // namespace ui

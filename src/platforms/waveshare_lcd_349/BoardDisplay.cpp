@@ -4,7 +4,6 @@
 
 #include <Arduino.h>
 #include <Wire.h>
-#include <algorithm>
 #include <driver/gpio.h>
 #include <esp_heap_caps.h>
 #include <esp_memory_utils.h>
@@ -113,32 +112,6 @@ namespace Board::Display {
 
     Arduino_GFX& gfx() {
         return gCanvas;
-    }
-
-    void flush() {
-        gCanvas.flush();
-    }
-
-    bool flushRegion(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
-        if (width == 0 || height == 0) {
-            return true;
-        }
-
-        const uint16_t canvasW = static_cast<uint16_t>(gCanvas.width());
-        const uint16_t canvasH = static_cast<uint16_t>(gCanvas.height());
-        if (x >= canvasW || y >= canvasH) {
-            return true;
-        }
-
-        const uint16_t clippedW = std::min<uint16_t>(width, static_cast<uint16_t>(canvasW - x));
-        const uint16_t clippedH = std::min<uint16_t>(height, static_cast<uint16_t>(canvasH - y));
-        if (gCanvas.getFramebuffer() == nullptr) {
-            return false;
-        }
-
-        gCanvas.markDirtyRect(x, y, clippedW, clippedH);
-        gCanvas.flush();
-        return true;
     }
 
     void holdBacklightOffForDeepSleep() {

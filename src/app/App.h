@@ -37,7 +37,7 @@ private:
     static void renderStorageStatus(void* context, const char* title, const char* line1, const char* line2,
                                     int progressPercent);
 
-    ui::Context immediateUi_{Board::Display::gfx(), &Board::Display::flush, &Board::Display::flushRegion};
+    ui::Context immediateUi_{Board::Display::gfx()};
     screens::ReaderScreen readerScreen_{Board::Display::gfx()};
     screens::LibraryScreen libraryScreen_;
     screens::ChaptersScreen chaptersScreen_;

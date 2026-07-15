@@ -34,10 +34,7 @@ namespace ui {
 
     } // namespace
 
-    Context::Context(Arduino_GFX& gfx, Flush flush, FlushRegion flushRegion) :
-            gfx_(gfx),
-            flush_(flush),
-            flushRegion_(flushRegion) {}
+    Context::Context(Arduino_GFX& gfx) : gfx_(gfx) {}
 
     void Context::setTheme(const ui::themes::Theme& theme) {
         if (theme_ != &theme) {
@@ -112,7 +109,6 @@ namespace ui {
     void Context::beginFrame(uint8_t screen) {
         nextSlot_ = 0;
         drew_ = false;
-        hasDirty_ = false;
         if (screen_ != screen) {
             screen_ = screen;
             invalid_ = true;
@@ -120,7 +116,7 @@ namespace ui {
         }
         if (invalid_) {
             gfx_.fillScreen(color(ui::themes::ColorRole::Background));
-            markDirty({0, 0, width(), height()});
+            markDrawn();
             for (Slot& slot: slots_) {
                 slot.valid = false;
             }
@@ -142,14 +138,8 @@ namespace ui {
             capturedSlot_ = kSlotCapacity;
         }
         slotCount_ = std::min(nextSlot_, kSlotCapacity);
-        if (drew_ && hasDirty_) {
-            const bool flushed = flushRegion_ != nullptr
-                              && flushRegion_(static_cast<uint16_t>(dirty_.x), static_cast<uint16_t>(dirty_.y),
-                                              static_cast<uint16_t>(dirty_.w), static_cast<uint16_t>(dirty_.h));
-            if (!flushed && flush_ != nullptr) {
-                flush_();
-            }
-        }
+        if (drew_)
+            gfx_.flush();
         touchPending_ = false;
     }
 
@@ -180,7 +170,7 @@ namespace ui {
         if (lineX < rect.x + rect.w)
             gfx_.drawFastHLine(lineX, static_cast<int16_t>(rect.y + rect.h / 2),
                                static_cast<int16_t>(rect.x + rect.w - lineX), blend(ui::themes::ColorRole::Muted, 96));
-        markDirty(rect);
+        markDrawn();
     }
 
     bool Context::setting(Rect rect, std::string_view label, std::string_view value, SettingLayout layout) {
@@ -784,7 +774,7 @@ namespace ui {
                 gfx_.drawLine(static_cast<int16_t>(centerX - 2), static_cast<int16_t>(bottom - 6),
                               static_cast<int16_t>(centerX + 8), static_cast<int16_t>(bottom - 17), ink);
             }
-            markDirty(rect);
+            markDrawn();
             drawTime();
             return;
         }
@@ -815,7 +805,7 @@ namespace ui {
         if (!paused && progress > 0 && progress < 1000)
             gfx_.drawFastVLine(centerX, static_cast<int16_t>(centerY + 1),
                                std::max<int16_t>(1, static_cast<int16_t>(bottom - bottomRows - centerY - 2)), ink);
-        markDirty(rect);
+        markDrawn();
         drawTime();
     }
 
@@ -886,31 +876,11 @@ namespace ui {
             return;
         }
         gfx_.fillRect(rect.x, rect.y, rect.w, rect.h, color(ui::themes::ColorRole::Background));
-        markDirty(rect);
-        drew_ = true;
+        markDrawn();
     }
 
-    void Context::markDirty(Rect rect) {
-        if (rect.w <= 0 || rect.h <= 0)
-            return;
+    void Context::markDrawn() {
         drew_ = true;
-        const int16_t left = std::max<int16_t>(0, rect.x);
-        const int16_t top = std::max<int16_t>(0, rect.y);
-        const int16_t right = std::min<int16_t>(width(), static_cast<int16_t>(rect.x + rect.w));
-        const int16_t bottom = std::min<int16_t>(height(), static_cast<int16_t>(rect.y + rect.h));
-        if (right <= left || bottom <= top)
-            return;
-        if (!hasDirty_) {
-            dirty_ = {left, top, static_cast<int16_t>(right - left), static_cast<int16_t>(bottom - top)};
-            hasDirty_ = true;
-            return;
-        }
-        const int16_t oldRight = static_cast<int16_t>(dirty_.x + dirty_.w);
-        const int16_t oldBottom = static_cast<int16_t>(dirty_.y + dirty_.h);
-        dirty_.x = std::min(dirty_.x, left);
-        dirty_.y = std::min(dirty_.y, top);
-        dirty_.w = static_cast<int16_t>(std::max(oldRight, right) - dirty_.x);
-        dirty_.h = static_cast<int16_t>(std::max(oldBottom, bottom) - dirty_.y);
     }
 
     void Context::drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t textColor, TextAlign align,

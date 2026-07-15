@@ -14,7 +14,8 @@ namespace ui {
         constexpr std::array<std::string_view, 10> kNumberExtras = {"+", "=", "_", "/", "\\", ":", ";", "?", "!", "."};
         constexpr std::array<std::string_view, 10> kTopSymbols = {"!", "@", "#", "$", "%", "^", "&", "*", "(", ")"};
         constexpr std::array<std::string_view, 9> kMiddleSymbols = {"[", "]", "{", "}", "<", ">", "+", "=", "~"};
-        constexpr std::array<std::string_view, 10> kBottomSymbols = {"\\", "|", ";", ":", "'", "\"", ",", "/", "`", "?"};
+        constexpr std::array<std::string_view, 10> kBottomSymbols = {"\\", "|", ";", ":", "'",
+                                                                     "\"", ",", "/", "`", "?"};
 
     } // namespace
 
@@ -29,12 +30,11 @@ namespace ui {
         std::array<char, 64> hidden{};
         const size_t hiddenLength = std::min(value.size(), hidden.size());
         std::fill_n(hidden.begin(), hiddenLength, '*');
-        std::string_view shownValue = masked && !state.passwordVisible ? std::string_view{hidden.data(), hiddenLength}
-                                                                       : std::string_view{value};
+        std::string_view shownValue =
+            masked && !state.passwordVisible ? std::string_view{hidden.data(), hiddenLength} : std::string_view{value};
         const int16_t clearWidth = inputHeight;
         const int16_t revealWidth = masked ? std::clamp<int16_t>(rect.w / 7, 72, 96) : 0;
-        const int16_t valueWidth = static_cast<int16_t>(rect.w - clearWidth - gap
-                                                        - (masked ? revealWidth + gap : 0));
+        const int16_t valueWidth = static_cast<int16_t>(rect.w - clearWidth - gap - (masked ? revealWidth + gap : 0));
         const size_t visibleCharacters = static_cast<size_t>(std::max<int16_t>(1, (valueWidth - 12) / 12));
         if (shownValue.size() > visibleCharacters) {
             size_t start = shownValue.size() - visibleCharacters;
@@ -53,14 +53,14 @@ namespace ui {
                          color(ui::themes::ColorRole::Accent));
             } else {
                 drawText({static_cast<int16_t>(input.x + 6), static_cast<int16_t>(input.y + 2),
-                          static_cast<int16_t>(input.w - 12), 8}, label, 1,
-                         color(ui::themes::ColorRole::Muted));
+                          static_cast<int16_t>(input.w - 12), 8},
+                         label, 1, color(ui::themes::ColorRole::Muted));
                 drawText({static_cast<int16_t>(input.x + 6), static_cast<int16_t>(input.y + 11),
                           static_cast<int16_t>(input.w - 12), static_cast<int16_t>(input.h - 11)},
                          shownValue.empty() ? std::string_view{"_"} : shownValue, 2,
                          color(ui::themes::ColorRole::Accent));
             }
-            markDirty(input);
+            markDrawn();
         }
         const int16_t clearX = static_cast<int16_t>(rect.x + valueWidth + gap);
         if (button({clearX, rect.y, clearWidth, inputHeight}, "X", !value.empty()))
@@ -92,7 +92,7 @@ namespace ui {
         };
 
         const auto drawCharacters = [&]<size_t N>(const std::array<std::string_view, N>& keys, int16_t y,
-                                                   uint8_t firstColumn = 0) {
+                                                  uint8_t firstColumn = 0) {
             for (size_t index = 0; index < N; ++index) {
                 const std::string_view key = keys[index];
                 char uppercase[2] = {key.empty() ? '\0' : key.front(), '\0'};

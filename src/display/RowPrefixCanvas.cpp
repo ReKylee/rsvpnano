@@ -495,69 +495,6 @@ void RowPrefixCanvas::flush(bool force_flush) {
     }
 }
 
-void RowPrefixCanvas::flushQuad(bool force_flush) {
-    int16_t y = _output_y;
-    uint16_t* row1 = _framebuffer;
-    uint16_t* row2 = _framebuffer + WIDTH;
-    if (_output) {
-        int16_t hQuad = HEIGHT / 2;
-        int16_t wQuad = WIDTH / 2;
-        if (!_rowBuf) {
-            _rowBuf = (uint16_t*) malloc(wQuad * 2);
-        }
-        uint16_t p;
-        while (hQuad--) {
-            for (int16_t i = 0; i < wQuad; ++i) {
-                p = (*row1++ & 0b1110011110011100) >> 2;
-                p += (*row1++ & 0b1110011110011100) >> 2;
-                p += (*row2++ & 0b1110011110011100) >> 2;
-                p += (*row2++ & 0b1110011110011100) >> 2;
-                _rowBuf[i] = p;
-            }
-            _output->draw16bitRGBBitmap(_output_x, _output_y + y++, _rowBuf, wQuad, 1);
-            row1 += WIDTH;
-            row2 += WIDTH;
-        }
-    }
-}
-
-void RowPrefixCanvas::shade(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t shade_mask) {
-    markDirtyRect(x, y, w, h);
-
-    if (_rotation > 0) {
-        int16_t t = x;
-        switch (_rotation) {
-        case 1:
-            x = WIDTH - y - h;
-            y = t;
-            t = w;
-            w = h;
-            h = t;
-            break;
-        case 2:
-            x = WIDTH - x - w;
-            y = HEIGHT - y - h;
-            break;
-        case 3:
-            x = y;
-            y = HEIGHT - t - w;
-            t = w;
-            w = h;
-            h = t;
-            break;
-        }
-    }
-    uint16_t* row = _framebuffer;
-    row += y * WIDTH;
-    row += x;
-    for (int j = 0; j < h; j++) {
-        for (int i = 0; i < w; i++) {
-            row[i] &= shade_mask;
-        }
-        row += WIDTH;
-    }
-}
-
 uint16_t* RowPrefixCanvas::getFramebuffer() {
     return _framebuffer;
 }

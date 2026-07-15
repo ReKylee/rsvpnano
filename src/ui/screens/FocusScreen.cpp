@@ -80,20 +80,18 @@ namespace screens {
 
         for (size_t index = 0; index < visibleCount; ++index) {
             const ui::Rect cell{static_cast<int16_t>(content.x + (index % columns) * cellWidth),
-                                static_cast<int16_t>(content.y + (index / columns) * (cellHeight + rowGap)),
-                                cellWidth, cellHeight};
+                                static_cast<int16_t>(content.y + (index / columns) * (cellHeight + rowGap)), cellWidth,
+                                cellHeight};
 
             if (index == timers_.count) {
                 if (redraw) {
-                    const uint16_t ink = ui.color(writable_ ? ui::themes::ColorRole::Accent
-                                                            : ui::themes::ColorRole::Muted);
+                    const uint16_t ink =
+                        ui.color(writable_ ? ui::themes::ColorRole::Accent : ui::themes::ColorRole::Muted);
                     const int16_t centerX = static_cast<int16_t>(cell.x + cell.w / 2);
                     const int16_t centerY = static_cast<int16_t>(cell.y + cell.h / 2);
                     ui.gfx().drawCircle(centerX, centerY, 21, ink);
-                    ui.gfx().fillRect(static_cast<int16_t>(centerX - 1), static_cast<int16_t>(centerY - 8), 3, 17,
-                                      ink);
-                    ui.gfx().fillRect(static_cast<int16_t>(centerX - 8), static_cast<int16_t>(centerY - 1), 17, 3,
-                                      ink);
+                    ui.gfx().fillRect(static_cast<int16_t>(centerX - 1), static_cast<int16_t>(centerY - 8), 3, 17, ink);
+                    ui.gfx().fillRect(static_cast<int16_t>(centerX - 8), static_cast<int16_t>(centerY - 1), 17, 3, ink);
                 }
                 if (ui.tap(cell, writable_)) {
                     edit(timers_.count, true, screen);
@@ -128,8 +126,8 @@ namespace screens {
                 const uint16_t base = ui.color(ui::themes::ColorRole::SurfaceActive);
                 const int16_t titleWidth = static_cast<int16_t>(cell.w - 4);
                 const uint8_t titleSize = timer.name.size() * 12 <= static_cast<size_t>(titleWidth) ? 2 : 1;
-                ui.drawText({static_cast<int16_t>(cell.x + 2), static_cast<int16_t>(visualTop - textLift),
-                             titleWidth, 16},
+                ui.drawText({static_cast<int16_t>(cell.x + 2), static_cast<int16_t>(visualTop - textLift), titleWidth,
+                             16},
                             timer.name, titleSize, ink, ui::TextAlign::Center);
                 ui.gfx().fillRect(left, top, glassWidth, chamberHeight, focusSand);
                 ui.gfx().fillTriangle(left, topRectBottom, right, topRectBottom, centerX, waist, focusSand);
@@ -161,8 +159,8 @@ namespace screens {
                             ui::TextAlign::Center);
                 ui.drawText({left, static_cast<int16_t>(bottomRectTop - textLift), glassWidth, chamberHeight},
                             breakTime, 2, ink, ui::TextAlign::Center);
-                ui.drawText({static_cast<int16_t>(right + groupGap),
-                             static_cast<int16_t>(bottomRectTop - textLift), roundsWidth, chamberHeight},
+                ui.drawText({static_cast<int16_t>(right + groupGap), static_cast<int16_t>(bottomRectTop - textLift),
+                             roundsWidth, chamberHeight},
                             rounds, 2, ink, ui::TextAlign::Center);
             }
 
@@ -180,7 +178,7 @@ namespace screens {
         }
 
         if (redraw)
-            ui.markDirty(content);
+            ui.markDrawn();
     }
 
     void FocusScreen::drawEditor(ui::Context& ui, Screen& screen) {
@@ -208,8 +206,8 @@ namespace screens {
                 deletePrompt = row.next(static_cast<int16_t>(content.w - backWidth - deleteWidth - gap * 2));
                 deleteAction = row.next(deleteWidth);
             } else {
-                const int16_t actionWidths = static_cast<int16_t>(backWidth + saveWidth
-                                                                  + (creating_ ? 0 : deleteWidth));
+                const int16_t actionWidths =
+                    static_cast<int16_t>(backWidth + saveWidth + (creating_ ? 0 : deleteWidth));
                 const int16_t actionGaps = static_cast<int16_t>(gap * (creating_ ? 2 : 3));
                 name = row.next(static_cast<int16_t>(content.w - actionWidths - actionGaps));
                 if (!creating_)
@@ -230,21 +228,20 @@ namespace screens {
             const int16_t saveX = static_cast<int16_t>(content.x + content.w - saveWidth);
             backAction = {content.x, content.y, 64, headerHeight};
             saveAction = {saveX, content.y, saveWidth, headerHeight};
-            ui.label({static_cast<int16_t>(content.x + 74), content.y,
-                      static_cast<int16_t>(saveX - content.x - 80), headerHeight},
+            ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(saveX - content.x - 80),
+                      headerHeight},
                      ui.text(UiText::FocusTimer), 2);
             const int16_t bodyY = static_cast<int16_t>(content.y + headerHeight + gap);
             const int16_t controlsY = static_cast<int16_t>(bodyY + 40);
             const int16_t deleteY = static_cast<int16_t>(content.y + content.h - 40);
-            const int16_t controlHeight = std::min<int16_t>(50, std::max<int16_t>(30, (deleteY - controlsY
-                                                                                      - controlGap * 3)
-                                                                                         / 3));
+            const int16_t controlHeight =
+                std::min<int16_t>(50, std::max<int16_t>(30, (deleteY - controlsY - controlGap * 3) / 3));
             name = {content.x, bodyY, content.w, 34};
             focusControl = {content.x, controlsY, content.w, controlHeight};
             breakControl = {content.x, static_cast<int16_t>(controlsY + controlHeight + controlGap), content.w,
                             controlHeight};
-            roundsControl = {content.x, static_cast<int16_t>(controlsY + (controlHeight + controlGap) * 2),
-                             content.w, controlHeight};
+            roundsControl = {content.x, static_cast<int16_t>(controlsY + (controlHeight + controlGap) * 2), content.w,
+                             controlHeight};
             if (confirming) {
                 const int16_t promptWidth = static_cast<int16_t>((content.w - gap) / 2);
                 deletePrompt = {content.x, deleteY, promptWidth, 40};
@@ -277,20 +274,18 @@ namespace screens {
             save = ui.button(saveAction, ui.text(creating_ ? UiText::Add : UiText::Save),
                              writable_ && focus::valid(draft_));
 
-        if (const auto value = ui.stepper(focusControl, ui.text(UiText::FocusMinutes), draft_.focusMinutes, 1, 180,
-                                          1, " min", ui::themes::ColorRole::Accent);
+        if (const auto value = ui.stepper(focusControl, ui.text(UiText::FocusMinutes), draft_.focusMinutes, 1, 180, 1,
+                                          " min", ui::themes::ColorRole::Accent);
             value.changed)
             draft_.focusMinutes = static_cast<uint16_t>(value.value);
         if (const auto value = ui.stepper(breakControl, ui.text(UiText::BreakMinutes), draft_.breakMinutes, 1, 60, 1,
                                           " min", ui::themes::ColorRole::BreakAccent);
             value.changed)
             draft_.breakMinutes = static_cast<uint16_t>(value.value);
-        if (const auto value = ui.stepper(roundsControl, ui.text(UiText::Rounds), draft_.rounds, 1, 12);
-            value.changed)
+        if (const auto value = ui.stepper(roundsControl, ui.text(UiText::Rounds), draft_.rounds, 1, 12); value.changed)
             draft_.rounds = static_cast<uint8_t>(value.value);
 
-        if (!creating_
-            && ui.button(deleteAction, ui.text(UiText::Delete), writable_ && timers_.count > 1)) {
+        if (!creating_ && ui.button(deleteAction, ui.text(UiText::Delete), writable_ && timers_.count > 1)) {
             if (!deleteConfirm_) {
                 deleteConfirm_ = true;
             } else {
@@ -332,8 +327,8 @@ namespace screens {
         const focus::Phase phase = session_.phase();
         const bool paused = phase == focus::Phase::PausedFocus || phase == focus::Phase::PausedBreak;
         const bool reversed = phase == focus::Phase::Break || phase == focus::Phase::PausedBreak;
-        const bool focusPhase = phase == focus::Phase::WaitingFocus || phase == focus::Phase::Focus
-                             || phase == focus::Phase::PausedFocus;
+        const bool focusPhase =
+            phase == focus::Phase::WaitingFocus || phase == focus::Phase::Focus || phase == focus::Phase::PausedFocus;
         const bool complete = phase == focus::Phase::Complete;
         uint32_t remaining = session_.remainingMs(nowMs);
         if (phase == focus::Phase::WaitingFocus)
@@ -344,8 +339,8 @@ namespace screens {
         char time[8];
         std::snprintf(time, sizeof(time), "%02lu:%02lu", static_cast<unsigned long>(seconds / 60UL),
                       static_cast<unsigned long>(seconds % 60UL));
-        const ui::themes::ColorRole phaseRole = focusPhase || complete ? ui::themes::ColorRole::Accent
-                                                                       : ui::themes::ColorRole::BreakAccent;
+        const ui::themes::ColorRole phaseRole =
+            focusPhase || complete ? ui::themes::ColorRole::Accent : ui::themes::ColorRole::BreakAccent;
         constexpr int16_t railWidth = 40;
         constexpr int16_t gap = 4;
         const ui::Rect hourglass{static_cast<int16_t>(area.x + railWidth + gap), area.y,

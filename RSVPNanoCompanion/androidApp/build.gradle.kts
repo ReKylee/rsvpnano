@@ -17,7 +17,7 @@ android {
     defaultConfig {
         applicationId = "com.rsvpnano.android"
         minSdk = 34
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1"
     }

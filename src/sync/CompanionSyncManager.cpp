@@ -11,6 +11,7 @@
 #include "display/ThemeStore.h"
 #include "fonts/FontCatalog.h"
 #include "fonts/RFont4Format.h"
+#include "net/WifiConnection.h"
 #include "settings/PreferenceSpecs.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
@@ -23,7 +24,7 @@ namespace {
 
     namespace pref = settings::prefs;
 
-    constexpr const char* kMdnsName = "rsvp-nano";
+    constexpr uint32_t kCompanionWifiTimeoutMs = 5000;
     constexpr size_t kMaxMetadataLineChars = 160;
     constexpr size_t kMaxSettingsPatchBytes = 8192;
     constexpr size_t kMaxRssFeedsPatchBytes = 4096;
@@ -217,7 +218,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <section id="help" class="page">
 <div class="card"><h2>How to use this web companion</h2>
 <ul>
-<li>Open Companion sync on the reader, join the <code>RSVP-Nano</code> Wi-Fi network, then open this page.</li>
+<li>Open Companion Sync on the reader, then use the address it shows. If it starts an <code>RSVP-Nano</code> network, join that network first.</li>
 <li>Use Books for prepared book files and Articles for article drafts, article uploads, and synced articles.</li>
 <li>For best book conversion, use the hosted web converter/flasher first. This page is the wireless upload and settings companion, not the full conversion engine.</li>
 <li><code>.txt</code> and <code>.epub</code> uploads are accepted, but EPUB conversion is handled on the device when opened.</li>
@@ -239,7 +240,7 @@ function escRsvp(s){return (s||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').tri
 function articleFile(){const title=$('articleTitle').value.trim()||'Untitled Article';const author=$('articleAuthor').value.trim();const body=escRsvp($('articleBody').value);let out='@rsvp 1\n@title '+title+'\n';if(author)out+='@author '+author+'\n';out+='@para\n'+body+'\n';return {name:safeName(title)+'.rsvp',blob:new Blob([out],{type:'text/plain'})}}
 function html(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function renderList(id,items){$(id).innerHTML=items.length?items.map(b=>`<div class="item"><div class="item-title">${html(b.metadata.title||b.name)}</div><div class="item-meta">${html([b.metadata.author,b.metadata.wordCount?b.metadata.wordCount+' words':null,b.metadata.chapterCount?b.metadata.chapterCount+' chapters':null,bytes(b.bytes),b.reading?b.reading.percent+'% read':null].filter(Boolean).join(' - '))}</div><p><button class="danger" data-delete="${html(encodeURIComponent(b.id))}">Delete</button></p></div>`).join(''):'<span class="muted">Nothing here yet.</span>';document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>delBook(decodeURIComponent(b.dataset.delete)))}
-async function refresh(){try{const info=await api('/api/v1/device');$('infoBox').innerHTML=`${info.name}<br><span class="muted">${info.mode} - ${info.networkSsid||''}</span><br>Pairing code: <strong>${info.pairingCode}</strong>`;const data=await api('/api/v1/library');renderList('booksList',data.books.filter(b=>b.category!=='article'));renderList('articlesList',data.books.filter(b=>b.category==='article'));status('Connected to RSVP Nano.')}catch(e){status('Connection problem: '+e.message)}}
+async function refresh(){try{const info=await api('/api/v1/device');$('infoBox').innerHTML=`${info.name}<br><span class="muted">${info.mode} - ${info.networkSsid||''}</span>`;const data=await api('/api/v1/library');renderList('booksList',data.books.filter(b=>b.category!=='article'));renderList('articlesList',data.books.filter(b=>b.category==='article'));status('Connected to RSVP Nano.')}catch(e){status('Connection problem: '+e.message)}}
 async function delBook(id){if(!confirm('Delete this item?'))return;try{await api('/api/v1/library?id='+encodeURIComponent(id),{method:'DELETE'});await refresh();status('Deleted')}catch(e){status('Delete failed: '+e.message)}}
 async function uploadBlob(blob,name,category){const fd=new FormData();fd.append('file',blob,name);await api('/api/v1/library?name='+encodeURIComponent(name)+'&category='+encodeURIComponent(category),{method:'POST',body:fd})}
 async function uploadPicked(inputId,category){const f=$(inputId).files[0];if(!f){status('Choose a file first.');return}try{await uploadBlob(f,f.name,category);$(inputId).value='';await refresh();status('Uploaded '+f.name)}catch(e){status('Upload failed: '+e.message)}}
@@ -568,12 +569,11 @@ bool CompanionSyncManager::begin(Preferences& preferences) {
     }
 
     instance_ = this;
-    pairingCode_ = std::to_string(static_cast<uint32_t>(esp_random()) % 900000UL + 100000UL);
     statusLine1_ = "Starting sync";
     statusLine2_ = "Preparing Wi-Fi";
     preferences_ = &preferences;
 
-    const bool networkReady = startAccessPoint();
+    const bool networkReady = startStation() || startAccessPoint();
     if (!networkReady) {
         statusLine1_ = "Wi-Fi failed";
         statusLine2_ = "";
@@ -591,8 +591,7 @@ bool CompanionSyncManager::begin(Preferences& preferences) {
     active_ = true;
     statusLine1_ = networkSsid_;
     statusLine2_ = baseUrl();
-    Serial.printf("[sync] ready ssid=%s url=%s pairing=%s\n", networkSsid_.c_str(), statusLine2_.c_str(),
-                  pairingCode_.c_str());
+    Serial.printf("[sync] ready ssid=%s url=%s\n", networkSsid_.c_str(), statusLine2_.c_str());
     return true;
 }
 
@@ -751,6 +750,51 @@ bool CompanionSyncManager::startAccessPoint() {
     return true;
 }
 
+bool CompanionSyncManager::startStation() {
+    const std::string ssid = settings::load<pref::WifiSsid>(*preferences_);
+    if (ssid.empty()) {
+        return false;
+    }
+
+    statusLine1_ = "Connecting to Wi-Fi";
+    statusLine2_ = ssid;
+    const std::string password = settings::load<pref::WifiPassword>(*preferences_);
+    if (!net::connectStation(ssid.c_str(), password.c_str(), nullptr, kCompanionWifiTimeoutMs)) {
+        Serial.printf("[sync] station failed ssid=%s; starting access point\n", ssid.c_str());
+        net::disconnect();
+        return false;
+    }
+
+    networkMode_ = NetworkMode::Station;
+    networkSsid_ = ssid;
+    const String suffix = deviceSuffix();
+    String hostname = "rsvp-nano-" + suffix;
+    const String instanceName = "RSVP-Nano-" + suffix;
+    hostname.toLowerCase();
+    if (!MDNS.begin(hostname.c_str())) {
+        Serial.println("[sync] mDNS failed; starting access point");
+        net::disconnect();
+        networkMode_ = NetworkMode::None;
+        networkSsid_.clear();
+        return false;
+    }
+
+    MDNS.setInstanceName(instanceName.c_str());
+    if (!MDNS.addService("rsvpnano", "tcp", 80)) {
+        Serial.println("[sync] mDNS service failed; starting access point");
+        MDNS.end();
+        net::disconnect();
+        networkMode_ = NetworkMode::None;
+        networkSsid_.clear();
+        return false;
+    }
+    MDNS.addServiceTxt("rsvpnano", "tcp", "id", suffix.c_str());
+    MDNS.addServiceTxt("rsvpnano", "tcp", "api", "1");
+    mdnsStarted_ = true;
+    Serial.printf("[sync] station ssid=%s ip=%s\n", ssid.c_str(), ipToString(WiFi.localIP()).c_str());
+    return true;
+}
+
 bool CompanionSyncManager::startServer() {
     server_.on("/", HTTP_GET, handleRootStatic);
     server_.on("/api/v1/device", HTTP_GET, handleInfoStatic);
@@ -771,16 +815,16 @@ bool CompanionSyncManager::startServer() {
     server_.begin();
     serverStarted_ = true;
 
-    if (networkMode_ == NetworkMode::Station && MDNS.begin(kMdnsName)) {
-        MDNS.addService("http", "tcp", 80);
-    }
     return true;
 }
 
 void CompanionSyncManager::stopServer() {
     if (serverStarted_) {
         server_.stop();
+    }
+    if (mdnsStarted_) {
         MDNS.end();
+        mdnsStarted_ = false;
     }
     finishUpload(false);
     serverStarted_ = false;
@@ -788,10 +832,8 @@ void CompanionSyncManager::stopServer() {
 
 void CompanionSyncManager::handleInfo() {
     const String mode = networkMode_ == NetworkMode::Station ? "station" : "access_point";
-    const String body = String("{") + "\"name\":\"RSVP Nano\"," + "\"mode\":\"" + mode + "\"," + "\"baseUrl\":\""
-                      + jsonEscape(String(baseUrl().c_str())) + "\"," + "\"networkSsid\":\""
-                      + jsonEscape(String(networkSsid_.c_str())) + "\"," + "\"pairingCode\":\"" + pairingCode_.c_str()
-                      + "\"," + "\"apiVersion\":1,\"uploadPath\":\"/api/v1/library\"" + "}";
+    const String body = String("{") + "\"name\":\"RSVP Nano\"," + "\"mode\":\"" + mode + "\"," + "\"networkSsid\":\""
+                      + jsonEscape(String(networkSsid_.c_str())) + "\"," + "\"apiVersion\":1" + "}";
     sendData(200, body);
 }
 

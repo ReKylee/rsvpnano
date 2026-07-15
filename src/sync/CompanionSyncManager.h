@@ -47,6 +47,7 @@ private:
     static void handleFontUploadStatic();
     static void handleNotFoundStatic();
 
+    bool startStation();
     bool startAccessPoint();
     bool startServer();
     void stopServer();
@@ -90,7 +91,6 @@ private:
     String uploadFinalPath_;
     String uploadTmpPath_;
     String uploadError_;
-    std::string pairingCode_;
     std::string networkSsid_;
     Preferences* preferences_ = nullptr;
     std::string statusLine1_ = "Idle";
@@ -99,4 +99,5 @@ private:
     bool active_ = false;
     bool serverStarted_ = false;
     bool settingsChanged_ = false;
+    bool mdnsStarted_ = false;
 };

@@ -4,10 +4,6 @@
 
 #include <functional>
 
-// The device's only station-mode WiFi lifecycle: bring the radio up to reach
-// the internet (RSS feed checks, OTA update checks) and tear it back down.
-// Both callers shared a byte-identical connect/poll/timeout loop before this
-// module; the timeout policy now lives here in one place.
 namespace net {
 
     // Reports association progress as a percentage in [0, 100] while connecting.
@@ -15,7 +11,8 @@ namespace net {
 
     // Brings up WIFI_STA and blocks until associated or the connect timeout
     // elapses. Returns true only when connected. progress may be null.
-    bool connectStation(const char* ssid, const char* password, const WifiProgress& progress = nullptr);
+    bool connectStation(const char* ssid, const char* password, const WifiProgress& progress = nullptr,
+                        uint32_t timeoutMs = 15000);
 
     // Disconnects and powers the radio off (WIFI_OFF).
     void disconnect();

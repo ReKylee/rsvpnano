@@ -5,22 +5,21 @@
 namespace net {
     namespace {
 
-        constexpr uint32_t kWifiConnectTimeoutMs = 15000;
         constexpr uint32_t kWifiConnectPollMs = 250;
 
     } // namespace
 
-    bool connectStation(const char* ssid, const char* password, const WifiProgress& progress) {
+    bool connectStation(const char* ssid, const char* password, const WifiProgress& progress, uint32_t timeoutMs) {
         WiFi.persistent(false);
         WiFi.setAutoReconnect(false);
         WiFi.mode(WIFI_STA);
         WiFi.begin(ssid, password);
 
         const uint32_t startMs = millis();
-        while (WiFi.status() != WL_CONNECTED && millis() - startMs < kWifiConnectTimeoutMs) {
+        while (WiFi.status() != WL_CONNECTED && millis() - startMs < timeoutMs) {
             if (progress) {
                 const uint32_t elapsedMs = millis() - startMs;
-                progress(5 + static_cast<int>((elapsedMs * 15) / kWifiConnectTimeoutMs));
+                progress(5 + static_cast<int>((elapsedMs * 15) / timeoutMs));
             }
             delay(kWifiConnectPollMs);
         }

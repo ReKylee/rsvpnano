@@ -20,7 +20,7 @@ class NanoDeviceSyncServiceTest {
 
         assertEquals("Nano", snapshot.info?.name)
         assertEquals(1, snapshot.books.size)
-        assertEquals(true, snapshot.rssFeeds?.ok)
+        assertEquals(listOf("https://example.com/feed"), snapshot.rssFeeds?.feeds)
     }
 
     @Test
@@ -41,16 +41,13 @@ class NanoDeviceSyncServiceTest {
         val position = service.setBookPosition(
             baseUrl = "http://device.local",
             id = "b12345678",
-            sourceSize = 1234,
-            sourceFingerprint = 3456,
-            wordCount = 1000,
             wordIndex = 250,
         )
 
         assertEquals(listOf("https://example.com/feed"), feeds.feeds)
         assertEquals("/books/Story.rsvp", upload.path)
-        assertEquals(true, delete.ok)
-        assertEquals(true, position.ok)
+        assertEquals(true, delete.deleted)
+        assertEquals(250, position.wordIndex)
         assertEquals("Story.rsvp", client.uploadedName)
         assertEquals("article", client.uploadedCategory)
         assertContentEquals(byteArrayOf(1, 2, 3), client.uploadedData)
@@ -66,15 +63,15 @@ class NanoDeviceSyncServiceTest {
         var deletedId: String? = null
         var savedWordIndex: Int? = null
 
-        override suspend fun fetchInfo(baseUrl: String): NanoInfo = NanoInfo(name = "Nano")
-        override suspend fun listBooks(baseUrl: String): List<NanoBook> = listOf(NanoBook(id = "1", title = "Book"))
+        override suspend fun fetchInfo(baseUrl: String): NanoInfo = NanoInfo(name = "Nano", apiVersion = 1)
+        override suspend fun listBooks(baseUrl: String): List<NanoBook> = listOf(sampleBook(id = "1", title = "Book"))
         override suspend fun fetchSettings(baseUrl: String): NanoSettings = sampleSettings()
         override suspend fun updateSettings(baseUrl: String, settings: NanoSettings): NanoSettings = settings
-        override suspend fun fetchWifiSettings(baseUrl: String): NanoWifiSettings = NanoWifiSettings(ok = true, configured = true, ssid = "RSSP", passwordSet = false)
-        override suspend fun updateWifi(baseUrl: String, ssid: String, password: String): NanoWifiSettings = NanoWifiSettings(ok = true, configured = true, ssid = ssid, passwordSet = true)
-        override suspend fun forgetWifi(baseUrl: String): NanoWifiSettings = NanoWifiSettings(ok = true, configured = false, ssid = "", passwordSet = false)
-        override suspend fun fetchRssFeeds(baseUrl: String): NanoRssFeeds = NanoRssFeeds(ok = true, feeds = listOf("https://example.com/feed"))
-        override suspend fun updateRssFeeds(baseUrl: String, feeds: List<String>): NanoRssFeeds = NanoRssFeeds(ok = true, feeds = feeds)
+        override suspend fun fetchWifiSettings(baseUrl: String): NanoWifiSettings = NanoWifiSettings(configured = true, ssid = "RSSP", passwordSet = false)
+        override suspend fun updateWifi(baseUrl: String, ssid: String, password: String): NanoWifiSettings = NanoWifiSettings(configured = true, ssid = ssid, passwordSet = true)
+        override suspend fun forgetWifi(baseUrl: String): NanoWifiSettings = NanoWifiSettings(configured = false, ssid = "", passwordSet = false)
+        override suspend fun fetchRssFeeds(baseUrl: String): NanoRssFeeds = NanoRssFeeds(feeds = listOf("https://example.com/feed"))
+        override suspend fun updateRssFeeds(baseUrl: String, feeds: List<String>): NanoRssFeeds = NanoRssFeeds(feeds = feeds)
         override suspend fun uploadBook(
             baseUrl: String,
             name: String,
@@ -86,24 +83,21 @@ class NanoDeviceSyncServiceTest {
             uploadedName = name
             uploadedCategory = category
             uploadedData = data
-            return NanoUploadResponse(ok = true, path = "/books/$name")
+            return NanoUploadResponse(path = "/books/$name")
         }
 
         override suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse {
             deletedId = id
-            return NanoUploadResponse(ok = true)
+            return NanoUploadResponse(id = id, deleted = true)
         }
 
         override suspend fun setBookPosition(
             baseUrl: String,
             id: String,
-            sourceSize: Long,
-            sourceFingerprint: Long,
-            wordCount: Int,
             wordIndex: Int,
         ): NanoUploadResponse {
             savedWordIndex = wordIndex
-            return NanoUploadResponse(ok = true)
+            return NanoUploadResponse(id = id, wordIndex = wordIndex)
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.rsvpnano
 
+import com.rsvpnano.models.NanoTheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -12,9 +13,7 @@ class NanoSettingsUpdateHelpersTest {
         val original = sampleSettings()
         val updated = original
             .withWpm(325)
-            .withReaderMode("scroll")
             .withPauseMode("instant")
-            .withAccurateTimeEstimate(false)
             .withPacingLongWordMs(120)
             .withPacingComplexWordMs(80)
             .withPacingPunctuationMs(200)
@@ -22,9 +21,7 @@ class NanoSettingsUpdateHelpersTest {
         assertNotSame(original, updated)
         assertEquals(250, original.reading.wpm)
         assertEquals(325, updated.reading.wpm)
-        assertEquals("scroll", updated.reading.readerMode)
         assertEquals("instant", updated.reading.pauseMode)
-        assertFalse(updated.reading.accurateTimeEstimate)
         assertEquals(100, updated.reading.pacing.longWordMs)
         assertEquals(100, updated.reading.pacing.complexWordMs)
         assertEquals(200, updated.reading.pacing.punctuationMs)
@@ -48,7 +45,7 @@ class NanoSettingsUpdateHelpersTest {
         assertEquals(100, updated.reading.wpm)
         assertEquals(600, updated.reading.pacing.longWordMs)
         assertEquals(0, updated.reading.pacing.complexWordMs)
-        assertEquals(4, updated.display.brightnessIndex)
+        assertEquals(19, updated.display.brightnessIndex)
         assertEquals(0, updated.display.fontSizeIndex)
         assertEquals(3, updated.typography.tracking)
         assertEquals(30, updated.typography.anchorPercent)
@@ -62,7 +59,6 @@ class NanoSettingsUpdateHelpersTest {
         val updated = original
             .withBrightnessIndex(4)
             .withHandedness("left")
-            .withReaderControls("rewind_top_right")
             .withFooterMetric("chapter_time")
             .withBatteryLabel("time_remaining")
             .withThemeId("night")
@@ -73,7 +69,6 @@ class NanoSettingsUpdateHelpersTest {
         assertEquals(1, original.display.brightnessIndex)
         assertEquals(4, updated.display.brightnessIndex)
         assertEquals("left", updated.display.handedness)
-        assertEquals("rewind_top_right", updated.display.readerControls)
         assertEquals("chapter_time", updated.display.footerMetric)
         assertEquals("time_remaining", updated.display.batteryLabel)
         assertEquals("night", updated.display.themeId)
@@ -90,6 +85,18 @@ class NanoSettingsUpdateHelpersTest {
 
         assertEquals("catppuccin-mocha", custom.display.themeId)
         assertEquals("default", blank.display.themeId)
+    }
+
+    @Test
+    fun themeIdHelperRestoresThatThemesTypeface() {
+        val settings = sampleSettings().copy(
+            themes = listOf(NanoTheme(id = "night", name = "Night", typeface = "atkinson")),
+        )
+
+        val updated = settings.withThemeId("night")
+
+        assertEquals("night", updated.display.themeId)
+        assertEquals("atkinson", updated.typography.typeface)
     }
 
     @Test

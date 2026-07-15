@@ -88,17 +88,11 @@ class NanoDeviceSyncService(
     suspend fun setBookPosition(
         baseUrl: String,
         id: String,
-        sourceSize: Long,
-        sourceFingerprint: Long,
-        wordCount: Int,
         wordIndex: Int,
     ): NanoUploadResponse =
         client.setBookPosition(
             baseUrl = baseUrl,
             id = id,
-            sourceSize = sourceSize,
-            sourceFingerprint = sourceFingerprint,
-            wordCount = wordCount,
             wordIndex = wordIndex,
         )
 }

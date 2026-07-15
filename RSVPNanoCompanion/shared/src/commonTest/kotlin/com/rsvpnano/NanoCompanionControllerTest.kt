@@ -6,6 +6,8 @@ import com.rsvpnano.app.NanoDeviceSyncService
 import com.rsvpnano.app.PendingDraftService
 import com.rsvpnano.converters.RsvpBookFile
 import com.rsvpnano.models.NanoBook
+import com.rsvpnano.models.NanoBookSource
+import com.rsvpnano.models.NanoReadingProgress
 import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoSettings
@@ -50,7 +52,7 @@ class NanoCompanionControllerTest {
         assertEquals(1, snapshot.syncedCount)
         assertEquals(emptyList(), snapshot.drafts)
         assertEquals("Example.rsvp", client.uploadedFilename)
-        assertEquals(listOf(NanoBook(id = "Example.rsvp", title = "Example")), snapshot.books)
+        assertEquals(listOf(sampleBook(id = "Example.rsvp", title = "Example")), snapshot.books)
     }
 
     @Test
@@ -120,15 +122,15 @@ class NanoCompanionControllerTest {
 
         assertEquals("Manual.rsvp", client.uploadedFilename)
         assertEquals("book", client.uploadedCategory)
-        assertEquals(listOf(NanoBook(id = "Manual.rsvp", title = "Manual")), snapshot.books)
+        assertEquals(listOf(sampleBook(id = "Manual.rsvp", title = "Manual")), snapshot.books)
     }
 
     @Test
     fun deleteBooksDeletesEachBookAndRefreshesBooks() = runBlocking {
         val client = RecordingNanoClient(
             initialBooks = listOf(
-                NanoBook(id = "b00000001", name = "One.rsvp", title = "One"),
-                NanoBook(id = "b00000002", name = "Two.rsvp", title = "Two"),
+                sampleBook(id = "b00000001", title = "One"),
+                sampleBook(id = "b00000002", title = "Two"),
             )
         )
         val controller = controller(InMemoryPendingStore(), client)
@@ -144,14 +146,14 @@ class NanoCompanionControllerTest {
 
     @Test
     fun setBookPositionSavesAndRefreshesBooks() = runBlocking {
-        val book = NanoBook(
-            id = "b12345678",
-            name = "Manual.rsvp",
-            title = "Manual",
-            sourceSize = 1234,
-            sourceFingerprint = 3456,
-            wordCount = 1000,
-            wordIndex = 100,
+        val book = sampleBook(id = "b12345678", title = "Manual", wordCount = 1000).copy(
+            source = NanoBookSource(size = 1234, fingerprint = 3456),
+            reading = NanoReadingProgress(
+                wordIndex = 100,
+                percent = 10,
+                remainingWords = 899,
+                estimatedMinutes = 3,
+            ),
         )
         val client = RecordingNanoClient(initialBooks = listOf(book))
         val controller = controller(InMemoryPendingStore(), client)
@@ -196,8 +198,8 @@ class NanoCompanionControllerTest {
         val cleared = controller.clearWifiSettings(baseUrl = "http://device.local")
 
         assertEquals("Home" to "secret", client.savedWifi)
-        assertEquals(NanoWifiSettings(ok = true, configured = true, ssid = "Home", passwordSet = true), saved.wifiSettings)
-        assertEquals(NanoWifiSettings(ok = true, configured = false, ssid = "", passwordSet = false), cleared.wifiSettings)
+        assertEquals(NanoWifiSettings(configured = true, ssid = "Home", passwordSet = true), saved.wifiSettings)
+        assertEquals(NanoWifiSettings(configured = false, ssid = "", passwordSet = false), cleared.wifiSettings)
     }
 
     private fun controller(
@@ -235,7 +237,7 @@ class NanoCompanionControllerTest {
         var savedPositionWordIndex: Int? = null
         val deletedFilenames = mutableListOf<String>()
 
-        override suspend fun fetchInfo(baseUrl: String): NanoInfo = NanoInfo(name = "Nano")
+        override suspend fun fetchInfo(baseUrl: String): NanoInfo = NanoInfo(name = "Nano", apiVersion = 1)
 
         override suspend fun listBooks(baseUrl: String): List<NanoBook> = books
 
@@ -247,22 +249,22 @@ class NanoCompanionControllerTest {
         }
 
         override suspend fun fetchWifiSettings(baseUrl: String): NanoWifiSettings =
-            NanoWifiSettings(ok = true, configured = true, ssid = "RSVP", passwordSet = false)
+            NanoWifiSettings(configured = true, ssid = "RSVP", passwordSet = false)
 
         override suspend fun updateWifi(baseUrl: String, ssid: String, password: String): NanoWifiSettings {
             savedWifi = ssid to password
-            return NanoWifiSettings(ok = true, configured = true, ssid = ssid, passwordSet = true)
+            return NanoWifiSettings(configured = true, ssid = ssid, passwordSet = true)
         }
 
         override suspend fun forgetWifi(baseUrl: String): NanoWifiSettings =
-            NanoWifiSettings(ok = true, configured = false, ssid = "", passwordSet = false)
+            NanoWifiSettings(configured = false, ssid = "", passwordSet = false)
 
         override suspend fun fetchRssFeeds(baseUrl: String): NanoRssFeeds =
-            NanoRssFeeds(ok = true, feeds = deviceFeeds)
+            NanoRssFeeds(feeds = deviceFeeds)
 
         override suspend fun updateRssFeeds(baseUrl: String, feeds: List<String>): NanoRssFeeds {
             savedFeeds = feeds
-            return NanoRssFeeds(ok = true, feeds = feeds)
+            return NanoRssFeeds(feeds = feeds)
         }
 
         override suspend fun uploadBook(
@@ -275,27 +277,24 @@ class NanoCompanionControllerTest {
             onProgress?.invoke(data.size.toLong(), data.size.toLong())
             uploadedFilename = name
             uploadedCategory = category
-            books = listOf(NanoBook(id = name, title = name.substringBeforeLast('.')))
-            return NanoUploadResponse(ok = true, path = "/books/$name")
+            books = listOf(sampleBook(id = name))
+            return NanoUploadResponse(path = "/books/$name")
         }
 
         override suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse {
             deletedFilenames += id
             books = books.filterNot { it.id == id }
-            return NanoUploadResponse(ok = true)
+            return NanoUploadResponse(id = id, deleted = true)
         }
 
         override suspend fun setBookPosition(
             baseUrl: String,
             id: String,
-            sourceSize: Long,
-            sourceFingerprint: Long,
-            wordCount: Int,
             wordIndex: Int,
         ): NanoUploadResponse {
             savedPositionId = id
             savedPositionWordIndex = wordIndex
-            return NanoUploadResponse(ok = true)
+            return NanoUploadResponse(id = id, wordIndex = wordIndex)
         }
     }
 

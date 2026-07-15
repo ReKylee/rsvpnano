@@ -28,15 +28,15 @@ class RsvpSharedDependenciesDeviceTest {
     }
 
     private class FakeClient : NanoClient {
-        override suspend fun fetchInfo(baseUrl: String): NanoInfo = NanoInfo(name = "Nano")
+        override suspend fun fetchInfo(baseUrl: String): NanoInfo = NanoInfo(name = "Nano", apiVersion = 1)
         override suspend fun listBooks(baseUrl: String): List<NanoBook> = emptyList()
         override suspend fun fetchSettings(baseUrl: String): NanoSettings = sampleSettings()
         override suspend fun updateSettings(baseUrl: String, settings: NanoSettings): NanoSettings = settings
-        override suspend fun fetchWifiSettings(baseUrl: String): NanoWifiSettings = NanoWifiSettings(ok = true, configured = false, ssid = "", passwordSet = false)
-        override suspend fun updateWifi(baseUrl: String, ssid: String, password: String): NanoWifiSettings = NanoWifiSettings(ok = true, configured = true, ssid = ssid, passwordSet = true)
-        override suspend fun forgetWifi(baseUrl: String): NanoWifiSettings = NanoWifiSettings(ok = true, configured = false, ssid = "", passwordSet = false)
-        override suspend fun fetchRssFeeds(baseUrl: String): NanoRssFeeds = NanoRssFeeds(ok = true, feeds = emptyList())
-        override suspend fun updateRssFeeds(baseUrl: String, feeds: List<String>): NanoRssFeeds = NanoRssFeeds(ok = true, feeds = feeds)
+        override suspend fun fetchWifiSettings(baseUrl: String): NanoWifiSettings = NanoWifiSettings(configured = false, ssid = "", passwordSet = false)
+        override suspend fun updateWifi(baseUrl: String, ssid: String, password: String): NanoWifiSettings = NanoWifiSettings(configured = true, ssid = ssid, passwordSet = true)
+        override suspend fun forgetWifi(baseUrl: String): NanoWifiSettings = NanoWifiSettings(configured = false, ssid = "", passwordSet = false)
+        override suspend fun fetchRssFeeds(baseUrl: String): NanoRssFeeds = NanoRssFeeds(feeds = emptyList())
+        override suspend fun updateRssFeeds(baseUrl: String, feeds: List<String>): NanoRssFeeds = NanoRssFeeds(feeds = feeds)
         override suspend fun uploadBook(
             baseUrl: String,
             name: String,
@@ -44,26 +44,21 @@ class RsvpSharedDependenciesDeviceTest {
             category: String?,
             onProgress: ((sent: Long, total: Long) -> Unit)?,
         ): NanoUploadResponse =
-            NanoUploadResponse(ok = true, path = "/books/$name")
-        override suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse = NanoUploadResponse(ok = true)
+            NanoUploadResponse(path = "/books/$name")
+        override suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse = NanoUploadResponse(id = id, deleted = true)
         override suspend fun setBookPosition(
             baseUrl: String,
             id: String,
-            sourceSize: Long,
-            sourceFingerprint: Long,
-            wordCount: Int,
             wordIndex: Int,
-        ): NanoUploadResponse = NanoUploadResponse(ok = true)
+        ): NanoUploadResponse = NanoUploadResponse(id = id, wordIndex = wordIndex)
     }
 
     private fun sampleSettings(): NanoSettings = NanoSettings(
-        ok = true,
         version = 1,
+        applied = true,
         reading = NanoSettings.Reading(
             wpm = 250,
-            readerMode = "single",
             pauseMode = "sentence",
-            accurateTimeEstimate = true,
             pacing = NanoSettings.Pacing(longWordMs = 0, complexWordMs = 0, punctuationMs = 0),
         ),
         display = NanoSettings.Display(

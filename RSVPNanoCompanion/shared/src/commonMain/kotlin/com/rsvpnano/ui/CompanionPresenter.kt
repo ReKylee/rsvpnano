@@ -349,8 +349,8 @@ class CompanionPresenter(
                         state.copy(
                             settings = snapshot.settings,
                             isSavingSettings = false,
-                            settingsSaveStatus = "Saved on Nano. Exit Companion Sync to apply every setting.",
-                            notice = CompanionNotice.Neutral("Saved to Nano. Some changes apply after leaving Companion Sync."),
+                            settingsSaveStatus = "Saved and applied on Nano.",
+                            notice = CompanionNotice.Success("Reader settings applied."),
                         )
                     } else {
                         state
@@ -1249,6 +1249,18 @@ class CompanionPresenter(
             lastError = result.exceptionOrNull()
         }
         throw lastError ?: IllegalStateException("Online theme catalog could not be loaded.")
+    }
+
+    private suspend fun fetchFirstFontCatalog(): Pair<String, CompanionFontCatalogSnapshot> {
+        var lastError: Throwable? = null
+        for (url in FONT_CATALOG_URLS) {
+            val result = runCatching { companionController.fetchFontCatalog(url) }
+            if (result.isSuccess) {
+                return url to result.getOrThrow()
+            }
+            lastError = result.exceptionOrNull()
+        }
+        throw lastError ?: IllegalStateException("Online font catalog could not be loaded.")
     }
 
     private fun themeUploadError(error: Throwable): String {

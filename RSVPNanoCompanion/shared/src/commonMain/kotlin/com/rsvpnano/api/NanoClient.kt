@@ -56,9 +56,6 @@ interface NanoClient {
     suspend fun setBookPosition(
         baseUrl: String,
         id: String,
-        sourceSize: Long,
-        sourceFingerprint: Long,
-        wordCount: Int,
         wordIndex: Int,
     ): NanoUploadResponse
 }

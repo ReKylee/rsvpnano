@@ -41,7 +41,6 @@ jobs:
             CHANNEL="$GITHUB_REF_NAME"
           fi
 
-          SHORT_SHA="$(git rev-parse --short=12 HEAD)"
           BUILD_SHA="$(git rev-parse HEAD)"
 
           if ! echo "$CHANNEL" | grep -Eq '^preview-[A-Za-z0-9._-]+$'; then
@@ -49,18 +48,27 @@ jobs:
             exit 1
           fi
 
-          VERSION="${CHANNEL}+${SHORT_SHA}"
-
           echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
-          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           echo "commit_sha=${BUILD_SHA}" >> "$GITHUB_OUTPUT"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "RSVP_FIRMWARE_TAG=${CHANNEL}" >> "$GITHUB_ENV"
 
           if [ -n "$LABEL" ]; then
             echo "title=${LABEL}" >> "$GITHUB_OUTPUT"
           else
             echo "title=Preview ${CHANNEL}" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Move preview tag to this commit
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          RELEASE_TAG: ${{ steps.preview.outputs.channel }}
+          BUILD_SHA: ${{ steps.preview.outputs.commit_sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git tag -f "$RELEASE_TAG" "$BUILD_SHA"
+          git push origin "refs/tags/${RELEASE_TAG}" --force
 
       - name: Install PlatformIO
         run: pip install platformio
@@ -81,7 +89,7 @@ jobs:
 
       - name: Export firmware assets
         shell: bash
-        run: python3 "${{ steps.exporter.outputs.path }}" --version "${{ steps.preview.outputs.version }}"
+        run: python3 "${{ steps.exporter.outputs.path }}"
 
       - name: Find firmware assets
         id: assets
@@ -159,8 +167,6 @@ jobs:
 
           Tag/channel: `${{ steps.preview.outputs.channel }}`
           Commit: `${{ steps.preview.outputs.commit_sha }}`
-          Build version: `${{ steps.preview.outputs.version }}`
-
           Assets:
           - `rsvp-nano-esp32-s3-touch-lcd-3.49.bin` is the full browser-flasher image for fresh installs on the Touch LCD 3.49.
           - `rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin` is the Touch LCD 3.49 OTA binary.
@@ -177,18 +183,6 @@ jobs:
           - `rsvp-nano-esp32-s3-touch-amoled-2.41.bin` is the full browser-flasher image for Touch AMOLED 2.41 boards.
           - `rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin` is the Touch AMOLED 2.41 OTA binary.
           NOTES
-
-      - name: Move preview tag to this commit
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          RELEASE_TAG: ${{ steps.preview.outputs.channel }}
-          BUILD_SHA: ${{ steps.preview.outputs.commit_sha }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git tag -f "$RELEASE_TAG" "$BUILD_SHA"
-          git push origin "refs/tags/${RELEASE_TAG}" --force
 
       - name: Publish or update preview release
         env:

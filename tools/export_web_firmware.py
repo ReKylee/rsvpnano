@@ -6,13 +6,13 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB_FIRMWARE_DIR = ROOT / "web" / "firmware"
 BOOT_APP0_GLOB = "framework-arduinoespressif32*/tools/partitions/boot_app0.bin"
+VERSION_DECLARATION = "inline constexpr char kFirmwareVersion[] = "
 
 FLASH_EXPORTS = (
     {
@@ -98,12 +98,10 @@ OTA_EXPORTS = (
 )
 
 
-def run(command: list[str], version: str | None = None) -> None:
+def run(command: list[str]) -> None:
     print("+", " ".join(command))
     env = os.environ.copy()
     env.setdefault("PLATFORMIO_SETTING_ENABLE_TELEMETRY", "No")
-    if version:
-        env["RSVP_FIRMWARE_VERSION"] = version
     subprocess.run(command, cwd=ROOT, check=True, env=env)
 
 
@@ -117,16 +115,6 @@ def pio_command() -> str:
         return found
 
     raise SystemExit("PlatformIO Core was not found. Install it or activate the PlatformIO env.")
-
-
-def git_version() -> str:
-    try:
-        value = subprocess.check_output(
-            ["git", "describe", "--tags", "--always", "--dirty"], cwd=ROOT, text=True
-        ).strip()
-        return value or "dev"
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return "dev"
 
 
 def find_boot_app0() -> Path:
@@ -188,10 +176,37 @@ def export_ota_binary(env: str, output: Path) -> None:
     shutil.copy2(firmware_path, output)
 
 
+def read_generated_version(env: str) -> str:
+    header = ROOT / ".pio" / "build" / env / "generated" / "FirmwareVersion.generated.h"
+    if not header.exists():
+        raise SystemExit(f"Missing generated firmware version header for {env}: {header}")
+
+    for line in header.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped.startswith(VERSION_DECLARATION) or not stripped.endswith(";"):
+            continue
+
+        encoded_version = stripped[len(VERSION_DECLARATION) : -1].strip()
+        version = json.loads(encoded_version)
+        if isinstance(version, str) and version:
+            return version
+
+    raise SystemExit(f"Could not read firmware version from generated header: {header}")
+
+
+def generated_version(envs: list[str]) -> str:
+    versions = {read_generated_version(env) for env in envs}
+    if len(versions) != 1:
+        formatted = ", ".join(sorted(versions))
+        raise SystemExit(f"PlatformIO environments produced different firmware versions: {formatted}")
+
+    return versions.pop()
+
+
 def update_manifest(path: Path, version: str) -> None:
-    manifest = json.loads(path.read_text())
+    manifest = json.loads(path.read_text(encoding="utf-8"))
     manifest["version"] = version
-    path.write_text(json.dumps(manifest, indent=2) + "\n")
+    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
 
 def main() -> int:
@@ -201,32 +216,28 @@ def main() -> int:
         action="store_true",
         help="Use existing .pio build outputs instead of running PlatformIO first.",
     )
-    parser.add_argument("--version", default=git_version(), help="Version string for manifests.")
     args = parser.parse_args()
 
-    pio = None if args.skip_build else pio_command()
-    WEB_FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
+    required_envs = sorted(
+        {export["env"] for export in FLASH_EXPORTS}
+        | {export["env"] for export in OTA_EXPORTS}
+    )
 
     if not args.skip_build:
-        required_envs = sorted(
-            {
-                export["env"]
-                for export in FLASH_EXPORTS
-            }
-            | {
-                export["env"]
-                for export in OTA_EXPORTS
-            }
-        )
+        pio = pio_command()
         for env in required_envs:
-            assert pio is not None
-            run([pio, "run", "-e", env], args.version)
+            run([pio, "run", "-e", env])
+
+    version = generated_version(required_envs)
+    print(f"Firmware version: {version}")
+
+    WEB_FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
 
     for export in FLASH_EXPORTS:
         output = WEB_FIRMWARE_DIR / export["binary"]
         print(f"Exporting {export['label']} -> {output}")
         merge_firmware(export["env"], output)
-        update_manifest(WEB_FIRMWARE_DIR / export["manifest"], args.version)
+        update_manifest(WEB_FIRMWARE_DIR / export["manifest"], version)
 
     for export in OTA_EXPORTS:
         ota_output = WEB_FIRMWARE_DIR / export["binary"]

@@ -14,8 +14,8 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.outlined.Wifi
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -26,7 +26,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
@@ -53,6 +52,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rsvpnano.app.CompanionNotice
+import com.rsvpnano.app.NanoEndpoint
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.PendingUpload
@@ -76,13 +76,14 @@ fun RsvpNanoSharedApp(
     onConnect: () -> Unit,
     onShowHelp: () -> Unit,
     onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
-    onAddressChange: (String) -> Unit,
-    onConnectDefault: () -> Unit,
     onWifiSsidChange: (String) -> Unit,
     onWifiPasswordChange: (String) -> Unit,
     onSaveWifi: () -> Unit,
     onClearWifi: () -> Unit,
+    onRememberCurrentNano: () -> Unit,
     onForgetRememberedNano: () -> Unit,
+    onSelectNano: (NanoEndpoint) -> Unit,
+    onCancelNanoSelection: () -> Unit,
     onGrantPermissions: () -> Unit,
     needsArticleFetch: (PendingUpload) -> Boolean,
     onEditDraft: (PendingUpload) -> Unit,
@@ -180,8 +181,7 @@ fun RsvpNanoSharedApp(
                     )
                     SharedConnectionBar(
                         uiState = uiState,
-                        onAddressChange = onAddressChange,
-                        onConnect = onConnect,
+                        onRememberCurrentNano = onRememberCurrentNano,
                     )
                 }
             },
@@ -249,8 +249,6 @@ fun RsvpNanoSharedApp(
                         uiState = uiState,
                         onRefresh = onRefresh,
                         onUpdateSettings = onUpdateSettings,
-                        onAddressChange = onAddressChange,
-                        onConnectDefault = onConnectDefault,
                         onWifiSsidChange = onWifiSsidChange,
                         onWifiPasswordChange = onWifiPasswordChange,
                         onSaveWifi = onSaveWifi,
@@ -286,6 +284,14 @@ fun RsvpNanoSharedApp(
                         showAddPicker = false
                         showRssDialog = true
                     },
+                )
+            }
+
+            if (uiState.discoveredNanos.isNotEmpty()) {
+                NanoPickerDialog(
+                    nanos = uiState.discoveredNanos,
+                    onSelect = onSelectNano,
+                    onDismiss = onCancelNanoSelection,
                 )
             }
 
@@ -327,8 +333,7 @@ fun RsvpNanoSharedApp(
 @Composable
 private fun SharedConnectionBar(
     uiState: CompanionUiState,
-    onAddressChange: (String) -> Unit,
-    onConnect: () -> Unit,
+    onRememberCurrentNano: () -> Unit,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -359,22 +364,54 @@ private fun SharedConnectionBar(
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                 }
             }
-            if (uiState.showAddressEntry) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = uiState.address,
-                        onValueChange = onAddressChange,
+            if (uiState.canRememberCurrentNano) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Remember ${uiState.nanoSsid} for direct connection when regular Wi-Fi is unavailable?",
                         modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        label = { Text("Reader address") },
+                        style = MaterialTheme.typography.bodySmall,
                     )
-                    Button(onClick = onConnect) {
-                        Text("Check")
+                    TextButton(onClick = onRememberCurrentNano) {
+                        Text("Remember")
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun NanoPickerDialog(
+    nanos: List<NanoEndpoint>,
+    onSelect: (NanoEndpoint) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Choose a Nano") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                nanos.forEach { endpoint ->
+                    TextButton(
+                        onClick = { onSelect(endpoint) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(endpoint.nano.ssid, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+    )
 }
 
 @Composable

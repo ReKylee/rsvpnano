@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -337,11 +338,18 @@ private fun PendingArticleRow(
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = draft.title, style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        text = pendingArticleMeta(draft = draft, needsFetch = needsFetch),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        MetadataField("Status", if (needsFetch) "Needs article text" else "Ready to sync")
+                        MetadataField("Size", draft.body.encodeToByteArray().size.toByteLabel())
+                        draft.sourceUrl
+                            ?.takeIf { it.isNotBlank() }
+                            ?.substringAfter("://")
+                            ?.substringBefore("/")
+                            ?.let { MetadataField("Source", it) }
+                    }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -384,11 +392,15 @@ private fun LibraryBookRow(
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = book.displayTitle, style = MaterialTheme.typography.titleSmall)
-                Text(
-                    text = book.libraryMetaLabel,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    book.metadata.author.takeIf { it.isNotBlank() }?.let { MetadataField("Author", it) }
+                    book.metadata.wordCount.takeIf { it > 0 }?.let { MetadataField("Words", it.toString()) }
+                    book.metadata.chapterCount.takeIf { it > 0 }?.let { MetadataField("Chapters", it.toString()) }
+                    MetadataField("Size", book.byteLabel)
+                }
             }
             DestructiveIconButton(
                 contentDescription = "Delete",
@@ -428,14 +440,17 @@ private fun LibraryBookDialog(
             title = { Text(text = book.displayTitle) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    metadata.author.takeIf { it.isNotBlank() }?.let { MetadataLine("Author", it) }
-                    reading?.currentChapter?.let { MetadataLine("Current chapter", "${it.number}. ${it.title}") }
-                    MetadataLine("Length", "${metadata.wordCount} words · ${metadata.chapterCount} chapters")
+                    metadata.author.takeIf { it.isNotBlank() }?.let { MetadataField("Author", it) }
+                    reading?.currentChapter?.let { MetadataField("Current chapter", "${it.number}. ${it.title}") }
+                    MetadataField("Word count", metadata.wordCount.toString())
+                    MetadataField("Chapters", metadata.chapterCount.toString())
                     reading?.let {
-                        MetadataLine("Progress", "${it.percent}% · ${it.remainingWords} words remaining")
-                        MetadataLine("Reading time", "About ${it.estimatedMinutes} min remaining")
+                        MetadataField("Progress", "${it.percent}%")
+                        MetadataField("Remaining", "${it.remainingWords} words")
+                        MetadataField("Reading time", "About ${it.estimatedMinutes} min remaining")
                     }
-                    MetadataLine("File", "${book.byteLabel} · ${book.name}")
+                    MetadataField("File size", book.byteLabel)
+                    MetadataField("Filename", book.name)
                     if (book.source != null && metadata.wordCount > 0) {
                         FilledTonalButton(onClick = { showPositionDialog = true }) {
                             Text("Change reading position")
@@ -467,10 +482,10 @@ private fun LibraryBookDialog(
 }
 
 @Composable
-private fun MetadataLine(label: String, value: String) {
+private fun MetadataField(label: String, value: String) {
     Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
         Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(text = value, style = MaterialTheme.typography.bodyMedium)
+        Text(text = value, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -545,23 +560,8 @@ private fun ReadingPositionDialog(
 val NanoBook.isArticle: Boolean
     get() = category == "article"
 
-val NanoBook.libraryMetaLabel: String
-    get() = listOfNotNull(
-        metadata.author.takeIf { it.isNotBlank() },
-        metadata.wordCount.takeIf { it > 0 }?.let { "$it words" },
-        reading?.percent?.let { "$it% read" },
-        byteLabel,
-        name.takeIf { displayTitle != name.substringAfterLast('/') },
-    ).joinToString(" · ").ifBlank { id }
-
 val NanoBook.byteLabel: String
     get() = bytes.toByteLabel()
-
-fun pendingArticleMeta(draft: PendingUpload, needsFetch: Boolean): String {
-    val state = if (needsFetch) "Needs article text" else "Ready to sync"
-    val source = draft.sourceUrl?.takeIf { it.isNotBlank() }?.substringAfter("://")?.substringBefore("/")
-    return listOfNotNull(state, draft.body.encodeToByteArray().size.toByteLabel(), source).joinToString(" · ")
-}
 
 fun Int.toByteLabel(): String {
     return when {

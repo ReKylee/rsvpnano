@@ -89,13 +89,12 @@ bash RSVPNanoCompanion/tools/build_shared_xcframework.sh
 ## Connect To The Reader
 
 1. Put the reader into `Companion sync`.
-2. Join the `RSVP-Nano-xxxxxx` Wi-Fi network shown on the reader in iPhone Settings.
-3. Return to the app.
-4. The app checks `http://192.168.4.1` automatically.
-5. If the default address is not reachable, enter the address shown on the reader.
+2. Press `Connect` in the app.
+3. If the reader joined the same Wi-Fi network, the app discovers it automatically.
+4. Otherwise, iOS offers the reader's `RSVP-Nano-xxxxxx` direct network.
 
-The app cannot change the reader firmware UI. The firmware currently shows the AP name and
-`http://192.168.4.1` while Companion sync is active.
+The firmware shows either the shared Wi-Fi network or the direct network, plus the active local
+address, while Companion Sync is open.
 
 ## Current Capabilities
 

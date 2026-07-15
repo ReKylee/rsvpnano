@@ -6,19 +6,7 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 
 object SharedAppUtils {
-    const val DEFAULT_DEVICE_ADDRESS = "http://192.168.4.1"
-
-    fun normalizedAddress(value: String): String {
-        val trimmed = value.trim()
-        if (trimmed.isEmpty()) {
-            return DEFAULT_DEVICE_ADDRESS
-        }
-        return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-            trimmed
-        } else {
-            "http://$trimmed"
-        }
-    }
+    const val ACCESS_POINT_BASE_URL = "http://192.168.4.1"
 
     fun nowIso8601(): String = Clock.System.now().toString()
 

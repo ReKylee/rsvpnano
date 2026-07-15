@@ -5,7 +5,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
 /**
- * Shared storage for companion app settings (default address, remembered Nano).
+ * Shared storage for the remembered Nano.
  */
 interface AppSettingsStore {
     suspend fun load(): CompanionAppSettings

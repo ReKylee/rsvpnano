@@ -1,6 +1,7 @@
 # RSVP Nano Android Companion
 
 Native Android companion app for RSVP Nano.
+Requires Android 14 or newer.
 
 The Android UI is Jetpack Compose. Business logic comes from Kotlin Multiplatform modules:
 `:shared` owns companion workflows, persistence, RSS/article drafts, device API access, and sync
@@ -63,13 +64,12 @@ adb -s PHONE_LAN_IP:5555 install -r RSVPNanoCompanion/androidApp/build/outputs/a
 ## Connect To The Reader
 
 1. Put the reader into `Companion sync`.
-2. Join the `RSVP-Nano-xxxxxx` Wi-Fi network shown on the reader from Android Wi-Fi settings.
-3. Return to the app.
-4. The app checks `http://192.168.4.1` automatically.
-5. If the default address is not reachable, enter the address shown on the reader.
+2. Press `Connect` in the app.
+3. If the reader joined the same Wi-Fi network, the app discovers it automatically.
+4. Otherwise, Android offers the reader's `RSVP-Nano-xxxxxx` direct network.
 
-The app permits cleartext HTTP because the reader exposes its companion API at
-`http://192.168.4.1` while in Companion sync mode.
+The app permits cleartext HTTP because the reader exposes its companion API only on the local
+network or its direct Wi-Fi network while Companion Sync is open.
 
 ## Share Target
 

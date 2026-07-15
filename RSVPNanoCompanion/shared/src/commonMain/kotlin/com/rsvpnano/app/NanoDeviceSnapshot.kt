@@ -23,9 +23,9 @@ data class NanoDeviceSnapshot(
             val bookLabel = if (bookCount == 1) "book" else "books"
             val articleLabel = if (articleCount == 1) "article" else "articles"
             val knownProgressCount = books.count { it.reading != null }
-            val base = "$bookCount $bookLabel · $articleCount $articleLabel"
+            val base = "$bookCount $bookLabel and $articleCount $articleLabel"
             return if (knownProgressCount > 0) {
-                "$base · $knownProgressCount with saved progress"
+                "$base, with saved progress for $knownProgressCount"
             } else {
                 base
             }

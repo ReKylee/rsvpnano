@@ -11,39 +11,54 @@ interface NanoWifiConnector {
     fun start()
     fun stop()
     fun refreshSnapshot()
-    fun hasRequiredPermissions(): Boolean
+    suspend fun discoverNanos(): List<NanoEndpoint>
     fun requestNanoNetwork(
         rememberedNano: RememberedNano? = null,
     ): NanoWifiRequestResult
-    fun cancelNanoRequest()
-    fun releaseRequestedNanoNetwork()
     suspend fun <T> withNanoNetwork(block: suspend () -> T): T
 }
 
+data class NanoEndpoint(
+    val baseUrl: String,
+    val nano: RememberedNano,
+)
+
 sealed interface NanoConnectionState {
     val currentNano: RememberedNano?
+    val transport: NanoConnectionTransport?
 
     data object Disconnected : NanoConnectionState {
         override val currentNano: RememberedNano? = null
+        override val transport: NanoConnectionTransport? = null
     }
 
     data class Requesting(
         val rememberedNano: RememberedNano?,
     ) : NanoConnectionState {
         override val currentNano: RememberedNano? = rememberedNano
+        override val transport: NanoConnectionTransport = NanoConnectionTransport.AccessPoint
     }
 
     data class WifiAttached(
         override val currentNano: RememberedNano?,
-    ) : NanoConnectionState
+    ) : NanoConnectionState {
+        override val transport: NanoConnectionTransport = NanoConnectionTransport.AccessPoint
+    }
 
     data class CheckingReader(
         override val currentNano: RememberedNano?,
+        override val transport: NanoConnectionTransport,
     ) : NanoConnectionState
 
     data class ReaderConnected(
         override val currentNano: RememberedNano?,
+        override val transport: NanoConnectionTransport,
     ) : NanoConnectionState
+}
+
+enum class NanoConnectionTransport {
+    LocalNetwork,
+    AccessPoint,
 }
 
 data class NanoWifiSnapshot(
@@ -66,7 +81,6 @@ sealed interface NanoWifiRequestResult {
     data object AlreadyAttached : NanoWifiRequestResult
     data object AlreadyRequesting : NanoWifiRequestResult
     data object MissingPermissions : NanoWifiRequestResult
-    data object Unsupported : NanoWifiRequestResult
     data class Failed(val reason: String) : NanoWifiRequestResult
 }
 
@@ -79,8 +93,8 @@ val NanoConnectionState.isConnected: Boolean
 
 val NanoConnectionState.isWifiAttached: Boolean
     get() = this is NanoConnectionState.WifiAttached ||
-        this is NanoConnectionState.CheckingReader ||
-        this is NanoConnectionState.ReaderConnected
+        (this is NanoConnectionState.CheckingReader && transport == NanoConnectionTransport.AccessPoint) ||
+        (this is NanoConnectionState.ReaderConnected && transport == NanoConnectionTransport.AccessPoint)
 
 val NanoConnectionState.isCheckingReader: Boolean
     get() = this is NanoConnectionState.CheckingReader

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.rsvpnano.app.NanoWifiConnector
+import com.rsvpnano.app.NanoEndpoint
 import com.rsvpnano.app.RsvpSharedApp
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoSettings
@@ -24,9 +25,9 @@ class CompanionViewModel(
 
     val uiState = presenter.uiState
 
-    fun setAddress(value: String) = presenter.setAddress(value)
-    fun connectDefault() = presenter.connectDefault()
     fun connectNanoScan() = presenter.connectNanoScan()
+    fun selectDiscoveredNano(endpoint: NanoEndpoint) = presenter.selectDiscoveredNano(endpoint)
+    fun cancelNanoSelection() = presenter.cancelNanoSelection()
     fun scanPermissionDenied() = presenter.scanPermissionDenied()
     fun requestWifiPermissions() = presenter.requestWifiPermissions()
     fun showHelpNotice() = presenter.showHelpNotice()
@@ -43,7 +44,6 @@ class CompanionViewModel(
     fun refresh() = presenter.refresh()
     fun refreshThemeCatalog() = presenter.refreshThemeCatalog()
     fun refreshFontCatalog() = presenter.refreshFontCatalog()
-    fun connect() = presenter.connect()
     fun recheckConnectionAfterResume() = presenter.recheckConnectionAfterResume()
     fun recheckConnectionAfterNetworkChange() = presenter.recheckConnectionAfterNetworkChange()
     fun updateSettings(transform: (NanoSettings) -> NanoSettings) = presenter.updateSettings(transform)

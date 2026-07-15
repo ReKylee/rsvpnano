@@ -66,10 +66,7 @@ data class NanoInfo(
     val name: String,
     val apiVersion: Int,
     val mode: String? = null,
-    val baseUrl: String? = null,
     val networkSsid: String? = null,
-    val pairingCode: String? = null,
-    val uploadPath: String? = null
 )
 
 @Serializable
@@ -400,17 +397,9 @@ object NanoSettingsSchema {
 @Serializable
 data class RememberedNano(
     val ssid: String,
-    val bssid: String? = null,
 )
 
 @Serializable
 data class CompanionAppSettings(
-    val defaultAddress: String = "http://192.168.4.1",
     val rememberedNano: RememberedNano? = null,
-) {
-    fun withDefaultAddress(value: String): CompanionAppSettings =
-        copy(defaultAddress = value)
-
-    fun withRememberedNano(value: RememberedNano?): CompanionAppSettings =
-        copy(rememberedNano = value)
-}
+)

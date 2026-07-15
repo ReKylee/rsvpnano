@@ -38,7 +38,7 @@
 	</dict>
 	<key>NSBonjourServices</key>
 	<array>
-		<string>_http._tcp</string>
+		<string>_rsvpnano._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>RSVP Nano uses the local network to connect to your reader while sync mode is open.</string>

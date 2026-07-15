@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.provider.OpenableColumns
 import android.provider.Settings
 import androidx.core.content.IntentCompat
@@ -206,9 +205,5 @@ tailrec fun Context.findActivity(): Activity? {
 }
 
 fun nanoWifiPermission(): String {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        android.Manifest.permission.NEARBY_WIFI_DEVICES
-    } else {
-        android.Manifest.permission.ACCESS_FINE_LOCATION
-    }
+    return android.Manifest.permission.NEARBY_WIFI_DEVICES
 }

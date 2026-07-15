@@ -78,8 +78,6 @@ fun SettingsTab(
     uiState: CompanionUiState,
     onRefresh: () -> Unit,
     onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
-    onAddressChange: (String) -> Unit,
-    onConnectDefault: () -> Unit,
     onWifiSsidChange: (String) -> Unit,
     onWifiPasswordChange: (String) -> Unit,
     onSaveWifi: () -> Unit,
@@ -117,8 +115,6 @@ fun SettingsTab(
                             uiState = uiState,
                             bottomPadding = if (uiState.showSettingsSaveStatus) 72.dp else 24.dp,
                             onUpdateSettings = onUpdateSettings,
-                            onAddressChange = onAddressChange,
-                            onConnectDefault = onConnectDefault,
                             onWifiSsidChange = onWifiSsidChange,
                             onWifiPasswordChange = onWifiPasswordChange,
                             onSaveWifi = onSaveWifi,
@@ -163,8 +159,6 @@ fun SettingsTab(
                             uiState = uiState,
                             bottomPadding = if (uiState.showSettingsSaveStatus) 72.dp else 24.dp,
                             onUpdateSettings = onUpdateSettings,
-                            onAddressChange = onAddressChange,
-                            onConnectDefault = onConnectDefault,
                             onWifiSsidChange = onWifiSsidChange,
                             onWifiPasswordChange = onWifiPasswordChange,
                             onSaveWifi = onSaveWifi,
@@ -233,8 +227,6 @@ private fun SettingsContent(
     uiState: CompanionUiState,
     bottomPadding: androidx.compose.ui.unit.Dp,
     onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
-    onAddressChange: (String) -> Unit,
-    onConnectDefault: () -> Unit,
     onWifiSsidChange: (String) -> Unit,
     onWifiPasswordChange: (String) -> Unit,
     onSaveWifi: () -> Unit,
@@ -258,8 +250,6 @@ private fun SettingsContent(
             SettingsCategory.Connection -> ConnectionSettings(
                 uiState = uiState,
                 bottomPadding = bottomPadding,
-                onAddressChange = onAddressChange,
-                onConnectDefault = onConnectDefault,
                 onWifiSsidChange = onWifiSsidChange,
                 onWifiPasswordChange = onWifiPasswordChange,
                 onSaveWifi = onSaveWifi,
@@ -323,8 +313,6 @@ private fun SettingsPage(
 private fun ConnectionSettings(
     uiState: CompanionUiState,
     bottomPadding: androidx.compose.ui.unit.Dp,
-    onAddressChange: (String) -> Unit,
-    onConnectDefault: () -> Unit,
     onWifiSsidChange: (String) -> Unit,
     onWifiPasswordChange: (String) -> Unit,
     onSaveWifi: () -> Unit,
@@ -336,7 +324,7 @@ private fun ConnectionSettings(
     SettingsPage(bottomPadding = bottomPadding) {
         SettingsSection(
             title = "Reader",
-            subtitle = "Connection and fallback address for the Nano.",
+            subtitle = "The app finds the Nano on shared Wi-Fi, then offers its direct network when needed.",
         ) {
             if (!hasPermissions) {
                 SettingsStatusRow(
@@ -356,9 +344,9 @@ private fun ConnectionSettings(
                 icon = if (remembered != null) Icons.Outlined.CheckCircle else Icons.Outlined.Wifi,
                 title = if (remembered != null) "Remembered Nano" else "No Nano remembered",
                 body = remembered?.ssid ?: if (uiState.isConnected) {
-                    "Connected, but Android did not expose a network name to save."
+                    "Use the Remember action above to save this Nano for direct connection."
                 } else {
-                    "Connect once to make reconnecting faster."
+                    "Connect once to remember its direct network for times without regular Wi-Fi."
                 },
                 action = remembered?.let {
                     {
@@ -368,17 +356,6 @@ private fun ConnectionSettings(
                     }
                 },
             )
-            OutlinedTextField(
-                value = uiState.address,
-                onValueChange = onAddressChange,
-                label = { Text("Reader address") },
-                supportingText = { Text("Used when calling the Nano API.") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            TextButton(onClick = onConnectDefault) {
-                Text(text = "Reset to 192.168.4.1")
-            }
         }
 
         if (uiState.settings != null && uiState.isConnected) {

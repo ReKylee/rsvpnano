@@ -2,6 +2,8 @@ package com.rsvpnano.ui
 
 import com.rsvpnano.app.CompanionNotice
 import com.rsvpnano.app.NanoConnectionState
+import com.rsvpnano.app.NanoEndpoint
+import com.rsvpnano.app.SharedAppUtils
 import com.rsvpnano.app.isCheckingReader
 import com.rsvpnano.app.isConnected
 import com.rsvpnano.app.isRequesting
@@ -20,7 +22,7 @@ data class CompanionUiState(
     val books: List<NanoBook> = emptyList(),
     val settings: NanoSettings? = null,
     val wifiSettings: NanoWifiSettings? = null,
-    val address: String = "http://192.168.4.1",
+    val baseUrl: String = SharedAppUtils.ACCESS_POINT_BASE_URL,
     val wifiSsidDraft: String = "",
     val wifiPasswordDraft: String = "",
     val draftTitle: String = "",
@@ -30,8 +32,8 @@ data class CompanionUiState(
     val rssFeedDraft: String = "",
     val connectionState: NanoConnectionState = NanoConnectionState.Disconnected,
     val rememberedNano: RememberedNano? = null,
+    val discoveredNanos: List<NanoEndpoint> = emptyList(),
     val canRememberCurrentNano: Boolean = false,
-    val showAddressEntry: Boolean = false,
     val isRefreshing: Boolean = false,
     val isSavingSettings: Boolean = false,
     val settingsSaveStatus: String? = null,

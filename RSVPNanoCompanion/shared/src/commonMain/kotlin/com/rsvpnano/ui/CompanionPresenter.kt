@@ -235,7 +235,7 @@ class CompanionPresenter(
         scope.launch {
             setNotice(CompanionNotice.Attention("Loading online fonts..."))
             runCatching {
-                val catalogUrl = catalogUrl("src/fonts/index.json")
+                val catalogUrl = catalogUrl("fonts/index.json")
                 catalogUrl to companionController.fetchFontCatalog(catalogUrl)
             }
                 .onSuccess { (catalogUrl, fonts) ->
@@ -1016,7 +1016,7 @@ class CompanionPresenter(
             }
 
             setNotice(CompanionNotice.Attention("Downloading ${font.name} $size..."))
-            val catalogUrl = state.fontCatalogUrl.ifBlank { catalogUrl("src/fonts/index.json") }
+            val catalogUrl = state.fontCatalogUrl.ifBlank { catalogUrl("fonts/index.json") }
             val fontFile = runCatching {
                 companionController.downloadFont(catalogUrl, font, size)
             }.onFailure { error ->

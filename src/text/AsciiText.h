@@ -1,5 +1,9 @@
 #pragma once
 
+#include <charconv>
+#include <concepts>
+#include <string_view>
+
 namespace AsciiText {
 
     constexpr bool isWhitespace(char c) {
@@ -18,12 +22,14 @@ namespace AsciiText {
         return isAlpha(c) || isDigit(c);
     }
 
-    constexpr bool isHexDigit(char c) {
-        return isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-    }
-
-    constexpr int hexValue(char c) {
-        return isDigit(c) ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+    template<std::unsigned_integral T>
+    inline bool parseUnsigned(std::string_view text, T& value, int base = 10) {
+        T parsed = 0;
+        const auto [end, error] = std::from_chars(text.begin(), text.end(), parsed, base);
+        if (error != std::errc{} || end != text.end())
+            return false;
+        value = parsed;
+        return true;
     }
 
     constexpr char toLower(char c) {

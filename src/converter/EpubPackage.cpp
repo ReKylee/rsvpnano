@@ -31,10 +31,9 @@ namespace EpubPackage {
 
             for (size_t i = 0; i < path.length(); ++i) {
                 if (path[i] == '%' && i + 2 < path.length()) {
-                    const int high = AsciiText::hexValue(path[i + 1]);
-                    const int low = AsciiText::hexValue(path[i + 2]);
-                    if (high >= 0 && low >= 0) {
-                        decoded += static_cast<char>((high << 4) | low);
+                    uint8_t byte = 0;
+                    if (AsciiText::parseUnsigned(std::string_view{path.c_str() + i + 1, 2}, byte, 16)) {
+                        decoded += static_cast<char>(byte);
                         i += 2;
                         continue;
                     }

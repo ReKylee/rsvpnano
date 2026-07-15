@@ -1,6 +1,7 @@
 #include "update/ReleaseParser.h"
 
 #include <algorithm>
+#include <cctype>
 
 namespace releaseparser {
     namespace {
@@ -144,6 +145,20 @@ namespace releaseparser {
         const bool haveTag = extractJsonStringValue(json, "tag_name", 0, out.tagName) && !out.tagName.isEmpty();
         extractAssetDownloadUrl(json, assetName, out.assetUrl);
         return haveTag;
+    }
+
+    bool versionForCommit(const String& tagName, String commitSha, String& version) {
+        commitSha.trim();
+        if (tagName.isEmpty() || commitSha.length() != 40) {
+            return false;
+        }
+        for (size_t i = 0; i < commitSha.length(); ++i) {
+            if (!std::isxdigit(static_cast<unsigned char>(commitSha[i]))) {
+                return false;
+            }
+        }
+        version = tagName + "+" + commitSha.substring(0, 12);
+        return true;
     }
 
 } // namespace releaseparser

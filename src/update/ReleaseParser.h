@@ -16,4 +16,7 @@ namespace releaseparser {
     // Returns true when a non-empty tag was found.
     bool parse(const String& json, const String& assetName, ReleaseInfo& out);
 
+    // Published builds use the release tag plus a stable abbreviated commit.
+    bool versionForCommit(const String& tagName, String commitSha, String& version);
+
 } // namespace releaseparser

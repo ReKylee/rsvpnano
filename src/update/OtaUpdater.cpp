@@ -257,8 +257,28 @@ bool OtaUpdater::fetchRelease(const Config& config, LatestRelease& release, Stri
         errorDetail = "Release tag missing";
         return false;
     }
-    release.tagName = parsed.tagName;
     release.assetUrl = parsed.assetUrl;
+
+    reportStatus(callback, context, kStatusTitle, "Checking version", parsed.tagName, 25);
+    const String commitUrl = "https://api.github.com/repos/" + source.owner + "/" + source.repo + "/commits/tags/"
+                           + urlEncodePathSegment(parsed.tagName);
+    if (!http.begin(client, commitUrl)) {
+        errorDetail = "Commit lookup failed";
+        return false;
+    }
+    http.addHeader("Accept", "application/vnd.github.sha");
+    const int commitStatus = http.GET();
+    if (commitStatus != HTTP_CODE_OK) {
+        errorDetail = httpClientErrorDetail("Tag commit", commitStatus);
+        http.end();
+        return false;
+    }
+    String commitSha = readBodyLimited(http, 64);
+    http.end();
+    if (!releaseparser::versionForCommit(parsed.tagName, commitSha, release.version)) {
+        errorDetail = "Tag commit invalid";
+        return false;
+    }
 
     if (release.assetUrl.isEmpty()) {
         errorDetail = config.assetName + " missing";
@@ -357,11 +377,11 @@ OtaUpdater::Result OtaUpdater::checkOnly(const Config& config, StatusCallback ca
     }
 
     disconnectWiFi();
-    result.latestVersion = release.tagName;
-    if (release.tagName == result.currentVersion) {
+    result.latestVersion = release.version;
+    if (release.version == result.currentVersion) {
         result.code = ResultCode::NoUpdate;
         result.summary = "Already current";
-        result.detail = release.tagName;
+        result.detail = release.version;
         return result;
     }
 
@@ -374,7 +394,7 @@ OtaUpdater::Result OtaUpdater::checkOnly(const Config& config, StatusCallback ca
 
     result.code = ResultCode::UpdateAvailable;
     result.summary = "Update available";
-    result.detail = release.tagName;
+    result.detail = release.version;
     return result;
 }
 
@@ -415,12 +435,12 @@ OtaUpdater::Result OtaUpdater::checkAndInstall(const Config& config, StatusCallb
         return result;
     }
 
-    result.latestVersion = release.tagName;
-    if (release.tagName == result.currentVersion) {
+    result.latestVersion = release.version;
+    if (release.version == result.currentVersion) {
         disconnectWiFi();
         result.code = ResultCode::NoUpdate;
         result.summary = "Already current";
-        result.detail = release.tagName;
+        result.detail = release.version;
         return result;
     }
 

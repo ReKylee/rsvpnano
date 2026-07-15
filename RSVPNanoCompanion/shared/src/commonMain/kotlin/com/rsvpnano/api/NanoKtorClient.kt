@@ -58,8 +58,22 @@ class NanoKtorClient(
             throw NanoClientError("Firmware release lookup returned HTTP ${response.status}")
         }
         val release = json.decodeFromString(GithubRelease.serializer(), response.body<String>())
+        val commitUrl = URLBuilder("https://api.github.com").apply {
+            appendPathSegments("repos", owner, repository, "commits", "tags", release.tagName)
+        }.build()
+        val commitResponse = httpClient.get(commitUrl) {
+            headers.append(HttpHeaders.Accept, "application/vnd.github.sha")
+            headers.append(HttpHeaders.UserAgent, "RSVP-Nano-Companion")
+        }
+        if (!commitResponse.status.isSuccess()) {
+            throw NanoClientError("Firmware commit lookup returned HTTP ${commitResponse.status}")
+        }
+        val commit = commitResponse.body<String>().trim()
+        if (commit.length != 40 || !commit.all { it.digitToIntOrNull(16) != null }) {
+            throw NanoClientError("Firmware commit lookup returned an invalid SHA.")
+        }
         return FirmwareRelease(
-            version = release.tagName,
+            version = "${release.tagName}+${commit.take(12)}",
             assets = release.assets.map(GithubAsset::name),
         )
     }

@@ -49,7 +49,7 @@ public:
 
 private:
     struct LatestRelease {
-        String tagName;
+        String version;
         String assetUrl;
     };
 

@@ -41,7 +41,7 @@ jobs:
             CHANNEL="$GITHUB_REF_NAME"
           fi
 
-          SHORT_SHA="$(git rev-parse --short HEAD)"
+          SHORT_SHA="$(git rev-parse --short=12 HEAD)"
           BUILD_SHA="$(git rev-parse HEAD)"
 
           if ! echo "$CHANNEL" | grep -Eq '^preview-[A-Za-z0-9._-]+$'; then
@@ -49,7 +49,7 @@ jobs:
             exit 1
           fi
 
-          VERSION="${CHANNEL}-${SHORT_SHA}"
+          VERSION="${CHANNEL}+${SHORT_SHA}"
 
           echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
           echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"

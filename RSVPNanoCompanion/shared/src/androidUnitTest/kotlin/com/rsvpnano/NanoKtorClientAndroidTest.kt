@@ -20,6 +20,33 @@ import kotlin.test.assertFailsWith
 
 class NanoKtorClientAndroidTest {
     @Test
+    fun resolvesPublishedBuildVersionFromReleaseTag() = runBlocking {
+        val seen = mutableListOf<String>()
+        val client = NanoKtorClient(mockHttpClient { request ->
+            seen += request.url.encodedPath
+            when (request.url.encodedPath) {
+                "/repos/reader/rsvpnano/releases/tags/preview-v0.0.9" ->
+                    """{"tag_name":"preview-v0.0.9","assets":[{"name":"reader-ota.bin"}]}"""
+                "/repos/reader/rsvpnano/commits/tags/preview-v0.0.9" ->
+                    "0123456789abcdef0123456789abcdef01234567"
+                else -> error("Unexpected request: ${request.url}")
+            }
+        })
+
+        val release = client.fetchFirmwareRelease("reader", "rsvpnano", "preview-v0.0.9")
+
+        assertEquals("preview-v0.0.9+0123456789ab", release.version)
+        assertEquals(listOf("reader-ota.bin"), release.assets)
+        assertEquals(
+            listOf(
+                "/repos/reader/rsvpnano/releases/tags/preview-v0.0.9",
+                "/repos/reader/rsvpnano/commits/tags/preview-v0.0.9",
+            ),
+            seen,
+        )
+    }
+
+    @Test
     fun fetchesDeviceSnapshotEndpoints() = runBlocking {
         val seen = mutableListOf<String>()
         val client = NanoKtorClient(mockHttpClient { request ->

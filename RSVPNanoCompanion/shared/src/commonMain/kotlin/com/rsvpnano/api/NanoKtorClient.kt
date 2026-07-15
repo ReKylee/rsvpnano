@@ -59,7 +59,7 @@ class NanoKtorClient(
         }
         val release = json.decodeFromString(GithubRelease.serializer(), response.body<String>())
         val commitUrl = URLBuilder("https://api.github.com").apply {
-            appendPathSegments("repos", owner, repository, "commits", "tags", release.tagName)
+            appendPathSegments("repos", owner, repository, "commits", release.tagName)
         }.build()
         val commitResponse = httpClient.get(commitUrl) {
             headers.append(HttpHeaders.Accept, "application/vnd.github.sha")

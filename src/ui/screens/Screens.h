@@ -139,7 +139,7 @@ namespace screens {
                   Screen& screen);
     Action storageEncryption(ui::Context& ui, settings::NvsEncryptionState encryptionState, Screen& screen);
     Action sync(ui::Context& ui, Screen& screen);
-    Action ota(ui::Context& ui, Screen& screen);
+    Action ota(ui::Context& ui, std::string_view firmwareVersion, Screen& screen);
     class FocusScreen {
     public:
         void begin(fs::FS* filesystem);

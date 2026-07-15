@@ -27,7 +27,7 @@ class NanoKtorClientAndroidTest {
             when (request.url.encodedPath) {
                 "/repos/reader/rsvpnano/releases/tags/preview-v0.0.9" ->
                     """{"tag_name":"preview-v0.0.9","assets":[{"name":"reader-ota.bin"}]}"""
-                "/repos/reader/rsvpnano/commits/tags/preview-v0.0.9" ->
+                "/repos/reader/rsvpnano/commits/preview-v0.0.9" ->
                     "0123456789abcdef0123456789abcdef01234567"
                 else -> error("Unexpected request: ${request.url}")
             }
@@ -40,7 +40,7 @@ class NanoKtorClientAndroidTest {
         assertEquals(
             listOf(
                 "/repos/reader/rsvpnano/releases/tags/preview-v0.0.9",
-                "/repos/reader/rsvpnano/commits/tags/preview-v0.0.9",
+                "/repos/reader/rsvpnano/commits/preview-v0.0.9",
             ),
             seen,
         )

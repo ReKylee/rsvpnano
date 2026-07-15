@@ -260,7 +260,7 @@ bool OtaUpdater::fetchRelease(const Config& config, LatestRelease& release, Stri
     release.assetUrl = parsed.assetUrl;
 
     reportStatus(callback, context, kStatusTitle, "Checking version", parsed.tagName, 25);
-    const String commitUrl = "https://api.github.com/repos/" + source.owner + "/" + source.repo + "/commits/tags/"
+    const String commitUrl = "https://api.github.com/repos/" + source.owner + "/" + source.repo + "/commits/"
                            + urlEncodePathSegment(parsed.tagName);
     if (!http.begin(client, commitUrl)) {
         errorDetail = "Commit lookup failed";

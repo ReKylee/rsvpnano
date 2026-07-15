@@ -27,15 +27,6 @@
     }
   },
   {
-    "id": "literata",
-    "name": "Literata",
-    "files": {
-      "large": "Literata/large.rfont4",
-      "medium": "Literata/medium.rfont4",
-      "small": "Literata/small.rfont4"
-    }
-  },
-  {
     "id": "opendyslexic",
     "name": "OpenDyslexic",
     "files": {

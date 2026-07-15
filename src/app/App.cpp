@@ -217,10 +217,12 @@ void App::renderScreen(uint32_t nowMs) {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         action = screens::sync(immediateUi_, screen_);
         break;
-    case screens::Screen::Ota:
+    case screens::Screen::Ota: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        action = screens::ota(immediateUi_, screen_);
+        const String firmwareVersion = OtaUpdater{}.currentVersion();
+        action = screens::ota(immediateUi_, firmwareVersion.c_str(), screen_);
         break;
+    }
     case screens::Screen::FocusTimers:
     case screens::Screen::FocusEditor:
     case screens::Screen::FocusNameEdit:

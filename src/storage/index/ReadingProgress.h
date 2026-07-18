@@ -2,8 +2,10 @@
 
 #include <Arduino.h>
 #include <cstdint>
+#include <expected>
 #include <optional>
 #include <string>
+#include <system_error>
 
 #include "book/BookMetadata.h"
 #include "settings/SettingsModel.h"
@@ -51,8 +53,10 @@ namespace ReadingProgress {
         std::string title(const StorageManager& storage) const;
     };
 
-    bool readBookStatePosition(const String& bookPath, const BookIdentity& identity, uint32_t& wordIndex);
-    bool writeBookStatePosition(const String& bookPath, const BookIdentity& identity, uint32_t wordIndex);
+    std::expected<uint32_t, std::error_code> readBookStatePosition(const String& bookPath,
+                                                                   const BookIdentity& identity);
+    std::expected<void, std::error_code> writeBookStatePosition(const String& bookPath, const BookIdentity& identity,
+                                                                uint32_t wordIndex);
     uint8_t percent(uint32_t wordIndex, uint32_t wordCount);
 
 } // namespace ReadingProgress

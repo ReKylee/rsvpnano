@@ -2,7 +2,9 @@
 
 #include <charconv>
 #include <concepts>
+#include <expected>
 #include <string_view>
+#include <system_error>
 
 namespace AsciiText {
 
@@ -23,13 +25,14 @@ namespace AsciiText {
     }
 
     template<std::unsigned_integral T>
-    inline bool parseUnsigned(std::string_view text, T& value, int base = 10) {
+    inline std::expected<T, std::error_code> parseUnsigned(std::string_view text, int base = 10) {
         T parsed = 0;
         const auto [end, error] = std::from_chars(text.begin(), text.end(), parsed, base);
-        if (error != std::errc{} || end != text.end())
-            return false;
-        value = parsed;
-        return true;
+        if (error != std::errc{})
+            return std::unexpected(std::make_error_code(error));
+        if (end != text.end())
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        return parsed;
     }
 
     constexpr char toLower(char c) {

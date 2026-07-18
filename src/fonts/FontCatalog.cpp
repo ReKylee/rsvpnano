@@ -39,59 +39,49 @@ namespace {
     }
 
     template<typename T, size_t Extent>
-    bool readSection(File& file, uint32_t offset, std::span<T, Extent> out, String& error) {
+    std::expected<void, std::string> readSection(File& file, uint32_t offset, std::span<T, Extent> out) {
         if (out.empty())
-            return true;
-        if (!file.seek(offset)) {
-            error = "Font section seek failed";
-            return false;
-        }
+            return {};
+        if (!file.seek(offset))
+            return std::unexpected(std::string{"Font section seek failed"});
         const size_t bytes = out.size_bytes();
-        if (file.read(reinterpret_cast<uint8_t*>(out.data()), bytes) != bytes) {
-            error = "Font section read failed";
-            return false;
-        }
-        return true;
+        if (file.read(reinterpret_cast<uint8_t*>(out.data()), bytes) != bytes)
+            return std::unexpected(std::string{"Font section read failed"});
+        return {};
     }
 
     template<typename FileRecord, typename RuntimeRecord, typename Transform>
-    bool readRecords(File& file, uint32_t offset, size_t count, std::vector<RuntimeRecord>& out, Transform transform,
-                     String& error) {
+    std::expected<void, std::string> readRecords(File& file, uint32_t offset, size_t count,
+                                                 std::vector<RuntimeRecord>& out, Transform transform) {
         std::vector<FileRecord> records(count);
-        if (!readSection(file, offset, std::span{records}, error))
-            return false;
+        if (auto read = readSection(file, offset, std::span{records}); !read)
+            return read;
         out.resize(count);
         std::ranges::transform(records, out.begin(), transform);
-        return true;
+        return {};
     }
 
-    bool readHeader(File& file, RFont4::Header& header, String& error) {
-        if (!file.seek(0) || file.read(reinterpret_cast<uint8_t*>(&header), sizeof(header)) != sizeof(header)) {
-            error = "Font header read failed";
-            return false;
-        }
-        return true;
+    std::expected<RFont4::Header, std::string> readHeader(File& file) {
+        RFont4::Header header;
+        if (!file.seek(0) || file.read(reinterpret_cast<uint8_t*>(&header), sizeof(header)) != sizeof(header))
+            return std::unexpected(std::string{"Font header read failed"});
+        return header;
     }
 
-    bool validateHeaderLayout(const RFont4::Header& header, size_t fileSize, String& error) {
-        if (header.magic != RFont4::kMagic || header.version != RFont4::kVersion) {
-            error = "Unsupported font format";
-            return false;
-        }
+    std::expected<void, std::string> validateHeaderLayout(const RFont4::Header& header, size_t fileSize) {
+        if (header.magic != RFont4::kMagic || header.version != RFont4::kVersion)
+            return std::unexpected(std::string{"Unsupported font format"});
         if (header.headerSize < sizeof(RFont4::Header) || header.glyphRecordSize != sizeof(RFont4::GlyphRecord)
             || header.rowRecordSize != sizeof(RFont4::RowRecord) || header.spanRecordSize != sizeof(RFont4::SpanRecord)
             || header.kerningRecordSize != sizeof(RFont4::KerningRecord)) {
-            error = "Font record layout mismatch";
-            return false;
+            return std::unexpected(std::string{"Font record layout mismatch"});
         }
         if (header.pageMapSize != RFont4::kPageMapBytes
             || header.pageTableSize != header.pageTableCount * RFont4::kPageTableEntries * sizeof(uint16_t)) {
-            error = "Font page table layout mismatch";
-            return false;
+            return std::unexpected(std::string{"Font page table layout mismatch"});
         }
         if (header.totalSize == 0 || header.totalSize > fileSize || header.totalSize > kMaxRuntimeFontBytes) {
-            error = "Invalid font size";
-            return false;
+            return std::unexpected(std::string{"Invalid font size"});
         }
 
         const uint32_t total = header.totalSize;
@@ -102,14 +92,12 @@ namespace {
             || !fits(header.pageMapOffset, header.pageMapSize, total)
             || !fits(header.pageTablesOffset, header.pageTableSize, total)
             || !fits(header.kerningOffset, header.kerningPairCount * sizeof(RFont4::KerningRecord), total)) {
-            error = "Font sections are out of bounds";
-            return false;
+            return std::unexpected(std::string{"Font sections are out of bounds"});
         }
         if (header.nameSize == 0 || header.glyphCount == 0 || header.yAdvance == 0) {
-            error = "Font is missing required metadata";
-            return false;
+            return std::unexpected(std::string{"Font is missing required metadata"});
         }
-        return true;
+        return {};
     }
 
 } // namespace
@@ -127,7 +115,7 @@ void FontCatalog::reset() {
 
 void FontCatalog::loadFromSd() {
     reset();
-    StorageFiles::ensureDirectory(StoragePaths::kFontsPath, "fonts");
+    StorageFiles::ensureDirectory(StoragePaths::kFontsPath);
 
     File root = Board::Storage::filesystem().open(StoragePaths::kFontsPath);
     if (!root || !root.isDirectory()) {
@@ -202,11 +190,13 @@ const ui::fonts::AlphaFont* FontCatalog::load(size_t familyIndex, size_t sizeInd
     if (!family.builtIn && !family.paths[safeSize].empty()) {
         if (loadedFamilyIndex_ == safeFamily && loadedSizeIndex_ == safeSize && runtimeFont_.glyphs != nullptr)
             return &runtimeFont_;
-        if (loadRuntimeFont(family.paths[safeSize])) {
+        auto loaded = loadRuntimeFont(family.paths[safeSize]);
+        if (loaded) {
             loadedFamilyIndex_ = safeFamily;
             loadedSizeIndex_ = safeSize;
             return &runtimeFont_;
         }
+        Serial.printf("[font] load failed %s: %s\n", family.paths[safeSize].c_str(), loaded.error().c_str());
     }
 
     clearRuntimeFont();
@@ -237,61 +227,64 @@ std::string FontCatalog::normalizeId(std::string_view value) {
     return out;
 }
 
-bool FontCatalog::validateFontFile(const String& path, String& error) {
+std::expected<void, std::string> FontCatalog::validateFontFile(const String& path) {
     File file = Board::Storage::filesystem().open(path, FILE_READ);
     if (!file || file.isDirectory()) {
-        if (file) {
+        if (file)
             file.close();
-        }
-        error = "Font file unavailable";
-        return false;
+        return std::unexpected(std::string{"Font file unavailable"});
     }
-    RFont4::Header header;
-    const bool ok = readHeader(file, header, error) && validateHeaderLayout(header, file.size(), error);
+    auto header = readHeader(file);
+    auto result = header ? validateHeaderLayout(*header, file.size())
+                         : std::expected<void, std::string>{std::unexpected(header.error())};
     file.close();
-    return ok;
+    return result;
 }
 
-bool FontCatalog::loadRuntimeFont(const std::string& path) {
-    String error;
+std::expected<void, std::string> FontCatalog::loadRuntimeFont(const std::string& path) {
     File file = Board::Storage::filesystem().open(path.c_str(), FILE_READ);
     if (!file || file.isDirectory()) {
-        if (file) {
+        if (file)
             file.close();
-        }
-        error = "Font file unavailable";
-        Serial.printf("[font] load failed %s: %s\n", path.c_str(), error.c_str());
-        return false;
+        return std::unexpected(std::string{"Font file unavailable"});
     }
 
-    RFont4::Header header;
-    if (!readHeader(file, header, error) || !validateHeaderLayout(header, file.size(), error)
-        || !loadRecords(file, header, error)) {
+    auto header = readHeader(file);
+    if (!header) {
         file.close();
         clearRuntimeFont();
-        Serial.printf("[font] load failed %s: %s\n", path.c_str(), error.c_str());
-        return false;
+        return std::unexpected(header.error());
+    }
+    if (auto valid = validateHeaderLayout(*header, file.size()); !valid) {
+        file.close();
+        clearRuntimeFont();
+        return valid;
+    }
+    if (auto loaded = loadRecords(file, *header); !loaded) {
+        file.close();
+        clearRuntimeFont();
+        return loaded;
     }
     file.close();
     runtimeFont_ = {
         .name = runtimeName_,
         .bitmap = bitmap_.data(),
         .glyphs = glyphs_.data(),
-        .glyphCount = header.glyphCount,
-        .yAdvance = header.yAdvance,
-        .ascent = header.ascent,
-        .descent = header.descent,
+        .glyphCount = header->glyphCount,
+        .yAdvance = header->yAdvance,
+        .ascent = header->ascent,
+        .descent = header->descent,
         .rows = rows_.data(),
         .spans = spans_.data(),
         .pageMap = pageMap_.data(),
         .pageTables = pageTablePointers_.data(),
-        .pageTableCount = header.pageTableCount,
+        .pageTableCount = header->pageTableCount,
         .kerningPairs = kerningPairs_.data(),
-        .kerningPairCount = header.kerningPairCount,
-        .wordInkTop = header.wordInkTop,
-        .wordInkBottom = header.wordInkBottom,
+        .kerningPairCount = header->kerningPairCount,
+        .wordInkTop = header->wordInkTop,
+        .wordInkBottom = header->wordInkBottom,
     };
-    return true;
+    return {};
 }
 
 void FontCatalog::clearRuntimeFont() {
@@ -307,57 +300,52 @@ void FontCatalog::clearRuntimeFont() {
     runtimeFont_ = {};
 }
 
-bool FontCatalog::loadRecords(File& file, const RFont4::Header& header, String& error) {
+std::expected<void, std::string> FontCatalog::loadRecords(File& file, const RFont4::Header& header) {
     clearRuntimeFont();
 
     std::vector<uint8_t> nameBytes(header.nameSize);
-    if (!readSection(file, header.nameOffset, std::span{nameBytes}, error)) {
-        return false;
-    }
+    if (auto read = readSection(file, header.nameOffset, std::span{nameBytes}); !read)
+        return read;
     runtimeName_.assign(reinterpret_cast<const char*>(nameBytes.data()), nameBytes.size());
 
     bitmap_.resize(header.bitmapSize);
-    if (!readSection(file, header.bitmapOffset, std::span{bitmap_}, error)) {
-        return false;
-    }
+    if (auto read = readSection(file, header.bitmapOffset, std::span{bitmap_}); !read)
+        return read;
 
-    if (!readRecords<RFont4::GlyphRecord>(
-            file, header.glyphsOffset, header.glyphCount, glyphs_,
-            [](const RFont4::GlyphRecord& item) {
+    if (auto read = readRecords<RFont4::GlyphRecord>(
+            file, header.glyphsOffset, header.glyphCount, glyphs_, [](const RFont4::GlyphRecord& item) {
                 return ui::fonts::AlphaGlyph{item.codepoint, item.bitmapOffset, item.rowOffset, item.kernOffset,
                                              item.width,     item.height,       item.rowStride, item.xAdvance,
                                              item.xOffset,   item.yOffset,      item.kernCount};
-            },
-            error)
-        || !readRecords<RFont4::RowRecord>(
-            file, header.rowsOffset, header.rowCount, rows_,
-            [](const RFont4::RowRecord& item) {
+            });
+        !read)
+        return read;
+    if (auto read = readRecords<RFont4::RowRecord>(
+            file, header.rowsOffset, header.rowCount, rows_, [](const RFont4::RowRecord& item) {
                 return ui::fonts::AlphaRow{item.spanOffset, item.spanCount};
-            },
-            error)
-        || !readRecords<RFont4::SpanRecord>(
-            file, header.spansOffset, header.spanCount, spans_,
-            [](const RFont4::SpanRecord& item) {
+            });
+        !read)
+        return read;
+    if (auto read = readRecords<RFont4::SpanRecord>(
+            file, header.spansOffset, header.spanCount, spans_, [](const RFont4::SpanRecord& item) {
                 return ui::fonts::AlphaSpan{item.x, item.width};
-            },
-            error)
-        || !readRecords<RFont4::KerningRecord>(
-            file, header.kerningOffset, header.kerningPairCount, kerningPairs_,
-            [](const RFont4::KerningRecord& item) {
+            });
+        !read)
+        return read;
+    if (auto read = readRecords<RFont4::KerningRecord>(
+            file, header.kerningOffset, header.kerningPairCount, kerningPairs_, [](const RFont4::KerningRecord& item) {
                 return ui::fonts::AlphaKerningPair{item.rightCodepoint, item.xAdjust};
-            },
-            error))
-        return false;
+            });
+        !read)
+        return read;
 
-    if (!readSection(file, header.pageMapOffset, std::span{pageMap_}, error)) {
-        return false;
-    }
+    if (auto read = readSection(file, header.pageMapOffset, std::span{pageMap_}); !read)
+        return read;
 
     const size_t pageEntryCount = header.pageTableCount * RFont4::kPageTableEntries;
     pageTableData_.resize(pageEntryCount);
-    if (!readSection(file, header.pageTablesOffset, std::span{pageTableData_}, error)) {
-        return false;
-    }
+    if (auto read = readSection(file, header.pageTablesOffset, std::span{pageTableData_}); !read)
+        return read;
     pageTablePointers_.resize(header.pageTableCount);
     const uint16_t* page = pageTableData_.data();
     std::ranges::generate(pageTablePointers_, [&page] {
@@ -365,5 +353,5 @@ bool FontCatalog::loadRecords(File& file, const RFont4::Header& header, String& 
         page += RFont4::kPageTableEntries;
         return current;
     });
-    return true;
+    return {};
 }

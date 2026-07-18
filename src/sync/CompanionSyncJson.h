@@ -3,6 +3,7 @@
 #include <glaze/json.hpp>
 
 #include <cstdint>
+#include <expected>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -117,23 +118,27 @@ namespace companion::api {
     };
 
     template<typename T>
-    bool encodeData(const T& data, std::string& output) {
+    std::expected<void, std::string> encodeData(const T& data, std::string& output) {
         output.clear();
-        return !glz::write_json(glz::obj{"data", data}, output);
+        if (glz::write_json(glz::obj{"data", data}, output))
+            return std::unexpected(std::string{"JSON serialization failed"});
+        return {};
     }
 
-    inline bool encodeError(ApiError error, std::string& output) {
+    inline std::expected<void, std::string> encodeError(ApiError error, std::string& output) {
         output.clear();
-        return !glz::write_json(ErrorEnvelope{std::move(error)}, output);
+        if (glz::write_json(ErrorEnvelope{std::move(error)}, output))
+            return std::unexpected(std::string{"JSON error serialization failed"});
+        return {};
     }
 
     template<typename T>
-    bool decode(std::string_view input, T& value, std::string& errorMessage) {
+    std::expected<T, std::string> decode(std::string_view input) {
+        T value;
         if (const auto error = glz::read_json(value, input)) {
-            errorMessage = glz::format_error(error, input);
-            return false;
+            return std::unexpected(glz::format_error(error, input));
         }
-        return true;
+        return value;
     }
 
 } // namespace companion::api

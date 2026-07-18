@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <span>
 #include <string>
 #include <string_view>
@@ -32,13 +33,13 @@ public:
     const Family* find(std::string_view id) const;
     const ui::fonts::AlphaFont* load(size_t familyIndex, size_t sizeIndex);
 
-    static bool validateFontFile(const String& path, String& error);
+    static std::expected<void, std::string> validateFontFile(const String& path);
 
 private:
     void reset();
-    bool loadRuntimeFont(const std::string& path);
+    std::expected<void, std::string> loadRuntimeFont(const std::string& path);
     void clearRuntimeFont();
-    bool loadRecords(File& file, const RFont4::Header& header, String& error);
+    std::expected<void, std::string> loadRecords(File& file, const RFont4::Header& header);
     static std::string normalizeId(std::string_view value);
 
     std::vector<Family> families_;

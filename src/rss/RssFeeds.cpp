@@ -4,6 +4,8 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <algorithm>
+#include <expected>
+#include <string>
 #include <vector>
 #include "board/BoardStorage.h"
 
@@ -27,11 +29,6 @@ namespace {
     constexpr uint8_t kMaxItemsPerFeed = 5;
     constexpr uint8_t kMaxArticlesPerCheck = 12;
     constexpr uint8_t kMaxFeedRedirects = 3;
-
-    bool ensureArticleDirectory() {
-        return StorageFiles::ensureDirectory(StoragePaths::kBooksPath, "rss")
-            && StorageFiles::ensureDirectory(StoragePaths::kArticleFilesPath, "rss");
-    }
 
     String trimCopy(String value) {
         value.trim();
@@ -214,16 +211,16 @@ namespace {
     bool connectWiFi(const String& wifiSsid, const String& wifiPassword, RssFeeds::StatusCallback callback,
                      void* context) {
         return net::connectStation(wifiSsid.c_str(), wifiPassword.c_str(), [&](int percent) {
-            report(callback, context, "Connecting Wi-Fi", wifiSsid, percent);
-        });
+                   report(callback, context, "Connecting Wi-Fi", wifiSsid, percent);
+               }).has_value();
     }
 
     void disconnectWiFi() {
         net::disconnect();
     }
 
-    bool fetchUrl(const String& url, String& body, String& error, uint8_t feedIndex, uint8_t feedCount,
-                                  RssFeeds::StatusCallback callback, void* context) {
+    std::expected<String, std::string> fetchUrl(const String& url, uint8_t feedIndex, uint8_t feedCount,
+                                                RssFeeds::StatusCallback callback, void* context) {
         String currentUrl = url;
         for (uint8_t redirectCount = 0; redirectCount <= kMaxFeedRedirects; ++redirectCount) {
             WiFiClientSecure secureClient;
@@ -240,11 +237,8 @@ namespace {
 
             const bool ok = currentUrl.startsWith("https://") ? http.begin(secureClient, currentUrl)
                                                               : http.begin(plainClient, currentUrl);
-            if (!ok) {
-                error = "Feed link did not open";
-                Serial.printf("[rss] begin failed url=%s\n", currentUrl.c_str());
-                return false;
-            }
+            if (!ok)
+                return std::unexpected(std::string{"Feed link did not open"});
 
             report(callback, context, feedProgressLabel(feedIndex, feedCount),
                    "Requesting " + feedparser::hostLabelForUrl(currentUrl), 18 + feedIndex * 7);
@@ -252,11 +246,8 @@ namespace {
             if (isRedirectStatus(statusCode)) {
                 String location = http.header("Location");
                 http.end();
-                if (location.isEmpty()) {
-                    error = "Feed moved but gave no link";
-                    Serial.printf("[rss] redirect missing location status=%d url=%s\n", statusCode, currentUrl.c_str());
-                    return false;
-                }
+                if (location.isEmpty())
+                    return std::unexpected(std::string{"Feed moved but gave no link"});
                 currentUrl = resolveRedirectUrl(currentUrl, location);
                 Serial.printf("[rss] redirect %u url=%s\n", static_cast<unsigned int>(statusCode), currentUrl.c_str());
                 report(callback, context, feedProgressLabel(feedIndex, feedCount),
@@ -265,19 +256,15 @@ namespace {
                 continue;
             }
             if (statusCode != HTTP_CODE_OK) {
-                error = friendlyHttpError(statusCode);
-                Serial.printf("[rss] http failed status=%d message=%s url=%s\n", statusCode, error.c_str(),
-                              currentUrl.c_str());
+                const String error = friendlyHttpError(statusCode);
                 http.end();
-                return false;
+                return std::unexpected(std::string{error.c_str(), error.length()});
             }
 
             WiFiClient* stream = http.getStreamPtr();
             if (stream == nullptr) {
-                error = "No data from site";
-                Serial.printf("[rss] no stream url=%s\n", currentUrl.c_str());
                 http.end();
-                return false;
+                return std::unexpected(std::string{"No data from site"});
             }
 
             uint8_t buffer[512];
@@ -289,7 +276,7 @@ namespace {
             const int reportedSize = http.getSize();
             const size_t reserveBytes =
                 reportedSize > 0 ? std::min(static_cast<size_t>(reportedSize), kMaxFeedBytes) : 8192;
-            body = "";
+            String body;
             body.reserve(reserveBytes);
             const uint32_t startedMs = millis();
             uint32_t lastByteMs = startedMs;
@@ -305,11 +292,8 @@ namespace {
                                       static_cast<unsigned int>(completeItemsRead));
                         break;
                     }
-                    error = "Site took too long";
-                    Serial.printf("[rss] total timeout url=%s bytes=%u\n", currentUrl.c_str(),
-                                  static_cast<unsigned int>(totalRead));
                     http.end();
-                    return false;
+                    return std::unexpected(std::string{"Site took too long"});
                 }
                 if (nowMs - lastByteMs > kFeedIdleTimeoutMs) {
                     if (completeItemsRead > 0) {
@@ -323,11 +307,8 @@ namespace {
                                       static_cast<unsigned int>(totalRead));
                         break;
                     }
-                    error = "Site stopped sending data";
-                    Serial.printf("[rss] idle timeout url=%s bytes=%u\n", currentUrl.c_str(),
-                                  static_cast<unsigned int>(totalRead));
                     http.end();
-                    return false;
+                    return std::unexpected(std::string{"Site stopped sending data"});
                 }
                 if (nowMs - lastReportMs >= kFeedProgressIntervalMs) {
                     lastReportMs = nowMs;
@@ -373,11 +354,8 @@ namespace {
             }
             http.end();
 
-            if (body.isEmpty()) {
-                error = "Feed was empty";
-                Serial.printf("[rss] empty response url=%s\n", currentUrl.c_str());
-                return false;
-            }
+            if (body.isEmpty())
+                return std::unexpected(std::string{"Feed was empty"});
             if (totalRead >= kMaxFeedBytes) {
                 Serial.printf("[rss] feed capped url=%s bytes=%u\n", currentUrl.c_str(),
                               static_cast<unsigned int>(totalRead));
@@ -395,28 +373,25 @@ namespace {
                 report(callback, context, feedProgressLabel(feedIndex, feedCount),
                        "Downloaded " + String(static_cast<unsigned int>(totalRead / 1024)) + " KB", 20 + feedIndex * 7);
             }
-            return true;
+            return body;
         }
 
-        error = "Feed redirected too often";
-        Serial.printf("[rss] too many redirects url=%s\n", url.c_str());
-        return false;
+        return std::unexpected(std::string{"Feed redirected too often"});
     }
 
-    bool saveItem(const feedparser::FeedItem& item, Preferences& preferences, RssFeeds::Result& result) {
-        if (!ensureArticleDirectory()) {
-            Serial.println("[rss] article folder unavailable");
-            return false;
-        }
+    std::expected<void, std::error_code> saveItem(const feedparser::FeedItem& item, Preferences& preferences,
+                                                  RssFeeds::Result& result) {
+        if (auto directory = StorageFiles::ensureDirectory(StoragePaths::kBooksPath); !directory)
+            return directory;
+        if (auto directory = StorageFiles::ensureDirectory(StoragePaths::kArticleFilesPath); !directory)
+            return directory;
         const String finalPath = String(StoragePaths::kArticleFilesPath) + "/" + filenameForItem(item);
         const String tmpPath = finalPath + ".tmp";
         Board::Storage::filesystem().remove(tmpPath);
 
         File file = Board::Storage::filesystem().open(tmpPath, FILE_WRITE);
-        if (!file) {
-            Serial.printf("[rss] could not create %s\n", tmpPath.c_str());
-            return false;
-        }
+        if (!file)
+            return std::unexpected(std::make_error_code(std::errc::io_error));
 
         file.println("@rsvp 1");
         file.print("@title ");
@@ -435,19 +410,23 @@ namespace {
             body += "\n\n[Article truncated on device.]";
         }
         file.println(body);
+        const bool writeFailed = file.getWriteError() != 0;
         file.close();
+        if (writeFailed) {
+            Board::Storage::filesystem().remove(tmpPath);
+            return std::unexpected(std::make_error_code(std::errc::io_error));
+        }
 
         Board::Storage::filesystem().remove(finalPath);
         if (!Board::Storage::filesystem().rename(tmpPath, finalPath)) {
             Board::Storage::filesystem().remove(tmpPath);
-            Serial.printf("[rss] rename failed %s\n", finalPath.c_str());
-            return false;
+            return std::unexpected(std::make_error_code(std::errc::io_error));
         }
 
         markItemSeen(item, preferences);
         ++result.articlesSaved;
         Serial.printf("[rss] saved %s\n", finalPath.c_str());
-        return true;
+        return {};
     }
 
     bool processFeed(const String& feedUrl, const String& feedBody, Preferences& preferences,
@@ -471,7 +450,9 @@ namespace {
                 continue;
             }
             report(callback, context, "Saving article " + String(itemCount), item.title, 24 + feedIndex * 7);
-            saveItem(item, preferences, result);
+            if (auto saved = saveItem(item, preferences, result); !saved)
+                Serial.printf("[rss] save failed title=%s error=%s code=%d\n", item.title.c_str(),
+                              saved.error().message().c_str(), saved.error().value());
         }
         const uint8_t savedHere = result.articlesSaved - savedBefore;
         const uint8_t skippedHere = result.articlesSkipped - skippedBefore;
@@ -540,9 +521,9 @@ RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::Devic
         report(callback, context, feedProgressLabel(displayIndex, feedCount),
                "Downloading " + feedparser::hostLabelForUrl(line), 15 + displayIndex * 8);
 
-        String feedBody;
-        String error;
-        if (!fetchUrl(line, feedBody, error, displayIndex, feedCount, callback, context)) {
+        auto feedBody = fetchUrl(line, displayIndex, feedCount, callback, context);
+        if (!feedBody) {
+            const String error = feedBody.error().c_str();
             Serial.printf("[rss] feed failed url=%s error=%s\n", line.c_str(), error.c_str());
             ++feedFailures;
             if (firstFeedError.isEmpty()) {
@@ -557,7 +538,7 @@ RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::Devic
         }
 
         ++result.feedsChecked;
-        processFeed(line, feedBody, preferences, result, displayIndex, feedCount, callback, context);
+        processFeed(line, *feedBody, preferences, result, displayIndex, feedCount, callback, context);
     }
 
     disconnectWiFi();

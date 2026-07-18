@@ -5,6 +5,7 @@
 #include "board/BoardStorage.h"
 
 #include "board/Board.h"
+#include "board/BoardConfig.h"
 #include "board/BoardInput.h"
 #include "converter/EpubConverter.h"
 #include "input/Input.h"
@@ -91,7 +92,7 @@ namespace {
     }
 
     bool benchmarkSdWriteRead() {
-        if (!StorageFiles::ensureDirectory(kBenchmarkDir, "bench")) {
+        if (!StorageFiles::ensureDirectory(kBenchmarkDir)) {
             return false;
         }
 
@@ -168,7 +169,7 @@ namespace {
         options.progressCallback = reportEpubProgress;
         options.progressTitle = "Benchmark";
         options.progressLabel = "Dracula";
-        return EpubConverter::convertIfNeeded(kDraculaEpubPath, kDraculaRsvpPath, options);
+        return EpubConverter::convertIfNeeded(kDraculaEpubPath, kDraculaRsvpPath, options).has_value();
     }
 
     void runTimed(const char* name, bool (*operation)(), size_t bytes = 0) {

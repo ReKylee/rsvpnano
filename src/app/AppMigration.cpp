@@ -507,15 +507,14 @@ void App::migrateLegacyStorage() {
                             break;
                         }
                         value.remove_prefix(rgb ? 1 : 2);
-                        uint32_t parsedColor = 0;
-                        if (!AsciiText::parseUnsigned(value, parsedColor, 16)
-                            || (!rgb && parsedColor > UINT16_MAX)) {
+                        const auto parsedColor = AsciiText::parseUnsigned<uint32_t>(value, 16);
+                        if (!parsedColor || (!rgb && *parsedColor > UINT16_MAX)) {
                             valid = false;
                             break;
                         }
                         const ui::themes::Rgb565 color = rgb
-                            ? ui::themes::rgb565(parsedColor >> 16U, parsedColor >> 8U, parsedColor)
-                            : static_cast<uint16_t>(parsedColor);
+                            ? ui::themes::rgb565(*parsedColor >> 16U, *parsedColor >> 8U, *parsedColor)
+                            : static_cast<uint16_t>(*parsedColor);
                         auto setColor = [&](std::string_view expected, auto& field, size_t index) {
                             if (key != expected)
                                 return false;
@@ -640,8 +639,7 @@ void App::migrateLegacyStorage() {
         if (legacyFocusPath != nullptr) {
             bool converted = false;
             if (StorageFiles::fileExists(StoragePaths::kFocusConfigPath)) {
-                focus::Timers current;
-                converted = focus::load(*filesystem, current) == focus::LoadResult::Valid;
+                converted = focus::load(*filesystem).has_value();
             } else {
                 std::string content;
                 LegacyFocusConfig legacy;
@@ -659,7 +657,7 @@ void App::migrateLegacyStorage() {
                         timer.rounds = source.rounds;
                         migrated.timers.push_back(std::move(timer));
                     }
-                    converted = focus::valid(migrated) && focus::save(*filesystem, migrated);
+                    converted = focus::valid(migrated) && focus::save(*filesystem, migrated).has_value();
                 }
             }
 
@@ -747,7 +745,7 @@ void App::migrateLegacyStorage() {
                     && currentState.wordCount > 0;
             }
             if (!converted && recoverable)
-                converted = ReadingProgress::writeBookStatePosition(bookPath.c_str(), identity, wordIndex);
+                converted = ReadingProgress::writeBookStatePosition(bookPath.c_str(), identity, wordIndex).has_value();
             if (!converted && legacyFileSeen) {
                 booksComplete = false;
                 Serial.printf("[migration] preserved invalid progress %s\n", legacyPath.c_str());

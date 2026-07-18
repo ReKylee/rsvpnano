@@ -24,8 +24,11 @@ namespace {
             text.remove_prefix(1);
             base = 16;
         }
-        return AsciiText::parseUnsigned(text, codepoint, base) && codepoint <= 0x10FFFF
-            && !(codepoint >= 0xD800 && codepoint <= 0xDFFF);
+        const auto parsed = AsciiText::parseUnsigned<uint32_t>(text, base);
+        if (!parsed || *parsed > 0x10FFFF || (*parsed >= 0xD800 && *parsed <= 0xDFFF))
+            return false;
+        codepoint = *parsed;
+        return true;
     }
 
     bool namedEntityCodepoint(const String& entity, uint32_t& codepoint) {

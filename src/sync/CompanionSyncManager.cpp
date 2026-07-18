@@ -24,6 +24,7 @@
 #include "storage/index/ReadingProgress.h"
 #include "text/AsciiText.h"
 #include "sync/CompanionSyncJson.h"
+#include "timer/FocusTimerStorage.h"
 #include "ui/Localization.h"
 #include "update/OtaUpdater.h"
 
@@ -47,7 +48,8 @@ namespace {
 
     template<typename T>
     bool sendData(WebServer& server, std::string& jsonBuffer, int status, const T& data) {
-        if (!api::encodeData(data, jsonBuffer)) {
+        if (auto encoded = api::encodeData(data, jsonBuffer); !encoded) {
+            Serial.printf("[sync] response encode failed: %s\n", encoded.error().c_str());
             server.send(500, "application/json",
                         "{\"error\":{\"code\":\"serialization_failed\",\"message\":\"Response could not be encoded\"}}");
             return false;
@@ -57,57 +59,10 @@ namespace {
         return true;
     }
 
-    bool ensureLibraryDirectories() {
-        return StorageFiles::ensureDirectory(StoragePaths::kBooksPath, "sync")
-            && StorageFiles::ensureDirectory(StoragePaths::kBookFilesPath, "sync")
-            && StorageFiles::ensureDirectory(StoragePaths::kArticleFilesPath, "sync");
-    }
-
-    bool ensureThemeDirectory() {
-        return StorageFiles::ensureDirectory(StoragePaths::kThemesPath, "sync");
-    }
-
-    bool ensureFontDirectory() {
-        return StorageFiles::ensureDirectory(StoragePaths::kFontsPath, "sync");
-    }
-
-    bool ensureFontFamilyDirectory(const String& family) {
-        if (!ensureFontDirectory()) {
-            return false;
-        }
-        return StorageFiles::ensureDirectory((String(StoragePaths::kFontsPath) + "/" + family).c_str(), "sync");
-    }
-
-    std::string readSmallTextFile(const String& path) {
-        File file = Board::Storage::filesystem().open(path, FILE_READ);
-        if (!file)
-            return {};
-        std::string text(std::min(static_cast<size_t>(file.size()), kMaxThemeUploadBytes), '\0');
-        text.resize(file.read(reinterpret_cast<uint8_t*>(text.data()), text.size()));
-        file.close();
-        return text;
-    }
-
-    bool replaceUploadedFile(const String& tmpPath, const String& finalPath) {
+    std::expected<void, std::error_code> replaceUploadedFile(const String& tmpPath, const String& finalPath) {
         const String backupPath = finalPath + ".bak";
-        Board::Storage::filesystem().remove(backupPath);
-
-        const bool hadFinal = StorageFiles::fileExists(finalPath.c_str());
-        if (hadFinal && !Board::Storage::filesystem().rename(finalPath, backupPath)) {
-            return false;
-        }
-
-        if (Board::Storage::filesystem().rename(tmpPath, finalPath)) {
-            if (hadFinal) {
-                Board::Storage::filesystem().remove(backupPath);
-            }
-            return true;
-        }
-
-        if (hadFinal) {
-            Board::Storage::filesystem().rename(backupPath, finalPath);
-        }
-        return false;
+        return StorageFiles::replaceFileAtomic(Board::Storage::filesystem(), finalPath.c_str(), tmpPath.c_str(),
+                                               backupPath.c_str());
     }
 
     const char kWebCompanionHtml[] PROGMEM = R"HTML(<!doctype html>
@@ -411,9 +366,7 @@ loadDraft();refresh();
     }
 
     focus::Timers readFocusTimers() {
-        focus::Timers timers = focus::defaultTimers();
-        focus::load(Board::Storage::filesystem(), timers);
-        return timers;
+        return focus::load(Board::Storage::filesystem()).value_or(focus::defaultTimers());
     }
 
     String rsvpMetadataValueFromLine(const String& line, const char* directive, bool& pastDirectives) {
@@ -642,8 +595,10 @@ bool CompanionSyncManager::startStation() {
 
     statusLine1_ = "Connecting to Wi-Fi";
     statusLine2_ = ssid;
-    if (!net::connectStation(ssid.c_str(), settingsStore_.secrets().wifiPassword.c_str())) {
-        Serial.printf("[sync] station failed ssid=%s; starting access point\n", ssid.c_str());
+    auto connected = net::connectStation(ssid.c_str(), settingsStore_.secrets().wifiPassword.c_str());
+    if (!connected) {
+        Serial.printf("[sync] station failed ssid=%s error=%s code=%d; starting access point\n", ssid.c_str(),
+                      connected.error().message().c_str(), connected.error().value());
         net::disconnect();
         return false;
     }
@@ -892,24 +847,23 @@ void CompanionSyncManager::handleWifi() {
         return;
     }
 
-    api::NetworkUpdate update;
-    std::string parseError;
-    if (!api::decode(toStringView(body), update, parseError)) {
-        sendError(400, "invalid_json", parseError.c_str());
+    auto update = api::decode<api::NetworkUpdate>(toStringView(body));
+    if (!update) {
+        sendError(400, "invalid_json", update.error().c_str());
         return;
     }
-    if (!update.ssid) {
+    if (!update->ssid) {
         sendError(422, "invalid_network", "Missing Wi-Fi SSID", "ssid");
         return;
     }
 
-    std::string ssid = trimCopy(*update.ssid);
+    std::string ssid = trimCopy(*update->ssid);
     if (ssid.empty() || ssid.size() > 32) {
         sendError(422, "invalid_network", ssid.empty() ? "Wi-Fi SSID is required" : "Wi-Fi SSID is too long",
                   "ssid");
         return;
     }
-    const std::string password = update.password.value_or("");
+    const std::string password = update->password.value_or("");
     if (password.size() > 64) {
         sendError(422, "invalid_network", "Wi-Fi password is too long", "password");
         return;
@@ -938,13 +892,12 @@ void CompanionSyncManager::handleRssFeeds() {
         return;
     }
 
-    rss::Config update;
-    std::string parseError;
-    if (!api::decode(toStringView(body), update, parseError)) {
-        sendError(400, "invalid_json", parseError.c_str());
+    auto update = api::decode<rss::Config>(toStringView(body));
+    if (!update) {
+        sendError(400, "invalid_json", update.error().c_str());
         return;
     }
-    if (const auto error = writeFeeds(update)) {
+    if (const auto error = writeFeeds(std::move(*update))) {
         sendError(422, "invalid_feed", error->message.c_str(), error->field.c_str());
         return;
     }
@@ -966,24 +919,25 @@ void CompanionSyncManager::handleFocusTimers() {
         return;
     }
 
-    focus::Timers timers;
-    std::string parseError;
-    if (!api::decode(toStringView(body), timers, parseError)) {
-        sendError(400, "invalid_json", parseError.c_str());
+    auto timers = api::decode<focus::Timers>(toStringView(body));
+    if (!timers) {
+        sendError(400, "invalid_json", timers.error().c_str());
         return;
     }
-    if (!focus::valid(timers)) {
+    if (!focus::valid(*timers)) {
         sendError(422, "invalid_focus_timers", "Focus timers are invalid", "timers");
         return;
     }
-    if (!focus::save(Board::Storage::filesystem(), timers)) {
+    auto saved = focus::save(Board::Storage::filesystem(), *timers);
+    if (!saved) {
+        StorageFiles::logError("sync", "save focus timers", StoragePaths::kFocusConfigPath, saved.error());
         sendError(500, "focus_save_failed", "Could not save focus timers");
         return;
     }
 
     statusLine1_ = "Focus timers saved";
     statusLine2_ = StoragePaths::kFocusConfigPath;
-    sendData(server_, jsonBuffer_, 200, timers);
+    sendData(server_, jsonBuffer_, 200, *timers);
 }
 
 void CompanionSyncManager::handleBooks() {
@@ -1032,8 +986,17 @@ void CompanionSyncManager::handleThemes() {
     }
 
     const std::string id = ui::themes::themeIdFromPath({uploadFinalPath_.c_str(), uploadFinalPath_.length()});
-    const std::string themeText = readSmallTextFile(uploadTmpPath_);
-    auto decoded = ui::themes::decodeToml(themeText, id);
+    auto themeText = StorageFiles::readTextFile(Board::Storage::filesystem(), uploadTmpPath_.c_str(),
+                                                kMaxThemeUploadBytes);
+    if (!themeText) {
+        StorageFiles::logError("sync", "read uploaded theme", uploadTmpPath_.c_str(), themeText.error());
+        Board::Storage::filesystem().remove(uploadTmpPath_);
+        uploadTmpPath_ = "";
+        uploadFinalPath_ = "";
+        sendError(500, "storage_error", "Theme upload could not be read");
+        return;
+    }
+    auto decoded = ui::themes::decodeToml(*themeText, id);
     if (!decoded) {
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
@@ -1050,7 +1013,10 @@ void CompanionSyncManager::handleThemes() {
         return;
     }
 
-    if (!replaceUploadedFile(uploadTmpPath_, uploadFinalPath_)) {
+    auto replaced = replaceUploadedFile(uploadTmpPath_, uploadFinalPath_);
+    if (!replaced) {
+        StorageFiles::logError("sync", "install theme", uploadTmpPath_.c_str(), uploadFinalPath_.c_str(),
+                               replaced.error());
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
@@ -1099,12 +1065,12 @@ void CompanionSyncManager::handleFonts() {
         return;
     }
 
-    String error;
-    if (!FontCatalog::validateFontFile(uploadTmpPath_, error)) {
+    auto validated = FontCatalog::validateFontFile(uploadTmpPath_);
+    if (!validated) {
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
-        sendError(422, "invalid_font", error, "file");
+        sendError(422, "invalid_font", validated.error().c_str(), "file");
         return;
     }
 
@@ -1116,7 +1082,10 @@ void CompanionSyncManager::handleFonts() {
         return;
     }
 
-    if (!replaceUploadedFile(uploadTmpPath_, uploadFinalPath_)) {
+    auto replaced = replaceUploadedFile(uploadTmpPath_, uploadFinalPath_);
+    if (!replaced) {
+        StorageFiles::logError("sync", "install font", uploadTmpPath_.c_str(), uploadFinalPath_.c_str(),
+                               replaced.error());
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
@@ -1164,7 +1133,9 @@ void CompanionSyncManager::handleFontUpload() {
         if (!RFont4::hasFontExtension(filename.c_str())) {
             filename += RFont4::kExtension;
         }
-        if (!ensureFontFamilyDirectory(family)) {
+        const String familyPath = String(StoragePaths::kFontsPath) + "/" + family;
+        if (!StorageFiles::ensureDirectory(StoragePaths::kFontsPath)
+            || !StorageFiles::ensureDirectory(familyPath.c_str())) {
             uploadError_ = "Fonts folder unavailable";
             return;
         }
@@ -1256,18 +1227,17 @@ void CompanionSyncManager::handleBookPosition() {
         return;
     }
 
-    api::BookPositionUpdate update;
-    std::string parseError;
-    if (!api::decode(toStringView(body), update, parseError)) {
-        sendError(400, "invalid_json", parseError.c_str());
+    auto update = api::decode<api::BookPositionUpdate>(toStringView(body));
+    if (!update) {
+        sendError(400, "invalid_json", update.error().c_str());
         return;
     }
-    if (!update.id || !update.wordIndex) {
+    if (!update->id || !update->wordIndex) {
         sendError(400, "missing_field", "Book id and wordIndex are required");
         return;
     }
 
-    const String id = update.id->c_str();
+    const String id = update->id->c_str();
     String path;
     if (!resolveBookId(id, path)) {
         sendError(404, "book_not_found", "Book not found", "id");
@@ -1285,9 +1255,12 @@ void CompanionSyncManager::handleBookPosition() {
         return;
     }
 
-    const uint32_t wordIndex = std::min<uint32_t>(*update.wordIndex, header.wordCount - 1);
-    if (!ReadingProgress::writeBookStatePosition(
-            path, {header.sourceSize, header.sourceFingerprint, header.wordCount}, wordIndex)) {
+    const uint32_t wordIndex = std::min<uint32_t>(*update->wordIndex, header.wordCount - 1);
+    auto written = ReadingProgress::writeBookStatePosition(
+        path, {header.sourceSize, header.sourceFingerprint, header.wordCount}, wordIndex);
+    if (!written) {
+        StorageFiles::logError("sync", "save reading position", StoragePaths::bookStatePathFor(path).c_str(),
+                               written.error());
         sendError(500, "storage_error", "Reading position could not be saved");
         return;
     }
@@ -1298,7 +1271,7 @@ void CompanionSyncManager::handleBookPosition() {
     statusLine1_ = "Position saved";
     statusLine2_ = relativeLibraryName(path).c_str();
     sendData(server_, jsonBuffer_, 200,
-             api::BookPositionResponse{*update.id, wordIndex, ReadingProgress::percent(wordIndex, header.wordCount)});
+             api::BookPositionResponse{*update->id, wordIndex, ReadingProgress::percent(wordIndex, header.wordCount)});
 }
 
 void CompanionSyncManager::handleBookUpload() {
@@ -1325,7 +1298,9 @@ void CompanionSyncManager::handleBookUpload() {
         const char* targetDirectory =
             category == "article" ? StoragePaths::kArticleFilesPath : StoragePaths::kBookFilesPath;
 
-        if (!ensureLibraryDirectories()) {
+        if (!StorageFiles::ensureDirectory(StoragePaths::kBooksPath)
+            || !StorageFiles::ensureDirectory(StoragePaths::kBookFilesPath)
+            || !StorageFiles::ensureDirectory(StoragePaths::kArticleFilesPath)) {
             uploadError_ = "Library folders unavailable";
             return;
         }
@@ -1381,7 +1356,7 @@ void CompanionSyncManager::handleThemeUpload() {
         if (!ui::themes::hasThemeExtension({filename.c_str(), filename.length()})) {
             filename += ui::themes::kThemeExtension.data();
         }
-        if (!ensureThemeDirectory()) {
+        if (!StorageFiles::ensureDirectory(StoragePaths::kThemesPath)) {
             uploadError_ = "Themes folder unavailable";
             return;
         }
@@ -1434,7 +1409,8 @@ void CompanionSyncManager::sendError(int status, const char* code, const String&
     api::ApiError error{code == nullptr ? "unknown" : code, toStdString(message), std::nullopt};
     if (field != nullptr && *field != '\0')
         error.field = field;
-    if (!api::encodeError(std::move(error), jsonBuffer_)) {
+    if (auto encoded = api::encodeError(std::move(error), jsonBuffer_); !encoded) {
+        Serial.printf("[sync] error response encode failed: %s\n", encoded.error().c_str());
         jsonBuffer_ =
             "{\"error\":{\"code\":\"serialization_failed\",\"message\":\"Error response could not be encoded\"}}";
         status = 500;
@@ -1534,8 +1510,11 @@ bool CompanionSyncManager::progressForPath(const String& path, uint32_t sourceSi
         return false;
     }
 
-    if (ReadingProgress::readBookStatePosition(path, {sourceSize, sourceFingerprint, wordCount}, wordIndex)) {
-        percent = ReadingProgress::percent(wordIndex, wordCount);
+    const auto savedWordIndex =
+        ReadingProgress::readBookStatePosition(path, {sourceSize, sourceFingerprint, wordCount});
+    if (savedWordIndex) {
+        wordIndex = *savedWordIndex;
+        percent = ReadingProgress::percent(*savedWordIndex, wordCount);
         return true;
     }
 
@@ -1606,7 +1585,10 @@ void CompanionSyncManager::finishUpload(bool success) {
     }
 
     if (success && uploadError_.isEmpty()) {
-        if (!replaceUploadedFile(uploadTmpPath_, uploadFinalPath_)) {
+        auto replaced = replaceUploadedFile(uploadTmpPath_, uploadFinalPath_);
+        if (!replaced) {
+            StorageFiles::logError("sync", "install book", uploadTmpPath_.c_str(), uploadFinalPath_.c_str(),
+                                   replaced.error());
             uploadError_ = "Rename failed";
             Board::Storage::filesystem().remove(uploadTmpPath_);
         } else {

@@ -9,7 +9,10 @@ namespace net {
 
     } // namespace
 
-    bool connectStation(const char* ssid, const char* password, const WifiProgress& progress, uint32_t timeoutMs) {
+    std::expected<void, std::error_code> connectStation(const char* ssid, const char* password,
+                                                        const WifiProgress& progress, uint32_t timeoutMs) {
+        if (ssid == nullptr || *ssid == '\0' || timeoutMs == 0)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         WiFi.persistent(false);
         WiFi.setAutoReconnect(false);
         WiFi.mode(WIFI_STA);
@@ -24,7 +27,9 @@ namespace net {
             delay(kWifiConnectPollMs);
         }
 
-        return WiFi.status() == WL_CONNECTED;
+        if (WiFi.status() != WL_CONNECTED)
+            return std::unexpected(std::make_error_code(std::errc::timed_out));
+        return {};
     }
 
     void disconnect() {

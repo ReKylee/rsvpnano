@@ -5,6 +5,7 @@
 
 #include <string>
 
+#include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 
 namespace focus {
@@ -12,69 +13,22 @@ namespace focus {
 
         constexpr size_t kMaxFileBytes = 4096;
 
-        bool ensureConfigDirectory(fs::FS& filesystem) {
-            File directory = filesystem.open(StoragePaths::kConfigPath);
-            const bool exists = directory && directory.isDirectory();
-            if (directory)
-                directory.close();
-            return exists || filesystem.mkdir(StoragePaths::kConfigPath);
-        }
-
     } // namespace
 
-    LoadResult load(fs::FS& filesystem, Timers& timers) {
-        File file = filesystem.open(StoragePaths::kFocusConfigPath, FILE_READ);
-        if (!file)
-            return LoadResult::Missing;
-        if (file.isDirectory() || file.size() == 0 || file.size() > kMaxFileBytes) {
-            file.close();
-            return LoadResult::Invalid;
-        }
-
-        std::string content(file.size(), '\0');
-        const size_t read = file.read(reinterpret_cast<uint8_t*>(content.data()), content.size());
-        file.close();
-        return read == content.size() && decodeToml(content, timers) ? LoadResult::Valid : LoadResult::Invalid;
+    std::expected<Timers, std::error_code> load(fs::FS& filesystem) {
+        return StorageFiles::readTextFile(filesystem, StoragePaths::kFocusConfigPath, kMaxFileBytes)
+            .and_then([](const std::string& content) { return decodeToml(content); });
     }
 
-    bool save(fs::FS& filesystem, const Timers& timers) {
-        const std::string content = encodeToml(timers);
-        if (content.empty() || !ensureConfigDirectory(filesystem))
-            return false;
-
-        filesystem.remove(StoragePaths::kFocusConfigTempPath);
-        File file = filesystem.open(StoragePaths::kFocusConfigTempPath, FILE_WRITE);
-        if (!file || file.isDirectory()) {
-            if (file)
-                file.close();
-            return false;
-        }
-        const size_t written = file.write(reinterpret_cast<const uint8_t*>(content.data()), content.size());
-        file.flush();
-        file.close();
-        if (written != content.size()) {
-            filesystem.remove(StoragePaths::kFocusConfigTempPath);
-            return false;
-        }
-
-        filesystem.remove(StoragePaths::kFocusConfigBackupPath);
-        File existing = filesystem.open(StoragePaths::kFocusConfigPath, FILE_READ);
-        const bool hadExisting = existing && !existing.isDirectory();
-        if (existing)
-            existing.close();
-        if (hadExisting
-            && !filesystem.rename(StoragePaths::kFocusConfigPath, StoragePaths::kFocusConfigBackupPath)) {
-            filesystem.remove(StoragePaths::kFocusConfigTempPath);
-            return false;
-        }
-        if (!filesystem.rename(StoragePaths::kFocusConfigTempPath, StoragePaths::kFocusConfigPath)) {
-            if (hadExisting)
-                filesystem.rename(StoragePaths::kFocusConfigBackupPath, StoragePaths::kFocusConfigPath);
-            filesystem.remove(StoragePaths::kFocusConfigTempPath);
-            return false;
-        }
-        filesystem.remove(StoragePaths::kFocusConfigBackupPath);
-        return true;
+    std::expected<void, std::error_code> save(fs::FS& filesystem, const Timers& timers) {
+        auto content = encodeToml(timers);
+        if (!content)
+            return std::unexpected(content.error());
+        if (auto directory = StorageFiles::ensureDirectory(StoragePaths::kConfigPath); !directory)
+            return directory;
+        return StorageFiles::writeFileAtomic(filesystem, StoragePaths::kFocusConfigPath,
+                                             StoragePaths::kFocusConfigTempPath, StoragePaths::kFocusConfigBackupPath,
+                                             *content);
     }
 
 } // namespace focus

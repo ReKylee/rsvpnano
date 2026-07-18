@@ -63,8 +63,9 @@ namespace EpubCache {
         return "EPUB - converts on open";
     }
 
-    bool ensureConverted(const String& epubPath, String& rsvpPath, StatusCallback statusCallback, void* statusContext) {
-        rsvpPath = rsvpCachePathForEpub(epubPath);
+    std::expected<String, std::error_code> ensureConverted(const String& epubPath, StatusCallback statusCallback,
+                                                           void* statusContext) {
+        const String rsvpPath = rsvpCachePathForEpub(epubPath);
         auto report = [&](const char* title, const char* line1 = "", const char* line2 = "", int progressPercent = -1) {
             if (statusCallback != nullptr) {
                 statusCallback(statusContext, title, line1, line2, progressPercent);
@@ -76,18 +77,18 @@ namespace EpubCache {
             if (!RSVP_ON_DEVICE_EPUB_CONVERSION) {
                 Serial.printf("[storage] EPUB conversion disabled at build time: %s\n", epubPath.c_str());
                 report("EPUB unsupported", displayNameForPath(epubPath).c_str(), "Build flag is disabled", 100);
-                return false;
+                return std::unexpected(std::make_error_code(std::errc::not_supported));
             }
 
             if (!StorageFiles::fileExistsWithBytes(epubPath.c_str())) {
                 Serial.printf("[storage] EPUB source missing or empty: %s\n", epubPath.c_str());
                 report("Preparing book", displayNameForPath(epubPath).c_str(), "EPUB missing", 100);
-                return false;
+                return std::unexpected(std::make_error_code(std::errc::no_such_file_or_directory));
             }
 
             if (hasCurrentCache(epubPath)) {
                 Serial.printf("[storage] EPUB cache hit: %s -> %s\n", epubPath.c_str(), rsvpPath.c_str());
-                return true;
+                return rsvpPath;
             }
 
             if (StorageFiles::fileExistsWithBytes(rsvpPath.c_str())) {
@@ -121,14 +122,14 @@ namespace EpubCache {
             options.progressLabel = displayNameForPath(epubPath);
 
             const uint32_t startedMs = millis();
-            const bool converted = EpubConverter::convertIfNeeded(epubPath, rsvpPath, options);
+            const auto converted = EpubConverter::convertIfNeeded(epubPath, rsvpPath, options);
             elapsedMs = millis() - startedMs;
             if (!converted) {
                 Serial.printf("[storage] EPUB conversion failed after %lu ms: %s\n",
                               static_cast<unsigned long>(elapsedMs), epubPath.c_str());
                 report("Preparing book", "EPUB conversion failed", "Check serial monitor", 100);
                 logHeapSnapshot("after EPUB conversion");
-                return false;
+                return std::unexpected(converted.error());
             }
         }
         logHeapSnapshot("after EPUB conversion");
@@ -137,13 +138,13 @@ namespace EpubCache {
             Serial.printf("[storage] EPUB conversion failed after %lu ms: %s\n", static_cast<unsigned long>(elapsedMs),
                           epubPath.c_str());
             report("Preparing book", "EPUB conversion failed", "Check serial monitor", 100);
-            return false;
+            return std::unexpected(std::make_error_code(std::errc::io_error));
         }
 
         Serial.printf("[storage] EPUB conversion ready after %lu ms: %s\n", static_cast<unsigned long>(elapsedMs),
                       rsvpPath.c_str());
         report("Preparing book", displayNameForPath(rsvpPath).c_str(), "Conversion complete", 100);
-        return true;
+        return rsvpPath;
     }
 
 } // namespace EpubCache

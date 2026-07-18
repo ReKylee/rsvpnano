@@ -7,9 +7,7 @@ namespace {
     const char* kAsset = "rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin";
 
     releaseparser::ReleaseInfo parseJson(const String& json) {
-        releaseparser::ReleaseInfo out;
-        releaseparser::parse(json, kAsset, out);
-        return out;
+        return releaseparser::parse(json, kAsset).value();
     }
 
 } // namespace
@@ -24,17 +22,17 @@ void test_extracts_tag_and_matching_asset_url() {
                         "{\"name\":\"rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin\",\"browser_download_url\":\"https://"
                         "example.com/ota.bin\"}"
                         "]}";
-    releaseparser::ReleaseInfo out;
-    TEST_ASSERT_TRUE(releaseparser::parse(json, kAsset, out));
-    TEST_ASSERT_EQUAL_STRING("v0.0.6", out.tagName.c_str());
-    TEST_ASSERT_EQUAL_STRING("https://example.com/ota.bin", out.assetUrl.c_str());
+    const auto out = releaseparser::parse(json, kAsset);
+    TEST_ASSERT_TRUE(out.has_value());
+    TEST_ASSERT_EQUAL_STRING("v0.0.6", out->tagName.c_str());
+    TEST_ASSERT_EQUAL_STRING("https://example.com/ota.bin", out->assetUrl.c_str());
 }
 
 void test_returns_false_when_tag_missing() {
     const String json = "{\"assets\":[]}";
-    releaseparser::ReleaseInfo out;
-    TEST_ASSERT_FALSE(releaseparser::parse(json, kAsset, out));
-    TEST_ASSERT_TRUE(out.tagName.isEmpty());
+    const auto out = releaseparser::parse(json, kAsset);
+    TEST_ASSERT_FALSE(out.has_value());
+    TEST_ASSERT_TRUE(out.error() == std::errc::invalid_argument);
 }
 
 void test_asset_url_empty_when_no_asset_matches() {
@@ -71,11 +69,11 @@ void test_picks_url_after_matching_name_not_a_neighbor() {
 }
 
 void test_builds_version_from_release_tag_and_commit() {
-    String version;
-    TEST_ASSERT_TRUE(releaseparser::versionForCommit("preview-v0.0.9", "0123456789abcdef0123456789abcdef01234567\n",
-                                                     version));
-    TEST_ASSERT_EQUAL_STRING("preview-v0.0.9+0123456789ab", version.c_str());
-    TEST_ASSERT_FALSE(releaseparser::versionForCommit("v1", "not-a-commit", version));
+    const auto version =
+        releaseparser::versionForCommit("preview-v0.0.9", "0123456789abcdef0123456789abcdef01234567\n");
+    TEST_ASSERT_TRUE(version.has_value());
+    TEST_ASSERT_EQUAL_STRING("preview-v0.0.9+0123456789ab", version->c_str());
+    TEST_ASSERT_FALSE(releaseparser::versionForCommit("v1", "not-a-commit").has_value());
 }
 
 int main(void) {

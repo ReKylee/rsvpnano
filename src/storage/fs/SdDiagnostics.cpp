@@ -72,12 +72,12 @@ namespace SdDiagnostics {
         }
 
         bool ensureLibraryFolderLayout() {
-            return StorageFiles::ensureDirectory(StoragePaths::kBooksPath, "sd-check")
-                && StorageFiles::ensureDirectory(StoragePaths::kBookFilesPath, "sd-check")
-                && StorageFiles::ensureDirectory(StoragePaths::kArticleFilesPath, "sd-check")
-                && StorageFiles::ensureDirectory(StoragePaths::kConfigPath, "sd-check")
-                && StorageFiles::ensureDirectory(StoragePaths::kThemesPath, "sd-check")
-                && StorageFiles::ensureDirectory(StoragePaths::kFontsPath, "sd-check");
+            return StorageFiles::ensureDirectory(StoragePaths::kBooksPath)
+                && StorageFiles::ensureDirectory(StoragePaths::kBookFilesPath)
+                && StorageFiles::ensureDirectory(StoragePaths::kArticleFilesPath)
+                && StorageFiles::ensureDirectory(StoragePaths::kConfigPath)
+                && StorageFiles::ensureDirectory(StoragePaths::kThemesPath)
+                && StorageFiles::ensureDirectory(StoragePaths::kFontsPath);
         }
 
         bool isSupportedFrequency(int frequencyKhz) {

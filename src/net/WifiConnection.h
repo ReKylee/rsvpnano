@@ -2,7 +2,9 @@
 
 #include <Arduino.h>
 
+#include <expected>
 #include <functional>
+#include <system_error>
 
 namespace net {
 
@@ -11,8 +13,9 @@ namespace net {
 
     // Brings up WIFI_STA and blocks until associated or the connect timeout
     // elapses. Returns true only when connected. progress may be null.
-    bool connectStation(const char* ssid, const char* password, const WifiProgress& progress = nullptr,
-                        uint32_t timeoutMs = 15000);
+    std::expected<void, std::error_code> connectStation(const char* ssid, const char* password,
+                                                        const WifiProgress& progress = nullptr,
+                                                        uint32_t timeoutMs = 15000);
 
     // Disconnects and powers the radio off (WIFI_OFF).
     void disconnect();

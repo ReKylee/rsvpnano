@@ -36,36 +36,42 @@ void test_focus_config_round_trip_and_validation() {
     focus::Timers timers;
     timers.timers = {timer("Write \\\"code\\\"", 25, 5, 4), timer("Чтение", 45, 10, 2)};
 
-    const std::string serialized = focus::encodeToml(timers);
-    TEST_ASSERT_NOT_EQUAL(std::string::npos, serialized.find("schemaVersion = 1"));
-    TEST_ASSERT_NOT_EQUAL(std::string::npos, serialized.find("[[timers]]"));
-    focus::Timers parsed;
-    TEST_ASSERT_TRUE(focus::decodeToml(serialized, parsed));
-    TEST_ASSERT_EQUAL(2, parsed.timers.size());
-    TEST_ASSERT_EQUAL_STRING(timers.timers[0].name.c_str(), parsed.timers[0].name.c_str());
-    TEST_ASSERT_EQUAL_STRING(timers.timers[1].name.c_str(), parsed.timers[1].name.c_str());
-    TEST_ASSERT_EQUAL(45, parsed.timers[1].focusMinutes);
+    const auto serialized = focus::encodeToml(timers);
+    TEST_ASSERT_TRUE(serialized.has_value());
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, serialized->find("schemaVersion = 1"));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, serialized->find("[[timers]]"));
+    auto parsed = focus::decodeToml(*serialized);
+    TEST_ASSERT_TRUE(parsed.has_value());
+    TEST_ASSERT_EQUAL(2, parsed->timers.size());
+    TEST_ASSERT_EQUAL_STRING(timers.timers[0].name.c_str(), parsed->timers[0].name.c_str());
+    TEST_ASSERT_EQUAL_STRING(timers.timers[1].name.c_str(), parsed->timers[1].name.c_str());
+    TEST_ASSERT_EQUAL(45, parsed->timers[1].focusMinutes);
 
     const std::string clamped =
         "schemaVersion = 1\n[[timers]]\nname = \"Bounded\"\nfocusMinutes = 181\nbreakMinutes = 0\nrounds = 99\n";
-    TEST_ASSERT_TRUE(focus::decodeToml(clamped, parsed));
-    TEST_ASSERT_EQUAL(180, parsed.timers[0].focusMinutes);
-    TEST_ASSERT_EQUAL(1, parsed.timers[0].breakMinutes);
-    TEST_ASSERT_EQUAL(12, parsed.timers[0].rounds);
-    TEST_ASSERT_FALSE(focus::decodeToml("schemaVersion = 2\n", parsed));
-    TEST_ASSERT_FALSE(focus::decodeToml("schemaVersion = 1\nunknown = true\n", parsed));
+    parsed = focus::decodeToml(clamped);
+    TEST_ASSERT_TRUE(parsed.has_value());
+    TEST_ASSERT_EQUAL(180, parsed->timers[0].focusMinutes);
+    TEST_ASSERT_EQUAL(1, parsed->timers[0].breakMinutes);
+    TEST_ASSERT_EQUAL(12, parsed->timers[0].rounds);
+    TEST_ASSERT_TRUE(focus::decodeToml("schemaVersion = 2\n").error() == std::errc::invalid_argument);
+    TEST_ASSERT_TRUE(focus::decodeToml("schemaVersion = 1\nunknown = true\n").error() == std::errc::invalid_argument);
     TEST_ASSERT_TRUE(focus::valid(timer("12345678901234", 25, 5, 4)));
     TEST_ASSERT_FALSE(focus::valid(timer("123456789012345", 25, 5, 4)));
 
     focus::Timers full;
     for (size_t index = 0; index < focus::kMaxTimers; ++index)
         full.timers.push_back(timer("Timer " + std::to_string(index), 25, 5, 4));
-    TEST_ASSERT_TRUE(focus::decodeToml(focus::encodeToml(full), parsed));
-    TEST_ASSERT_EQUAL(focus::kMaxTimers, parsed.timers.size());
-    std::string tooMany = focus::encodeToml(full);
+    const auto fullToml = focus::encodeToml(full);
+    TEST_ASSERT_TRUE(fullToml.has_value());
+    parsed = focus::decodeToml(*fullToml);
+    TEST_ASSERT_TRUE(parsed.has_value());
+    TEST_ASSERT_EQUAL(focus::kMaxTimers, parsed->timers.size());
+    std::string tooMany = *fullToml;
     tooMany += "\n[[timers]]\nname = \"Seventh\"\nfocusMinutes = 25\nbreakMinutes = 5\nrounds = 4\n";
-    TEST_ASSERT_TRUE(focus::decodeToml(tooMany, parsed));
-    TEST_ASSERT_EQUAL(focus::kMaxTimers, parsed.timers.size());
+    parsed = focus::decodeToml(tooMany);
+    TEST_ASSERT_TRUE(parsed.has_value());
+    TEST_ASSERT_EQUAL(focus::kMaxTimers, parsed->timers.size());
 }
 
 void test_focus_session_flip_pause_and_completion() {

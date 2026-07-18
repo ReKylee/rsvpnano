@@ -76,29 +76,29 @@ namespace focus {
             && std::ranges::all_of(timers.timers, [](const Timer& timer) { return valid(timer); });
     }
 
-    bool decodeToml(std::string_view content, Timers& timers) {
+    std::expected<Timers, std::error_code> decodeToml(std::string_view content) {
         if (content.empty() || content.size() > kMaxFileBytes)
-            return false;
+            return std::unexpected(std::make_error_code(content.empty() ? std::errc::invalid_argument
+                                                                        : std::errc::value_too_large));
 
         Timers parsed;
         if (glz::read_toml(parsed, content) || parsed.schemaVersion != kSchemaVersion)
-            return false;
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         if (parsed.timers.empty())
             parsed.timers.push_back(defaultTimer());
         if (parsed.timers.size() > kMaxTimers)
             parsed.timers.resize(kMaxTimers);
         if (!valid(parsed))
-            return false;
-        timers = std::move(parsed);
-        return true;
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        return parsed;
     }
 
-    std::string encodeToml(const Timers& timers) {
+    std::expected<std::string, std::error_code> encodeToml(const Timers& timers) {
         if (!valid(timers))
-            return {};
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         std::string output;
         if (glz::write_toml(timers, output))
-            return {};
+            return std::unexpected(std::make_error_code(std::errc::io_error));
         return output;
     }
 

@@ -10,6 +10,7 @@
 #include "reader/ReadingLoop.h"
 #include "settings/SettingsGlaze.h"
 #include "storage/StorageManager.h"
+#include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 #include "storage/index/IndexedBookStore.h"
 
@@ -28,70 +29,63 @@ namespace ReadingProgress {
                 && state.wordCount == identity.wordCount;
         }
 
-        bool readBookState(const String& bookPath, const BookIdentity& identity, BookState& state) {
+        std::expected<BookState, std::error_code> readBookState(const String& bookPath, const BookIdentity& identity) {
             if (bookPath.isEmpty() || !isValidIdentity(identity))
-                return false;
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
 
             File file = Board::Storage::filesystem().open(StoragePaths::bookStatePathFor(bookPath), FILE_READ);
             if (!file || file.isDirectory()) {
                 if (file)
                     file.close();
-                return false;
+                return std::unexpected(std::make_error_code(file ? std::errc::invalid_argument
+                                                                 : std::errc::no_such_file_or_directory));
             }
             const size_t size = file.size();
             if (size == 0 || size > kMaxBookStateBytes) {
                 file.close();
-                return false;
+                return std::unexpected(std::make_error_code(size > kMaxBookStateBytes ? std::errc::value_too_large
+                                                                                      : std::errc::invalid_argument));
             }
             std::string input(size, '\0');
             const size_t read = file.read(reinterpret_cast<uint8_t*>(input.data()), input.size());
             file.close();
             if (read != input.size())
-                return false;
+                return std::unexpected(std::make_error_code(std::errc::io_error));
 
             BookState candidate;
             if (const glz::error_ctx error = glz::read_toml(candidate, input)) {
-                Serial.printf("[storage-progress] invalid book state: %s\n%s\n", bookPath.c_str(),
-                              glz::format_error(error, input).c_str());
-                return false;
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
             }
-            if (!matches(candidate, identity)) {
-                Serial.printf("[storage-progress] ignored stale book state: %s\n", bookPath.c_str());
-                return false;
-            }
+            if (!matches(candidate, identity))
+                return std::unexpected(std::make_error_code(std::errc::state_not_recoverable));
             candidate.wordIndex = std::min(candidate.wordIndex, identity.wordCount - 1);
-            state = std::move(candidate);
-            return true;
+            return candidate;
         }
 
-        bool writeBookState(const String& bookPath, BookState state) {
+        std::expected<void, std::error_code> writeBookState(const String& bookPath, BookState state) {
             std::string output;
-            if (const glz::error_ctx error = glz::write_toml(state, output)) {
-                Serial.printf("[storage-progress] book state serialization failed: %s\n", bookPath.c_str());
-                return false;
-            }
+            if (glz::write_toml(state, output))
+                return std::unexpected(std::make_error_code(std::errc::io_error));
 
             const String sidecarPath = StoragePaths::bookStatePathFor(bookPath);
             File file = Board::Storage::filesystem().open(sidecarPath, FILE_WRITE);
             if (!file || file.isDirectory()) {
                 if (file)
                     file.close();
-                Serial.printf("[storage-progress] book state open failed: %s\n", sidecarPath.c_str());
-                return false;
+                return std::unexpected(std::make_error_code(std::errc::io_error));
             }
             const size_t written = file.write(reinterpret_cast<const uint8_t*>(output.data()), output.size());
             file.close();
             if (written != output.size()) {
-                Serial.printf("[storage-progress] book state write failed: %s\n", sidecarPath.c_str());
-                return false;
+                return std::unexpected(std::make_error_code(std::errc::io_error));
             }
-            return true;
+            return {};
         }
 
-        bool writeSessionSidecar(const Session& session, const IndexedBookStore& store, uint32_t wordIndex,
-                                 uint32_t wordCount) {
+        std::expected<void, std::error_code> writeSessionSidecar(const Session& session, const IndexedBookStore& store,
+                                                                uint32_t wordIndex, uint32_t wordCount) {
             if (!session.fromStorage || session.path.empty() || !store.isOpen() || wordCount == 0)
-                return false;
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
             BookState state = session.state;
             state.sourceSize = store.sourceSize();
             state.sourceFingerprint = store.sourceFingerprint();
@@ -100,46 +94,43 @@ namespace ReadingProgress {
             return writeBookState(session.path.c_str(), std::move(state));
         }
 
-        bool readSessionSidecar(Session& session, const IndexedBookStore& store, const ReadingLoop& reader,
-                                uint32_t& wordIndex) {
-            wordIndex = kNoSavedWordIndex;
+        std::expected<uint32_t, std::error_code> readSessionSidecar(Session& session, const IndexedBookStore& store,
+                                                                   const ReadingLoop& reader) {
             const BookIdentity identity{store.sourceSize(), store.sourceFingerprint(),
                                         static_cast<uint32_t>(reader.wordCount())};
-            if (!session.fromStorage || session.path.empty() || !store.isOpen()
-                || !readBookState(session.path.c_str(), identity, session.state))
-                return false;
-            wordIndex = session.state.wordIndex;
-            return true;
+            if (!session.fromStorage || session.path.empty() || !store.isOpen())
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            auto state = readBookState(session.path.c_str(), identity);
+            if (!state)
+                return std::unexpected(state.error());
+            session.state = std::move(*state);
+            return session.state.wordIndex;
         }
 
     } // namespace
 
-    bool readBookStatePosition(const String& bookPath, const BookIdentity& identity, uint32_t& wordIndex) {
-        wordIndex = 0;
-        BookState state;
-        if (!readBookState(bookPath, identity, state))
-            return false;
-        wordIndex = state.wordIndex;
-        return true;
+    std::expected<uint32_t, std::error_code> readBookStatePosition(const String& bookPath,
+                                                                   const BookIdentity& identity) {
+        return readBookState(bookPath, identity).transform([](const BookState& state) { return state.wordIndex; });
     }
 
-    bool writeBookStatePosition(const String& bookPath, const BookIdentity& identity, uint32_t wordIndex) {
+    std::expected<void, std::error_code> writeBookStatePosition(const String& bookPath, const BookIdentity& identity,
+                                                                uint32_t wordIndex) {
         if (bookPath.isEmpty() || !isValidIdentity(identity))
-            return false;
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
 
-        BookState state;
-        readBookState(bookPath, identity, state); // Preserve per-book preferences during position-only writes.
+        BookState state = readBookState(bookPath, identity).value_or(BookState{}); // Preserve per-book preferences.
         state.sourceSize = identity.sourceSize;
         state.sourceFingerprint = identity.sourceFingerprint;
         state.wordCount = identity.wordCount;
         state.wordIndex = std::min(wordIndex, identity.wordCount - 1);
-        if (!writeBookState(bookPath, std::move(state)))
-            return false;
+        if (auto written = writeBookState(bookPath, std::move(state)); !written)
+            return written;
 
         Serial.printf("[storage-progress] mirrored position word=%u count=%u state=%s\n",
                       static_cast<unsigned int>(wordIndex), static_cast<unsigned int>(identity.wordCount),
                       StoragePaths::bookStatePathFor(bookPath).c_str());
-        return true;
+        return {};
     }
 
     uint8_t percent(uint32_t wordIndex, uint32_t wordCount) {
@@ -171,14 +162,21 @@ namespace ReadingProgress {
     }
 
     void Session::mirror(const IndexedBookStore& store, const ReadingLoop& reader) const {
-        writeSessionSidecar(*this, store, static_cast<uint32_t>(reader.currentIndex()),
-                            static_cast<uint32_t>(reader.wordCount()));
+        auto written = writeSessionSidecar(*this, store, static_cast<uint32_t>(reader.currentIndex()),
+                                           static_cast<uint32_t>(reader.wordCount()));
+        if (!written)
+            StorageFiles::logError("storage-progress", "mirror", StoragePaths::bookStatePathFor(path.c_str()).c_str(),
+                                   written.error());
     }
 
     uint32_t Session::restore(const IndexedBookStore& store, const ReadingLoop& reader) {
-        uint32_t wordIndex = kNoSavedWordIndex;
-        if (readSessionSidecar(*this, store, reader, wordIndex))
-            return wordIndex;
+        auto wordIndex = readSessionSidecar(*this, store, reader);
+        if (wordIndex)
+            return *wordIndex;
+        if (wordIndex.error() != std::errc::no_such_file_or_directory
+            && wordIndex.error() != std::errc::state_not_recoverable)
+            StorageFiles::logError("storage-progress", "restore", StoragePaths::bookStatePathFor(path.c_str()).c_str(),
+                                   wordIndex.error());
         return kNoSavedWordIndex;
     }
 

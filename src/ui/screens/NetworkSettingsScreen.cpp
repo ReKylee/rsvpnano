@@ -197,7 +197,7 @@ namespace screens {
 
         ui.endFrame();
         status(ui, ui.text(UiText::Connecting), ssid);
-        const bool connected = net::connectStation(ssid.c_str(), password_.c_str(), [&](int percent) {
+        const auto connected = net::connectStation(ssid.c_str(), password_.c_str(), [&](int percent) {
             status(ui, ui.text(UiText::Connecting), ssid, {}, percent);
         });
         net::disconnect();

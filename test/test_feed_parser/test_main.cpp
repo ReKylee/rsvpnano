@@ -3,6 +3,7 @@
 
 #include "rss/FeedParser.h"
 #include "rss/RssConfig.h"
+#include "text/AsciiText.h"
 
 void setUp() {}
 
@@ -195,6 +196,23 @@ void test_rss_config_round_trip_and_normalization() {
   TEST_ASSERT_EQUAL(2, fromJson.feeds.size());
 }
 
+void test_standard_error_codes_are_preserved() {
+  TEST_ASSERT_TRUE(rss::decodeToml("schemaVersion = 2\n").error() == std::errc::not_supported);
+  TEST_ASSERT_TRUE(rss::decodeToml("schemaVersion = 1\nfeeds = [\"ftp://example.com/feed\"]\n").error()
+                   == std::errc::invalid_argument);
+
+  rss::Config tooMany;
+  for (size_t index = 0; index <= rss::kMaxFeeds; ++index)
+    tooMany.feeds.push_back("https://example.com/" + std::to_string(index));
+  TEST_ASSERT_TRUE(rss::normalize(tooMany).error() == std::errc::no_buffer_space);
+  TEST_ASSERT_TRUE(rss::decodeToml(std::string(rss::kMaxConfigBytes + 1, 'x')).error()
+                   == std::errc::value_too_large);
+
+  TEST_ASSERT_EQUAL(255, *AsciiText::parseUnsigned<uint16_t>("ff", 16));
+  TEST_ASSERT_TRUE(AsciiText::parseUnsigned<uint16_t>("12x").error() == std::errc::invalid_argument);
+  TEST_ASSERT_TRUE(AsciiText::parseUnsigned<uint8_t>("256").error() == std::errc::result_out_of_range);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_parses_rss_item_fields);
@@ -210,5 +228,6 @@ int main(void) {
   RUN_TEST(test_preserves_long_full_text_content);
   RUN_TEST(test_host_label_strips_scheme_and_www);
   RUN_TEST(test_rss_config_round_trip_and_normalization);
+  RUN_TEST(test_standard_error_codes_are_preserved);
   return UNITY_END();
 }

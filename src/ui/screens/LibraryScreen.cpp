@@ -218,7 +218,9 @@ namespace screens {
             } else if (metadataLoaded && header.wordCount > 0) {
                 const ReadingProgress::BookIdentity identity{header.sourceSize, header.sourceFingerprint,
                                                              header.wordCount};
-                hasPosition = ReadingProgress::readBookStatePosition(path.c_str(), identity, wordIndex);
+                const auto savedWordIndex = ReadingProgress::readBookStatePosition(path.c_str(), identity);
+                hasPosition = savedWordIndex.has_value();
+                wordIndex = savedWordIndex.value_or(0);
                 item.progress = hasPosition ? ReadingProgress::percent(wordIndex, header.wordCount) : 0;
                 if (const ChapterMarker* chapter = metadata.chapterAt(hasPosition ? wordIndex : 0)) {
                     item.chapter = chapter->title;

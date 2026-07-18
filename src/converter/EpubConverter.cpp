@@ -562,20 +562,18 @@ bool EpubConverter::isCurrentCache(const String& rsvpPath) {
     return current;
 }
 
-bool EpubConverter::convertIfNeeded(const String& epubPath, const String& rsvpPath, const Options& options) {
-    if (removeStaleCacheOrReuseCurrent(rsvpPath)) {
-        return true;
-    }
+std::expected<void, std::error_code> EpubConverter::convertIfNeeded(const String& epubPath, const String& rsvpPath,
+                                                                    const Options& options) {
+    if (removeStaleCacheOrReuseCurrent(rsvpPath))
+        return {};
 
     const ConversionPaths paths = conversionPathsFor(rsvpPath);
-    if (previousCurrentAttemptRestarted(epubPath, paths, options)) {
-        return false;
-    }
+    if (previousCurrentAttemptRestarted(epubPath, paths, options))
+        return std::unexpected(std::make_error_code(std::errc::operation_canceled));
 
     removeOrphanedTempFile(epubPath, paths.temp);
-    if (shouldSkipCurrentFailure(epubPath, paths.failed)) {
-        return false;
-    }
+    if (shouldSkipCurrentFailure(epubPath, paths.failed))
+        return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));
 
     Serial.printf("[epub] Converting on device: %s\n", epubPath.c_str());
     writeFailureMarker(paths.lock, "Conversion in progress. Delete this file only if retrying.");
@@ -583,9 +581,9 @@ bool EpubConverter::convertIfNeeded(const String& epubPath, const String& rsvpPa
     Board::Storage::filesystem().remove(paths.lock);
     if (!converted) {
         writeFailureMarker(paths.failed, "Conversion failed. Remove this marker to retry.");
-        return false;
+        return std::unexpected(std::make_error_code(std::errc::io_error));
     }
 
     Board::Storage::filesystem().remove(paths.failed);
-    return true;
+    return {};
 }

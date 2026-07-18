@@ -100,7 +100,7 @@ void test_unknown_key_and_schema_errors_are_distinct() {
 void test_companion_envelope_encodes_lvalue_without_owning_it() {
     const companion::api::NetworkResponse response{true};
     std::string json;
-    TEST_ASSERT_TRUE(companion::api::encodeData(response, json));
+    TEST_ASSERT_TRUE(companion::api::encodeData(response, json).has_value());
     TEST_ASSERT_EQUAL_STRING("{\"data\":{\"passwordSet\":true}}", json.c_str());
 }
 

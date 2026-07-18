@@ -1,6 +1,8 @@
 #pragma once
 
 #include <Arduino.h>
+#include <expected>
+#include <string>
 #include "board/BoardConfig.h"
 #include "settings/SettingsModel.h"
 
@@ -54,10 +56,10 @@ private:
 
     bool connectWiFi(const Config& config, StatusCallback callback, void* context) const;
     void disconnectWiFi() const;
-    bool fetchRelease(const Config& config, LatestRelease& release, String& errorDetail, StatusCallback callback,
-                      void* context) const;
-    bool resolveDownloadUrl(const String& assetUrl, const String& version, String& resolvedUrl, String& errorDetail,
-                            StatusCallback callback, void* context) const;
+    std::expected<LatestRelease, std::string> fetchRelease(const Config& config, StatusCallback callback,
+                                                           void* context) const;
+    std::expected<String, std::string> resolveDownloadUrl(const String& assetUrl, const String& version,
+                                                          StatusCallback callback, void* context) const;
     void reportStatus(StatusCallback callback, void* context, const char* title, const String& line1,
                       const String& line2, int progressPercent) const;
 };

@@ -19,7 +19,7 @@ namespace {
     };
 
     bool writeThemeFile(const char* path, const ui::themes::Theme& theme) {
-        if (!StorageFiles::ensureDirectory(StoragePaths::kThemesPath, "theme"))
+        if (!StorageFiles::ensureDirectory(StoragePaths::kThemesPath))
             return false;
         auto encoded = ui::themes::encodeToml(theme.definition);
         if (!encoded) {

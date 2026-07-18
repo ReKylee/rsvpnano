@@ -1,6 +1,8 @@
 #pragma once
 
 #include <Arduino.h>
+#include <expected>
+#include <system_error>
 
 #ifndef RSVP_MAX_BOOK_WORDS
 #define RSVP_MAX_BOOK_WORDS 0
@@ -28,6 +30,7 @@ public:
         String progressLabel;
     };
 
-    static bool convertIfNeeded(const String& epubPath, const String& rsvpPath, const Options& options = Options());
+    static std::expected<void, std::error_code> convertIfNeeded(const String& epubPath, const String& rsvpPath,
+                                                                const Options& options = Options());
     static bool isCurrentCache(const String& rsvpPath);
 };

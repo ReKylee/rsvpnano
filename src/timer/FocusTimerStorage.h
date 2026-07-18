@@ -1,6 +1,7 @@
 #pragma once
 
-#include <cstdint>
+#include <expected>
+#include <system_error>
 
 #include "timer/FocusTimers.h"
 
@@ -10,13 +11,7 @@ namespace fs {
 
 namespace focus {
 
-    enum class LoadResult : uint8_t {
-        Missing,
-        Valid,
-        Invalid,
-    };
-
-    LoadResult load(fs::FS& filesystem, Timers& timers);
-    bool save(fs::FS& filesystem, const Timers& timers);
+    std::expected<Timers, std::error_code> load(fs::FS& filesystem);
+    std::expected<void, std::error_code> save(fs::FS& filesystem, const Timers& timers);
 
 } // namespace focus

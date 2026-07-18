@@ -2,8 +2,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 #include "settings/SettingsRules.h"
@@ -31,7 +33,7 @@ namespace focus {
 
     bool valid(const Timer& timer);
     bool valid(const Timers& timers);
-    bool decodeToml(std::string_view content, Timers& timers);
-    std::string encodeToml(const Timers& timers);
+    std::expected<Timers, std::error_code> decodeToml(std::string_view content);
+    std::expected<std::string, std::error_code> encodeToml(const Timers& timers);
 
 } // namespace focus

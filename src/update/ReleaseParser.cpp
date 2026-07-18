@@ -140,25 +140,24 @@ namespace releaseparser {
 
     } // namespace
 
-    bool parse(const String& json, const String& assetName, ReleaseInfo& out) {
-        out = ReleaseInfo();
+    std::expected<ReleaseInfo, std::error_code> parse(const String& json, const String& assetName) {
+        ReleaseInfo out;
         const bool haveTag = extractJsonStringValue(json, "tag_name", 0, out.tagName) && !out.tagName.isEmpty();
         extractAssetDownloadUrl(json, assetName, out.assetUrl);
-        return haveTag;
+        if (!haveTag)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        return out;
     }
 
-    bool versionForCommit(const String& tagName, String commitSha, String& version) {
+    std::expected<String, std::error_code> versionForCommit(const String& tagName, String commitSha) {
         commitSha.trim();
-        if (tagName.isEmpty() || commitSha.length() != 40) {
-            return false;
-        }
+        if (tagName.isEmpty() || commitSha.length() != 40)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         for (size_t i = 0; i < commitSha.length(); ++i) {
-            if (!std::isxdigit(static_cast<unsigned char>(commitSha[i]))) {
-                return false;
-            }
+            if (!std::isxdigit(static_cast<unsigned char>(commitSha[i])))
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         }
-        version = tagName + "+" + commitSha.substring(0, 12);
-        return true;
+        return tagName + "+" + commitSha.substring(0, 12);
     }
 
 } // namespace releaseparser

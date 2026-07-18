@@ -34,13 +34,13 @@ namespace ui::themes {
                 return;
             }
 
-            uint32_t color = 0;
-            if (!AsciiText::parseUnsigned(std::string_view{text}.substr(1), color, 16)) {
+            const auto color = AsciiText::parseUnsigned<uint32_t>(std::string_view{text}.substr(1), 16);
+            if (!color) {
                 context.error = glz::error_code::constraint_violated;
                 context.custom_error_message = "RGB565 color contains a non-hexadecimal digit";
                 return;
             }
-            output.value = rgb565(color >> 16U, color >> 8U, color);
+            output.value = rgb565(*color >> 16U, *color >> 8U, *color);
         };
 
         inline constexpr auto writeRgb565 = [](const Rgb565& color) {

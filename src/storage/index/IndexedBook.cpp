@@ -890,20 +890,20 @@ namespace IndexedBook {
                     return false;
                 }
 
-                String rsvpPath;
-                if (!EpubCache::ensureConverted(path, rsvpPath, request.statusCallback, request.statusContext)) {
+                auto rsvpPath = EpubCache::ensureConverted(path, request.statusCallback, request.statusContext);
+                if (!rsvpPath) {
                     return false;
                 }
 
                 BookLibrary::refresh(library, true, RSVP_ON_DEVICE_EPUB_CONVERSION);
-                const int convertedIndex = BookLibrary::indexOfPath(library, rsvpPath.c_str());
+                const int convertedIndex = BookLibrary::indexOfPath(library, rsvpPath->c_str());
                 if (convertedIndex < 0) {
-                    Serial.printf("[storage] Converted RSVP not found in refreshed library: %s\n", rsvpPath.c_str());
+                    Serial.printf("[storage] Converted RSVP not found in refreshed library: %s\n", rsvpPath->c_str());
                     report("Book open failed", displayNameForPath(path).c_str(), "Conversion cache missing", 100);
                     return false;
                 }
 
-                path = rsvpPath;
+                path = *rsvpPath;
                 parsedIndex = static_cast<size_t>(convertedIndex);
             }
         }

@@ -14,23 +14,51 @@
 #include <vector>
 
 #include "board/BoardStorage.h"
+#include "rss/RssConfig.h"
+#include "rss/RssConfigStorage.h"
 #include "settings/NvsSecurity.h"
 #include "settings/SettingsGlaze.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 #include "storage/index/ReadingProgress.h"
 #include "text/AsciiText.h"
+#include "timer/FocusTimerStorage.h"
 #include "ui/Theme.h"
 
+namespace {
+
+    struct LegacyFocusTimer {
+        std::string name;
+        uint16_t focus_minutes = 25;
+        uint16_t break_minutes = 5;
+        uint8_t rounds = 4;
+    };
+
+    struct LegacyFocusConfig {
+        uint32_t version = 0;
+        std::vector<LegacyFocusTimer> timer;
+    };
+
+} // namespace
+
 void App::migrateLegacyStorage() {
-    // This function is for migrating pre-Glaze settings, secrets, themes, and book progress.
-    constexpr char kMigrationMarker[] = "cfg2_migrated";
+    // This function is for migrating pre-Glaze settings, secrets, themes, RSS, focus timers, and book progress.
+    constexpr char kMigrationMarker[] = "cfg4_migrated";
+    constexpr std::array kPreviousMigrationMarkers{"cfg2_migrated", "cfg3_migrated"};
     constexpr char kLegacySettingsPath[] = "/config/settings.conf";
     constexpr char kLegacySettingsBackupPath[] = "/config/settings.conf.bak";
     constexpr char kLegacySettingsTempPath[] = "/config/settings.conf.tmp";
+    constexpr char kLegacyRssPath[] = "/config/rss.conf";
+    constexpr char kLegacyRssBackupPath[] = "/config/rss.conf.bak";
+    constexpr char kLegacyRssTempPath[] = "/config/rss.conf.tmp";
+    constexpr char kLegacyFocusPath[] = "/config/focus.conf";
+    constexpr char kLegacyFocusBackupPath[] = "/config/focus.conf.bak";
+    constexpr char kLegacyFocusTempPath[] = "/config/focus.conf.tmp";
     constexpr char kLegacyThemeExtension[] = ".rtheme";
     constexpr char kLegacyProgressExtension[] = ".rpos";
     constexpr size_t kMaxLegacyThemeBytes = 4096;
+    constexpr size_t kMaxLegacyRssBytes = 4096;
+    constexpr size_t kMaxLegacyFocusBytes = 4096;
 
     if (prefs_.getBool(kMigrationMarker, false))
         return;
@@ -552,6 +580,105 @@ void App::migrateLegacyStorage() {
         }
     }
 
+    bool rssComplete = filesystem != nullptr;
+    if (filesystem != nullptr) {
+        const char* legacyRssPath = nullptr;
+        for (const char* path: {kLegacyRssPath, kLegacyRssBackupPath, kLegacyRssTempPath}) {
+            if (StorageFiles::fileExists(path)) {
+                legacyRssPath = path;
+                break;
+            }
+        }
+
+        if (legacyRssPath != nullptr) {
+            bool converted = false;
+            if (StorageFiles::fileExists(StoragePaths::kRssConfigPath)) {
+                converted = rss::load(*filesystem).has_value();
+            } else {
+                std::string content;
+                if (readFile(*filesystem, legacyRssPath, kMaxLegacyRssBytes, content)) {
+                    rss::Config migrated;
+                    std::string_view remaining = content;
+                    while (!remaining.empty()) {
+                        std::string_view line = trim(nextLine(remaining));
+                        if (line.empty() || line.front() == '#')
+                            continue;
+                        if (line.starts_with("feed="))
+                            line = trim(line.substr(5));
+                        migrated.feeds.emplace_back(line);
+                    }
+                    converted = rss::save(*filesystem, std::move(migrated)).has_value();
+                }
+            }
+
+            if (!converted) {
+                rssComplete = false;
+                Serial.printf("[migration] preserved invalid RSS config %s\n", legacyRssPath);
+            } else {
+                for (const char* path: {kLegacyRssPath, kLegacyRssBackupPath, kLegacyRssTempPath}) {
+                    if (StorageFiles::fileExists(path) && !filesystem->remove(path)) {
+                        rssComplete = false;
+                        Serial.printf("[migration] could not remove %s\n", path);
+                    }
+                }
+                if (rssComplete)
+                    Serial.printf("[migration] converted RSS feeds to %s\n", StoragePaths::kRssConfigPath);
+            }
+        }
+    }
+
+    bool focusComplete = filesystem != nullptr;
+    if (filesystem != nullptr) {
+        const char* legacyFocusPath = nullptr;
+        for (const char* path: {kLegacyFocusPath, kLegacyFocusBackupPath, kLegacyFocusTempPath}) {
+            if (StorageFiles::fileExists(path)) {
+                legacyFocusPath = path;
+                break;
+            }
+        }
+
+        if (legacyFocusPath != nullptr) {
+            bool converted = false;
+            if (StorageFiles::fileExists(StoragePaths::kFocusConfigPath)) {
+                focus::Timers current;
+                converted = focus::load(*filesystem, current) == focus::LoadResult::Valid;
+            } else {
+                std::string content;
+                LegacyFocusConfig legacy;
+                if (readFile(*filesystem, legacyFocusPath, kMaxLegacyFocusBytes, content)
+                    && !glz::read_toml(legacy, content) && legacy.version == 1 && !legacy.timer.empty()) {
+                    focus::Timers migrated;
+                    migrated.timers.reserve(std::min(legacy.timer.size(), focus::kMaxTimers));
+                    for (const LegacyFocusTimer& source: legacy.timer) {
+                        if (migrated.timers.size() == focus::kMaxTimers)
+                            break;
+                        focus::Timer timer;
+                        timer.name = source.name;
+                        timer.focusMinutes = source.focus_minutes;
+                        timer.breakMinutes = source.break_minutes;
+                        timer.rounds = source.rounds;
+                        migrated.timers.push_back(std::move(timer));
+                    }
+                    converted = focus::valid(migrated) && focus::save(*filesystem, migrated);
+                }
+            }
+
+            if (!converted) {
+                focusComplete = false;
+                Serial.printf("[migration] preserved invalid focus config %s\n", legacyFocusPath);
+            } else {
+                for (const char* path: {kLegacyFocusPath, kLegacyFocusBackupPath, kLegacyFocusTempPath}) {
+                    if (StorageFiles::fileExists(path) && !filesystem->remove(path)) {
+                        focusComplete = false;
+                        Serial.printf("[migration] could not remove %s\n", path);
+                    }
+                }
+                if (focusComplete)
+                    Serial.printf("[migration] converted focus timers to %s\n", StoragePaths::kFocusConfigPath);
+            }
+        }
+    }
+
     bool booksComplete = filesystem != nullptr;
     if (filesystem != nullptr) {
         storage_.refreshBooks(false);
@@ -670,11 +797,16 @@ void App::migrateLegacyStorage() {
         }
     }
 
-    if (settingsPersisted && configComplete && themesComplete && booksComplete) {
-        if (prefs_.putBool(kMigrationMarker, true) > 0)
+    if (settingsPersisted && configComplete && themesComplete && rssComplete && focusComplete && booksComplete) {
+        if (prefs_.putBool(kMigrationMarker, true) > 0) {
+            for (const char* marker: kPreviousMigrationMarkers) {
+                if (prefs_.isKey(marker))
+                    prefs_.remove(marker);
+            }
             Serial.println("[migration] legacy storage migration complete");
-        else
+        } else {
             Serial.println("[migration] could not save completion marker; migration will retry");
+        }
     } else if (filesystem == nullptr) {
         Serial.println("[migration] SD migration deferred until storage is available");
     }

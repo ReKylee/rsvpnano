@@ -398,7 +398,7 @@ RSS checks can continue in the background, while installable firmware updates st
 
 The Focus Timer provides up to six custom Pomodoro routines. Each routine has its own name,
 focus duration, break duration, and round count. The defaults are stored in
-`/config/focus.conf` on the SD card, where they can also be edited as text. Timer names are limited
+`/config/focus.toml` on the SD card, where they can also be edited as TOML. Timer names are limited
 to 14 UTF-8 bytes (14 ASCII characters) so they fit above the hourglass.
 
 1. Swipe up from the bottom edge.

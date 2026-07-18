@@ -39,6 +39,7 @@ private:
     static void handleSettingsStatic();
     static void handleWifiStatic();
     static void handleRssFeedsStatic();
+    static void handleFocusTimersStatic();
     static void handleBookDeleteStatic();
     static void handleBookPositionStatic();
     static void handleBooksStatic();
@@ -59,6 +60,7 @@ private:
     void handleSettings();
     void handleWifi();
     void handleRssFeeds();
+    void handleFocusTimers();
     void handleBookDelete();
     void handleBookPosition();
     void handleBooks();

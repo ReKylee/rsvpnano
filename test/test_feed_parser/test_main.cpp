@@ -1,6 +1,8 @@
 #include <unity.h>
+#include <glaze/json.hpp>
 
 #include "rss/FeedParser.h"
+#include "rss/RssConfig.h"
 
 void setUp() {}
 
@@ -173,6 +175,26 @@ void test_host_label_strips_scheme_and_www() {
                            feedparser::hostLabelForUrl("https://www.example.com/path?x=1").c_str());
 }
 
+void test_rss_config_round_trip_and_normalization() {
+  rss::Config config{.feeds = {" https://example.com/feed ", "https://example.com/feed", "http://example.org/rss"}};
+  const auto encoded = rss::encodeToml(config);
+  TEST_ASSERT_TRUE(encoded.has_value());
+  TEST_ASSERT_NOT_EQUAL(std::string::npos, encoded->find("schemaVersion = 1"));
+
+  const auto decoded = rss::decodeToml(*encoded);
+  TEST_ASSERT_TRUE(decoded.has_value());
+  TEST_ASSERT_EQUAL(2, decoded->feeds.size());
+  TEST_ASSERT_EQUAL_STRING("https://example.com/feed", decoded->feeds[0].c_str());
+  TEST_ASSERT_FALSE(rss::decodeToml("schemaVersion = 2\n").has_value());
+  TEST_ASSERT_FALSE(rss::decodeToml("schemaVersion = 1\nfeeds = [\"ftp://example.com/feed\"]\n").has_value());
+
+  std::string json;
+  TEST_ASSERT_FALSE(glz::write_json(*decoded, json));
+  rss::Config fromJson;
+  TEST_ASSERT_FALSE(glz::read_json(fromJson, json));
+  TEST_ASSERT_EQUAL(2, fromJson.feeds.size());
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_parses_rss_item_fields);
@@ -187,5 +209,6 @@ int main(void) {
   RUN_TEST(test_detects_complete_feed_and_advances_over_items);
   RUN_TEST(test_preserves_long_full_text_content);
   RUN_TEST(test_host_label_strips_scheme_and_www);
+  RUN_TEST(test_rss_config_round_trip_and_normalization);
   return UNITY_END();
 }

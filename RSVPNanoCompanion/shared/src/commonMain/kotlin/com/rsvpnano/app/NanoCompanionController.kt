@@ -4,6 +4,7 @@ import com.rsvpnano.api.NanoClient
 import com.rsvpnano.converters.RsvpBookFile
 import com.rsvpnano.converters.SharedArticle
 import com.rsvpnano.models.NanoBook
+import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoThemeCatalogItem
 import com.rsvpnano.models.NanoFontCatalogItem
@@ -32,6 +33,7 @@ class NanoCompanionController(
             settings = runCatching { client.fetchSettings(baseUrl) }.getOrNull(),
             wifiSettings = runCatching { client.fetchWifiSettings(baseUrl) }.getOrNull(),
             rssFeeds = runCatching { client.fetchRssFeeds(baseUrl) }.getOrNull(),
+            focusTimers = runCatching { client.fetchFocusTimers(baseUrl) }.getOrNull(),
         )
         val deviceFeeds = RssFeedNormalizer.normalize(device.rssFeeds?.feeds.orEmpty())
         return CompanionConnectSnapshot(
@@ -105,7 +107,7 @@ class NanoCompanionController(
     ): List<String> {
         verifyReachable(baseUrl)
         val normalized = RssFeedNormalizer.normalize(feeds)
-        val deviceFeeds = client.updateRssFeeds(baseUrl, normalized).feeds
+        val deviceFeeds = client.updateRssFeeds(baseUrl, NanoRssFeeds(feeds = normalized)).feeds
         val syncedFeeds = RssFeedNormalizer.normalize(deviceFeeds)
         return syncedFeeds
     }

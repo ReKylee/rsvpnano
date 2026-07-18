@@ -2,6 +2,7 @@ package com.rsvpnano.api
 
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoRssFeeds
+import com.rsvpnano.models.NanoFocusTimers
 import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoThemeCatalogItem
@@ -118,13 +119,24 @@ class NanoKtorClient(
     override suspend fun fetchRssFeeds(baseUrl: String): NanoRssFeeds =
         requestData(baseUrl, "api/v1/feeds", NanoRssFeeds.serializer())
 
-    override suspend fun updateRssFeeds(baseUrl: String, feeds: List<String>): NanoRssFeeds {
+    override suspend fun updateRssFeeds(baseUrl: String, config: NanoRssFeeds): NanoRssFeeds {
         val response = httpClient.put(buildUrl(baseUrl, "api/v1/feeds")) {
             contentType(ContentType.Application.Json)
-            setBody(NanoRssFeeds(feeds = feeds))
+            setBody(config)
         }
         val body = response.body<String>()
         return decodeDeviceResponse(response.status, body, NanoRssFeeds.serializer())
+    }
+
+    override suspend fun fetchFocusTimers(baseUrl: String): NanoFocusTimers =
+        requestData(baseUrl, "api/v1/focus", NanoFocusTimers.serializer())
+
+    override suspend fun updateFocusTimers(baseUrl: String, timers: NanoFocusTimers): NanoFocusTimers {
+        val response = httpClient.put(buildUrl(baseUrl, "api/v1/focus")) {
+            contentType(ContentType.Application.Json)
+            setBody(timers)
+        }
+        return decodeDeviceResponse(response.status, response.body<String>(), NanoFocusTimers.serializer())
     }
 
     override suspend fun uploadBook(

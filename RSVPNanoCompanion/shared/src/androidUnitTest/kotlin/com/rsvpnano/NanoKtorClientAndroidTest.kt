@@ -54,7 +54,8 @@ class NanoKtorClientAndroidTest {
             when (request.url.encodedPath) {
                 "/api/v1/device" -> """{"data":{"name":"Nano","apiVersion":1}}"""
                 "/api/v1/library" -> """{"data":{"books":[{"id":"b12345678","name":"books/Book.rsvp","category":"book","bytes":1234,"metadata":{"title":"Book","wordCount":1000,"chapterCount":1,"chapters":[{"title":"Chapter 1","wordIndex":0}]},"source":{"size":1234,"fingerprint":3456},"reading":{"wordIndex":249,"percent":24,"remainingWords":750,"estimatedMinutes":3,"currentChapter":{"number":1,"title":"Chapter 1"}}}]}}"""
-                "/api/v1/feeds" -> """{"data":{"feeds":["https://example.com/feed"]}}"""
+                "/api/v1/feeds" -> """{"data":{"schemaVersion":1,"feeds":["https://example.com/feed"]}}"""
+                "/api/v1/focus" -> """{"data":{"schemaVersion":1,"timers":[{"name":"Pomodoro","focusMinutes":25,"breakMinutes":5,"rounds":4}]}}"""
                 else -> error("Unexpected request: ${request.url}")
             }
         })
@@ -68,7 +69,8 @@ class NanoKtorClientAndroidTest {
         assertEquals(249, book.reading?.wordIndex)
         assertEquals("Chapter 1", book.metadata.chapters.single().title)
         assertEquals(listOf("https://example.com/feed"), client.fetchRssFeeds("http://device.local").feeds)
-        assertEquals(listOf("GET /api/v1/device", "GET /api/v1/library", "GET /api/v1/feeds"), seen)
+        assertEquals("Pomodoro", client.fetchFocusTimers("http://device.local").timers.single().name)
+        assertEquals(listOf("GET /api/v1/device", "GET /api/v1/library", "GET /api/v1/feeds", "GET /api/v1/focus"), seen)
     }
 
     @Test

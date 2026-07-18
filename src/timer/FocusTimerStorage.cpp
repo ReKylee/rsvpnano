@@ -34,11 +34,11 @@ namespace focus {
         std::string content(file.size(), '\0');
         const size_t read = file.read(reinterpret_cast<uint8_t*>(content.data()), content.size());
         file.close();
-        return read == content.size() && parse(content, timers) ? LoadResult::Valid : LoadResult::Invalid;
+        return read == content.size() && decodeToml(content, timers) ? LoadResult::Valid : LoadResult::Invalid;
     }
 
     bool save(fs::FS& filesystem, const Timers& timers) {
-        const std::string content = serialize(timers);
+        const std::string content = encodeToml(timers);
         if (content.empty() || !ensureConfigDirectory(filesystem))
             return false;
 

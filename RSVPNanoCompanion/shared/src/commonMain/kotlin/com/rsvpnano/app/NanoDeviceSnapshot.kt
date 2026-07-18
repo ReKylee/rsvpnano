@@ -3,6 +3,7 @@ package com.rsvpnano.app
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoRssFeeds
+import com.rsvpnano.models.NanoFocusTimers
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoWifiSettings
 
@@ -15,6 +16,7 @@ data class NanoDeviceSnapshot(
     val settings: NanoSettings? = null,
     val wifiSettings: NanoWifiSettings? = null,
     val rssFeeds: NanoRssFeeds? = null,
+    val focusTimers: NanoFocusTimers? = null,
 ) {
     val summaryText: String
         get() {

@@ -13,11 +13,12 @@ namespace StoragePaths {
     constexpr const char* kSettingsConfigPath = "/config/settings.toml";
     constexpr const char* kSettingsConfigTempPath = "/config/settings.toml.tmp";
     constexpr const char* kSettingsConfigBackupPath = "/config/settings.toml.bak";
-    constexpr const char* kRssConfigPath = "/config/rss.conf";
-    constexpr const char* kRssConfigTempPath = "/config/rss.conf.tmp";
-    constexpr const char* kFocusConfigPath = "/config/focus.conf";
-    constexpr const char* kFocusConfigTempPath = "/config/focus.conf.tmp";
-    constexpr const char* kFocusConfigBackupPath = "/config/focus.conf.bak";
+    constexpr const char* kRssConfigPath = "/config/rss.toml";
+    constexpr const char* kRssConfigTempPath = "/config/rss.toml.tmp";
+    constexpr const char* kRssConfigBackupPath = "/config/rss.toml.bak";
+    constexpr const char* kFocusConfigPath = "/config/focus.toml";
+    constexpr const char* kFocusConfigTempPath = "/config/focus.toml.tmp";
+    constexpr const char* kFocusConfigBackupPath = "/config/focus.toml.bak";
     constexpr const char* kSdFrequencyProbePath = "/.sdfreq.tmp";
     constexpr const char* kThemesPath = "/themes";
     constexpr const char* kFontsPath = "/fonts";

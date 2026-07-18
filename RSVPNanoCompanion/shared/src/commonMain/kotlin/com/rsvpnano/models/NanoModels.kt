@@ -82,7 +82,22 @@ data class NanoUploadResponse(
 
 @Serializable
 data class NanoRssFeeds(
+    val schemaVersion: Int = 1,
     val feeds: List<String>,
+)
+
+@Serializable
+data class NanoFocusTimer(
+    val name: String,
+    val focusMinutes: Int,
+    val breakMinutes: Int,
+    val rounds: Int,
+)
+
+@Serializable
+data class NanoFocusTimers(
+    val schemaVersion: Int = 1,
+    val timers: List<NanoFocusTimer>,
 )
 
 @Serializable

@@ -87,14 +87,6 @@ namespace companion::api {
         std::optional<std::string> password;
     };
 
-    struct FeedsResponse {
-        std::vector<std::string> feeds;
-    };
-
-    struct FeedsUpdate {
-        std::optional<std::vector<std::string>> feeds;
-    };
-
     struct BookPositionUpdate {
         std::optional<std::string> id;
         std::optional<uint32_t> wordIndex;

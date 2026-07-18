@@ -9,6 +9,8 @@
 
 #include "net/WifiConnection.h"
 #include "rss/FeedParser.h"
+#include "rss/RssConfig.h"
+#include "rss/RssConfigStorage.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 #include "text/AsciiText.h"
@@ -506,37 +508,19 @@ RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::Devic
         return result;
     }
 
-    File config = Board::Storage::filesystem().open(StoragePaths::kRssConfigPath);
-
-    if (!config || config.isDirectory()) {
-        if (config) {
-            config.close();
-        }
+    auto config = rss::load(Board::Storage::filesystem());
+    if (!config) {
         disconnectWiFi();
-        result.summary = "No feeds";
+        result.summary = config.error() == std::errc::no_such_file_or_directory ? "No feeds" : "Invalid feeds";
         result.detail = StoragePaths::kRssConfigPath;
         return result;
     }
 
     std::vector<String> feeds;
-    feeds.reserve(kMaxFeedsPerCheck);
-    while (config.available() && feeds.size() < kMaxFeedsPerCheck) {
-        String line = config.readStringUntil('\n');
-        line.trim();
-        if (line.isEmpty() || line.startsWith("#")) {
-            continue;
-        }
-        if (line.startsWith("feed=")) {
-            line = line.substring(5);
-            line.trim();
-        }
-        if (!startsWithHttp(line)) {
-            continue;
-        }
-
-        feeds.push_back(line);
-    }
-    config.close();
+    const size_t feedCount = std::min(config->feeds.size(), static_cast<size_t>(kMaxFeedsPerCheck));
+    feeds.reserve(feedCount);
+    for (size_t index = 0; index < feedCount; ++index)
+        feeds.emplace_back(config->feeds[index].c_str());
 
     if (feeds.empty()) {
         disconnectWiFi();

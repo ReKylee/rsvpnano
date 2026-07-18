@@ -240,9 +240,9 @@ class NanoCompanionControllerTest {
         override suspend fun fetchRssFeeds(baseUrl: String): NanoRssFeeds =
             NanoRssFeeds(feeds = deviceFeeds)
 
-        override suspend fun updateRssFeeds(baseUrl: String, feeds: List<String>): NanoRssFeeds {
-            savedFeeds = feeds
-            return NanoRssFeeds(feeds = feeds)
+        override suspend fun updateRssFeeds(baseUrl: String, config: NanoRssFeeds): NanoRssFeeds {
+            savedFeeds = config.feeds
+            return config
         }
 
         override suspend fun uploadBook(

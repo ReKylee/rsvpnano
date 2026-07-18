@@ -1,34 +1,37 @@
 #pragma once
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
+
+#include "settings/SettingsRules.h"
 
 namespace focus {
 
     constexpr size_t kMaxTimers = 6;
     constexpr size_t kMaxTimerNameBytes = 14;
+    constexpr uint32_t kSchemaVersion = 1;
 
     struct Timer {
         std::string name;
-        uint16_t focusMinutes = 25;
-        uint16_t breakMinutes = 5;
-        uint8_t rounds = 4;
+        settings::BoundedValue<uint16_t, 1, 180> focusMinutes{25};
+        settings::BoundedValue<uint16_t, 1, 60> breakMinutes{5};
+        settings::BoundedValue<uint8_t, 1, 12> rounds{4};
     };
 
     struct Timers {
-        std::array<Timer, kMaxTimers> items;
-        size_t count = 0;
+        uint32_t schemaVersion = kSchemaVersion;
+        std::vector<Timer> timers;
     };
 
-    inline Timer defaultTimer() {
-        return {.name = "Pomodoro", .focusMinutes = 25, .breakMinutes = 5, .rounds = 4};
-    }
+    Timer defaultTimer();
+    Timers defaultTimers();
 
     bool valid(const Timer& timer);
-    bool parse(std::string_view content, Timers& timers);
-    std::string serialize(const Timers& timers);
+    bool valid(const Timers& timers);
+    bool decodeToml(std::string_view content, Timers& timers);
+    std::string encodeToml(const Timers& timers);
 
 } // namespace focus

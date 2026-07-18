@@ -9,8 +9,7 @@
 namespace screens {
     void FocusScreen::begin(fs::FS* filesystem) {
         filesystem_ = filesystem;
-        timers_.items[0] = focus::defaultTimer();
-        timers_.count = 1;
+        timers_ = focus::defaultTimers();
         writable_ = filesystem_ != nullptr;
         if (filesystem_ != nullptr) {
             focus::Timers loaded;
@@ -20,7 +19,7 @@ namespace screens {
             } else if (result == focus::LoadResult::Missing) {
                 writable_ = focus::save(*filesystem_, timers_);
             } else {
-                Serial.println("[focus] invalid focus.conf; using default timer");
+                Serial.println("[focus] invalid focus.toml; using default timer");
             }
         }
         orientation_.begin();
@@ -64,13 +63,12 @@ namespace screens {
         constexpr int16_t rowGap = 8;
         const int16_t cellWidth = static_cast<int16_t>(content.w / columns);
         const int16_t cellHeight = static_cast<int16_t>((content.h - rowGap) / rows);
-        const size_t visibleCount = timers_.count + (timers_.count < focus::kMaxTimers ? 1 : 0);
+        const size_t visibleCount = timers_.timers.size() + (timers_.timers.size() < focus::kMaxTimers ? 1 : 0);
 
-        uint32_t state = static_cast<uint32_t>(timers_.count);
+        uint32_t state = static_cast<uint32_t>(timers_.timers.size());
         state = ui::Context::combine(state, writable_);
         state = ui::Context::combine(state, orientation_.available());
-        for (size_t index = 0; index < timers_.count; ++index) {
-            const focus::Timer& timer = timers_.items[index];
+        for (const focus::Timer& timer: timers_.timers) {
             state = ui::Context::signature(timer.name, state);
             state = ui::Context::combine(state, timer.focusMinutes);
             state = ui::Context::combine(state, timer.breakMinutes);
@@ -83,7 +81,7 @@ namespace screens {
                                 static_cast<int16_t>(content.y + (index / columns) * (cellHeight + rowGap)), cellWidth,
                                 cellHeight};
 
-            if (index == timers_.count) {
+            if (index == timers_.timers.size()) {
                 if (redraw) {
                     const uint16_t ink =
                         ui.color(writable_ ? ui::themes::ColorRole::Accent : ui::themes::ColorRole::Muted);
@@ -94,12 +92,12 @@ namespace screens {
                     ui.gfx().fillRect(static_cast<int16_t>(centerX - 8), static_cast<int16_t>(centerY - 1), 17, 3, ink);
                 }
                 if (ui.tap(cell, writable_)) {
-                    edit(timers_.count, true, screen);
+                    edit(timers_.timers.size(), true, screen);
                 }
                 continue;
             }
 
-            const focus::Timer& timer = timers_.items[index];
+            const focus::Timer& timer = timers_.timers[index];
             if (redraw) {
                 const uint16_t ink = ui.color(orientation_.available() ? ui::themes::ColorRole::Foreground
                                                                        : ui::themes::ColorRole::Muted);
@@ -285,14 +283,12 @@ namespace screens {
         if (const auto value = ui.stepper(roundsControl, ui.text(UiText::Rounds), draft_.rounds, 1, 12); value.changed)
             draft_.rounds = static_cast<uint8_t>(value.value);
 
-        if (!creating_ && ui.button(deleteAction, ui.text(UiText::Delete), writable_ && timers_.count > 1)) {
+        if (!creating_ && ui.button(deleteAction, ui.text(UiText::Delete), writable_ && timers_.timers.size() > 1)) {
             if (!deleteConfirm_) {
                 deleteConfirm_ = true;
             } else {
                 focus::Timers updated = timers_;
-                for (size_t index = editIndex_ + 1; index < updated.count; ++index)
-                    updated.items[index - 1] = std::move(updated.items[index]);
-                --updated.count;
+                updated.timers.erase(updated.timers.begin() + editIndex_);
                 if (persist(updated)) {
                     timers_ = std::move(updated);
                     deleteConfirm_ = false;
@@ -303,9 +299,10 @@ namespace screens {
 
         if (save) {
             focus::Timers updated = timers_;
-            updated.items[editIndex_] = draft_;
             if (creating_)
-                ++updated.count;
+                updated.timers.push_back(draft_);
+            else
+                updated.timers[editIndex_] = draft_;
             if (persist(updated)) {
                 timers_ = std::move(updated);
                 screen = Screen::FocusTimers;
@@ -323,7 +320,7 @@ namespace screens {
 
     bool FocusScreen::drawSession(ui::Context& ui, uint32_t nowMs) {
         const ui::Rect area = detail::content(ui);
-        const focus::Timer& timer = timers_.items[activeIndex_];
+        const focus::Timer& timer = timers_.timers[activeIndex_];
         const focus::Phase phase = session_.phase();
         const bool paused = phase == focus::Phase::PausedFocus || phase == focus::Phase::PausedBreak;
         const bool reversed = phase == focus::Phase::Break || phase == focus::Phase::PausedBreak;
@@ -353,7 +350,7 @@ namespace screens {
     void FocusScreen::edit(size_t index, bool creating, Screen& screen) {
         editIndex_ = index;
         creating_ = creating;
-        draft_ = creating ? focus::defaultTimer() : timers_.items[index];
+        draft_ = creating ? focus::defaultTimer() : timers_.timers[index];
         if (creating)
             draft_.name.clear();
         deleteConfirm_ = false;

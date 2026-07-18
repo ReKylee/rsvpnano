@@ -14,6 +14,8 @@
 #include "fonts/FontCatalog.h"
 #include "fonts/RFont4Format.h"
 #include "net/WifiConnection.h"
+#include "rss/RssConfig.h"
+#include "rss/RssConfigStorage.h"
 #include "settings/SettingsCodec.h"
 #include "settings/SettingsGlaze.h"
 #include "storage/fs/StorageFiles.h"
@@ -31,9 +33,9 @@ namespace {
 
     constexpr size_t kMaxMetadataLineChars = 160;
     constexpr size_t kMaxRssFeedsPatchBytes = 4096;
+    constexpr size_t kMaxFocusTimersBytes = 4096;
     constexpr size_t kMaxThemeUploadBytes = 4096;
     constexpr size_t kMaxFontUploadBytes = 2UL * 1024UL * 1024UL;
-    constexpr size_t kMaxRssFeeds = 24;
 
     std::string toStdString(const String& value) {
         return {value.c_str(), value.length()};
@@ -139,6 +141,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <button data-tab="articles">Articles</button>
 <button data-tab="settings">Settings</button>
 <button data-tab="rss">RSS</button>
+<button data-tab="focus">Focus</button>
 <button data-tab="help">Help</button>
 </nav>
 </header>
@@ -227,9 +230,16 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 </section>
 
 <section id="rss" class="page">
-<div class="card"><h2>RSS Feeds</h2><p class="muted">Add one feed URL per line. Feeds are saved to <code>/config/rss.conf</code>; run RSS feeds from the reader menu to download articles.</p>
+<div class="card"><h2>RSS Feeds</h2><p class="muted">Add one feed URL per line. Feeds are saved to <code>/config/rss.toml</code>; run RSS feeds from the reader menu to download articles.</p>
 <textarea id="rssFeeds" placeholder="https://example.com/feed/"></textarea>
 <p><button class="primary" id="saveRssButton">Save feeds</button> <button id="reloadRssButton">Reload</button></p>
+</div>
+</section>
+
+<section id="focus" class="page">
+<div class="card"><h2>Focus Timers</h2><p class="muted">Configure the same timers shown on the reader.</p>
+<div id="focusTimers"></div>
+<p><button id="addFocusButton">Add timer</button> <button class="primary" id="saveFocusButton">Save timers</button></p>
 </div>
 </section>
 
@@ -247,7 +257,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 </section>
 </main>
 <script>
-const $=id=>document.getElementById(id);let settings=null;let themeCatalog=[];let themeCatalogUrl='';let fontCatalog=[];let fontCatalogUrl='';
+const $=id=>document.getElementById(id);let settings=null,rssConfig={schemaVersion:1,feeds:[]},focusTimers={schemaVersion:1,timers:[]};let themeCatalog=[];let themeCatalogUrl='';let fontCatalog=[];let fontCatalogUrl='';
 function status(msg){$('status').textContent=msg}
 function catalogUrl(path){const u=(settings&&settings.updates)||{};let owner=String(u.repositoryOwner||'').trim(),repo='rsvpnano',tag=String(u.releaseTag||'').trim();const apply=v=>{const p=v.trim().split('/');if(p.length!==2||!p[0]||!p[1])return false;owner=p[0];repo=p[1];return true};apply(owner);const at=tag.indexOf('@');if(at>0&&at<tag.length-1){const r=tag.slice(0,at).trim();tag=tag.slice(at+1).trim();if(!apply(r)&&r)repo=r}if(!owner||!repo)throw new Error('Configure a GitHub release owner first.');return 'https://raw.githubusercontent.com/'+[owner,repo,tag||'main'].map(encodeURIComponent).join('/')+'/'+path}
 async function api(path,opts){const r=await fetch(path,opts);const t=await r.text();let j={};try{j=t?JSON.parse(t):{}}catch(e){throw new Error(t||'Bad response')}if(!r.ok)throw new Error((j.error&&j.error.message)||r.statusText);return j.data}
@@ -285,12 +295,17 @@ async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const r=settings
 async function loadWifi(){try{await api('/api/v1/network');const ssid=(settings&&settings.network&&settings.network.wifiSsid)||'';$('wifiSsid').value=ssid;$('wifiPassword').value='';$('wifiCurrent').textContent=ssid?'Saved network: '+ssid:'No home Wi-Fi saved.'}catch(e){status('Wi-Fi load failed: '+e.message)}}
 async function saveWifi(){const ssid=$('wifiSsid').value.trim();if(!ssid){status('Enter a Wi-Fi SSID first.');return}try{await api('/api/v1/network',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password:$('wifiPassword').value})});settings.network.wifiSsid=ssid;$('wifiPassword').value='';$('wifiCurrent').textContent='Saved network: '+ssid;status('Wi-Fi saved for RSS and OTA.')}catch(e){status('Wi-Fi save failed: '+e.message)}}
 async function forgetWifi(){if(!confirm('Forget saved Wi-Fi?'))return;try{await api('/api/v1/network',{method:'DELETE'});settings.network.wifiSsid='';$('wifiSsid').value='';$('wifiPassword').value='';$('wifiCurrent').textContent='No home Wi-Fi saved.';status('Wi-Fi credentials cleared.')}catch(e){status('Forget Wi-Fi failed: '+e.message)}}
-async function loadRss(){try{const r=await api('/api/v1/feeds');$('rssFeeds').value=(r.feeds||[]).join('\n');status('RSS feeds loaded.')}catch(e){status('RSS load failed: '+e.message)}}
-async function saveRss(){const feeds=$('rssFeeds').value.split(/\n+/).map(s=>s.trim()).filter(Boolean);try{await api('/api/v1/feeds',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({feeds})});status('RSS feeds saved.')}catch(e){status('RSS save failed: '+e.message)}}
-document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.tab).classList.add('active');if(b.dataset.tab==='settings'){loadSettings();loadWifi()}if(b.dataset.tab==='rss')loadRss()});
+async function loadRss(){try{rssConfig=await api('/api/v1/feeds');$('rssFeeds').value=(rssConfig.feeds||[]).join('\n');status('RSS feeds loaded.')}catch(e){status('RSS load failed: '+e.message)}}
+async function saveRss(){rssConfig.feeds=$('rssFeeds').value.split(/\n+/).map(s=>s.trim()).filter(Boolean);try{rssConfig=await api('/api/v1/feeds',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(rssConfig)});status('RSS feeds saved.')}catch(e){status('RSS save failed: '+e.message)}}
+function renderFocus(){const timers=focusTimers.timers||[];$('focusTimers').innerHTML=timers.map((t,i)=>`<div class="item" data-focus-index="${i}"><label>Name</label><input data-field="name" maxlength="14" value="${html(t.name)}"><div class="row"><label>Focus minutes<input data-field="focusMinutes" type="number" min="1" max="180" value="${t.focusMinutes}"></label><label>Break minutes<input data-field="breakMinutes" type="number" min="1" max="60" value="${t.breakMinutes}"></label><label>Rounds<input data-field="rounds" type="number" min="1" max="12" value="${t.rounds}"></label></div>${timers.length>1?`<button class="danger" data-remove-focus="${i}">Remove</button>`:''}</div>`).join('');document.querySelectorAll('[data-remove-focus]').forEach(b=>b.onclick=()=>{readFocus();focusTimers.timers.splice(+b.dataset.removeFocus,1);renderFocus()})}
+function readFocus(){focusTimers.timers=[...document.querySelectorAll('[data-focus-index]')].map(card=>({name:card.querySelector('[data-field=name]').value.trim(),focusMinutes:+card.querySelector('[data-field=focusMinutes]').value,breakMinutes:+card.querySelector('[data-field=breakMinutes]').value,rounds:+card.querySelector('[data-field=rounds]').value}))}
+async function loadFocus(){try{focusTimers=await api('/api/v1/focus');renderFocus();status('Focus timers loaded.')}catch(e){status('Focus timer load failed: '+e.message)}}
+function addFocus(){readFocus();if(focusTimers.timers.length<6){focusTimers.timers.push({name:'Timer',focusMinutes:25,breakMinutes:5,rounds:4});renderFocus()}}
+async function saveFocus(){readFocus();try{focusTimers=await api('/api/v1/focus',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(focusTimers)});renderFocus();status('Focus timers saved.')}catch(e){status('Focus timer save failed: '+e.message)}}
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.tab).classList.add('active');if(b.dataset.tab==='settings'){loadSettings();loadWifi()}if(b.dataset.tab==='rss')loadRss();if(b.dataset.tab==='focus')loadFocus()});
 $('wpm').oninput=()=>{setVal('wpm',snapWpm(val('wpm')));updateLabels()};
 ['longWordMs','complexWordMs','punctuationMs','brightnessIndex','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>$(id).oninput=updateLabels);
-$('refreshBooksButton').onclick=refresh;$('refreshArticlesButton').onclick=refresh;$('uploadBookButton').onclick=()=>uploadPicked('bookFileInput','book');$('uploadArticleButton').onclick=()=>uploadPicked('articleFileInput','article');$('uploadThemeButton').onclick=uploadPickedTheme;$('installOnlineThemeButton').onclick=installOnlineTheme;$('uploadFontButton').onclick=uploadPickedFont;$('installOnlineFontButton').onclick=installOnlineFont;$('syncArticleButton').onclick=syncArticle;$('saveDraftButton').onclick=saveDraft;$('saveSettingsButton').onclick=saveSettings;$('saveWifiButton').onclick=saveWifi;$('forgetWifiButton').onclick=forgetWifi;$('saveRssButton').onclick=saveRss;$('reloadRssButton').onclick=loadRss;
+$('refreshBooksButton').onclick=refresh;$('refreshArticlesButton').onclick=refresh;$('uploadBookButton').onclick=()=>uploadPicked('bookFileInput','book');$('uploadArticleButton').onclick=()=>uploadPicked('articleFileInput','article');$('uploadThemeButton').onclick=uploadPickedTheme;$('installOnlineThemeButton').onclick=installOnlineTheme;$('uploadFontButton').onclick=uploadPickedFont;$('installOnlineFontButton').onclick=installOnlineFont;$('syncArticleButton').onclick=syncArticle;$('saveDraftButton').onclick=saveDraft;$('saveSettingsButton').onclick=saveSettings;$('saveWifiButton').onclick=saveWifi;$('forgetWifiButton').onclick=forgetWifi;$('saveRssButton').onclick=saveRss;$('reloadRssButton').onclick=loadRss;$('addFocusButton').onclick=addFocus;$('saveFocusButton').onclick=saveFocus;
 loadDraft();refresh();
 </script>
 </body>
@@ -357,16 +372,6 @@ loadDraft();refresh();
         return "root";
     }
 
-    bool isHttpUrl(String value) {
-        value.trim();
-        value.toLowerCase();
-        return value.startsWith("http://") || value.startsWith("https://");
-    }
-
-    bool isHttpUrl(std::string_view value) {
-        return value.starts_with("http://") || value.starts_with("https://");
-    }
-
     struct ValidationError {
         std::string message;
         std::string field;
@@ -390,64 +395,25 @@ loadDraft();refresh();
         return {!secrets.wifiPassword.empty()};
     }
 
-    api::FeedsResponse readFeeds() {
-        api::FeedsResponse response;
-        File file = Board::Storage::filesystem().open(StoragePaths::kRssConfigPath);
-        if (file && !file.isDirectory()) {
-            while (file.available()) {
-                String line = file.readStringUntil('\n');
-                line.trim();
-                if (line.isEmpty() || line.startsWith("#"))
-                    continue;
-                if (line.startsWith("feed=")) {
-                    line = line.substring(5);
-                    line.trim();
-                }
-                if (isHttpUrl(line))
-                    response.feeds.push_back(toStdString(line));
-            }
-        }
-        if (file)
-            file.close();
-        return response;
+    rss::Config readFeeds() {
+        return rss::load(Board::Storage::filesystem()).value_or(rss::Config{});
     }
 
-    std::optional<ValidationError> writeFeeds(const api::FeedsUpdate& update) {
-        if (!update.feeds)
-            return ValidationError{"Missing feeds array", "feeds"};
-
-        std::vector<std::string> feeds;
-        feeds.reserve(update.feeds->size());
-        for (const std::string& input: *update.feeds) {
-            std::string feed = trimCopy(input);
-            if (feed.empty())
-                continue;
-            if (!isHttpUrl(feed))
+    std::optional<ValidationError> writeFeeds(rss::Config config) {
+        if (auto result = rss::save(Board::Storage::filesystem(), std::move(config)); !result) {
+            if (result.error() == std::errc::invalid_argument)
                 return ValidationError{"Feeds must start with http:// or https://", "feeds"};
-            if (feeds.size() >= kMaxRssFeeds)
+            if (result.error() == std::errc::no_buffer_space)
                 return ValidationError{"Too many RSS feeds", "feeds"};
-            if (std::find(feeds.begin(), feeds.end(), feed) == feeds.end())
-                feeds.push_back(std::move(feed));
-        }
-
-        Board::Storage::filesystem().mkdir(StoragePaths::kConfigPath);
-        const String tmpPath = StoragePaths::kRssConfigTempPath;
-        Board::Storage::filesystem().remove(tmpPath);
-        File file = Board::Storage::filesystem().open(tmpPath, FILE_WRITE);
-        if (!file)
-            return ValidationError{"Could not write RSS config", "feeds"};
-        file.println("# RSVP Nano RSS feeds");
-        for (const std::string& feed: feeds) {
-            file.print("feed=");
-            file.println(feed.c_str());
-        }
-        file.close();
-
-        if (!replaceUploadedFile(tmpPath, StoragePaths::kRssConfigPath)) {
-            Board::Storage::filesystem().remove(tmpPath);
             return ValidationError{"Could not save RSS config", "feeds"};
         }
         return std::nullopt;
+    }
+
+    focus::Timers readFocusTimers() {
+        focus::Timers timers = focus::defaultTimers();
+        focus::load(Board::Storage::filesystem(), timers);
+        return timers;
     }
 
     String rsvpMetadataValueFromLine(const String& line, const char* directive, bool& pastDirectives) {
@@ -592,6 +558,12 @@ void CompanionSyncManager::handleRssFeedsStatic() {
     }
 }
 
+void CompanionSyncManager::handleFocusTimersStatic() {
+    if (instance_ != nullptr) {
+        instance_->handleFocusTimers();
+    }
+}
+
 void CompanionSyncManager::handleBookDeleteStatic() {
     if (instance_ != nullptr) {
         instance_->handleBookDelete();
@@ -722,6 +694,8 @@ bool CompanionSyncManager::startServer() {
     server_.on("/api/v1/network", HTTP_DELETE, handleWifiStatic);
     server_.on("/api/v1/feeds", HTTP_GET, handleRssFeedsStatic);
     server_.on("/api/v1/feeds", HTTP_PUT, handleRssFeedsStatic);
+    server_.on("/api/v1/focus", HTTP_GET, handleFocusTimersStatic);
+    server_.on("/api/v1/focus", HTTP_PUT, handleFocusTimersStatic);
     server_.onNotFound(handleNotFoundStatic);
     server_.begin();
     serverStarted_ = true;
@@ -964,7 +938,7 @@ void CompanionSyncManager::handleRssFeeds() {
         return;
     }
 
-    api::FeedsUpdate update;
+    rss::Config update;
     std::string parseError;
     if (!api::decode(toStringView(body), update, parseError)) {
         sendError(400, "invalid_json", parseError.c_str());
@@ -978,6 +952,38 @@ void CompanionSyncManager::handleRssFeeds() {
     statusLine1_ = "RSS feeds saved";
     statusLine2_ = StoragePaths::kRssConfigPath;
     sendData(server_, jsonBuffer_, 200, readFeeds());
+}
+
+void CompanionSyncManager::handleFocusTimers() {
+    if (server_.method() == HTTP_GET) {
+        sendData(server_, jsonBuffer_, 200, readFocusTimers());
+        return;
+    }
+
+    const String body = server_.arg("plain");
+    if (body.length() > kMaxFocusTimersBytes) {
+        sendError(413, "payload_too_large", "Focus timer payload exceeds 4 KB");
+        return;
+    }
+
+    focus::Timers timers;
+    std::string parseError;
+    if (!api::decode(toStringView(body), timers, parseError)) {
+        sendError(400, "invalid_json", parseError.c_str());
+        return;
+    }
+    if (!focus::valid(timers)) {
+        sendError(422, "invalid_focus_timers", "Focus timers are invalid", "timers");
+        return;
+    }
+    if (!focus::save(Board::Storage::filesystem(), timers)) {
+        sendError(500, "focus_save_failed", "Could not save focus timers");
+        return;
+    }
+
+    statusLine1_ = "Focus timers saved";
+    statusLine2_ = StoragePaths::kFocusConfigPath;
+    sendData(server_, jsonBuffer_, 200, timers);
 }
 
 void CompanionSyncManager::handleBooks() {

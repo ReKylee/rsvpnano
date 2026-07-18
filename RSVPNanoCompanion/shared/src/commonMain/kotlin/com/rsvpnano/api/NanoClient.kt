@@ -2,6 +2,7 @@ package com.rsvpnano.api
 
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoRssFeeds
+import com.rsvpnano.models.NanoFocusTimers
 import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoThemeCatalogItem
@@ -25,7 +26,11 @@ interface NanoClient {
     suspend fun updateWifi(baseUrl: String, ssid: String, password: String): NanoWifiSettings
     suspend fun forgetWifi(baseUrl: String): NanoWifiSettings
     suspend fun fetchRssFeeds(baseUrl: String): NanoRssFeeds
-    suspend fun updateRssFeeds(baseUrl: String, feeds: List<String>): NanoRssFeeds
+    suspend fun updateRssFeeds(baseUrl: String, config: NanoRssFeeds): NanoRssFeeds
+    suspend fun fetchFocusTimers(baseUrl: String): NanoFocusTimers =
+        throw NanoClientError("Focus timers are not supported by this client.")
+    suspend fun updateFocusTimers(baseUrl: String, timers: NanoFocusTimers): NanoFocusTimers =
+        throw NanoClientError("Focus timers are not supported by this client.")
     suspend fun uploadBook(
         baseUrl: String,
         name: String,

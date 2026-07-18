@@ -122,7 +122,7 @@ Use this layout:
 /books/articles/my-article.rsvp
 ```
 
-On first open, the firmware may create `.ridx` and `.rdat` sidecar files next to a book. These are the SD-backed word index and normalized word data used for long books. It also writes a hidden `.rpos` sidecar for durable reading progress. Leave these files on the card; cache files are rebuilt automatically if the source book changes, and stale progress is ignored.
+On first open, the firmware may create `.ridx` and `.rdat` sidecar files next to a book. These are the SD-backed word index and normalized word data used for long books. It also writes a hidden `.rstate.toml` book-state file for durable reading progress and per-book preferences. Leave these files on the card; cache files are rebuilt automatically if the source book changes, and stale state is ignored.
 
 Large books now load through the same indexed reading path as smaller books, with progress messages while indexes and time estimates are prepared. If a book cannot be prepared, the device should return to the menu with a readable reason instead of silently failing.
 
@@ -186,7 +186,7 @@ You can set Wi-Fi credentials from:
 - The native companion app settings page.
 - The on-device Wi-Fi settings page.
 
-User preferences are mirrored to `/config/settings.conf` on the SD card. Wi-Fi passwords are deliberately excluded
+User preferences are mirrored to `/config/settings.toml` on the SD card. Wi-Fi passwords are deliberately excluded
 from that file and remain in device storage; configure or change them through one of the settings interfaces above.
 Hardware-backed NVS encryption is optional under `Device -> Storage encryption`. Enabling it permanently reserves one
 per-device eFuse key block, clears the saved Wi-Fi password, and cannot be undone. It protects NVS against raw flash
@@ -543,8 +543,8 @@ web/firmware/manifest-esp32-s3-touch-amoled-2.41.json
 
 `preview-v0.0.9` adds the current multi-board firmware base plus companion and storage polish:
 
-- Adds durable `.rpos` reading progress next to each book, with NVS kept as the fast runtime cache.
-- Restores progress from `.rpos` first, then backfills from per-book or legacy NVS when needed.
+- Adds durable `.rstate.toml` book state next to each book for reading progress and per-book typography.
+- Keeps active progress in RAM and writes book state at book switches and other lifecycle boundaries.
 - Exposes opaque book IDs, source identity, word counts, exact saved positions, and chapters through
   the companion API.
 - Lets the native companion app set a saved book location by chapter, slider, or exact word number.

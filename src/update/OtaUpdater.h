@@ -1,9 +1,8 @@
 #pragma once
 
 #include <Arduino.h>
-#include <Preferences.h>
-
 #include "board/BoardConfig.h"
+#include "settings/SettingsModel.h"
 
 class OtaUpdater {
 public:
@@ -41,7 +40,7 @@ public:
         bool rebootRequired = false;
     };
 
-    Config config(Preferences& preferences) const;
+    Config config(const settings::DeviceSettings& settings, const settings::DeviceSecrets& secrets) const;
     bool isConfigured(const Config& config) const;
     String currentVersion() const;
     Result checkOnly(const Config& config, StatusCallback callback = nullptr, void* context = nullptr) const;

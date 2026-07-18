@@ -21,6 +21,11 @@ namespace {
     bool writeThemeFile(const char* path, const ui::themes::Theme& theme) {
         if (!StorageFiles::ensureDirectory(StoragePaths::kThemesPath, "theme"))
             return false;
+        auto encoded = ui::themes::encodeToml(theme.definition);
+        if (!encoded) {
+            Serial.printf("[theme] encode failed: %s\n", encoded.error().message.c_str());
+            return false;
+        }
         const std::string tmpPath = std::string{path} + ".tmp";
         const std::string backupPath = std::string{path} + ".bak";
         auto& filesystem = Board::Storage::filesystem();
@@ -30,12 +35,8 @@ namespace {
         File file = filesystem.open(tmpPath.c_str(), FILE_WRITE);
         if (!file)
             return false;
-        file.printf("@rtheme\nname=%s\ntypeface=%s\n", theme.name.c_str(), theme.typeface.c_str());
-        for (size_t i = 0; i < theme.colors.size(); ++i) {
-            const std::string_view role = ui::themes::colorRoleName(i);
-            file.printf("%s=0x%04X\n", role.data(), theme.colors[i]);
-        }
-        const bool written = file.getWriteError() == 0;
+        const size_t count = file.write(reinterpret_cast<const uint8_t*>(encoded->data()), encoded->size());
+        const bool written = count == encoded->size() && file.getWriteError() == 0;
         file.close();
         if (!written) {
             filesystem.remove(tmpPath.c_str());
@@ -58,19 +59,11 @@ namespace {
         return false;
     }
 
-    std::string themePath(std::string_view id) {
-        std::string path{StoragePaths::kThemesPath};
-        path += '/';
-        path += id;
-        path += ui::themes::kThemeExtension;
-        return path;
-    }
-
 } // namespace
 
-void ThemeStore::loadFromSd(const FontCatalog& fonts) {
+void ThemeStore::loadFromSd(const FontCatalog& fonts, const settings::TypographySettings& defaults) {
     const std::string selectedId = selected().id;
-    themes_ = {ui::themes::defaultTheme()};
+    themes_ = {ui::themes::defaultTheme(defaults)};
     selectedIndex_ = 0;
 
     File dir = Board::Storage::filesystem().open(StoragePaths::kThemesPath);
@@ -100,23 +93,33 @@ void ThemeStore::loadFromSd(const FontCatalog& fonts) {
             continue;
         }
 
-        std::string text(std::min(entry.size(), kMaxThemeBytes), '\0');
-        text.resize(entry.read(reinterpret_cast<uint8_t*>(text.data()), text.size()));
-        entry.close();
-        ui::themes::Theme theme;
-        std::string error;
-        bool hasTypefaceValue = false;
-        if (ui::themes::parseThemeText(text, ui::themes::themeIdFromPath(path), theme, error, &hasTypefaceValue)) {
-            const FontCatalog::Family* family = fonts.find(theme.typeface);
-            const std::string& typeface = family == nullptr ? fonts.families().front().id : family->id;
-            if (!hasTypefaceValue || theme.typeface != typeface) {
-                theme.typeface = typeface;
-                repairs.push_back({path, loaded.size()});
-            }
-            loaded.push_back(std::move(theme));
-        } else {
-            Serial.printf("[theme] skipped %s: %s\n", path.c_str(), error.c_str());
+        if (entry.size() > kMaxThemeBytes) {
+            Serial.printf("[theme] skipped %s: file exceeds %u bytes\n", path.c_str(),
+                          static_cast<unsigned>(kMaxThemeBytes));
+            entry.close();
+            continue;
         }
+        std::string text(entry.size(), '\0');
+        const size_t count = entry.read(reinterpret_cast<uint8_t*>(text.data()), text.size());
+        entry.close();
+        if (count != text.size()) {
+            Serial.printf("[theme] skipped %s: incomplete read\n", path.c_str());
+            continue;
+        }
+        auto parsed = ui::themes::decodeToml(text, ui::themes::themeIdFromPath(path), defaults);
+        if (!parsed) {
+            Serial.printf("[theme] skipped %s: %s\n", path.c_str(), parsed.error().message.c_str());
+            continue;
+        }
+
+        auto& fontId = parsed->definition.typography.fontId;
+        if (fonts.find(fontId) == nullptr && !fonts.families().empty()) {
+            Serial.printf("[theme] %s references missing font '%s'; using '%s'\n", path.c_str(), fontId.c_str(),
+                          fonts.families().front().id.c_str());
+            fontId = fonts.families().front().id;
+            repairs.push_back({path, loaded.size()});
+        }
+        loaded.push_back(std::move(*parsed));
     }
     dir.close();
 
@@ -129,9 +132,7 @@ void ThemeStore::loadFromSd(const FontCatalog& fonts) {
     const auto duplicates = std::ranges::unique(loaded, {}, &ui::themes::Theme::id);
     loaded.erase(duplicates.begin(), duplicates.end());
 
-    const auto defaultTheme = std::ranges::find_if(loaded, [](const ui::themes::Theme& theme) {
-        return theme.id == ui::themes::kDefaultThemeId;
-    });
+    const auto defaultTheme = std::ranges::find(loaded, ui::themes::kDefaultThemeId, &ui::themes::Theme::id);
     if (defaultTheme != loaded.end()) {
         defaultTheme->builtIn = true;
         themes_.front() = std::move(*defaultTheme);
@@ -142,9 +143,7 @@ void ThemeStore::loadFromSd(const FontCatalog& fonts) {
 }
 
 bool ThemeStore::selectById(std::string_view id) {
-    const auto found = std::ranges::find_if(themes_, [id](const ui::themes::Theme& theme) {
-        return theme.id == id;
-    });
+    const auto found = std::ranges::find(themes_, id, &ui::themes::Theme::id);
     if (found == themes_.end())
         return false;
     selectedIndex_ = found - themes_.begin();
@@ -153,25 +152,6 @@ bool ThemeStore::selectById(std::string_view id) {
 
 void ThemeStore::selectNext() {
     selectedIndex_ = (selectedIndex_ + 1) % themes_.size();
-}
-
-bool ThemeStore::setSelectedTypeface(std::string_view typeface, const FontCatalog& fonts) {
-    const FontCatalog::Family* family = fonts.find(typeface);
-    if (family == nullptr)
-        return false;
-
-    ui::themes::Theme& theme = themes_[selectedIndex_];
-    if (theme.typeface == family->id)
-        return true;
-
-    const std::string previous = theme.typeface;
-    theme.typeface = family->id;
-    const std::string path = themePath(theme.id);
-    if (writeThemeFile(path.c_str(), theme))
-        return true;
-
-    theme.typeface = previous;
-    return false;
 }
 
 const ui::themes::Theme& ThemeStore::selected() const {

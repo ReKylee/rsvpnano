@@ -1,167 +1,117 @@
 #include "standby/Screensaver.h"
 
-#include <new>
-
 namespace standby {
-
-    ScreensaverSlot::~ScreensaverSlot() {
-        reset();
-    }
-
-    LifeScreensaver& ScreensaverSlot::life() {
-        return *reinterpret_cast<LifeScreensaver*>(&storage_);
-    }
-
-    const LifeScreensaver& ScreensaverSlot::life() const {
-        return *reinterpret_cast<const LifeScreensaver*>(&storage_);
-    }
-
-    MazeScreensaver& ScreensaverSlot::maze() {
-        return *reinterpret_cast<MazeScreensaver*>(&storage_);
-    }
-
-    const MazeScreensaver& ScreensaverSlot::maze() const {
-        return *reinterpret_cast<const MazeScreensaver*>(&storage_);
-    }
-
-    ReactionScreensaver& ScreensaverSlot::reaction() {
-        return *reinterpret_cast<ReactionScreensaver*>(&storage_);
-    }
-
-    const ReactionScreensaver& ScreensaverSlot::reaction() const {
-        return *reinterpret_cast<const ReactionScreensaver*>(&storage_);
-    }
-
-    VoronoiScreensaver& ScreensaverSlot::voronoi() {
-        return *reinterpret_cast<VoronoiScreensaver*>(&storage_);
-    }
-
-    const VoronoiScreensaver& ScreensaverSlot::voronoi() const {
-        return *reinterpret_cast<const VoronoiScreensaver*>(&storage_);
-    }
 
     void ScreensaverSlot::select(Kind kind, uint16_t columns, uint16_t rows) {
         reset();
-        kind_ = kind;
-        if (kind == Kind::ScreenOff)
-            return;
-        active_ = true;
 
-        switch (kind_) {
-        case Kind::Maze:
-            new (&storage_) MazeScreensaver();
-            maze().reset(columns, rows);
+        switch (kind) {
+        case Kind::maze: {
+            kind_ = Kind::maze;
+            auto& saver = storage_.emplace<MazeScreensaver>();
+            saver.reset(columns, rows);
             break;
-        case Kind::Voronoi:
-            new (&storage_) VoronoiScreensaver();
-            voronoi().reset(columns, rows);
+        }
+
+        case Kind::voronoi: {
+            kind_ = Kind::voronoi;
+            auto& saver = storage_.emplace<VoronoiScreensaver>();
+            saver.reset(columns, rows);
             break;
-        case Kind::Reaction:
-            new (&storage_) ReactionScreensaver();
-            reaction().reset(columns, rows);
+        }
+
+        case Kind::reaction: {
+            kind_ = Kind::reaction;
+            auto& saver = storage_.emplace<ReactionScreensaver>();
+            saver.reset(columns, rows);
             break;
-        case Kind::ScreenOff:
+        }
+
+        case Kind::screenOff:
+            kind_ = Kind::screenOff;
             break;
-        case Kind::Life:
-        default:
-            new (&storage_) LifeScreensaver();
-            life().reset(columns, rows);
+
+        case Kind::life:
+        case Kind::Count:
+        default: {
+            kind_ = Kind::life;
+            auto& saver = storage_.emplace<LifeScreensaver>();
+            saver.reset(columns, rows);
             break;
+        }
         }
     }
 
     void ScreensaverSlot::reset() {
-        if (!active_) {
-            return;
-        }
-
-        switch (kind_) {
-        case Kind::Maze:
-            maze().~MazeScreensaver();
-            break;
-        case Kind::Voronoi:
-            voronoi().~VoronoiScreensaver();
-            break;
-        case Kind::Reaction:
-            reaction().~ReactionScreensaver();
-            break;
-        case Kind::ScreenOff:
-            break;
-        case Kind::Life:
-        default:
-            life().~LifeScreensaver();
-            break;
-        }
-
-        active_ = false;
-        kind_ = Kind::Life;
+        storage_.emplace<std::monostate>();
+        kind_ = Kind::life;
     }
 
     void ScreensaverSlot::seed(uint32_t rngSeed) {
-        if (!active_) {
+        if (!*this) {
             return;
         }
 
         switch (kind_) {
-        case Kind::Maze:
-            maze().seed(rngSeed);
+        case Kind::maze:
+            std::get<MazeScreensaver>(storage_).seed(rngSeed);
             break;
-        case Kind::Voronoi:
-            voronoi().seed(rngSeed);
+        case Kind::voronoi:
+            std::get<VoronoiScreensaver>(storage_).seed(rngSeed);
             break;
-        case Kind::Reaction:
-            reaction().seed(rngSeed);
+        case Kind::reaction:
+            std::get<ReactionScreensaver>(storage_).seed(rngSeed);
             break;
-        case Kind::ScreenOff:
+        case Kind::screenOff:
             break;
-        case Kind::Life:
+        case Kind::life:
         default:
-            life().seed(rngSeed);
+            std::get<LifeScreensaver>(storage_).seed(rngSeed);
             break;
         }
     }
 
     void ScreensaverSlot::step() {
-        if (!active_) {
+        if (!*this) {
             return;
         }
 
         switch (kind_) {
-        case Kind::Maze:
-            maze().step();
+        case Kind::maze:
+            std::get<MazeScreensaver>(storage_).step();
             break;
-        case Kind::Voronoi:
-            voronoi().step();
+        case Kind::voronoi:
+            std::get<VoronoiScreensaver>(storage_).step();
             break;
-        case Kind::Reaction:
-            reaction().step();
+        case Kind::reaction:
+            std::get<ReactionScreensaver>(storage_).step();
             break;
-        case Kind::ScreenOff:
+        case Kind::screenOff:
             break;
-        case Kind::Life:
+        case Kind::life:
         default:
-            life().step();
+            std::get<LifeScreensaver>(storage_).step();
             break;
         }
     }
 
     Frame ScreensaverSlot::frame() const {
-        if (!active_) {
+        if (!*this) {
             return {};
         }
 
         switch (kind_) {
-        case Kind::Maze:
-            return maze().frame();
-        case Kind::Voronoi:
-            return voronoi().frame();
-        case Kind::Reaction:
-            return reaction().frame();
-        case Kind::ScreenOff:
+        case Kind::maze:
+            return std::get<MazeScreensaver>(storage_).frame();
+        case Kind::voronoi:
+            return std::get<VoronoiScreensaver>(storage_).frame();
+        case Kind::reaction:
+            return std::get<ReactionScreensaver>(storage_).frame();
+        case Kind::screenOff:
             return {};
-        case Kind::Life:
+        case Kind::life:
         default:
-            return life().frame();
+            return std::get<LifeScreensaver>(storage_).frame();
         }
     }
 

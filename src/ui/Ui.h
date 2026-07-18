@@ -238,7 +238,7 @@ namespace ui {
 
         Arduino_GFX& gfx_;
         const ui::themes::Theme* theme_ = nullptr;
-        UiLanguage language_ = UiLanguage::English;
+        UiLanguage language_ = UiLanguage::english;
         TouchSource touchSource_{};
         Touch touchEvent_{};
         Orientation touchOrientation_ = Orientation::Portrait;

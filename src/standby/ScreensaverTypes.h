@@ -7,11 +7,11 @@
 namespace standby {
 
     enum class Kind : uint8_t {
-        Life = 0,
-        Maze = 1,
-        Voronoi = 2,
-        ScreenOff = 3,
-        Reaction = 4,
+        life = 0,
+        maze = 1,
+        voronoi = 2,
+        screenOff = 3,
+        reaction = 4,
         Count,
     };
 

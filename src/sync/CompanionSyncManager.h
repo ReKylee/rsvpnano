@@ -7,11 +7,13 @@
 #include <string>
 #include <string_view>
 
-class Preferences;
+#include "settings/SettingsStore.h"
 
 class CompanionSyncManager {
 public:
-    bool begin(Preferences& preferences);
+    explicit CompanionSyncManager(settings::SettingsStore& settingsStore) : settingsStore_(settingsStore) {}
+
+    bool begin();
     bool update();
     void end();
     bool active() const;
@@ -66,16 +68,8 @@ private:
     void handleFonts();
     void handleFontUpload();
     void handleNotFound();
-    void sendData(int status, const String& json);
     void sendError(int status, const char* code, const String& message, const char* field = nullptr);
-    String settingsJson();
-    bool applySettingsJson(const String& body, String& error);
-    String wifiJson();
-    bool applyWifiJson(const String& body, String& error);
-    String rssFeedsJson();
-    bool writeRssFeedsJson(const String& body, String& error);
     String deviceSuffix() const;
-    String jsonEscape(const String& value) const;
     String sanitizeFilename(const String& name) const;
     RsvpMetadata readRsvpMetadata(const String& path) const;
     bool progressForPath(const String& path, uint32_t sourceSize, uint32_t sourceFingerprint, uint32_t wordCount,
@@ -92,7 +86,8 @@ private:
     String uploadTmpPath_;
     String uploadError_;
     std::string networkSsid_;
-    Preferences* preferences_ = nullptr;
+    std::string jsonBuffer_;
+    settings::SettingsStore& settingsStore_;
     std::string statusLine1_ = "Idle";
     std::string statusLine2_;
     NetworkMode networkMode_ = NetworkMode::None;

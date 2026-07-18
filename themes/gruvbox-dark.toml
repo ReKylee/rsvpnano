@@ -1,0 +1,29 @@
+schemaVersion = 1
+name = "Gruvbox Dark"
+
+[typography]
+fontId = "literata"
+fontSizeIndex = 0
+focusHighlight = true
+tracking = 0
+anchor = 30
+guideWidth = 30
+guideGap = 5
+
+[colors]
+background = "#282828"
+foreground = "#EBDBB2"
+muted = "#A89984"
+subtle = "#928374"
+accent = "#FB4934"
+accentBar = "#FABD2F"
+breakAccent = "#B8BB26"
+onAccent = "#282828"
+surface = "#1D2021"
+surfaceMuted = "#3C3836"
+surfaceActive = "#504945"
+outline = "#665C54"
+guide = "#928374"
+guideFocus = "#FB4934"
+phantom = "#7C6F64"
+progressTrack = "#3C3836"

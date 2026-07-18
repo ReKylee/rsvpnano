@@ -1,112 +1,69 @@
 #include "ui/Theme.h"
 
-#include <algorithm>
-#include <cctype>
+#include <glaze/toml.hpp>
 
-#include "text/AsciiText.h"
+#include <algorithm>
+#include <utility>
+
+#include "settings/SettingsGlaze.h"
+#include "settings/SettingsRules.h"
 
 namespace ui::themes {
     namespace {
 
-        constexpr std::array<std::string_view, kColorRoleCount> kColorRoleNames = {
-            "background",   "foreground",  "muted",   "subtle",         "accent",         "accent_bar",
-            "break_accent", "on_accent",   "surface", "surface_muted",  "surface_active", "outline",
-            "guide",        "guide_focus", "phantom", "progress_track",
-        };
-
-        constexpr std::array<uint16_t, kColorRoleCount> kDefaultThemeColors = {
-            0x0000, 0xFFFF, 0x8410, 0x528A, 0xF800, 0xF800, rgb565(68, 132, 88), 0xFFFF, 0x0000, 0x2104,
-            0x4208, 0x8410, 0x8410, 0xF800, 0x8410, 0x8410,
-        };
-
-        char lower(unsigned char value) {
-            return std::tolower(value);
-        }
-
-        bool whitespace(unsigned char value) {
-            return std::isspace(value);
-        }
-
-        std::string_view trim(std::string_view value) {
-            while (!value.empty() && whitespace(value.front()))
-                value.remove_prefix(1);
-            while (!value.empty() && whitespace(value.back()))
-                value.remove_suffix(1);
-            return value;
-        }
-
-        bool equalIgnoreCase(std::string_view left, std::string_view right) {
-            return left.size() == right.size()
-                && std::equal(left.begin(), left.end(), right.begin(), [](char a, char b) {
-                       return lower(a) == lower(b);
-                   });
-        }
-
         bool endsWithIgnoreCase(std::string_view value, std::string_view suffix) {
-            return value.size() >= suffix.size() && equalIgnoreCase(value.substr(value.size() - suffix.size()), suffix);
+            if (value.size() < suffix.size())
+                return false;
+            value.remove_prefix(value.size() - suffix.size());
+            return std::ranges::equal(value, suffix, [](char left, char right) {
+                if (left >= 'A' && left <= 'Z')
+                    left += 'a' - 'A';
+                if (right >= 'A' && right <= 'Z')
+                    right += 'a' - 'A';
+                return left == right;
+            });
         }
 
-        bool parseColor(std::string_view value, uint16_t& out) {
-            const bool rgb = value.size() == 7 && value.front() == '#';
-            if (rgb)
-                value.remove_prefix(1);
-            else if (value.size() == 6 && value[0] == '0' && lower(value[1]) == 'x')
-                value.remove_prefix(2);
-            else
-                return false;
-
-            uint32_t parsed = 0;
-            if (!AsciiText::parseUnsigned(value, parsed, 16))
-                return false;
-            out = rgb ? rgb565(parsed >> 16U, parsed >> 8U, parsed) : parsed;
-            return true;
-        }
-
-        std::string_view nextLine(std::string_view& text) {
-            const size_t end = text.find('\n');
-            if (end == std::string_view::npos) {
-                const std::string_view line = text;
-                text = {};
-                return line;
-            }
-            const std::string_view line = text.substr(0, end);
-            text.remove_prefix(end + 1);
-            return line;
-        }
-
-        bool consumeMagic(std::string_view& text, std::string& error) {
-            while (!text.empty()) {
-                std::string_view line = nextLine(text);
-                if (line.starts_with("\xEF\xBB\xBF"))
-                    line.remove_prefix(3);
-                line = trim(line);
-                if (line.empty() || line.front() == '#')
-                    continue;
-                if (line == kThemeMagic)
-                    return true;
-                error = "first content line must be @rtheme";
-                return false;
-            }
-            error = "missing @rtheme";
-            return false;
+        settings::SettingsError errorFrom(glz::error_ctx error, std::string_view input) {
+            const settings::SettingsErrorCategory category = error.ec == glz::error_code::unknown_key
+                ? settings::SettingsErrorCategory::UnknownKey
+                : error.ec == glz::error_code::unexpected_enum ? settings::SettingsErrorCategory::InvalidEnum
+                : error.ec == glz::error_code::constraint_violated ? settings::SettingsErrorCategory::Constraint
+                                                                    : settings::SettingsErrorCategory::Syntax;
+            return {.category = category,
+                    .source = settings::SettingsSource::Theme,
+                    .message = glz::format_error(error, input),
+                    .glazeCode = error.ec};
         }
 
     } // namespace
 
-    std::string_view colorRoleName(size_t role) {
-        return role < kColorRoleNames.size() ? kColorRoleNames[role] : std::string_view{};
+    uint16_t color(const ThemeColors& colors, ColorRole role) {
+        switch (role) {
+        case Background: return colors.background;
+        case Foreground: return colors.foreground;
+        case Muted: return colors.muted;
+        case Subtle: return colors.subtle;
+        case Accent: return colors.accent;
+        case AccentBar: return colors.accentBar;
+        case BreakAccent: return colors.breakAccent;
+        case OnAccent: return colors.onAccent;
+        case Surface: return colors.surface;
+        case SurfaceMuted: return colors.surfaceMuted;
+        case SurfaceActive: return colors.surfaceActive;
+        case Outline: return colors.outline;
+        case Guide: return colors.guide;
+        case GuideFocus: return colors.guideFocus;
+        case Phantom: return colors.phantom;
+        case ProgressTrack: return colors.progressTrack;
+        }
+        return colors.foreground;
     }
 
-    size_t colorRoleIndexForName(std::string_view name) {
-        name = trim(name);
-        const auto found = std::find_if(kColorRoleNames.begin(), kColorRoleNames.end(), [name](std::string_view role) {
-            return equalIgnoreCase(name, role);
-        });
-        return found - kColorRoleNames.begin();
-    }
-
-    Theme defaultTheme() {
-        return {std::string{kDefaultThemeId}, "Default", kDefaultThemeColors, std::string{kDefaultTypefaceId}, true};
+    ThemeEntry defaultTheme(const settings::TypographySettings& typography) {
+        ThemeFile definition;
+        definition.typography = typography;
+        return {.id = std::string{kDefaultThemeId}, .definition = std::move(definition), .builtIn = true};
     }
 
     bool hasThemeExtension(std::string_view path) {
@@ -120,73 +77,42 @@ namespace ui::themes {
         if (endsWithIgnoreCase(path, kThemeExtension))
             path.remove_suffix(kThemeExtension.size());
         std::string id{path};
-        std::transform(id.begin(), id.end(), id.begin(), lower);
+        std::ranges::transform(id, id.begin(), [](char value) {
+            return value >= 'A' && value <= 'Z' ? static_cast<char>(value + ('a' - 'A')) : value;
+        });
         return id;
     }
 
-    bool parseThemeText(std::string_view text, std::string_view id, Theme& theme, std::string& error,
-                        bool* hasTypefaceValue) {
-        if (hasTypefaceValue != nullptr)
-            *hasTypefaceValue = false;
-        if (!consumeMagic(text, error))
-            return false;
-
-        Theme parsed;
-        parsed.id = id;
-        parsed.name = id;
-        std::array<bool, kColorRoleCount> seen{};
-        bool hasName = false;
-
-        while (!text.empty()) {
-            std::string_view line = trim(nextLine(text));
-            if (line.empty() || line.front() == '#')
-                continue;
-            const size_t equals = line.find('=');
-            if (equals == std::string_view::npos || equals == 0)
-                continue;
-            const std::string_view key = trim(line.substr(0, equals));
-            const std::string_view value = trim(line.substr(equals + 1));
-
-            if (equalIgnoreCase(key, "name")) {
-                if (value.empty()) {
-                    error = "missing name";
-                    return false;
-                }
-                parsed.name = value;
-                hasName = true;
-                continue;
-            }
-            if (equalIgnoreCase(key, "typeface")) {
-                if (hasTypefaceValue != nullptr)
-                    *hasTypefaceValue = !value.empty();
-                parsed.typeface = value.empty() ? std::string{kDefaultTypefaceId} : std::string{value};
-                continue;
-            }
-            const size_t roleIndex = colorRoleIndexForName(key);
-            if (roleIndex == kColorRoleCount)
-                continue;
-            uint16_t color = 0;
-            if (!parseColor(value, color)) {
-                error = "invalid color for ";
-                error.append(key);
-                return false;
-            }
-            parsed.colors[roleIndex] = color;
-            seen[roleIndex] = true;
+    settings::SettingsResult<ThemeEntry> decodeToml(std::string_view text, std::string_view id,
+                                                    const settings::TypographySettings& defaults) {
+        ThemeFile candidate;
+        candidate.typography = defaults;
+        if (const glz::error_ctx error = glz::read_toml(candidate, text))
+            return std::unexpected(errorFrom(error, text));
+        if (candidate.schemaVersion != kThemeSchemaVersion) {
+            return std::unexpected(settings::SettingsError{
+                .category = settings::SettingsErrorCategory::UnsupportedSchema,
+                .source = settings::SettingsSource::Theme,
+                .path = "schemaVersion",
+                .message = "unsupported theme schema version " + std::to_string(candidate.schemaVersion)});
         }
+        if (candidate.name.empty())
+            candidate.name = "Unnamed";
+        if (candidate.name.size() > settings::rules::kThemeNameMaxLength)
+            candidate.name.resize(settings::rules::kThemeNameMaxLength);
+        if (candidate.typography.fontId.empty())
+            candidate.typography.fontId = settings::TypographySettings{}.fontId;
+        if (candidate.typography.fontId.size() > settings::rules::kFontIdMaxLength)
+            candidate.typography.fontId.resize(settings::rules::kFontIdMaxLength);
+        return ThemeEntry{.id = std::string{id}, .definition = std::move(candidate), .builtIn = false};
+    }
 
-        if (!hasName) {
-            error = "missing name";
-            return false;
-        }
-        const auto missing = std::find(seen.begin(), seen.end(), false);
-        if (missing != seen.end()) {
-            error = "missing color ";
-            error.append(kColorRoleNames[missing - seen.begin()]);
-            return false;
-        }
-        theme = std::move(parsed);
-        return true;
+    settings::SettingsResult<std::string> encodeToml(const ThemeFile& theme) {
+        ThemeFile mutableTheme = theme;
+        std::string output;
+        if (const glz::error_ctx error = glz::write_toml(mutableTheme, output))
+            return std::unexpected(errorFrom(error, output));
+        return output;
     }
 
 } // namespace ui::themes

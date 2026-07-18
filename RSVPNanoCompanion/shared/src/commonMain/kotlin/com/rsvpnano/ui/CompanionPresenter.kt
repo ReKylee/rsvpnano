@@ -402,7 +402,8 @@ class CompanionPresenter(
                     updateState {
                         it.copy(
                             wifiSettings = wifi,
-                            wifiSsidDraft = wifi.ssid,
+                            settings = it.settings?.copy(network = NanoSettings.Network(wifiSsid = ssid)),
+                            wifiSsidDraft = ssid,
                             wifiPasswordDraft = "",
                             notice = CompanionNotice.Success("Wi-Fi settings saved."),
                         )
@@ -426,7 +427,8 @@ class CompanionPresenter(
                     updateState {
                         it.copy(
                             wifiSettings = wifi,
-                            wifiSsidDraft = wifi.ssid,
+                            settings = it.settings?.copy(network = NanoSettings.Network()),
+                            wifiSsidDraft = "",
                             wifiPasswordDraft = "",
                             notice = CompanionNotice.Success("Wi-Fi settings cleared."),
                         )
@@ -884,8 +886,8 @@ class CompanionPresenter(
                 setNotice(CompanionNotice.Error("Connect to your Nano before uploading themes."))
                 return@launch
             }
-            if (!displayName.endsWith(".rtheme", ignoreCase = true)) {
-                setNotice(CompanionNotice.Error("Theme files must use the .rtheme extension."))
+            if (!displayName.endsWith(".toml", ignoreCase = true)) {
+                setNotice(CompanionNotice.Error("Theme files must use the .toml extension."))
                 return@launch
             }
             if (!ensureReaderReachable("uploading themes")) return@launch
@@ -1187,7 +1189,7 @@ class CompanionPresenter(
                 firmwareVersion = device.info?.firmwareVersion.orEmpty(),
                 otaAsset = device.info?.otaAsset.orEmpty(),
                 wifiSettings = device.wifiSettings,
-                wifiSsidDraft = device.wifiSettings?.ssid.orEmpty(),
+                wifiSsidDraft = device.settings?.network?.wifiSsid.orEmpty(),
                 wifiPasswordDraft = "",
                 baseUrl = baseUrl,
                 rssFeeds = snapshot.rssFeeds,
@@ -1214,7 +1216,7 @@ class CompanionPresenter(
                 it.copy(
                     settings = snapshot.settings,
                     wifiSettings = snapshot.wifiSettings ?: it.wifiSettings,
-                    wifiSsidDraft = snapshot.wifiSettings?.ssid ?: it.wifiSsidDraft,
+                    wifiSsidDraft = snapshot.settings.network.wifiSsid,
                     notice = CompanionNotice.Success("Reader settings loaded."),
                 )
             }
@@ -1252,7 +1254,7 @@ class CompanionPresenter(
 
     private fun catalogUrl(path: String): String {
         val settings = current.settings ?: error("Connect to your Nano before loading catalogs.")
-        val source = releaseSource(settings.updates.owner, settings.updates.tag)
+        val source = releaseSource(settings.updates.repositoryOwner, settings.updates.releaseTag)
             ?: error("Configure a GitHub release owner on your Nano first.")
         return source.rawContentUrl(path)
     }

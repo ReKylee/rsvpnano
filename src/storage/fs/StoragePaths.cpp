@@ -85,8 +85,8 @@ namespace StoragePaths {
         return path + kDataExtension;
     }
 
-    String progressSidecarPathFor(const String& path) {
-        return siblingPathWithExtension(path, kProgressExtension);
+    String bookStatePathFor(const String& path) {
+        return siblingPathWithExtension(path, kBookStateExtension);
     }
 
     String indexedTempPathFor(const String& path) {
@@ -106,7 +106,7 @@ namespace StoragePaths {
         }
 
         if (lowered.endsWith(kIndexExtension) || lowered.endsWith(kDataExtension)
-            || lowered.endsWith(kProgressExtension) || lowered.endsWith(kTempExtension)) {
+            || lowered.endsWith(kBookStateExtension) || lowered.endsWith(kTempExtension)) {
             return true;
         }
 

@@ -1,19 +1,18 @@
 #pragma once
 
 #include <Arduino.h>
-#include <Preferences.h>
-
 #include <array>
+#include <optional>
 #include <span>
 #include <string>
 
 #include "book/BookMetadata.h"
-#include "display/InterfaceSettings.h"
 #include "display/ThemeStore.h"
 #include "fonts/FontCatalog.h"
-#include "reader/ReaderSettings.h"
 #include "reader/ReadingLoop.h"
 #include "settings/NvsSecurity.h"
+#include "settings/SettingsModel.h"
+#include "settings/SettingsStore.h"
 #include "standby/ScreensaverTypes.h"
 #include "timer/FocusOrientation.h"
 #include "timer/FocusSession.h"
@@ -75,21 +74,21 @@ namespace screens {
 
     Action read(ui::Context& ui, const ReadModel& model, Screen& screen);
     Action settings(ui::Context& ui, Screen& screen);
-    void readingSettings(ui::Context& ui, ReadingLoop& reader, ReaderSettings& settings, Preferences& preferences,
-                         Screen& screen);
+    bool readingSettings(ui::Context& ui, ReadingLoop& reader, settings::ReadingSettings& settings, Screen& screen);
     class InterfaceScreen {
     public:
-        InterfaceSettings config;
         ThemeStore themes;
 
-        void begin(ui::Context& ui, Preferences& preferences, const FontCatalog& fonts, void (*setBrightness)(uint8_t));
-        bool draw(ui::Context& ui, Preferences& preferences, std::span<const uint32_t> standbyDurations,
-                  void (*setBrightness)(uint8_t), Screen& screen);
+        void begin(ui::Context& ui, settings::InterfaceSettings& settings,
+                   const settings::TypographySettings& typographyDefaults, const FontCatalog& fonts,
+                   void (*setBrightness)(uint8_t));
+        bool draw(ui::Context& ui, settings::InterfaceSettings& settings,
+                  std::span<const uint32_t> standbyDurations, void (*setBrightness)(uint8_t), Screen& screen);
     };
-    void pacingSettings(ui::Context& ui, ReadingLoop& reader, Preferences& preferences, Screen& screen);
-    bool typographySettings(ui::Context& ui, ReaderSettings& settings, FontCatalog& fonts, ThemeStore& themes,
-                            Preferences& preferences, Screen& screen);
-    void readerSettings(ui::Context& ui, ReaderSettings& settings, Preferences& preferences, Screen& screen);
+    bool pacingSettings(ui::Context& ui, ReadingLoop& reader, settings::PacingSettings& settings, Screen& screen);
+    bool typographySettings(ui::Context& ui, std::optional<settings::TypographySettings>& bookOverride,
+                            const settings::TypographySettings& inherited, FontCatalog& fonts, Screen& screen);
+    bool readerSettings(ui::Context& ui, settings::ReadingSettings& settings, Screen& screen);
     class NetworkScreen {
     public:
         std::string ssid;
@@ -99,13 +98,13 @@ namespace screens {
         bool autoCheckPending = false;
         bool ssidStored = false;
 
-        void begin(Preferences& preferences);
-        void draw(ui::Context& ui, Preferences& preferences, Screen& screen);
+        void begin(settings::SettingsStore& store);
+        void draw(ui::Context& ui, settings::SettingsStore& store, Screen& screen);
         void openWifiScan();
         void closeWifi();
-        void drawWifiScan(ui::Context& ui, Preferences& preferences, Screen& screen);
-        bool drawWifiConnect(ui::Context& ui, Preferences& preferences, Screen& screen);
-        void drawEdit(ui::Context& ui, Preferences& preferences, Screen& screen);
+        void drawWifiScan(ui::Context& ui, settings::SettingsStore& store, Screen& screen);
+        bool drawWifiConnect(ui::Context& ui, settings::SettingsStore& store, Screen& screen);
+        void drawEdit(ui::Context& ui, settings::SettingsStore& store, Screen& screen);
 
     private:
         struct WifiNetwork {
@@ -125,6 +124,8 @@ namespace screens {
             Owner,
             Tag,
         };
+
+        void saveNetwork(settings::SettingsStore& store);
 
         std::array<WifiNetwork, 8> networks_;
         size_t networkCount_ = 0;

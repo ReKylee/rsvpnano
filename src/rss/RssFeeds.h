@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
+#include "settings/SettingsModel.h"
+
 namespace RssFeeds {
 
     using StatusCallback = void (*)(void* context, const char* title, const char* line1, const char* line2,
@@ -16,6 +18,8 @@ namespace RssFeeds {
         String detail;
     };
 
-    Result check(Preferences& preferences, StatusCallback callback = nullptr, void* context = nullptr);
+    Result check(Preferences& statePreferences, const settings::DeviceSettings& settings,
+                 const settings::DeviceSecrets& secrets, StatusCallback callback = nullptr,
+                 void* context = nullptr);
 
 } // namespace RssFeeds

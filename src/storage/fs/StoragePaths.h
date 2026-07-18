@@ -10,9 +10,9 @@ namespace StoragePaths {
     constexpr const char* kArticleFilesPath = "/books/articles";
     constexpr const char* kArticleFilesPrefix = "/books/articles/";
     constexpr const char* kConfigPath = "/config";
-    constexpr const char* kSettingsConfigPath = "/config/settings.conf";
-    constexpr const char* kSettingsConfigTempPath = "/config/settings.conf.tmp";
-    constexpr const char* kSettingsConfigBackupPath = "/config/settings.conf.bak";
+    constexpr const char* kSettingsConfigPath = "/config/settings.toml";
+    constexpr const char* kSettingsConfigTempPath = "/config/settings.toml.tmp";
+    constexpr const char* kSettingsConfigBackupPath = "/config/settings.toml.bak";
     constexpr const char* kRssConfigPath = "/config/rss.conf";
     constexpr const char* kRssConfigTempPath = "/config/rss.conf.tmp";
     constexpr const char* kFocusConfigPath = "/config/focus.conf";
@@ -26,7 +26,7 @@ namespace StoragePaths {
     constexpr const char* kEpubExtension = ".epub";
     constexpr const char* kIndexExtension = ".ridx";
     constexpr const char* kDataExtension = ".rdat";
-    constexpr const char* kProgressExtension = ".rpos";
+    constexpr const char* kBookStateExtension = ".rstate.toml";
     constexpr const char* kFontExtension = ".rfont4";
     constexpr const char* kTempExtension = ".tmp";
     constexpr const char* kFailedExtension = ".failed";
@@ -44,7 +44,7 @@ namespace StoragePaths {
     String rsvpCachePathForEpub(const String& epubPath);
     String indexedIndexPathFor(const String& path);
     String indexedDataPathFor(const String& path);
-    String progressSidecarPathFor(const String& path);
+    String bookStatePathFor(const String& path);
     String indexedTempPathFor(const String& path);
     bool isHiddenOrSidecarPath(const String& path);
 

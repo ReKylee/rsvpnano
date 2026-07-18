@@ -72,6 +72,52 @@ class NanoKtorClientAndroidTest {
     }
 
     @Test
+    fun settingsUseCanonicalDocumentAndPut() = runBlocking {
+        val seen = mutableListOf<String>()
+        val client = NanoKtorClient(mockHttpClient { request ->
+            seen += "${request.method.value} ${request.url.encodedPath}"
+            val wpm = if (request.method == HttpMethod.Put) 450 else 300
+            """{"data":{"schemaVersion":1,"reading":{"wpm":$wpm,"pauseMode":"sentenceEnd","phantomWords":true,"chapterScrollReversed":false,"footerMetric":"chapterTime","batteryLabel":"timeRemaining","batteryVisibleWhileReading":true,"chapterVisibleWhileReading":false,"progressVisibleWhileReading":true,"leftHanded":false,"typography":{"fontId":"literata","fontSizeIndex":1,"focusHighlight":true,"tracking":0,"anchor":30,"guideWidth":30,"guideGap":5},"pacing":{"longWordDelayMs":200,"complexWordDelayMs":250,"punctuationDelayMs":300}},"interface":{"brightnessIndex":13,"language":"english","standbyTimerIndex":1,"screensaver":"reaction","selectedThemeId":"night"},"network":{"wifiSsid":"Home"},"updates":{"automatic":true,"repositoryOwner":"reader","releaseTag":"preview"}}}"""
+        })
+
+        val fetched = client.fetchSettings("http://device.local")
+        assertEquals("sentenceEnd", fetched.reading.pauseMode)
+        assertEquals(250, fetched.reading.pacing.complexWordDelayMs)
+        assertEquals("literata", fetched.reading.typography.fontId)
+        assertEquals("reaction", fetched.`interface`.screensaver)
+        assertEquals("Home", fetched.network.wifiSsid)
+        assertEquals("reader", fetched.updates.repositoryOwner)
+
+        val updated = client.updateSettings("http://device.local", fetched.withWpm(450))
+        assertEquals(450, updated.reading.wpm)
+        assertEquals(
+            listOf("GET /api/v1/settings", "PUT /api/v1/settings"),
+            seen,
+        )
+    }
+
+    @Test
+    fun networkApiKeepsSsidInDeviceSettings() = runBlocking {
+        val seen = mutableListOf<String>()
+        val client = NanoKtorClient(mockHttpClient { request ->
+            seen += "${request.method.value} ${request.url.encodedPath}"
+            """{"data":{"passwordSet":${request.method != HttpMethod.Delete}}}"""
+        })
+
+        assertEquals(true, client.fetchWifiSettings("http://device.local").passwordSet)
+        assertEquals(true, client.updateWifi("http://device.local", "Home", "secret").passwordSet)
+        assertEquals(false, client.forgetWifi("http://device.local").passwordSet)
+        assertEquals(
+            listOf(
+                "GET /api/v1/network",
+                "PUT /api/v1/network",
+                "DELETE /api/v1/network",
+            ),
+            seen,
+        )
+    }
+
+    @Test
     fun bookMutationsUseDeviceContract() = runBlocking {
         val seen = mutableListOf<String>()
         val client = NanoKtorClient(mockHttpClient { request ->

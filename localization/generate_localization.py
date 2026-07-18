@@ -324,7 +324,7 @@ def generate_header(model: LocalizationModel) -> str:
 	writer.add("#include <cstdint>")
 	writer.add("#include <string_view>")
 	writer.add()
-	write_enum(writer, "UiLanguage", [language.name for language in model.languages])
+	write_enum(writer, "UiLanguage", [language.name.lower() for language in model.languages])
 	writer.add()
 	write_enum(writer, "UiText", [text.key for text in model.texts])
 	writer.add()

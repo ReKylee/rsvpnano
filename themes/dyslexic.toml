@@ -1,0 +1,29 @@
+schemaVersion = 1
+name = "Dyslexic"
+
+[typography]
+fontId = "opendyslexic"
+fontSizeIndex = 0
+focusHighlight = true
+tracking = 0
+anchor = 30
+guideWidth = 30
+guideGap = 5
+
+[colors]
+background = "#FFF8DC"
+foreground = "#1D1B16"
+muted = "#6F6A57"
+subtle = "#857D62"
+accent = "#006F9F"
+accentBar = "#006F9F"
+breakAccent = "#4F7F52"
+onAccent = "#FFFFFF"
+surface = "#FFF2BD"
+surfaceMuted = "#EADFAE"
+surfaceActive = "#D9CC98"
+outline = "#9F946D"
+guide = "#897F5D"
+guideFocus = "#006F9F"
+phantom = "#9A906B"
+progressTrack = "#D9CC98"

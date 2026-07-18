@@ -5,6 +5,7 @@
 
 #include "board/BoardDisplay.h"
 #include "input/Input.h"
+#include "settings/SettingsStore.h"
 #include "storage/StorageManager.h"
 #include "sync/CompanionSyncManager.h"
 #include "ui/Ui.h"
@@ -21,6 +22,7 @@ public:
     void update(uint32_t nowMs);
 
 private:
+    void migrateLegacyStorage();
     void renderScreen(uint32_t nowMs);
     void handleScreenAction(screens::Action action, uint32_t nowMs);
     void handleInput(const Input::Event& event, uint32_t nowMs);
@@ -44,12 +46,12 @@ private:
     screens::InterfaceScreen interfaceScreen_;
     screens::NetworkScreen networkScreen_;
     StorageManager storage_;
-    CompanionSyncManager sync_;
+    Preferences prefs_;
+    settings::SettingsStore settingsStore_;
+    CompanionSyncManager sync_{settingsStore_};
     UsbMassStorageManager usbTransfer_;
     screens::FocusScreen focusScreen_;
     screens::StandbyScreen standbyScreen_;
-    Preferences prefs_;
-
     screens::Screen screen_ = screens::Screen::Status;
     uint32_t bootMs_ = 0;
     uint32_t lastActivityMs_ = 0;

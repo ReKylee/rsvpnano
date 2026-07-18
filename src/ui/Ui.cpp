@@ -817,7 +817,7 @@ namespace ui {
         if (theme_ == nullptr) {
             return role == ui::themes::ColorRole::Background ? kFallbackBlack : kFallbackWhite;
         }
-        return theme_->colors[role];
+        return ui::themes::color(theme_->definition.colors, role);
     }
 
     uint16_t Context::blend(ui::themes::ColorRole role, uint8_t alpha) const {

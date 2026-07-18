@@ -178,7 +178,6 @@ class NanoCompanionController(
         )
         val refreshed = client.fetchSettings(baseUrl)
         val selected = uploaded.id
-            ?.takeIf { id -> refreshed.themes.any { it.id == id } }
             ?.let { id -> client.updateSettings(baseUrl, refreshed.withThemeId(id)) }
             ?: refreshed
         return CompanionSettingsSnapshot(settings = selected, wifiSettings = null)

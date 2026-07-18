@@ -8,7 +8,6 @@
 #include <WiFiClientSecure.h>
 #include "FirmwareVersion.generated.h"
 #include "net/WifiConnection.h"
-#include "settings/PreferenceSpecs.h"
 #include "update/ReleaseParser.h"
 
 namespace {
@@ -171,20 +170,17 @@ namespace {
 
 } // namespace
 
-OtaUpdater::Config OtaUpdater::config(Preferences& preferences) const {
+OtaUpdater::Config OtaUpdater::config(const settings::DeviceSettings& settings,
+                                      const settings::DeviceSecrets& secrets) const {
     Config result;
-    const std::string ssid = settings::load<settings::prefs::WifiSsid>(preferences);
-    if (!ssid.empty()) {
-        result.wifiSsid = ssid.c_str();
-        result.wifiPassword = settings::load<settings::prefs::WifiPassword>(preferences).c_str();
+    if (!settings.network.wifiSsid.empty()) {
+        result.wifiSsid = settings.network.wifiSsid.c_str();
+        result.wifiPassword = secrets.wifiPassword.c_str();
     }
-    const std::string owner = settings::load<settings::prefs::OtaOwner>(preferences);
-    if (!owner.empty())
-        result.githubOwner = owner.c_str();
-    if (settings::contains<settings::prefs::OtaTag>(preferences))
-        result.githubTag = settings::load<settings::prefs::OtaTag>(preferences).c_str();
-    if (settings::contains<settings::prefs::OtaAuto>(preferences))
-        result.autoCheck = settings::load<settings::prefs::OtaAuto>(preferences);
+    if (!settings.updates.repositoryOwner.empty())
+        result.githubOwner = settings.updates.repositoryOwner.c_str();
+    result.githubTag = settings.updates.releaseTag.c_str();
+    result.autoCheck = settings.updates.automatic;
     return result;
 }
 

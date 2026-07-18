@@ -180,8 +180,7 @@ namespace screens {
 
     const std::vector<LibraryItem>& LibraryScreen::items(StorageManager& storage, const IndexedBookStore& bookStore,
                                                          const ReadingLoop& reader,
-                                                         const ReadingProgress::Session& book,
-                                                         Preferences& preferences) {
+                                                         const ReadingProgress::Session& book) {
         const size_t bookCount = storage.bookCount();
         if (itemsValid_ && sourceCount_ == bookCount) {
             if (book.fromStorage && book.index < items_.size() && bookStore.isOpen()) {
@@ -219,15 +218,13 @@ namespace screens {
             } else if (metadataLoaded && header.wordCount > 0) {
                 const ReadingProgress::BookIdentity identity{header.sourceSize, header.sourceFingerprint,
                                                              header.wordCount};
-                hasPosition = ReadingProgress::readPositionSidecar(path.c_str(), identity, wordIndex);
-                if (!hasPosition)
-                    hasPosition = ReadingProgress::readCachedPosition(preferences, path.c_str(), identity, wordIndex);
+                hasPosition = ReadingProgress::readBookStatePosition(path.c_str(), identity, wordIndex);
                 item.progress = hasPosition ? ReadingProgress::percent(wordIndex, header.wordCount) : 0;
                 if (const ChapterMarker* chapter = metadata.chapterAt(hasPosition ? wordIndex : 0)) {
                     item.chapter = chapter->title;
                 }
             } else {
-                item.progress = storedProgress(index, storage, bookStore, reader, book, preferences);
+                item.progress = 0;
             }
 
             item.progressLabel = progressLabel(item.progress);
@@ -236,16 +233,6 @@ namespace screens {
         sourceCount_ = bookCount;
         itemsValid_ = true;
         return items_;
-    }
-
-    uint8_t LibraryScreen::storedProgress(size_t index, StorageManager& storage, const IndexedBookStore& bookStore,
-                                          const ReadingLoop& reader, const ReadingProgress::Session& book,
-                                          Preferences& preferences) const {
-        if (book.fromStorage && index == book.index && bookStore.isOpen()) {
-            return ReadingProgress::percent(reader.currentIndex(), reader.wordCount());
-        }
-        const std::string path = storage.bookPath(index);
-        return ReadingProgress::cachedPercent(preferences, path.c_str());
     }
 
     std::string LibraryScreen::spineLabel(std::string_view title) {

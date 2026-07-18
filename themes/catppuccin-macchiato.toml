@@ -1,0 +1,29 @@
+schemaVersion = 1
+name = "Catppuccin Macchiato"
+
+[typography]
+fontId = "literata"
+fontSizeIndex = 0
+focusHighlight = true
+tracking = 0
+anchor = 30
+guideWidth = 30
+guideGap = 5
+
+[colors]
+background = "#24273A"
+foreground = "#CAD3F5"
+muted = "#A5ADCB"
+subtle = "#8087A2"
+accent = "#ED8796"
+accentBar = "#ED8796"
+breakAccent = "#A6DA95"
+onAccent = "#181926"
+surface = "#1E2030"
+surfaceMuted = "#363A4F"
+surfaceActive = "#494D64"
+outline = "#5B6078"
+guide = "#6E738D"
+guideFocus = "#ED8796"
+phantom = "#6E738D"
+progressTrack = "#363A4F"

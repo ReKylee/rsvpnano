@@ -1,12 +1,12 @@
 # RSVP Nano Themes
 
-Copy this `themes` folder to the SD card root. The device loads `*.rtheme` files from `/themes`
+Copy this `themes` folder to the SD card root. The device loads `*.toml` files from `/themes`
 at startup and appends valid themes after the built-in default theme.
 
 Theme files are plain text:
 
 ```ini
-@rtheme
+TOML
 name=Catppuccin Mocha
 typeface=literata
 

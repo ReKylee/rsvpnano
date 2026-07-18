@@ -2,73 +2,73 @@
   {
     "id": "catppuccin-frappe",
     "name": "Catppuccin Frappe",
-    "file": "catppuccin-frappe.rtheme",
+    "file": "catppuccin-frappe.toml",
     "typeface": "literata"
   },
   {
     "id": "catppuccin-latte",
     "name": "Catppuccin Latte",
-    "file": "catppuccin-latte.rtheme",
+    "file": "catppuccin-latte.toml",
     "typeface": "literata"
   },
   {
     "id": "catppuccin-macchiato",
     "name": "Catppuccin Macchiato",
-    "file": "catppuccin-macchiato.rtheme",
+    "file": "catppuccin-macchiato.toml",
     "typeface": "literata"
   },
   {
     "id": "catppuccin-mocha",
     "name": "Catppuccin Mocha",
-    "file": "catppuccin-mocha.rtheme",
+    "file": "catppuccin-mocha.toml",
     "typeface": "literata"
   },
   {
     "id": "dracula",
     "name": "Dracula",
-    "file": "dracula.rtheme",
+    "file": "dracula.toml",
     "typeface": "literata"
   },
   {
     "id": "dyslexic",
     "name": "Dyslexic",
-    "file": "dyslexic.rtheme",
+    "file": "dyslexic.toml",
     "typeface": "opendyslexic"
   },
   {
     "id": "gruvbox-dark",
     "name": "Gruvbox Dark",
-    "file": "gruvbox-dark.rtheme",
+    "file": "gruvbox-dark.toml",
     "typeface": "literata"
   },
   {
     "id": "light",
     "name": "Light",
-    "file": "light.rtheme",
+    "file": "light.toml",
     "typeface": "literata"
   },
   {
     "id": "night",
     "name": "Night",
-    "file": "night.rtheme",
+    "file": "night.toml",
     "typeface": "literata"
   },
   {
     "id": "nord",
     "name": "Nord",
-    "file": "nord.rtheme",
+    "file": "nord.toml",
     "typeface": "literata"
   },
   {
     "id": "solarized-dark",
     "name": "Solarized Dark",
-    "file": "solarized-dark.rtheme",
+    "file": "solarized-dark.toml",
     "typeface": "literata"
   },
   {
     "id": "tokyo-night",
     "name": "Tokyo Night",
-    "file": "tokyo-night.rtheme",
+    "file": "tokyo-night.toml",
     "typeface": "literata"
   }
 ]

@@ -5,30 +5,24 @@ import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoBookMetadata
 
 internal fun sampleSettings(): NanoSettings = NanoSettings(
-    version = 1,
-    applied = true,
     reading = NanoSettings.Reading(
         wpm = 250,
-        pauseMode = "sentence",
-        pacing = NanoSettings.Pacing(longWordMs = 0, complexWordMs = 0, punctuationMs = 0),
-    ),
-    display = NanoSettings.Display(
-        brightnessIndex = 1,
-        handedness = "right",
-        footerMetric = "battery",
-        batteryLabel = "battery",
-        language = 0,
+        pauseMode = "sentenceEnd",
+        footerMetric = "percentage",
+        batteryLabel = "percentage",
         phantomWords = false,
-        fontSizeIndex = 1,
+        typography = NanoSettings.Typography(
+            fontId = "serif",
+            fontSizeIndex = 1,
+            focusHighlight = true,
+            tracking = 0,
+            anchor = 30,
+            guideWidth = 12,
+            guideGap = 2,
+        ),
+        pacing = NanoSettings.Pacing(longWordDelayMs = 0, complexWordDelayMs = 0, punctuationDelayMs = 0),
     ),
-    typography = NanoSettings.Typography(
-        typeface = "serif",
-        focusHighlight = true,
-        tracking = 0,
-        anchorPercent = 50,
-        guideWidth = 1,
-        guideGap = 1,
-    ),
+    `interface` = NanoSettings.Interface(brightnessIndex = 1),
 )
 
 internal fun sampleBook(

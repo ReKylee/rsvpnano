@@ -24,8 +24,8 @@ class FirmwareUpdates(
                 firmwareUpdateTarget = FirmwareUpdateTarget(
                     currentVersion = currentVersion,
                     otaAsset = otaAsset,
-                    owner = settings.updates.owner,
-                    tag = settings.updates.tag,
+                    owner = settings.updates.repositoryOwner,
+                    tag = settings.updates.releaseTag,
                 ),
             )
         }

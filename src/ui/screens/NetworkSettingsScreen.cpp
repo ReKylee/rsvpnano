@@ -6,23 +6,22 @@
 #include <functional>
 
 #include "net/WifiConnection.h"
-#include "settings/PreferenceSpecs.h"
-#include "update/OtaUpdater.h"
+#include "settings/SettingsStore.h"
 
 namespace screens {
 
-    void NetworkScreen::begin(Preferences& preferences) {
-        const OtaUpdater::Config config = OtaUpdater{}.config(preferences);
-        ssid.assign(config.wifiSsid.c_str(), config.wifiSsid.length());
-        password_.assign(config.wifiPassword.c_str(), config.wifiPassword.length());
-        owner.assign(config.githubOwner.c_str(), config.githubOwner.length());
-        tag.assign(config.githubTag.c_str(), config.githubTag.length());
-        automatic = config.autoCheck;
-        ssidStored = settings::contains<settings::prefs::WifiSsid>(preferences);
+    void NetworkScreen::begin(settings::SettingsStore& store) {
+        const auto& persisted = store.settings();
+        ssid = persisted.network.wifiSsid;
+        password_ = store.secrets().wifiPassword;
+        owner = persisted.updates.repositoryOwner;
+        tag = persisted.updates.releaseTag;
+        automatic = persisted.updates.automatic;
+        ssidStored = !ssid.empty();
         autoCheckPending = automatic && !ssid.empty();
     }
 
-    void NetworkScreen::draw(ui::Context& ui, Preferences& preferences, Screen& screen) {
+    void NetworkScreen::draw(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
         const ui::Rect content = detail::content(ui);
         if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
             screen = Screen::Settings;
@@ -44,7 +43,8 @@ namespace screens {
                        static_cast<int16_t>(content.w - networkWidth - gap), 32},
                       ui.text(UiText::AutomaticChecks), automatic)) {
             automatic = !automatic;
-            settings::save<settings::prefs::OtaAuto>(preferences, automatic);
+            store.settings().updates.automatic = automatic;
+            store.acceptChanges();
             autoCheckPending = automatic && !ssid.empty();
         }
         const int16_t secondRowY = static_cast<int16_t>(firstRowY + 38);
@@ -72,9 +72,9 @@ namespace screens {
         if (ui.button(actions.next(), ui.text(UiText::FirmwareUpdates)))
             screen = Screen::Ota;
         if (ssidStored && ui.button(actions.next(), ui.text(UiText::ForgetNetwork))) {
-            settings::reset<settings::prefs::WifiSsid>(preferences);
-            settings::reset<settings::prefs::WifiPassword>(preferences);
             ssid.clear();
+            password_.clear();
+            saveNetwork(store);
             ssidStored = false;
             autoCheckPending = false;
         }
@@ -91,7 +91,7 @@ namespace screens {
         net::disconnect();
     }
 
-    void NetworkScreen::drawWifiScan(ui::Context& ui, Preferences& preferences, Screen& screen) {
+    void NetworkScreen::drawWifiScan(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
         const ui::Rect content = detail::content(ui);
         if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back))) {
             closeWifi();
@@ -168,8 +168,7 @@ namespace screens {
                 ssid = network.ssid;
                 if (!network.secured) {
                     password_.clear();
-                    settings::save<settings::prefs::WifiSsid>(preferences, ssid);
-                    settings::save<settings::prefs::WifiPassword>(preferences, password_);
+                    saveNetwork(store);
                     ssidStored = true;
                     closeWifi();
                     screen = Screen::NetworkSettings;
@@ -185,7 +184,7 @@ namespace screens {
         }
     }
 
-    bool NetworkScreen::drawWifiConnect(ui::Context& ui, Preferences& preferences, Screen& screen) {
+    bool NetworkScreen::drawWifiConnect(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
         const ui::Rect content = detail::content(ui);
         const std::string_view label = connectionFailed_ ? ui.text(UiText::ConnectionFailed) : std::string_view{ssid};
         const ui::KeyboardAction action = ui.keyboard(content, password_, 63, keyboard_, label, true);
@@ -206,14 +205,13 @@ namespace screens {
             connectionFailed_ = true;
             return true;
         }
-        settings::save<settings::prefs::WifiSsid>(preferences, ssid);
-        settings::save<settings::prefs::WifiPassword>(preferences, password_);
+        saveNetwork(store);
         ssidStored = true;
         screen = Screen::NetworkSettings;
         return true;
     }
 
-    void NetworkScreen::drawEdit(ui::Context& ui, Preferences& preferences, Screen& screen) {
+    void NetworkScreen::drawEdit(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
         const ui::Rect content = detail::content(ui);
         const ui::KeyboardAction action =
             ui.keyboard(content, editValue_, 63, keyboard_,
@@ -223,19 +221,21 @@ namespace screens {
         } else if (action == ui::KeyboardAction::Submit) {
             if (editField_ == EditField::Owner) {
                 owner = editValue_;
-                if (owner.empty())
-                    settings::reset<settings::prefs::OtaOwner>(preferences);
-                else
-                    settings::save<settings::prefs::OtaOwner>(preferences, owner);
+                store.settings().updates.repositoryOwner = owner;
             } else {
                 tag = editValue_;
-                if (tag.empty())
-                    settings::reset<settings::prefs::OtaTag>(preferences);
-                else
-                    settings::save<settings::prefs::OtaTag>(preferences, tag);
+                store.settings().updates.releaseTag = tag;
             }
+            store.acceptChanges();
             screen = Screen::NetworkSettings;
         }
+    }
+
+    void NetworkScreen::saveNetwork(settings::SettingsStore& store) {
+        store.settings().network.wifiSsid = ssid;
+        store.secrets().wifiPassword = password_;
+        store.acceptChanges();
+        store.acceptSecretChanges();
     }
 
 } // namespace screens

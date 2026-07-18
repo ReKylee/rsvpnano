@@ -51,10 +51,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.rsvpnano.models.NanoFont
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoSettingsSchema
-import com.rsvpnano.models.NanoTheme
 
 private enum class SettingsCategory(
     val label: String,
@@ -278,9 +276,10 @@ private fun DeviceSettings(
                 title = "Internet Wi-Fi",
                 subtitle = "Saved on the Nano for RSS and device updates.",
             ) {
-                val wifiStatus = uiState.wifiSettings?.let { wifi ->
-                    if (wifi.configured) "Saved network: ${wifi.ssid}" else "No saved network"
-                } ?: "Reader Wi-Fi settings are not loaded."
+                val wifiStatus = uiState.settings.network.wifiSsid
+                    .takeIf(String::isNotBlank)
+                    ?.let { "Saved network: $it" }
+                    ?: "No saved network"
                 SettingsStatusRow(
                     icon = Icons.Outlined.Wifi,
                     title = "Nano internet network",
@@ -324,8 +323,12 @@ private fun DeviceSettings(
         ) {
             val settings = uiState.settings
             if (settings != null && uiState.isConnected) {
-                var ownerDraft by remember(settings.updates.owner) { mutableStateOf(settings.updates.owner) }
-                var tagDraft by remember(settings.updates.tag) { mutableStateOf(settings.updates.tag) }
+                var ownerDraft by remember(settings.updates.repositoryOwner) {
+                    mutableStateOf(settings.updates.repositoryOwner)
+                }
+                var tagDraft by remember(settings.updates.releaseTag) {
+                    mutableStateOf(settings.updates.releaseTag)
+                }
                 SettingsStatusRow(
                     icon = Icons.Outlined.SystemUpdate,
                     title = "Installed firmware",
@@ -358,14 +361,15 @@ private fun DeviceSettings(
                         }
                     },
                     enabled = ownerDraft.isNotBlank() &&
-                        (ownerDraft.trim() != settings.updates.owner || tagDraft.trim() != settings.updates.tag),
+                        (ownerDraft.trim() != settings.updates.repositoryOwner ||
+                            tagDraft.trim() != settings.updates.releaseTag),
                 ) {
                     Text("Save release source")
                 }
                 SwitchRow(
                     label = "Check on the Nano",
                     description = "Let the reader check this source automatically when it has internet access.",
-                    checked = settings.updates.autoCheck,
+                    checked = settings.updates.automatic,
                     onCheckedChange = { enabled ->
                         onUpdateSettings { it.withAutomaticUpdateChecks(enabled) }
                     },
@@ -431,17 +435,17 @@ private fun ReadingSettings(
         ) {
             PacingSlider(
                 label = "Long words",
-                value = settings.reading.pacing.longWordMs,
+                value = settings.reading.pacing.longWordDelayMs,
                 onChanged = { value -> onUpdateSettings { it.withPacingLongWordMs(value) } },
             )
             PacingSlider(
                 label = "Complex words",
-                value = settings.reading.pacing.complexWordMs,
+                value = settings.reading.pacing.complexWordDelayMs,
                 onChanged = { value -> onUpdateSettings { it.withPacingComplexWordMs(value) } },
             )
             PacingSlider(
                 label = "Punctuation",
-                value = settings.reading.pacing.punctuationMs,
+                value = settings.reading.pacing.punctuationDelayMs,
                 onChanged = { value -> onUpdateSettings { it.withPacingPunctuationMs(value) } },
             )
             TextButton(
@@ -500,17 +504,15 @@ private fun DisplaySettings(
             DropdownRow(
                 label = "Theme",
                 description = "Colors and typeface settings used by the Nano.",
-                selected = settings.display.themeId,
-                options = settings.themes.ifEmpty {
-                    listOf(NanoTheme(NanoSettingsSchema.THEME_DEFAULT, "Default", builtIn = true))
-                }.map { theme -> theme.id to theme.name },
+                selected = settings.`interface`.selectedThemeId,
+                options = listOf(settings.`interface`.selectedThemeId to settings.`interface`.selectedThemeId),
                 onSelected = { themeId -> onUpdateSettings { it.withThemeId(themeId) } },
             )
             SliderRow(
                 label = "Brightness",
                 description = "Applied immediately.",
                 valueLabel = { value -> "${(value.toInt() + 1) * 5}%" },
-                value = settings.display.brightnessIndex.toFloat(),
+                value = settings.`interface`.brightnessIndex.toFloat(),
                 valueRange = NanoSettingsSchema.BRIGHTNESS_MIN.toFloat()..NanoSettingsSchema.BRIGHTNESS_MAX.toFloat(),
                 steps = 18,
                 onValueChangeFinished = { value -> onUpdateSettings { it.withBrightnessIndex(value.toInt()) } },
@@ -518,7 +520,11 @@ private fun DisplaySettings(
             SegmentedChoiceRow(
                 label = "Reader hand",
                 description = "Moves navigation controls for one-handed use.",
-                selected = settings.display.handedness,
+                selected = if (settings.reading.leftHanded) {
+                    NanoSettingsSchema.HANDEDNESS_LEFT
+                } else {
+                    NanoSettingsSchema.HANDEDNESS_RIGHT
+                },
                 options = listOf(
                     NanoSettingsSchema.HANDEDNESS_LEFT to "Left",
                     NanoSettingsSchema.HANDEDNESS_RIGHT to "Right",
@@ -533,7 +539,7 @@ private fun DisplaySettings(
         ) {
             DropdownRow(
                 label = "Footer label",
-                selected = settings.display.footerMetric,
+                selected = settings.reading.footerMetric,
                 options = listOf(
                     NanoSettingsSchema.FOOTER_PERCENTAGE to "Book percent",
                     NanoSettingsSchema.FOOTER_CHAPTER_TIME to "Chapter time",
@@ -543,9 +549,9 @@ private fun DisplaySettings(
             )
             DropdownRow(
                 label = "Battery label",
-                selected = settings.display.batteryLabel,
+                selected = settings.reading.batteryLabel,
                 options = listOf(
-                    NanoSettingsSchema.BATTERY_PERCENT to "Percent",
+                    NanoSettingsSchema.BATTERY_PERCENTAGE to "Percent",
                     NanoSettingsSchema.BATTERY_TIME_REMAINING to "Time left",
                     NanoSettingsSchema.BATTERY_VOLTAGE to "Voltage",
                 ),
@@ -553,17 +559,17 @@ private fun DisplaySettings(
             )
             SwitchRow(
                 label = "Battery while reading",
-                checked = settings.display.readingBattery,
+                checked = settings.reading.batteryVisibleWhileReading,
                 onCheckedChange = { checked -> onUpdateSettings { it.withReadingBattery(checked) } },
             )
             SwitchRow(
                 label = "Chapter while reading",
-                checked = settings.display.readingChapter,
+                checked = settings.reading.chapterVisibleWhileReading,
                 onCheckedChange = { checked -> onUpdateSettings { it.withReadingChapter(checked) } },
             )
             SwitchRow(
                 label = "Book progress while reading",
-                checked = settings.display.readingProgress,
+                checked = settings.reading.progressVisibleWhileReading,
                 onCheckedChange = { checked -> onUpdateSettings { it.withReadingProgress(checked) } },
             )
         }
@@ -574,21 +580,21 @@ private fun DisplaySettings(
         ) {
             DropdownRow(
                 label = "Screensaver",
-                selected = settings.display.screensaver.toString(),
+                selected = settings.`interface`.screensaver,
                 options = listOf(
-                    NanoSettingsSchema.SCREENSAVER_LIFE.toString() to "Life",
-                    NanoSettingsSchema.SCREENSAVER_MAZE.toString() to "Maze",
-                    NanoSettingsSchema.SCREENSAVER_VORONOI.toString() to "Voronoi",
-                    NanoSettingsSchema.SCREENSAVER_REACTION.toString() to "Reaction",
-                    NanoSettingsSchema.SCREENSAVER_SCREEN_OFF.toString() to "Screen off",
+                    NanoSettingsSchema.SCREENSAVER_LIFE to "Life",
+                    NanoSettingsSchema.SCREENSAVER_MAZE to "Maze",
+                    NanoSettingsSchema.SCREENSAVER_VORONOI to "Voronoi",
+                    NanoSettingsSchema.SCREENSAVER_REACTION to "Reaction",
+                    NanoSettingsSchema.SCREENSAVER_SCREEN_OFF to "Screen off",
                 ),
                 onSelected = { mode ->
-                    onUpdateSettings { it.withScreensaver(mode.toIntOrNull() ?: NanoSettingsSchema.SCREENSAVER_LIFE) }
+                    onUpdateSettings { it.withScreensaver(mode) }
                 },
             )
             DropdownRow(
                 label = "Standby timer",
-                selected = settings.display.standbyTimerIndex.toString(),
+                selected = settings.`interface`.standbyTimerIndex.toString(),
                 options = listOf(
                     NanoSettingsSchema.STANDBY_TIMER_NEVER.toString() to "Never",
                     NanoSettingsSchema.STANDBY_TIMER_1_MIN.toString() to "1 minute",
@@ -604,16 +610,17 @@ private fun DisplaySettings(
             )
             DropdownRow(
                 label = "Language",
-                selected = settings.display.language.toString(),
+                selected = settings.`interface`.language,
                 options = listOf(
-                    "0" to "English",
-                    "1" to "Español",
-                    "2" to "Français",
-                    "3" to "Deutsch",
-                    "4" to "Română",
-                    "5" to "Polski",
+                    NanoSettingsSchema.LANGUAGE_ENGLISH to "English",
+                    NanoSettingsSchema.LANGUAGE_SPANISH to "Español",
+                    NanoSettingsSchema.LANGUAGE_FRENCH to "Français",
+                    NanoSettingsSchema.LANGUAGE_GERMAN to "Deutsch",
+                    NanoSettingsSchema.LANGUAGE_ROMANIAN to "Română",
+                    NanoSettingsSchema.LANGUAGE_POLISH to "Polski",
+                    NanoSettingsSchema.LANGUAGE_RUSSIAN to "Русский",
                 ),
-                onSelected = { language -> onUpdateSettings { it.withLanguage(language.toIntOrNull() ?: 0) } },
+                onSelected = { language -> onUpdateSettings { it.withLanguage(language) } },
             )
         }
 
@@ -682,15 +689,13 @@ private fun TypographySettings(
             DropdownRow(
                 label = "Typeface",
                 description = "Changing this updates only the selected theme.",
-                selected = settings.typography.typeface,
-                options = settings.fonts.ifEmpty {
-                    listOf(NanoFont(NanoSettingsSchema.TYPEFACE_DEFAULT, "Literata", builtIn = true))
-                }.map { font -> font.id to font.name },
+                selected = settings.reading.typography.fontId,
+                options = listOf(settings.reading.typography.fontId to settings.reading.typography.fontId),
                 onSelected = { typeface -> onUpdateSettings { it.withTypeface(typeface) } },
             )
             SegmentedChoiceRow(
                 label = "Font size",
-                selected = settings.display.fontSizeIndex.toString(),
+                selected = settings.reading.typography.fontSizeIndex.toString(),
                 options = listOf("0" to "Large", "1" to "Medium", "2" to "Small"),
                 onSelected = { value -> onUpdateSettings { it.withFontSizeIndex(value.toInt()) } },
             )
@@ -698,7 +703,7 @@ private fun TypographySettings(
                 label = "Tracking",
                 description = "Space between letters.",
                 valueLabel = { value -> value.toInt().toString() },
-                value = settings.typography.tracking.toFloat(),
+                value = settings.reading.typography.tracking.toFloat(),
                 valueRange = NanoSettingsSchema.TRACKING_MIN.toFloat()..NanoSettingsSchema.TRACKING_MAX.toFloat(),
                 steps = 4,
                 onValueChangeFinished = { value -> onUpdateSettings { it.withTracking(value.toInt()) } },
@@ -712,19 +717,19 @@ private fun TypographySettings(
             SwitchRow(
                 label = "Focus highlight",
                 description = "Highlights the current word's focus point.",
-                checked = settings.typography.focusHighlight,
+                checked = settings.reading.typography.focusHighlight,
                 onCheckedChange = { checked -> onUpdateSettings { it.withFocusHighlight(checked) } },
             )
             SwitchRow(
                 label = "Phantom words",
                 description = "Shows adjacent words as faint context.",
-                checked = settings.display.phantomWords,
+                checked = settings.reading.phantomWords,
                 onCheckedChange = { checked -> onUpdateSettings { it.withPhantomWords(checked) } },
             )
             SliderRow(
                 label = "Anchor position",
                 valueLabel = { value -> "${value.toInt()}%" },
-                value = settings.typography.anchorPercent.toFloat(),
+                value = settings.reading.typography.anchor.toFloat(),
                 valueRange = NanoSettingsSchema.ANCHOR_PERCENT_MIN.toFloat()..NanoSettingsSchema.ANCHOR_PERCENT_MAX.toFloat(),
                 steps = 9,
                 onValueChangeFinished = { value -> onUpdateSettings { it.withAnchorPercent(value.toInt()) } },
@@ -732,7 +737,7 @@ private fun TypographySettings(
             SliderRow(
                 label = "Guide width",
                 valueLabel = { value -> NanoSettingsSchema.snapGuideWidth(value.toInt()).toString() },
-                value = settings.typography.guideWidth.toFloat(),
+                value = settings.reading.typography.guideWidth.toFloat(),
                 valueRange = NanoSettingsSchema.GUIDE_WIDTH_MIN.toFloat()..NanoSettingsSchema.GUIDE_WIDTH_MAX.toFloat(),
                 steps = 8,
                 snapValue = { value -> NanoSettingsSchema.snapGuideWidth(value.toInt()).toFloat() },
@@ -741,7 +746,7 @@ private fun TypographySettings(
             SliderRow(
                 label = "Guide gap",
                 valueLabel = { value -> value.toInt().toString() },
-                value = settings.typography.guideGap.toFloat(),
+                value = settings.reading.typography.guideGap.toFloat(),
                 valueRange = NanoSettingsSchema.GUIDE_GAP_MIN.toFloat()..NanoSettingsSchema.GUIDE_GAP_MAX.toFloat(),
                 steps = 5,
                 onValueChangeFinished = { value -> onUpdateSettings { it.withGuideGap(value.toInt()) } },

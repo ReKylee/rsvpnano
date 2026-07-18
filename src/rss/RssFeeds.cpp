@@ -9,8 +9,6 @@
 
 #include "net/WifiConnection.h"
 #include "rss/FeedParser.h"
-#include "settings/Nvs.h"
-#include "settings/PreferenceSpecs.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 #include "text/AsciiText.h"
@@ -169,11 +167,11 @@ namespace {
     }
 
     bool itemAlreadySeen(const feedparser::FeedItem& item, Preferences& preferences) {
-        return settings::nvs::get(preferences, seenKeyForItem(item).c_str(), false);
+        return preferences.getBool(seenKeyForItem(item).c_str(), false);
     }
 
     void markItemSeen(const feedparser::FeedItem& item, Preferences& preferences) {
-        settings::nvs::put(preferences, seenKeyForItem(item).c_str(), true);
+        preferences.putBool(seenKeyForItem(item).c_str(), true);
     }
 
     String filenameForItem(const feedparser::FeedItem& item) {
@@ -489,9 +487,10 @@ namespace {
     }
 } // namespace
 
-RssFeeds::Result RssFeeds::check(Preferences& preferences, StatusCallback callback, void* context) {
-    const String wifiSsid = settings::load<settings::prefs::WifiSsid>(preferences).c_str();
-    const String wifiPassword = settings::load<settings::prefs::WifiPassword>(preferences).c_str();
+RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::DeviceSettings& settings,
+                                const settings::DeviceSecrets& secrets, StatusCallback callback, void* context) {
+    const String wifiSsid = settings.network.wifiSsid.c_str();
+    const String wifiPassword = secrets.wifiPassword.c_str();
 
     Result result;
     if (trimCopy(wifiSsid).isEmpty()) {

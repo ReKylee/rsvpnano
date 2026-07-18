@@ -1,21 +1,61 @@
 #pragma once
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
 
+#include "settings/SettingsCodec.h"
+#include "settings/SettingsModel.h"
+#include "ui/Rgb565.h"
+
 namespace ui::themes {
 
+    inline constexpr uint32_t kThemeSchemaVersion = 1;
     inline constexpr std::string_view kDefaultThemeId = "default";
-    inline constexpr std::string_view kThemeMagic = "@rtheme";
-    inline constexpr std::string_view kThemeExtension = ".rtheme";
+    inline constexpr std::string_view kThemeExtension = ".toml";
     inline constexpr std::string_view kDefaultTypefaceId = "literata";
-    constexpr size_t kColorRoleCount = 16;
 
-    enum ColorRole : size_t {
-        Background = 0,
+    struct ThemeColors {
+        Rgb565 background = 0x0000;
+        Rgb565 foreground = 0xFFFF;
+        Rgb565 muted = 0x8410;
+        Rgb565 subtle = 0x528A;
+        Rgb565 accent = 0xF800;
+        Rgb565 accentBar = 0xF800;
+        Rgb565 breakAccent = rgb565(68, 132, 88);
+        Rgb565 onAccent = 0xFFFF;
+        Rgb565 surface = 0x0000;
+        Rgb565 surfaceMuted = 0x2104;
+        Rgb565 surfaceActive = 0x4208;
+        Rgb565 outline = 0x8410;
+        Rgb565 guide = 0x8410;
+        Rgb565 guideFocus = 0xF800;
+        Rgb565 phantom = 0x8410;
+        Rgb565 progressTrack = 0x8410;
+
+        bool operator==(const ThemeColors&) const = default;
+    };
+
+    struct ThemeFile {
+        uint32_t schemaVersion = kThemeSchemaVersion;
+        std::string name = "Default";
+        settings::TypographySettings typography;
+        ThemeColors colors;
+
+        bool operator==(const ThemeFile&) const = default;
+    };
+
+    struct ThemeEntry {
+        std::string id;
+        ThemeFile definition;
+        bool builtIn = false;
+    };
+
+    using Theme = ThemeEntry;
+
+    enum ColorRole : uint8_t {
+        Background,
         Foreground,
         Muted,
         Subtle,
@@ -33,24 +73,12 @@ namespace ui::themes {
         ProgressTrack,
     };
 
-    struct Theme {
-        std::string id;
-        std::string name;
-        std::array<uint16_t, kColorRoleCount> colors = {};
-        std::string typeface = std::string{kDefaultTypefaceId};
-        bool builtIn = false;
-    };
-
-    constexpr uint16_t rgb565(uint8_t red, uint8_t green, uint8_t blue) {
-        return ((red & 0xF8U) << 8) | ((green & 0xFCU) << 3) | (blue >> 3);
-    }
-
-    std::string_view colorRoleName(size_t role);
-    size_t colorRoleIndexForName(std::string_view name);
-    Theme defaultTheme();
+    uint16_t color(const ThemeColors& colors, ColorRole role);
+    ThemeEntry defaultTheme(const settings::TypographySettings& typography = {});
     bool hasThemeExtension(std::string_view path);
     std::string themeIdFromPath(std::string_view path);
-    bool parseThemeText(std::string_view text, std::string_view id, Theme& theme, std::string& error,
-                        bool* hasTypefaceValue = nullptr);
+    settings::SettingsResult<ThemeEntry> decodeToml(std::string_view text, std::string_view id,
+                                                    const settings::TypographySettings& defaults = {});
+    settings::SettingsResult<std::string> encodeToml(const ThemeFile& theme);
 
 } // namespace ui::themes

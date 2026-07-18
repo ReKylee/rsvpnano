@@ -42,7 +42,7 @@ namespace screens {
             return true;
         if (static_cast<int32_t>(nowMs - nextFrameMs_) < 0)
             return false;
-        const uint32_t frameMs = kind_ == standby::Kind::Voronoi ? kVoronoiFrameMs : kFrameMs;
+        const uint32_t frameMs = kind_ == standby::Kind::voronoi ? kVoronoiFrameMs : kFrameMs;
         screensaver_.step();
         nextFrameMs_ = nowMs + frameMs;
         draw(ui);
@@ -63,7 +63,7 @@ namespace screens {
         const int16_t originX = static_cast<int16_t>((ui.width() - columns_ * kCellSize) / 2);
         const int16_t originY = static_cast<int16_t>((ui.height() - rows_ * kCellSize) / 2);
         const uint16_t dim = ui.blend(ui::themes::ColorRole::Foreground, 72);
-        const uint16_t bright = kind_ == standby::Kind::Life ? ui.color(ui::themes::ColorRole::Foreground)
+        const uint16_t bright = kind_ == standby::Kind::life ? ui.color(ui::themes::ColorRole::Foreground)
                                                              : ui.color(ui::themes::ColorRole::Accent);
         const size_t cellCount = static_cast<size_t>(columns_) * rows_;
         const auto drawRun = [&](size_t first, size_t last, uint16_t color) {

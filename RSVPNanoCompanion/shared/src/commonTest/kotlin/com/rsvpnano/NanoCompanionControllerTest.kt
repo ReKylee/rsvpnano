@@ -177,8 +177,8 @@ class NanoCompanionControllerTest {
         val cleared = controller.clearWifiSettings(baseUrl = "http://device.local")
 
         assertEquals("Home" to "secret", client.savedWifi)
-        assertEquals(NanoWifiSettings(configured = true, ssid = "Home", passwordSet = true), saved)
-        assertEquals(NanoWifiSettings(configured = false, ssid = "", passwordSet = false), cleared)
+        assertEquals(NanoWifiSettings(passwordSet = true), saved)
+        assertEquals(NanoWifiSettings(passwordSet = false), cleared)
     }
 
     private fun controller(
@@ -227,15 +227,15 @@ class NanoCompanionControllerTest {
         }
 
         override suspend fun fetchWifiSettings(baseUrl: String): NanoWifiSettings =
-            NanoWifiSettings(configured = true, ssid = "RSVP", passwordSet = false)
+            NanoWifiSettings(passwordSet = false)
 
         override suspend fun updateWifi(baseUrl: String, ssid: String, password: String): NanoWifiSettings {
             savedWifi = ssid to password
-            return NanoWifiSettings(configured = true, ssid = ssid, passwordSet = true)
+            return NanoWifiSettings(passwordSet = true)
         }
 
         override suspend fun forgetWifi(baseUrl: String): NanoWifiSettings =
-            NanoWifiSettings(configured = false, ssid = "", passwordSet = false)
+            NanoWifiSettings(passwordSet = false)
 
         override suspend fun fetchRssFeeds(baseUrl: String): NanoRssFeeds =
             NanoRssFeeds(feeds = deviceFeeds)

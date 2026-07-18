@@ -9,10 +9,9 @@
 
 class ThemeStore {
 public:
-    void loadFromSd(const FontCatalog& fonts);
+    void loadFromSd(const FontCatalog& fonts, const settings::TypographySettings& defaults);
     bool selectById(std::string_view id);
     void selectNext();
-    bool setSelectedTypeface(std::string_view typeface, const FontCatalog& fonts);
     const ui::themes::Theme& selected() const;
     std::span<const ui::themes::Theme> themes() const;
 

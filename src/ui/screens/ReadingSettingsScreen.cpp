@@ -2,13 +2,11 @@
 
 #include <algorithm>
 
-#include "settings/PreferenceSpecs.h"
+#include "settings/SettingsRules.h"
 
 namespace screens {
-    namespace pref = settings::prefs;
-
-    void readingSettings(ui::Context& ui, ReadingLoop& reader, ReaderSettings& config, Preferences& preferences,
-                         Screen& screen) {
+    bool readingSettings(ui::Context& ui, ReadingLoop& reader, settings::ReadingSettings& config, Screen& screen) {
+        bool changed = false;
         const ui::Rect content = detail::content(ui);
         if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
             screen = Screen::Settings;
@@ -19,11 +17,12 @@ namespace screens {
         const int16_t sliderWidth = std::min<int16_t>(content.w, 480);
         const int16_t sliderX = static_cast<int16_t>(content.x + (content.w - sliderWidth) / 2);
         if (const auto wpm = ui.slider({sliderX, controlsY, sliderWidth, 36}, ui.text(UiText::WordsPerMinute),
-                                       reader.wpm(), 10,
-                                       1000, 10, " WPM");
+                                       reader.wpm(), decltype(config.wpm)::min(), decltype(config.wpm)::max(),
+                                       decltype(config.wpm)::step(), " WPM");
             wpm.changed) {
-            reader.setWpm(static_cast<uint16_t>(wpm.value));
-            settings::save<pref::Wpm>(preferences, reader.wpm());
+            config.wpm = static_cast<uint16_t>(wpm.value);
+            reader.setWpm(config.wpm);
+            changed = true;
         }
 
         ui.separator({content.x, static_cast<int16_t>(controlsY + 42), content.w, 10},
@@ -33,16 +32,20 @@ namespace screens {
         const int16_t halfWidth = static_cast<int16_t>((content.w - gap) / 2);
         const int16_t rowY = static_cast<int16_t>(controlsY + 56);
         if (ui.setting({content.x, rowY, halfWidth, 42}, ui.text(UiText::Pause),
-                       ui.text(config.pauseMode == PauseMode::SentenceEnd ? UiText::SentenceEnd : UiText::Instant),
+                       ui.text(config.pauseMode == settings::PauseMode::sentenceEnd ? UiText::SentenceEnd
+                                                                                   : UiText::Instant),
                        ui::SettingLayout::Inline)) {
-            config.pauseMode = settings::cycle<pref::PauseMode>(preferences);
+            config.pauseMode = settings::cycleEnum(config.pauseMode);
+            changed = true;
         }
 
         if (ui.toggle({static_cast<int16_t>(content.x + halfWidth + gap), rowY, halfWidth, 42},
                       ui.text(UiText::PhantomWords),
                       config.phantomWords)) {
-            config.phantomWords = settings::toggle<pref::PhantomWords>(preferences);
+            config.phantomWords = !config.phantomWords;
+            changed = true;
         }
+        return changed;
     }
 
 } // namespace screens

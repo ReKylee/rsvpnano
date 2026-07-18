@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include <type_traits>
+#include <variant>
 
 #include "standby/LifeScreensaver.h"
 #include "standby/MazeScreensaver.h"
@@ -14,7 +14,7 @@ namespace standby {
     class ScreensaverSlot {
     public:
         ScreensaverSlot() = default;
-        ~ScreensaverSlot();
+        ~ScreensaverSlot() = default;
 
         ScreensaverSlot(const ScreensaverSlot&) = delete;
         ScreensaverSlot& operator=(const ScreensaverSlot&) = delete;
@@ -28,26 +28,17 @@ namespace standby {
         Kind kind() const {
             return kind_;
         }
+
         explicit operator bool() const {
-            return active_;
+            return !std::holds_alternative<std::monostate>(storage_);
         }
 
     private:
-        using Storage = std::aligned_union_t<0, LifeScreensaver, MazeScreensaver, ReactionScreensaver,
-                                             VoronoiScreensaver>;
+        using Storage =
+            std::variant<std::monostate, LifeScreensaver, MazeScreensaver, ReactionScreensaver, VoronoiScreensaver>;
 
-        LifeScreensaver& life();
-        const LifeScreensaver& life() const;
-        MazeScreensaver& maze();
-        const MazeScreensaver& maze() const;
-        ReactionScreensaver& reaction();
-        const ReactionScreensaver& reaction() const;
-        VoronoiScreensaver& voronoi();
-        const VoronoiScreensaver& voronoi() const;
-
-        Storage storage_{};
-        Kind kind_ = Kind::Life;
-        bool active_ = false;
+        Storage storage_;
+        Kind kind_ = Kind::life;
     };
 
 } // namespace standby

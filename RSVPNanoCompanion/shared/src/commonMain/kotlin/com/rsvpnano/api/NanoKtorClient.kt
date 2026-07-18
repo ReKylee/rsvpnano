@@ -89,7 +89,7 @@ class NanoKtorClient(
         requestData(baseUrl, "api/v1/settings", NanoSettings.serializer())
 
     override suspend fun updateSettings(baseUrl: String, settings: NanoSettings): NanoSettings {
-        val response = httpClient.patch(buildUrl(baseUrl, "api/v1/settings")) {
+        val response = httpClient.put(buildUrl(baseUrl, "api/v1/settings")) {
             contentType(ContentType.Application.Json)
             setBody(settings)
         }

@@ -4,8 +4,6 @@
 #include <string_view>
 #include <vector>
 
-#include <Preferences.h>
-
 #include "reader/ReadingLoop.h"
 #include "storage/StorageManager.h"
 #include "storage/index/IndexedBookStore.h"
@@ -35,8 +33,7 @@ namespace screens {
         void reset();
         void invalidate();
         const std::vector<LibraryItem>& items(StorageManager& storage, const IndexedBookStore& bookStore,
-                                              const ReadingLoop& reader, const ReadingProgress::Session& book,
-                                              Preferences& preferences);
+                                              const ReadingLoop& reader, const ReadingProgress::Session& book);
         size_t selectedIndex() const {
             return selectedIndex_;
         }
@@ -50,9 +47,6 @@ namespace screens {
         int16_t spineWidth(const LibraryItem& item, size_t index) const;
         int16_t spineHeight(const LibraryItem& item, size_t index) const;
         uint32_t signature(const std::vector<LibraryItem>& items, size_t current) const;
-        uint8_t storedProgress(size_t index, StorageManager& storage, const IndexedBookStore& bookStore,
-                               const ReadingLoop& reader, const ReadingProgress::Session& book,
-                               Preferences& preferences) const;
         static std::string spineLabel(std::string_view title);
         static std::string progressLabel(uint8_t progress);
 

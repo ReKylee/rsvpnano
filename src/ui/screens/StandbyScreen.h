@@ -18,7 +18,7 @@ namespace screens {
         uint32_t nextFrameMs_ = 0;
         uint16_t columns_ = 0;
         uint16_t rows_ = 0;
-        standby::Kind kind_ = standby::Kind::Life;
+        standby::Kind kind_ = standby::Kind::life;
     };
 
 } // namespace screens

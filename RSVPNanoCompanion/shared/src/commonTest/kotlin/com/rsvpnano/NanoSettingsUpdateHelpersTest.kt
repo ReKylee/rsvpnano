@@ -1,6 +1,5 @@
 package com.rsvpnano
 
-import com.rsvpnano.models.NanoTheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -12,7 +11,7 @@ class NanoSettingsUpdateHelpersTest {
     fun readingHelpersReturnUpdatedCopiesWithoutMutatingOriginal() {
         val original = sampleSettings()
         val updated = original
-            .withWpm(325)
+            .withWpm(320)
             .withPauseMode("instant")
             .withPacingLongWordMs(120)
             .withPacingComplexWordMs(80)
@@ -20,13 +19,12 @@ class NanoSettingsUpdateHelpersTest {
 
         assertNotSame(original, updated)
         assertEquals(250, original.reading.wpm)
-        assertEquals(325, updated.reading.wpm)
+        assertEquals(320, updated.reading.wpm)
         assertEquals("instant", updated.reading.pauseMode)
-        assertEquals(100, updated.reading.pacing.longWordMs)
-        assertEquals(100, updated.reading.pacing.complexWordMs)
-        assertEquals(200, updated.reading.pacing.punctuationMs)
-        assertEquals(original.display, updated.display)
-        assertEquals(original.typography, updated.typography)
+        assertEquals(100, updated.reading.pacing.longWordDelayMs)
+        assertEquals(100, updated.reading.pacing.complexWordDelayMs)
+        assertEquals(200, updated.reading.pacing.punctuationDelayMs)
+        assertEquals(original.`interface`, updated.`interface`)
     }
 
     @Test
@@ -43,14 +41,14 @@ class NanoSettingsUpdateHelpersTest {
             .withGuideGap(99)
 
         assertEquals(100, updated.reading.wpm)
-        assertEquals(600, updated.reading.pacing.longWordMs)
-        assertEquals(0, updated.reading.pacing.complexWordMs)
-        assertEquals(19, updated.display.brightnessIndex)
-        assertEquals(0, updated.display.fontSizeIndex)
-        assertEquals(3, updated.typography.tracking)
-        assertEquals(30, updated.typography.anchorPercent)
-        assertEquals(20, updated.typography.guideWidth)
-        assertEquals(8, updated.typography.guideGap)
+        assertEquals(600, updated.reading.pacing.longWordDelayMs)
+        assertEquals(0, updated.reading.pacing.complexWordDelayMs)
+        assertEquals(19, updated.`interface`.brightnessIndex)
+        assertEquals(0, updated.reading.typography.fontSizeIndex)
+        assertEquals(3, updated.reading.typography.tracking)
+        assertEquals(30, updated.reading.typography.anchor)
+        assertEquals(20, updated.reading.typography.guideWidth)
+        assertEquals(8, updated.reading.typography.guideGap)
     }
 
     @Test
@@ -59,23 +57,21 @@ class NanoSettingsUpdateHelpersTest {
         val updated = original
             .withBrightnessIndex(4)
             .withHandedness("left")
-            .withFooterMetric("chapter_time")
-            .withBatteryLabel("time_remaining")
+            .withFooterMetric("chapterTime")
+            .withBatteryLabel("timeRemaining")
             .withThemeId("night")
             .withPhantomWords(true)
             .withFontSizeIndex(2)
 
         assertNotSame(original, updated)
-        assertEquals(1, original.display.brightnessIndex)
-        assertEquals(4, updated.display.brightnessIndex)
-        assertEquals("left", updated.display.handedness)
-        assertEquals("chapter_time", updated.display.footerMetric)
-        assertEquals("time_remaining", updated.display.batteryLabel)
-        assertEquals("night", updated.display.themeId)
-        assertTrue(updated.display.phantomWords)
-        assertEquals(2, updated.display.fontSizeIndex)
-        assertEquals(original.reading, updated.reading)
-        assertEquals(original.typography, updated.typography)
+        assertEquals(1, original.`interface`.brightnessIndex)
+        assertEquals(4, updated.`interface`.brightnessIndex)
+        assertTrue(updated.reading.leftHanded)
+        assertEquals("chapterTime", updated.reading.footerMetric)
+        assertEquals("timeRemaining", updated.reading.batteryLabel)
+        assertEquals("night", updated.`interface`.selectedThemeId)
+        assertTrue(updated.reading.phantomWords)
+        assertEquals(2, updated.reading.typography.fontSizeIndex)
     }
 
     @Test
@@ -83,20 +79,8 @@ class NanoSettingsUpdateHelpersTest {
         val custom = sampleSettings().withThemeId("catppuccin-mocha")
         val blank = sampleSettings().withThemeId("")
 
-        assertEquals("catppuccin-mocha", custom.display.themeId)
-        assertEquals("default", blank.display.themeId)
-    }
-
-    @Test
-    fun themeIdHelperRestoresThatThemesTypeface() {
-        val settings = sampleSettings().copy(
-            themes = listOf(NanoTheme(id = "night", name = "Night", typeface = "atkinson")),
-        )
-
-        val updated = settings.withThemeId("night")
-
-        assertEquals("night", updated.display.themeId)
-        assertEquals("atkinson", updated.typography.typeface)
+        assertEquals("catppuccin-mocha", custom.`interface`.selectedThemeId)
+        assertEquals("default", blank.`interface`.selectedThemeId)
     }
 
     @Test
@@ -111,14 +95,13 @@ class NanoSettingsUpdateHelpersTest {
             .withGuideGap(4)
 
         assertNotSame(original, updated)
-        assertEquals("serif", original.typography.typeface)
-        assertEquals("atkinson", updated.typography.typeface)
-        assertFalse(updated.typography.focusHighlight)
-        assertEquals(2, updated.typography.tracking)
-        assertEquals(36, updated.typography.anchorPercent)
-        assertEquals(18, updated.typography.guideWidth)
-        assertEquals(4, updated.typography.guideGap)
-        assertEquals(original.reading, updated.reading)
-        assertEquals(original.display, updated.display)
+        assertEquals("serif", original.reading.typography.fontId)
+        assertEquals("atkinson", updated.reading.typography.fontId)
+        assertFalse(updated.reading.typography.focusHighlight)
+        assertEquals(2, updated.reading.typography.tracking)
+        assertEquals(36, updated.reading.typography.anchor)
+        assertEquals(18, updated.reading.typography.guideWidth)
+        assertEquals(4, updated.reading.typography.guideGap)
+        assertEquals(original.`interface`, updated.`interface`)
     }
 }

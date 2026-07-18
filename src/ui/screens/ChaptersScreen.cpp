@@ -20,7 +20,7 @@ namespace screens {
     } // namespace
 
     Action ChaptersScreen::draw(ui::Context& ui, std::span<const ChapterMarker> chapters, ReadingLoop& reader,
-                                const ReaderSettings& settings, uint32_t nowMs, Screen& screen) {
+                                const settings::ReadingSettings& settings, uint32_t nowMs, Screen& screen) {
         if (const Action action = detail::navigation(ui, Screen::Chapters, screen); action != Action::None)
             return action;
 

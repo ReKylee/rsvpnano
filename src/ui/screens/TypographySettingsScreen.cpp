@@ -2,19 +2,17 @@
 
 #include <algorithm>
 
-#include "settings/PreferenceSpecs.h"
-
 namespace screens {
-    namespace pref = settings::prefs;
-
-    bool typographySettings(ui::Context& ui, ReaderSettings& config, FontCatalog& fonts, ThemeStore& themes,
-                            Preferences& preferences, Screen& screen) {
+    bool typographySettings(ui::Context& ui, std::optional<settings::TypographySettings>& bookOverride,
+                            const settings::TypographySettings& inherited, FontCatalog& fonts, Screen& screen) {
+        settings::TypographySettings config = bookOverride.value_or(inherited);
         const auto families = fonts.families();
-        const auto selected = std::ranges::find_if(families, [&themes](const FontCatalog::Family& family) {
-            return family.id == themes.selected().typeface;
+        const auto selected = std::ranges::find_if(families, [&config](const FontCatalog::Family& family) {
+            return family.id == config.fontId;
         });
         size_t familyIndex = selected == families.end() ? 0 : selected - families.begin();
-        bool fontChanged = false;
+        bool changed = false;
+        bool reset = false;
         const ui::Rect content = detail::content(ui);
         if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
             screen = Screen::Settings;
@@ -24,18 +22,14 @@ namespace screens {
                   std::max<int16_t>(0, static_cast<int16_t>(resetX - content.x - 80)), 24},
                  ui.text(UiText::Typography), 2);
         if (ui.button({resetX, content.y, resetWidth, 24}, ui.text(UiText::Reset))) {
-            config.fontSizeIndex = pref::ReaderFontSizeIndex::defaultValue();
-            config.typography = {};
-
-            settings::save<pref::ReaderFontSizeIndex>(preferences, config.fontSizeIndex);
-            if (themes.setSelectedTypeface(families.front().id, fonts))
-                familyIndex = 0;
-            settings::save<pref::TypographyFocusHighlight>(preferences, config.typography.focusHighlight);
-            settings::save<pref::TypographyTracking>(preferences, config.typography.tracking);
-            settings::save<pref::TypographyAnchor>(preferences, config.typography.anchor);
-            settings::save<pref::TypographyGuideWidth>(preferences, config.typography.guideWidth);
-            settings::save<pref::TypographyGuideGap>(preferences, config.typography.guideGap);
-            fontChanged = true;
+            changed = bookOverride.has_value();
+            bookOverride.reset();
+            config = inherited;
+            reset = true;
+            const auto inheritedFamily = std::ranges::find_if(families, [&config](const FontCatalog::Family& family) {
+                return family.id == config.fontId;
+            });
+            familyIndex = inheritedFamily == families.end() ? 0 : inheritedFamily - families.begin();
         }
 
         constexpr int16_t gap = 6;
@@ -50,20 +44,20 @@ namespace screens {
 
         if (ui.setting(font.next(fontSizeWidth), ui.text(UiText::FontSize), RFont4::sizeLabel(config.fontSizeIndex),
                        ui::SettingLayout::Inline)) {
-            config.fontSizeIndex = settings::cycle<pref::ReaderFontSizeIndex>(preferences);
-            fontChanged = true;
+            config.fontSizeIndex.cycle();
+            changed = true;
         }
 
         if (ui.setting(font.next(typefaceWidth), ui.text(UiText::Typeface), families[familyIndex].label.c_str())) {
             const size_t next = (familyIndex + 1) % families.size();
-            if (themes.setSelectedTypeface(families[next].id, fonts)) {
-                familyIndex = next;
-                fontChanged = true;
-            }
+            config.fontId = families[next].id;
+            familyIndex = next;
+            changed = true;
         }
 
-        if (ui.toggle(font.next(focusWidth), ui.text(UiText::Focus), config.typography.focusHighlight)) {
-            config.typography.focusHighlight = settings::toggle<pref::TypographyFocusHighlight>(preferences);
+        if (ui.toggle(font.next(focusWidth), ui.text(UiText::Focus), config.focusHighlight)) {
+            config.focusHighlight = !config.focusHighlight;
+            changed = true;
         }
 
         const int16_t geometryY = static_cast<int16_t>(fontY + 38);
@@ -74,30 +68,39 @@ namespace screens {
                           32,
                           4};
         if (const auto value =
-                ui.slider(geometry.next(), ui.text(UiText::Tracking), config.typography.tracking, -2, 3, 1, " px");
+                ui.slider(geometry.next(), ui.text(UiText::Tracking), config.tracking,
+                          decltype(config.tracking)::min(), decltype(config.tracking)::max(),
+                          decltype(config.tracking)::step(), " px");
             value.changed) {
-            config.typography.tracking = static_cast<int8_t>(value.value);
-            settings::save<pref::TypographyTracking>(preferences, config.typography.tracking);
+            config.tracking = value.value;
+            changed = true;
         }
         if (const auto value =
-                ui.slider(geometry.next(), ui.text(UiText::Anchor), config.typography.anchor, 30, 40, 1, "%");
+                ui.slider(geometry.next(), ui.text(UiText::Anchor), config.anchor, decltype(config.anchor)::min(),
+                          decltype(config.anchor)::max(), decltype(config.anchor)::step(), "%");
             value.changed) {
-            config.typography.anchor = static_cast<uint8_t>(value.value);
-            settings::save<pref::TypographyAnchor>(preferences, config.typography.anchor);
+            config.anchor = static_cast<uint8_t>(value.value);
+            changed = true;
         }
         if (const auto value =
-                ui.slider(geometry.next(), ui.text(UiText::GuideWidth), config.typography.guideWidth, 12, 30, 2, " px");
+                ui.slider(geometry.next(), ui.text(UiText::GuideWidth), config.guideWidth,
+                          decltype(config.guideWidth)::min(), decltype(config.guideWidth)::max(),
+                          decltype(config.guideWidth)::step(), " px");
             value.changed) {
-            config.typography.guideWidth = static_cast<uint8_t>(value.value);
-            settings::save<pref::TypographyGuideWidth>(preferences, config.typography.guideWidth);
+            config.guideWidth = static_cast<uint8_t>(value.value);
+            changed = true;
         }
         if (const auto value =
-                ui.slider(geometry.next(), ui.text(UiText::GuideGap), config.typography.guideGap, 2, 8, 1, " px");
+                ui.slider(geometry.next(), ui.text(UiText::GuideGap), config.guideGap,
+                          decltype(config.guideGap)::min(), decltype(config.guideGap)::max(),
+                          decltype(config.guideGap)::step(), " px");
             value.changed) {
-            config.typography.guideGap = static_cast<uint8_t>(value.value);
-            settings::save<pref::TypographyGuideGap>(preferences, config.typography.guideGap);
+            config.guideGap = static_cast<uint8_t>(value.value);
+            changed = true;
         }
-        return fontChanged;
+        if (changed && !reset)
+            bookOverride = std::move(config);
+        return changed;
     }
 
 } // namespace screens

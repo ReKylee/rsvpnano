@@ -6,13 +6,13 @@
 #include <string_view>
 
 enum class UiLanguage : uint8_t {
-	English = 0,
-	Spanish,
-	French,
-	German,
-	Romanian,
-	Polish,
-	Russian,
+	english = 0,
+	spanish,
+	french,
+	german,
+	romanian,
+	polish,
+	russian,
 	Count,
 };
 

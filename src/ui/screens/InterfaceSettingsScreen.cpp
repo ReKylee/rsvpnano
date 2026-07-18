@@ -2,32 +2,27 @@
 
 #include <algorithm>
 
-#include "settings/PreferenceSpecs.h"
+#include "settings/SettingsRules.h"
 
 namespace screens {
-    namespace pref = settings::prefs;
-
-    void InterfaceScreen::begin(ui::Context& ui, Preferences& preferences, const FontCatalog& fonts,
+    void InterfaceScreen::begin(ui::Context& ui, settings::InterfaceSettings& config,
+                                const settings::TypographySettings& typographyDefaults, const FontCatalog& fonts,
                                 void (*setBrightness)(uint8_t)) {
-        config.brightnessIndex = settings::load<pref::BrightnessIndex>(preferences);
-        config.standbyIndex = settings::load<pref::StandbyTimerIndex>(preferences);
-        config.language = settings::load<pref::UiLanguage>(preferences);
-        config.screensaver = settings::load<pref::ScreensaverMode>(preferences);
         if (setBrightness != nullptr)
-            setBrightness(static_cast<uint8_t>((config.brightnessIndex + 1U) * 5U));
+            setBrightness(static_cast<uint8_t>((static_cast<uint8_t>(config.brightnessIndex) + 1U) * 5U));
 
-        themes.loadFromSd(fonts);
-        const std::string savedThemeId = settings::load<pref::ThemeId>(preferences);
-        if (!savedThemeId.empty())
-            themes.selectById(savedThemeId);
+        themes.loadFromSd(fonts, typographyDefaults);
+        if (!themes.selectById(config.selectedThemeId)) {
+            config.selectedThemeId = themes.selected().id;
+        }
         ui.setTheme(themes.selected());
         ui.setLanguage(config.language);
     }
 
-    bool InterfaceScreen::draw(ui::Context& ui, Preferences& preferences,
+    bool InterfaceScreen::draw(ui::Context& ui, settings::InterfaceSettings& config,
                                std::span<const uint32_t> standbyDurations, void (*setBrightness)(uint8_t),
                                Screen& screen) {
-        bool themeChanged = false;
+        bool changed = false;
         const ui::Rect content = detail::content(ui);
         if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
             screen = Screen::Settings;
@@ -43,9 +38,9 @@ namespace screens {
                           100, 5, "%");
             brightness.changed) {
             config.brightnessIndex = static_cast<uint8_t>(brightness.value / 5 - 1);
-            settings::save<pref::BrightnessIndex>(preferences, config.brightnessIndex);
             if (setBrightness != nullptr)
                 setBrightness(static_cast<uint8_t>(brightness.value));
+            changed = true;
         }
 
         const int16_t gap = 6;
@@ -57,40 +52,44 @@ namespace screens {
 
         const int16_t firstRowY = static_cast<int16_t>(sectionsY + 14);
         const int16_t secondRowY = static_cast<int16_t>(firstRowY + 37);
-        if (ui.setting({content.x, firstRowY, halfWidth, 32}, ui.text(UiText::Theme), themes.selected().name,
+        if (ui.setting({content.x, firstRowY, halfWidth, 32}, ui.text(UiText::Theme),
+                       themes.selected().definition.name,
                        ui::SettingLayout::Inline)) {
             themes.selectNext();
-            settings::save<pref::ThemeId>(preferences, themes.selected().id);
+            config.selectedThemeId = themes.selected().id;
             ui.setTheme(themes.selected());
-            themeChanged = true;
+            changed = true;
         }
 
         if (ui.setting({content.x, secondRowY, halfWidth, 32}, ui.text(UiText::Language),
                        Localization::languageName(config.language), ui::SettingLayout::Inline)) {
             config.language = Localization::nextLanguage(config.language);
-            settings::save<pref::UiLanguage>(preferences, config.language);
             ui.setLanguage(config.language);
+            changed = true;
         }
 
         std::string standby{ui.text(UiText::Off)};
-        if (config.standbyIndex < standbyDurations.size() && standbyDurations[config.standbyIndex] != 0) {
-            standby = std::to_string(standbyDurations[config.standbyIndex] / 60000UL) + "m";
+        const size_t standbyIndex = config.standbyTimerIndex;
+        if (standbyIndex < standbyDurations.size() && standbyDurations[standbyIndex] != 0) {
+            standby = std::to_string(standbyDurations[standbyIndex] / 60000UL) + "m";
         }
         if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), firstRowY, halfWidth, 32},
                        ui.text(UiText::Standby), standby, ui::SettingLayout::Inline)) {
-            config.standbyIndex = settings::cycle<pref::StandbyTimerIndex>(preferences);
+            config.standbyTimerIndex.cycle();
+            changed = true;
         }
 
-        const UiText screensaver = config.screensaver == standby::Kind::Maze      ? UiText::Maze
-                                  : config.screensaver == standby::Kind::Voronoi   ? UiText::Voronoi
-                                  : config.screensaver == standby::Kind::Reaction  ? UiText::Reaction
-                                  : config.screensaver == standby::Kind::ScreenOff ? UiText::ScreenOff
+        const UiText screensaver = config.screensaver == standby::Kind::maze      ? UiText::Maze
+                                  : config.screensaver == standby::Kind::voronoi   ? UiText::Voronoi
+                                  : config.screensaver == standby::Kind::reaction  ? UiText::Reaction
+                                  : config.screensaver == standby::Kind::screenOff ? UiText::ScreenOff
                                                                                   : UiText::Life;
         if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), secondRowY, halfWidth, 32},
                        ui.text(UiText::Screensaver), ui.text(screensaver), ui::SettingLayout::Inline)) {
-            config.screensaver = settings::cycle<pref::ScreensaverMode>(preferences);
+            config.screensaver = settings::cycleEnum(config.screensaver);
+            changed = true;
         }
-        return themeChanged;
+        return changed;
     }
 
 } // namespace screens

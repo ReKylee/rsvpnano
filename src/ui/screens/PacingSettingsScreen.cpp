@@ -1,11 +1,8 @@
 #include "ui/screens/ScreenCommon.h"
 
-#include "settings/PreferenceSpecs.h"
-
 namespace screens {
-    namespace pref = settings::prefs;
-
-    void pacingSettings(ui::Context& ui, ReadingLoop& reader, Preferences& preferences, Screen& screen) {
+    bool pacingSettings(ui::Context& ui, ReadingLoop& reader, settings::PacingSettings& config, Screen& screen) {
+        bool changed = false;
         const ui::Rect content = detail::content(ui);
         if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
             screen = Screen::Settings;
@@ -18,45 +15,54 @@ namespace screens {
                      ui.text(UiText::AdditionalDelaySection));
         const int16_t sliderY = static_cast<int16_t>(content.y + 44);
         if (const auto value = ui.slider({content.x, sliderY, cardWidth, 50}, ui.text(UiText::LongWords),
-                                         reader.pacingConfig().longWordDelayMs, 0, 600, 50, " ms");
+                                         reader.pacingConfig().longWordDelayMs,
+                                         decltype(config.longWordDelayMs)::min(),
+                                         decltype(config.longWordDelayMs)::max(),
+                                         decltype(config.longWordDelayMs)::step(), " ms");
             value.changed) {
             auto pacing = reader.pacingConfig();
             pacing.longWordDelayMs = static_cast<uint16_t>(value.value);
-            settings::save<pref::PacingLongWordDelay>(preferences, pacing.longWordDelayMs);
+            config.longWordDelayMs = pacing.longWordDelayMs;
             reader.setPacingConfig(pacing);
+            changed = true;
         }
 
         if (const auto value =
                 ui.slider({static_cast<int16_t>(content.x + cardWidth + gap), sliderY, cardWidth, 50},
                           ui.text(UiText::Complexity),
-                          reader.pacingConfig().complexWordDelayMs, 0, 600, 50, " ms");
+                          reader.pacingConfig().complexWordDelayMs, decltype(config.complexWordDelayMs)::min(),
+                          decltype(config.complexWordDelayMs)::max(), decltype(config.complexWordDelayMs)::step(),
+                          " ms");
             value.changed) {
             auto pacing = reader.pacingConfig();
             pacing.complexWordDelayMs = static_cast<uint16_t>(value.value);
-            settings::save<pref::PacingComplexWordDelay>(preferences, pacing.complexWordDelayMs);
+            config.complexWordDelayMs = pacing.complexWordDelayMs;
             reader.setPacingConfig(pacing);
+            changed = true;
         }
 
         if (const auto value =
                 ui.slider({static_cast<int16_t>(content.x + (cardWidth + gap) * 2), sliderY, cardWidth, 50},
-                          ui.text(UiText::Punctuation), reader.pacingConfig().punctuationDelayMs, 0, 600, 50, " ms");
+                          ui.text(UiText::Punctuation), reader.pacingConfig().punctuationDelayMs,
+                          decltype(config.punctuationDelayMs)::min(), decltype(config.punctuationDelayMs)::max(),
+                          decltype(config.punctuationDelayMs)::step(), " ms");
             value.changed) {
             auto pacing = reader.pacingConfig();
             pacing.punctuationDelayMs = static_cast<uint16_t>(value.value);
-            settings::save<pref::PacingPunctuationDelay>(preferences, pacing.punctuationDelayMs);
+            config.punctuationDelayMs = pacing.punctuationDelayMs;
             reader.setPacingConfig(pacing);
+            changed = true;
         }
 
         if (ui.button({content.x, static_cast<int16_t>(sliderY + 58), content.w, 38},
                       ui.text(UiText::ResetPacing))) {
-            const ReadingLoop::PacingConfig pacing{pref::PacingLongWordDelay::defaultValue(),
-                                                   pref::PacingComplexWordDelay::defaultValue(),
-                                                   pref::PacingPunctuationDelay::defaultValue()};
+            config = {};
+            const ReadingLoop::PacingConfig pacing{config.longWordDelayMs, config.complexWordDelayMs,
+                                                   config.punctuationDelayMs};
             reader.setPacingConfig(pacing);
-            settings::save<pref::PacingLongWordDelay>(preferences, pacing.longWordDelayMs);
-            settings::save<pref::PacingComplexWordDelay>(preferences, pacing.complexWordDelayMs);
-            settings::save<pref::PacingPunctuationDelay>(preferences, pacing.punctuationDelayMs);
+            changed = true;
         }
+        return changed;
     }
 
 } // namespace screens

@@ -17,6 +17,9 @@ void assertSameFrame(const standby::Frame& left, const standby::Frame& right) {
 
 } // namespace
 
+void setUp() {}
+void tearDown() {}
+
 void test_reaction_is_deterministic_and_keeps_visual_states_disjoint() {
     standby::ReactionScreensaver left;
     standby::ReactionScreensaver right;

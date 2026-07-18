@@ -95,7 +95,7 @@ fun RsvpNanoSharedApp(
             }
         }
         val themePicker = rememberFilePickerLauncher(
-            type = FileKitType.File(extensions = listOf("rtheme")),
+            type = FileKitType.File(extensions = listOf("toml")),
         ) { file ->
             if (file != null) {
                 scope.launch {

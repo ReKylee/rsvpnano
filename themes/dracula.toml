@@ -1,0 +1,29 @@
+schemaVersion = 1
+name = "Dracula"
+
+[typography]
+fontId = "literata"
+fontSizeIndex = 0
+focusHighlight = true
+tracking = 0
+anchor = 30
+guideWidth = 30
+guideGap = 5
+
+[colors]
+background = "#282A36"
+foreground = "#F8F8F2"
+muted = "#BFBFBF"
+subtle = "#6272A4"
+accent = "#FF79C6"
+accentBar = "#BD93F9"
+breakAccent = "#50FA7B"
+onAccent = "#282A36"
+surface = "#21222C"
+surfaceMuted = "#44475A"
+surfaceActive = "#6272A4"
+outline = "#6272A4"
+guide = "#8BE9FD"
+guideFocus = "#FF79C6"
+phantom = "#6272A4"
+progressTrack = "#44475A"

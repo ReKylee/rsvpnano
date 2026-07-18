@@ -1,0 +1,29 @@
+schemaVersion = 1
+name = "Light"
+
+[typography]
+fontId = "literata"
+fontSizeIndex = 0
+focusHighlight = true
+tracking = 0
+anchor = 30
+guideWidth = 30
+guideGap = 5
+
+[colors]
+background = "#FFFFFF"
+foreground = "#000000"
+muted = "#6B6B6B"
+subtle = "#5A5A5A"
+accent = "#FF0000"
+accentBar = "#FF0000"
+breakAccent = "#448458"
+onAccent = "#FFFFFF"
+surface = "#FFFFFF"
+surfaceMuted = "#EEEEEE"
+surfaceActive = "#DDDDDD"
+outline = "#9A9A9A"
+guide = "#777777"
+guideFocus = "#FF0000"
+phantom = "#8A8A8A"
+progressTrack = "#D0D0D0"

@@ -9,9 +9,6 @@
 #include <nvs_flash.h>
 #include <nvs_sec_provider.h>
 
-#include "settings/Config.h"
-#include "settings/PreferenceSpecs.h"
-
 namespace settings {
     namespace {
 
@@ -63,13 +60,13 @@ namespace settings {
                 earlyInitializationResult = nvs_flash_secure_init(&config);
         }
 
-        void restorePlaintextNvs(Preferences& preferences, fs::FS& filesystem) {
-            if (nvs_flash_init() != ESP_OK || !preferences.begin(kPrefsNamespace)) {
+        void restorePlaintextNvs(Preferences& statePreferences, SettingsStore& settingsStore) {
+            if (nvs_flash_init() != ESP_OK || !statePreferences.begin(kStateNvsNamespace)
+                || !settingsStore.reopenNvsAndPersist()) {
                 Serial.println("[settings] plaintext NVS recovery failed; restarting");
                 delay(250);
                 esp_restart();
             }
-            reconcile(preferences, filesystem);
         }
 
     } // namespace
@@ -101,9 +98,8 @@ namespace settings {
         return false;
     }
 
-    bool enableNvsEncryption(Preferences& preferences, fs::FS& filesystem) {
-        if (encryptionState() != EncryptionState::Plaintext || !configMirrorReady()
-            || !flush(preferences, filesystem))
+    bool enableNvsEncryption(Preferences& statePreferences, SettingsStore& settingsStore) {
+        if (encryptionState() != EncryptionState::Plaintext || !settingsStore.flush())
             return false;
 
         nvs_sec_scheme_t* scheme = nullptr;
@@ -114,7 +110,8 @@ namespace settings {
             return false;
         }
 
-        preferences.end();
+        settingsStore.closeNvs();
+        statePreferences.end();
         result = nvs_flash_erase();
         if (result == ESP_OK) {
             nvs_sec_cfg_t config{};
@@ -124,7 +121,8 @@ namespace settings {
         }
         nvs_sec_provider_deregister(scheme);
 
-        if (result == ESP_OK) {
+        if (result == ESP_OK && statePreferences.begin(kStateNvsNamespace)
+            && settingsStore.reopenNvsAndPersist()) {
             Serial.println("[settings] NVS encryption enabled; restarting");
             delay(250);
             esp_restart();
@@ -132,7 +130,7 @@ namespace settings {
 
         Serial.printf("[settings] NVS encryption migration failed: %s\n", esp_err_to_name(result));
         if (encryptionState() == EncryptionState::Plaintext)
-            restorePlaintextNvs(preferences, filesystem);
+            restorePlaintextNvs(statePreferences, settingsStore);
         else {
             delay(250);
             esp_restart();

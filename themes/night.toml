@@ -1,0 +1,29 @@
+schemaVersion = 1
+name = "Night"
+
+[typography]
+fontId = "literata"
+fontSizeIndex = 0
+focusHighlight = true
+tracking = 0
+anchor = 30
+guideWidth = 30
+guideGap = 5
+
+[colors]
+background = "#000000"
+foreground = "#FF9C00"
+muted = "#5F3A00"
+subtle = "#8A5300"
+accent = "#FF5000"
+accentBar = "#FF5000"
+breakAccent = "#70B07E"
+onAccent = "#000000"
+surface = "#000000"
+surfaceMuted = "#1A0F00"
+surfaceActive = "#332000"
+outline = "#6B4200"
+guide = "#7A4A00"
+guideFocus = "#FF5000"
+phantom = "#4F3000"
+progressTrack = "#4F3000"

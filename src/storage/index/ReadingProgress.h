@@ -2,9 +2,11 @@
 
 #include <Arduino.h>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 #include "book/BookMetadata.h"
+#include "settings/SettingsModel.h"
 
 class Preferences;
 class IndexedBookStore;
@@ -21,6 +23,16 @@ namespace ReadingProgress {
         uint32_t wordCount = 0;
     };
 
+    struct BookState {
+        uint32_t sourceSize = 0;
+        uint32_t sourceFingerprint = 0;
+        uint32_t wordCount = 0;
+        uint32_t wordIndex = 0;
+        std::optional<settings::TypographySettings> bookTypographyOverride;
+
+        bool operator==(const BookState&) const = default;
+    };
+
     struct Session {
         BookMetadata metadata;
         std::string path;
@@ -28,30 +40,19 @@ namespace ReadingProgress {
         size_t lastSavedWordIndex = static_cast<size_t>(-1);
         uint32_t lastSaveMs = 0;
         bool fromStorage = false;
+        BookState state;
 
-        void save(Preferences& preferences, const IndexedBookStore& store, const ReadingLoop& reader, bool force,
-                  uint32_t nowMs);
-        void cache(Preferences& preferences, const IndexedBookStore& store, const ReadingLoop& reader,
-                   uint32_t wordIndex);
+        void save(Preferences& preferences, const ReadingLoop& reader, bool force, uint32_t nowMs);
+        void cache(Preferences& preferences, const ReadingLoop& reader, uint32_t wordIndex);
         void mirror(const IndexedBookStore& store, const ReadingLoop& reader) const;
-        uint32_t restore(Preferences& preferences, const IndexedBookStore& store, const ReadingLoop& reader);
+        uint32_t restore(const IndexedBookStore& store, const ReadingLoop& reader);
         bool saveChapterTransition(Preferences& preferences, const IndexedBookStore& store, ReadingLoop& reader,
                                    size_t previousWordIndex, size_t currentWordIndex, uint32_t nowMs);
         std::string title(const StorageManager& storage) const;
     };
 
-    bool readPositionSidecar(const String& bookPath, const BookIdentity& identity, uint32_t& wordIndex);
-    bool writePositionSidecar(const String& bookPath, const BookIdentity& identity, uint32_t wordIndex);
-    bool readCachedPosition(Preferences& preferences, const String& bookPath, const BookIdentity& identity,
-                            uint32_t& wordIndex);
-    void cachePosition(Preferences& preferences, const String& bookPath, const BookIdentity& identity,
-                       uint32_t wordIndex);
-    uint8_t cachedPercent(Preferences& preferences, const String& bookPath);
-    String positionKey(const String& bookPath);
-    String wordCountKey(const String& bookPath);
-    String sourceSizeKey(const String& bookPath);
-    String sourceFingerprintKey(const String& bookPath);
-    String bookId(const String& bookPath);
+    bool readBookStatePosition(const String& bookPath, const BookIdentity& identity, uint32_t& wordIndex);
+    bool writeBookStatePosition(const String& bookPath, const BookIdentity& identity, uint32_t wordIndex);
     uint8_t percent(uint32_t wordIndex, uint32_t wordCount);
 
 } // namespace ReadingProgress

@@ -4,7 +4,7 @@
 #include <span>
 
 #include "book/BookMetadata.h"
-#include "reader/ReaderSettings.h"
+#include "settings/SettingsModel.h"
 #include "reader/ReadingLoop.h"
 #include "ui/Ui.h"
 #include "ui/screens/Screens.h"
@@ -14,7 +14,7 @@ namespace screens {
     class ChaptersScreen {
     public:
         Action draw(ui::Context& ui, std::span<const ChapterMarker> chapters, ReadingLoop& reader,
-                    const ReaderSettings& settings, uint32_t nowMs, Screen& screen);
+                    const settings::ReadingSettings& settings, uint32_t nowMs, Screen& screen);
 
     private:
         const ChapterMarker* source_ = nullptr;

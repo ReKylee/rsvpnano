@@ -208,7 +208,6 @@ class CompanionPresenter(
 
     fun refreshThemeCatalog() {
         scope.launch {
-            setNotice(CompanionNotice.Attention("Loading online themes..."))
             runCatching {
                 val catalogUrl = catalogUrl("themes/index.json")
                 catalogUrl to companionController.fetchThemeCatalog(catalogUrl)
@@ -221,7 +220,6 @@ class CompanionPresenter(
                             themeCatalog = themes,
                             themeCatalogUrl = catalogUrl,
                             selectedCatalogThemeId = selected,
-                            notice = CompanionNotice.Success("Loaded ${themes.size} online themes."),
                         )
                     }
                 }
@@ -233,7 +231,6 @@ class CompanionPresenter(
 
     fun refreshFontCatalog() {
         scope.launch {
-            setNotice(CompanionNotice.Attention("Loading online fonts..."))
             runCatching {
                 val catalogUrl = catalogUrl("fonts/index.json")
                 catalogUrl to companionController.fetchFontCatalog(catalogUrl)
@@ -246,7 +243,6 @@ class CompanionPresenter(
                             fontCatalog = fonts,
                             fontCatalogUrl = catalogUrl,
                             selectedCatalogFontId = selected,
-                            notice = CompanionNotice.Success("Loaded ${fonts.size} online fonts."),
                         )
                     }
                 }

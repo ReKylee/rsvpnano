@@ -1,5 +1,4 @@
 const CATALOG_URLS = [
-  "https://raw.githubusercontent.com/ionutdecebal/rsvpnano/main/themes/index.json",
   "https://raw.githubusercontent.com/ReKylee/rsvpnano/main/themes/index.json",
 ];
 
@@ -43,8 +42,8 @@ async function ensureThemesDirectory() {
 }
 
 async function writeThemeFile(filename, blob) {
-  if (!filename.endsWith(".rtheme") || filename.includes("/") || filename.includes("\\")) {
-    throw new Error("Theme files must be simple .rtheme files.");
+  if (!filename.endsWith(".toml") || filename.includes("/") || filename.includes("\\")) {
+    throw new Error("Theme files must be simple .toml files.");
   }
   const themesHandle = await ensureThemesDirectory();
   const fileHandle = await themesHandle.getFileHandle(filename, { create: true });
@@ -111,7 +110,7 @@ async function installSelectedOnlineTheme() {
 async function uploadLocalTheme() {
   const file = elements.uploadInput.files?.[0];
   if (!file) {
-    setStatus("Choose a theme file", "Pick a local .rtheme file first.", "error");
+    setStatus("Choose a theme file", "Pick a local .toml file first.", "error");
     return;
   }
   await writeThemeFile(file.name, file);

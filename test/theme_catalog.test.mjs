@@ -11,4 +11,8 @@ test("theme catalog references checked-in TOML files", () => {
     assert.match(theme.file, /^[a-z0-9-]+\.toml$/);
     assert.ok(existsSync(`themes/${theme.file}`), theme.file);
   }
+
+  const installer = readFileSync("web/themes.js", "utf8");
+  assert.doesNotMatch(installer, /\.rtheme/);
+  assert.match(installer, /filename\.endsWith\("\.toml"\)/);
 });

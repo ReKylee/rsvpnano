@@ -89,13 +89,13 @@ namespace ui::fonts {
         static_assert(MaxStripRows > 0);
 
     public:
-        explicit AlphaTextRenderer(Arduino_GFX* output) : output_(output) {}
+        explicit AlphaTextRenderer(Arduino_GFX& output) : output_(output) {}
 
         AlphaTextRenderer(const AlphaTextRenderer&) = delete;
         AlphaTextRenderer& operator=(const AlphaTextRenderer&) = delete;
 
         bool begin() {
-            ready_ = output_ != nullptr;
+            ready_ = true;
             return ready_;
         }
 
@@ -326,7 +326,7 @@ namespace ui::fonts {
         }
 
         void drawGlyphs(std::string_view text, int16_t x, int16_t baseline) {
-            if (output_ == nullptr || font_ == nullptr) {
+            if (font_ == nullptr) {
                 return;
             }
 
@@ -360,12 +360,12 @@ namespace ui::fonts {
         }
 
         bool drawGlyphsToStrips(std::string_view text, int16_t x, int16_t baseline, const Bounds& bounds) {
-            if (output_ == nullptr || font_ == nullptr || bounds.w == 0 || bounds.h == 0) {
+            if (font_ == nullptr || bounds.w == 0 || bounds.h == 0) {
                 return false;
             }
 
-            const int16_t displayW = output_->width();
-            const int16_t displayH = output_->height();
+            const int16_t displayW = output_.width();
+            const int16_t displayH = output_.height();
             const int16_t boundsX2 = static_cast<int16_t>(bounds.x1 + bounds.w);
             const int16_t boundsY2 = static_cast<int16_t>(bounds.y1 + bounds.h);
             const int16_t visibleX0 = std::max<int16_t>(bounds.x1, 0);
@@ -548,9 +548,9 @@ namespace ui::fonts {
                     if (spanWidth > 0) {
                         // Pass mutable RAM pointer intentionally: Arduino_GFX selects the
                         // bulk writePixels() path.
-                        output_->draw16bitRGBBitmap(static_cast<int16_t>(stripX + spanStart),
-                                                    static_cast<int16_t>(stripY + row), strip_[row] + spanStart,
-                                                    spanWidth, 1);
+                        output_.draw16bitRGBBitmap(static_cast<int16_t>(stripX + spanStart),
+                                                   static_cast<int16_t>(stripY + row), strip_[row] + spanStart,
+                                                   spanWidth, 1);
                     }
                 }
             }
@@ -562,8 +562,8 @@ namespace ui::fonts {
                 return;
             }
 
-            const int16_t displayW = output_->width();
-            const int16_t displayH = output_->height();
+            const int16_t displayW = output_.width();
+            const int16_t displayH = output_.height();
             for (uint8_t row = 0; row < glyph.height; ++row) {
                 drawPackedRowFromSpans(glyph, row, x, static_cast<int16_t>(y + row), displayW, displayH);
             }
@@ -614,7 +614,7 @@ namespace ui::fonts {
                     continue;
                 }
                 renderSpan(packedRow, clippedX0, spanWidth);
-                output_->draw16bitRGBBitmap(static_cast<int16_t>(dstX + clippedX0), dstY, row_, spanWidth, 1);
+                output_.draw16bitRGBBitmap(static_cast<int16_t>(dstX + clippedX0), dstY, row_, spanWidth, 1);
             }
         }
 
@@ -840,7 +840,7 @@ namespace ui::fonts {
             return true;
         }
 
-        Arduino_GFX* output_ = nullptr;
+        Arduino_GFX& output_;
         const AlphaFont* font_ = nullptr;
         uint16_t row_[MaxRowWidth]{};
         uint16_t strip_[MaxStripRows][MaxRowWidth]{};

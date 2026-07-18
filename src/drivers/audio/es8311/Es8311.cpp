@@ -42,32 +42,24 @@ namespace BoardDrivers::Es8311 {
         constexpr uint8_t kDacVolumeMax = 0xFF;
 
         bool readRegister(Context& context, uint8_t reg, uint8_t& value) {
-            if (context.wire == nullptr) {
+            context.wire.beginTransmission(context.address);
+            context.wire.write(reg);
+            if (context.wire.endTransmission(false) != 0) {
+                return false;
+            }
+            if (context.wire.requestFrom(static_cast<int>(context.address), 1, 1) != 1) {
                 return false;
             }
 
-            context.wire->beginTransmission(context.address);
-            context.wire->write(reg);
-            if (context.wire->endTransmission(false) != 0) {
-                return false;
-            }
-            if (context.wire->requestFrom(static_cast<int>(context.address), 1, 1) != 1) {
-                return false;
-            }
-
-            value = context.wire->read();
+            value = context.wire.read();
             return true;
         }
 
         bool writeRegister(Context& context, uint8_t reg, uint8_t value) {
-            if (context.wire == nullptr) {
-                return false;
-            }
-
-            context.wire->beginTransmission(context.address);
-            context.wire->write(reg);
-            context.wire->write(value);
-            return context.wire->endTransmission(true) == 0;
+            context.wire.beginTransmission(context.address);
+            context.wire.write(reg);
+            context.wire.write(value);
+            return context.wire.endTransmission(true) == 0;
         }
 
         bool initI2s(Context& context) {

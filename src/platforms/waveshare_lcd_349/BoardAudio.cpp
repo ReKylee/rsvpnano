@@ -9,7 +9,7 @@
 namespace {
 
     BoardDrivers::Es8311::Context gAudioContext = {
-        &Wire1,
+        Wire1,
         WaveshareLcd349::AudioWiring::kEs8311Address,
         I2S_NUM_0,
         WaveshareLcd349::AudioWiring::kMclkPin,

@@ -25,7 +25,7 @@ namespace {
                              0, 0, 0, 0);
 
     RowPrefixCanvas gCanvas(WaveshareLcd349::DisplayWiring::kPanelWidth, WaveshareLcd349::DisplayWiring::kPanelHeight,
-                            &gPanel, 0, 0, 1);
+                            gPanel, 0, 0, 1);
 
     // This panel's PWM curve has a large dead zone at low duty values.
     // Keep the user-facing brightness scale at 1-100%, but map it onto

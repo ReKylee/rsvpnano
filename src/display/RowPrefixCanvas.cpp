@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cstdlib>
 
-RowPrefixCanvas::RowPrefixCanvas(int16_t w, int16_t h, Arduino_G* output, int16_t output_x, int16_t output_y,
+RowPrefixCanvas::RowPrefixCanvas(int16_t w, int16_t h, Arduino_G& output, int16_t output_x, int16_t output_y,
                                  uint8_t r) :
         Arduino_GFX(w, h),
         _output(output),
@@ -23,8 +23,8 @@ RowPrefixCanvas::~RowPrefixCanvas() {
 }
 
 bool RowPrefixCanvas::begin(int32_t speed) {
-    if ((speed != GFX_SKIP_OUTPUT_BEGIN) && (_output)) {
-        if (!_output->begin(speed)) {
+    if (speed != GFX_SKIP_OUTPUT_BEGIN) {
+        if (!_output.begin(speed)) {
             return false;
         }
     }
@@ -486,10 +486,10 @@ void RowPrefixCanvas::flush(bool force_flush) {
         markDirtyRect(0, 0, width(), height());
     }
 
-    if (_output && _framebuffer && hasDirty()) {
+    if (_framebuffer && hasDirty()) {
         const int16_t rows = dirtyNativeRowEnd();
         if (rows > 0) {
-            _output->draw16bitRGBBitmap(_output_x, _output_y, _framebuffer, WIDTH, rows);
+            _output.draw16bitRGBBitmap(_output_x, _output_y, _framebuffer, WIDTH, rows);
         }
         clearDirty();
     }

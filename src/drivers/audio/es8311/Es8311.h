@@ -7,9 +7,7 @@
 namespace BoardDrivers::Es8311 {
 
     struct Context {
-        Context() = default;
-
-        Context(TwoWire* wire, uint8_t address, i2s_port_t i2sPort, int mclkPin, int bclkPin, int wsPin, int dataOutPin,
+        Context(TwoWire& wire, uint8_t address, i2s_port_t i2sPort, int mclkPin, int bclkPin, int wsPin, int dataOutPin,
                 uint32_t sampleRateHz = 16000) :
                 wire(wire),
                 address(address),
@@ -21,7 +19,7 @@ namespace BoardDrivers::Es8311 {
                 dataOutPin(dataOutPin),
                 sampleRateHz(sampleRateHz) {}
 
-        TwoWire* wire = nullptr;
+        TwoWire& wire;
         uint8_t address = 0;
         i2s_port_t i2sPort = I2S_NUM_0;
         I2SClass i2s;

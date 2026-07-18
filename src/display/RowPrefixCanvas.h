@@ -7,7 +7,7 @@
 
 class RowPrefixCanvas : public Arduino_GFX {
 public:
-    RowPrefixCanvas(int16_t w, int16_t h, Arduino_G* output, int16_t output_x = 0, int16_t output_y = 0,
+    RowPrefixCanvas(int16_t w, int16_t h, Arduino_G& output, int16_t output_x = 0, int16_t output_y = 0,
                     uint8_t rotation = 0);
     ~RowPrefixCanvas();
 
@@ -30,7 +30,7 @@ public:
 
 protected:
     uint16_t* _framebuffer = nullptr;
-    Arduino_G* _output = nullptr;
+    Arduino_G& _output;
     int16_t _output_x, _output_y;
     int16_t MAX_X, MAX_Y;
 

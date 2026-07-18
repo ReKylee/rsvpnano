@@ -141,6 +141,7 @@ data class NanoSettings(
         val chapterScrollReversed: Boolean = false,
         val footerMetric: String = NanoSettingsSchema.FOOTER_PERCENTAGE,
         val batteryLabel: String = NanoSettingsSchema.BATTERY_PERCENTAGE,
+        val batteryIconVisible: Boolean = true,
         val batteryVisibleWhileReading: Boolean = true,
         val chapterVisibleWhileReading: Boolean = false,
         val progressVisibleWhileReading: Boolean = false,

@@ -292,6 +292,7 @@ namespace screens {
         const bool showChapter = !reading || settings.chapterVisibleWhileReading;
         const bool showProgress = !reading || settings.progressVisibleWhileReading;
         const bool showBattery = !reading || settings.batteryVisibleWhileReading;
+        const bool showBatteryIcon = settings.batteryIconVisible && showBattery;
         const int16_t footerWidth = showProgress ? static_cast<int16_t>(footer.size() * 12) : 0;
         const int16_t footerX = settings.leftHanded ? 18 : static_cast<int16_t>(ui.width() - 18 - footerWidth);
         const int16_t chapterX =
@@ -318,12 +319,20 @@ namespace screens {
             std::snprintf(batteryText, sizeof(batteryText), "%u%%", static_cast<unsigned int>(batteryModel.percent));
         const std::string_view batteryLabel{batteryText};
         const ui::Rect batteryArea = batteryRect(ui.width());
-        ui.battery(batteryArea, showBattery ? batteryModel.percent : 0, showBattery && batteryModel.charging,
-                   showBattery ? batteryLabel : std::string_view{});
+
+        ui.battery(batteryArea, batteryModel.percent, batteryModel.charging, batteryLabel, showBatteryIcon);
+    }
+
+    bool ReaderScreen::batteryTouched(const ui::Touch& touch) const {
+        return ui::contains(batteryRect(gfx_.width()), touch.x, touch.y);
     }
 
     bool ReaderScreen::batteryTapped(const ui::Touch& touch) const {
-        return ui::hasTouch(touch, ui::TouchTap) && ui::contains(batteryRect(gfx_.width()), touch.x, touch.y);
+        return ui::hasTouch(touch, ui::TouchTap) && batteryTouched(touch);
+    }
+
+    bool ReaderScreen::batteryLongPressed(const ui::Touch& touch) const {
+        return ui::hasTouch(touch, ui::TouchHold) && batteryTouched(touch);
     }
 
     bool ReaderScreen::previousSentenceTapped(uint16_t x) const {
@@ -340,6 +349,7 @@ namespace screens {
         const ui::Touch& touch = *event;
         const bool ended = ui::hasTouch(touch, ui::TouchRelease);
         const bool held = ui::hasTouch(touch, ui::TouchHold);
+
         if (ended && touchIntent_ == TouchIntent::PlayHold) {
             resetTouch();
             requestPause(preferences, nowMs);
@@ -395,6 +405,13 @@ namespace screens {
             return;
         }
 
+        if (touchIntent_ == TouchIntent::None && tapLike && batteryLongPressed(touch)) {
+            settings_->batteryIconVisible = !settings_->batteryIconVisible;
+            settingsStore.acceptChanges();
+            lastTapValid_ = false;
+            resetTouch();
+            return;
+        }
         if (touchIntent_ == TouchIntent::None && !ended && held && tapLike) {
             lastTapValid_ = false;
             touchIntent_ = TouchIntent::PlayHold;
@@ -441,8 +458,7 @@ namespace screens {
             return;
         }
         if (batteryTapped({ui::TouchTap, touch.x, touch.y})) {
-            battery.label = settings::cycleEnum(battery.label);
-            settings_->batteryLabel = battery.label;
+            settings_->batteryLabel = settings::cycleEnum(settings_->batteryLabel);
             settingsStore.acceptChanges();
             lastTapValid_ = false;
             return;

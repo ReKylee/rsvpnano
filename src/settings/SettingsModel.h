@@ -65,6 +65,7 @@ namespace settings {
         bool chapterScrollReversed = false;
         FooterMetric footerMetric = FooterMetric::percentage;
         BatteryLabel batteryLabel = BatteryLabel::percentage;
+        bool batteryIconVisible = true;
         bool batteryVisibleWhileReading = true;
         bool chapterVisibleWhileReading = false;
         bool progressVisibleWhileReading = false;

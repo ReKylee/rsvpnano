@@ -144,7 +144,7 @@ namespace ui {
                     uint8_t textLines = 1, std::string_view detailLeft = {}, std::string_view detailRight = {});
         bool iconButton(Rect rect, Icon icon);
         bool tab(Rect rect, std::string_view text, bool active, Icon icon = Icon::None);
-        void battery(Rect rect, uint8_t percent, bool charging, std::string_view label);
+        void battery(Rect rect, uint8_t percent, bool charging, std::string_view label, bool showIcon = true);
         void progress(Rect rect, int value, int minimum = 0, int maximum = 100);
         void steps(Rect rect, uint8_t current, uint8_t total,
                    ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);
@@ -257,6 +257,7 @@ namespace ui {
         void drawDeviceIcon(Rect rect, uint16_t ink);
         void drawHourglassIcon(Rect rect, uint16_t ink);
         void drawPowerIcon(Rect rect, uint16_t ink, uint16_t surface);
+        void drawBatteryIcon(Rect rect, uint8_t percent, bool charging, uint16_t ink, uint16_t surface);
         int valueAt(Rect rect, uint16_t x, int minimum, int maximum, int step) const;
         bool tapped(size_t slot, Rect rect);
         bool sliderValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,

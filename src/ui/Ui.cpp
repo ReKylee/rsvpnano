@@ -9,9 +9,6 @@ namespace ui {
 
         constexpr uint16_t kFallbackBlack = 0x0000;
         constexpr uint16_t kFallbackWhite = 0xFFFF;
-        constexpr uint16_t kBatteryGood = ui::themes::rgb565(126, 176, 92);
-        constexpr uint16_t kBatteryMedium = ui::themes::rgb565(214, 163, 58);
-        constexpr uint16_t kBatteryLow = ui::themes::rgb565(200, 82, 82);
 
         int16_t textWidth(std::string_view text, uint8_t size) {
             return static_cast<int16_t>(text.size() * 6U * std::max<uint8_t>(1, size));
@@ -326,43 +323,42 @@ namespace ui {
         return tapped(widget.index, rect);
     }
 
-    void Context::battery(Rect rect, uint8_t percent, bool charging, std::string_view labelText) {
+    void Context::battery(Rect rect, uint8_t percent, bool charging, std::string_view labelText, bool showIcon) {
         percent = std::min<uint8_t>(percent, 100);
+
         uint32_t state = combine(signature(labelText), percent);
         state = combine(state, charging);
-        if (!claim(Kind::Battery, rect, state).changed || (labelText.empty() && percent == 0))
+        state = combine(state, showIcon);
+
+        if (!claim(Kind::Battery, rect, state).changed || (!showIcon && labelText.empty()))
             return;
 
-        constexpr int16_t iconWidth = 26;
+        constexpr int16_t iconWidth = 29;
         constexpr int16_t iconHeight = 13;
-        constexpr int16_t capWidth = 3;
-        constexpr int16_t gap = 7;
-        const int16_t labelWidth = textWidth(labelText, 2);
-        const int16_t totalWidth = static_cast<int16_t>(iconWidth + capWidth + gap + labelWidth);
-        const int16_t x = std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + rect.w - totalWidth));
-        const int16_t iconY = static_cast<int16_t>(rect.y + std::max<int16_t>(0, (rect.h - iconHeight) / 2));
-        const uint16_t outline = color(ui::themes::ColorRole::Muted);
-        const uint16_t fillColor = charging || percent > 35 ? kBatteryGood
-                                 : percent <= 18            ? kBatteryLow
-                                                            : kBatteryMedium;
+        constexpr int16_t labelGap = 7;
 
-        gfx_.drawRect(x, iconY, iconWidth, iconHeight, outline);
-        gfx_.fillRect(static_cast<int16_t>(x + iconWidth), static_cast<int16_t>(iconY + 4), capWidth, 5, outline);
-        const int16_t fill = charging ? iconWidth - 4 : static_cast<int16_t>((iconWidth - 4) * percent / 100);
-        if (fill > 0)
-            gfx_.fillRect(static_cast<int16_t>(x + 2), static_cast<int16_t>(iconY + 2), fill, iconHeight - 4,
-                          fillColor);
-        if (charging) {
-            const uint16_t background = color(ui::themes::ColorRole::Background);
-            gfx_.drawLine(static_cast<int16_t>(x + 15), static_cast<int16_t>(iconY + 2), static_cast<int16_t>(x + 11),
-                          static_cast<int16_t>(iconY + 7), background);
-            gfx_.drawLine(static_cast<int16_t>(x + 11), static_cast<int16_t>(iconY + 7), static_cast<int16_t>(x + 16),
-                          static_cast<int16_t>(iconY + 7), background);
-            gfx_.drawLine(static_cast<int16_t>(x + 16), static_cast<int16_t>(iconY + 7), static_cast<int16_t>(x + 12),
-                          static_cast<int16_t>(iconY + 12), background);
+        const int16_t iconAreaWidth = showIcon ? iconWidth + labelGap : 0;
+        const int16_t labelWidth = textWidth(labelText, 2);
+        const int16_t totalWidth = static_cast<int16_t>(iconAreaWidth + labelWidth);
+        const int16_t x = std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + rect.w - totalWidth));
+
+        const uint16_t ink = color(ui::themes::ColorRole::Muted);
+        const uint16_t surface = color(ui::themes::ColorRole::Background);
+
+        if (showIcon) {
+            const int16_t iconY = static_cast<int16_t>(rect.y + std::max<int16_t>(0, (rect.h - iconHeight) / 2));
+
+            drawBatteryIcon({x, iconY, iconWidth, iconHeight}, percent, charging, ink, surface);
         }
-        drawText({static_cast<int16_t>(x + iconWidth + capWidth + gap), rect.y, labelWidth, rect.h}, labelText, 2,
-                 outline);
+
+        drawText(
+            {
+                static_cast<int16_t>(x + iconAreaWidth),
+                rect.y,
+                labelWidth,
+                rect.h,
+            },
+            labelText, 2, ink);
     }
 
     void Context::progress(Rect rect, int value, int minimum, int maximum) {

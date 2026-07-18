@@ -25,6 +25,7 @@ void test_defaults_round_trip_through_toml_and_json() {
     const settings::DeviceSettings defaults;
     auto toml = settings::codec::encodeToml(defaults, settings::SettingsSource::Programmatic);
     TEST_ASSERT_TRUE_MESSAGE(toml.has_value(), toml ? "" : toml.error().message.c_str());
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("batteryIconVisible = true"));
     auto fromToml = settings::codec::decodeToml(*toml, settings::SettingsSource::Sd);
     TEST_ASSERT_TRUE_MESSAGE(fromToml.has_value(), fromToml ? "" : fromToml.error().message.c_str());
     TEST_ASSERT_TRUE(defaults == *fromToml);
@@ -54,8 +55,7 @@ void test_missing_fields_retain_defaults() {
 }
 
 void test_bounded_values_clamp_during_deserialization() {
-    auto value = settings::codec::decodeToml("schemaVersion = 1\n[reading]\nwpm = 9\n",
-                                             settings::SettingsSource::Sd);
+    auto value = settings::codec::decodeToml("schemaVersion = 1\n[reading]\nwpm = 9\n", settings::SettingsSource::Sd);
     TEST_ASSERT_TRUE_MESSAGE(value.has_value(), value ? "" : value.error().message.c_str());
     TEST_ASSERT_EQUAL_UINT16(10, value->reading.wpm);
 }
@@ -72,9 +72,9 @@ void test_bounded_values_clamp_on_every_assignment() {
 void test_invalid_input_cannot_mutate_a_live_value() {
     settings::DeviceSettings live;
     live.reading.wpm = 450;
-    auto candidate = settings::codec::decodeToml(
-        "schemaVersion = 1\n[reading]\nwpm = 600\n[interface]\nbrightnessPercent = 101\n",
-        settings::SettingsSource::Sd);
+    auto candidate =
+        settings::codec::decodeToml("schemaVersion = 1\n[reading]\nwpm = 600\n[interface]\nbrightnessPercent = 101\n",
+                                    settings::SettingsSource::Sd);
     TEST_ASSERT_TRUE(candidate.has_value());
     TEST_ASSERT_EQUAL_UINT16(600, candidate->reading.wpm);
     TEST_ASSERT_EQUAL_UINT8(100, candidate->interface.brightnessPercent);
@@ -82,8 +82,8 @@ void test_invalid_input_cannot_mutate_a_live_value() {
 }
 
 void test_unknown_key_and_schema_errors_are_distinct() {
-    auto unknown = settings::codec::decodeJson(R"({"schemaVersion":1,"surprise":true})",
-                                                settings::SettingsSource::Companion);
+    auto unknown =
+        settings::codec::decodeJson(R"({"schemaVersion":1,"surprise":true})", settings::SettingsSource::Companion);
     TEST_ASSERT_FALSE(unknown.has_value());
     TEST_ASSERT_EQUAL(settings::SettingsErrorCategory::UnknownKey, unknown.error().category);
 
@@ -92,7 +92,7 @@ void test_unknown_key_and_schema_errors_are_distinct() {
     TEST_ASSERT_EQUAL(settings::SettingsErrorCategory::UnsupportedSchema, schema.error().category);
 
     auto invalidEnum = settings::codec::decodeJson(R"({"schemaVersion":1,"reading":{"pauseMode":"later"}})",
-                                                    settings::SettingsSource::Companion);
+                                                   settings::SettingsSource::Companion);
     TEST_ASSERT_FALSE(invalidEnum.has_value());
     TEST_ASSERT_EQUAL(settings::SettingsErrorCategory::InvalidEnum, invalidEnum.error().category);
 }

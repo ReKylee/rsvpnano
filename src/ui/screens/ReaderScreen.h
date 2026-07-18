@@ -56,6 +56,8 @@ namespace screens {
         void loadInitialBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, uint32_t nowMs);
         void draw(ui::Context& ui, const StorageManager& storage, uint32_t nowMs);
         bool batteryTapped(const ui::Touch& touch) const;
+        bool batteryLongPressed(const ui::Touch& touch) const;
+        bool batteryTouched(const ui::Touch& touch) const;
         bool previousSentenceTapped(uint16_t x) const;
         void handleTouch(ui::Context& ui, uint32_t nowMs, Preferences& preferences,
                          settings::SettingsStore& settingsStore);

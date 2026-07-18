@@ -2,14 +2,12 @@
 
 #include <algorithm>
 
-#include "settings/SettingsRules.h"
-
 namespace screens {
     void InterfaceScreen::begin(ui::Context& ui, settings::InterfaceSettings& config,
                                 const settings::TypographySettings& typographyDefaults, const FontCatalog& fonts,
                                 void (*setBrightness)(uint8_t)) {
         if (setBrightness != nullptr)
-            setBrightness(static_cast<uint8_t>((static_cast<uint8_t>(config.brightnessIndex) + 1U) * 5U));
+            setBrightness(config.brightnessPercent);
 
         themes.loadFromSd(fonts, typographyDefaults);
         if (!themes.selectById(config.selectedThemeId)) {
@@ -29,17 +27,13 @@ namespace screens {
         ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
                  ui.text(UiText::Interface), 2);
 
-        const int brightnessPercent = (static_cast<int>(config.brightnessIndex) + 1) * 5;
         const int16_t controlsY = static_cast<int16_t>(content.y + 32);
         const int16_t sliderWidth = std::min<int16_t>(content.w, 480);
         const int16_t sliderX = static_cast<int16_t>(content.x + (content.w - sliderWidth) / 2);
-        if (const auto brightness =
-                ui.slider({sliderX, controlsY, sliderWidth, 34}, ui.text(UiText::Brightness), brightnessPercent, 5,
-                          100, 5, "%");
-            brightness.changed) {
-            config.brightnessIndex = static_cast<uint8_t>(brightness.value / 5 - 1);
+        if (ui.slider({sliderX, controlsY, sliderWidth, 34}, ui.text(UiText::Brightness), config.brightnessPercent,
+                      "%")) {
             if (setBrightness != nullptr)
-                setBrightness(static_cast<uint8_t>(brightness.value));
+                setBrightness(config.brightnessPercent);
             changed = true;
         }
 

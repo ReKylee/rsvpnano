@@ -49,18 +49,9 @@ namespace screens {
         ui.separator({content.x, visibilityY, content.w, 10}, ui.text(UiText::VisibleWhileReadingSection));
         ui::Grid visibility{{content.x, static_cast<int16_t>(visibilityY + 14), content.w,
                              static_cast<int16_t>(content.h - 107)}, 3, 28, gap};
-        if (ui.toggle(visibility.next(), ui.text(UiText::Battery), config.batteryVisibleWhileReading)) {
-            config.batteryVisibleWhileReading = !config.batteryVisibleWhileReading;
-            changed = true;
-        }
-        if (ui.toggle(visibility.next(), ui.text(UiText::Chapter), config.chapterVisibleWhileReading)) {
-            config.chapterVisibleWhileReading = !config.chapterVisibleWhileReading;
-            changed = true;
-        }
-        if (ui.toggle(visibility.next(), ui.text(UiText::Progress), config.progressVisibleWhileReading)) {
-            config.progressVisibleWhileReading = !config.progressVisibleWhileReading;
-            changed = true;
-        }
+        changed |= ui.toggle(visibility.next(), ui.text(UiText::Battery), config.batteryVisibleWhileReading);
+        changed |= ui.toggle(visibility.next(), ui.text(UiText::Chapter), config.chapterVisibleWhileReading);
+        changed |= ui.toggle(visibility.next(), ui.text(UiText::Progress), config.progressVisibleWhileReading);
         return changed;
     }
 

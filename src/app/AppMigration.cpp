@@ -156,6 +156,9 @@ void App::migrateLegacyStorage() {
     settings::DeviceSecrets secrets = settingsStore_.secrets();
     bool legacySettingsSeen = false;
     bool legacySecretsSeen = false;
+    const auto migrateBrightnessIndex = [](uint64_t value) {
+        return static_cast<uint8_t>((std::min<uint64_t>(value, 19) + 1) * 5);
+    };
 
     auto readU8 = [&](const char* key, auto&& assign) {
         if (!prefs_.isKey(key))
@@ -189,7 +192,7 @@ void App::migrateLegacyStorage() {
     };
 
     readU16("wpm", [&](uint16_t value) { candidate.reading.wpm = value; });
-    readU8("bright", [&](uint8_t value) { candidate.interface.brightnessIndex = value; });
+    readU8("bright", [&](uint8_t value) { candidate.interface.brightnessPercent = migrateBrightnessIndex(value); });
     readStringKey("theme_id", candidate.interface.selectedThemeId);
     readU8("ui_lang", [&](uint8_t value) {
         candidate.interface.language = value < std::to_underlying(UiLanguage::Count)
@@ -276,7 +279,12 @@ void App::migrateLegacyStorage() {
         auto assigned = [](bool valid) { return valid ? AssignResult::applied : AssignResult::invalid; };
         auto assignLegacySetting = [&](std::string_view key, std::string_view value) {
             if (key == "wpm") return assigned(assignUnsigned(value, parsed.reading.wpm));
-            if (key == "bright") return assigned(assignUnsigned(value, parsed.interface.brightnessIndex));
+            if (key == "bright") {
+                uint64_t legacyValue = 0;
+                if (!parseUnsigned(value, legacyValue)) return AssignResult::invalid;
+                parsed.interface.brightnessPercent = migrateBrightnessIndex(legacyValue);
+                return AssignResult::applied;
+            }
             if (key == "theme_id") return assigned(parseString(value, parsed.interface.selectedThemeId));
             if (key == "handed") return assigned(parseBool(value, parsed.reading.leftHanded));
             if (key == "phantom_on") return assigned(parseBool(value, parsed.reading.phantomWords));

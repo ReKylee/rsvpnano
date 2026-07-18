@@ -42,7 +42,6 @@ namespace screens {
         if (ui.toggle({static_cast<int16_t>(content.x + networkWidth + gap), firstRowY,
                        static_cast<int16_t>(content.w - networkWidth - gap), 32},
                       ui.text(UiText::AutomaticChecks), automatic)) {
-            automatic = !automatic;
             store.settings().updates.automatic = automatic;
             store.acceptChanges();
             autoCheckPending = automatic && !ssid.empty();

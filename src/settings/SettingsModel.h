@@ -76,7 +76,7 @@ namespace settings {
     };
 
     struct InterfaceSettings {
-        BoundedValue<uint8_t, 0, 19> brightnessIndex{13};
+        BoundedValue<uint8_t, 5, 100, 5> brightnessPercent{70};
         UiLanguage language = UiLanguage::english;
         BoundedValue<uint8_t, 0, 4> standbyTimerIndex{1};
         standby::Kind screensaver = standby::Kind::life;

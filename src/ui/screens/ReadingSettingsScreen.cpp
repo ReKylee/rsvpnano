@@ -16,11 +16,7 @@ namespace screens {
         const int16_t controlsY = static_cast<int16_t>(content.y + 30);
         const int16_t sliderWidth = std::min<int16_t>(content.w, 480);
         const int16_t sliderX = static_cast<int16_t>(content.x + (content.w - sliderWidth) / 2);
-        if (const auto wpm = ui.slider({sliderX, controlsY, sliderWidth, 36}, ui.text(UiText::WordsPerMinute),
-                                       reader.wpm(), decltype(config.wpm)::min(), decltype(config.wpm)::max(),
-                                       decltype(config.wpm)::step(), " WPM");
-            wpm.changed) {
-            config.wpm = static_cast<uint16_t>(wpm.value);
+        if (ui.slider({sliderX, controlsY, sliderWidth, 36}, ui.text(UiText::WordsPerMinute), config.wpm, " WPM")) {
             reader.setWpm(config.wpm);
             changed = true;
         }
@@ -39,12 +35,8 @@ namespace screens {
             changed = true;
         }
 
-        if (ui.toggle({static_cast<int16_t>(content.x + halfWidth + gap), rowY, halfWidth, 42},
-                      ui.text(UiText::PhantomWords),
-                      config.phantomWords)) {
-            config.phantomWords = !config.phantomWords;
-            changed = true;
-        }
+        changed |= ui.toggle({static_cast<int16_t>(content.x + halfWidth + gap), rowY, halfWidth, 42},
+                             ui.text(UiText::PhantomWords), config.phantomWords);
         return changed;
     }
 

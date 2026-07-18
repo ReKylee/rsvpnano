@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include "ui/Ui.h"
+#include "settings/SettingsRules.h"
 
 namespace {
 
@@ -98,17 +99,16 @@ void test_button_and_slider_consume_touch() {
     gContact = {true, 25, 40};
     TEST_ASSERT_TRUE(context.pollTouch(3));
     context.beginFrame(2);
-    const auto value = context.slider({0, 30, 101, 20}, 0, 0, 100, 5);
+    settings::BoundedValue<int, 0, 100, 5> value{0};
+    TEST_ASSERT_FALSE(context.slider({0, 30, 101, 20}, "", value));
     context.endFrame();
-    TEST_ASSERT_FALSE(value.changed);
-    TEST_ASSERT_EQUAL(25, value.value);
+    TEST_ASSERT_EQUAL(0, value);
     gContact = {};
     TEST_ASSERT_TRUE(context.pollTouch(4));
     context.beginFrame(2);
-    const auto committed = context.slider({0, 30, 101, 20}, 0, 0, 100, 5);
+    TEST_ASSERT_TRUE(context.slider({0, 30, 101, 20}, "", value));
     context.endFrame();
-    TEST_ASSERT_TRUE(committed.changed);
-    TEST_ASSERT_EQUAL(25, committed.value);
+    TEST_ASSERT_EQUAL(25, value);
 }
 
 void test_stepper_taps_and_repeats() {
@@ -117,33 +117,32 @@ void test_stepper_taps_and_repeats() {
     auto colors = theme();
     context.setTheme(colors);
     enableTouch(context);
+    int value = 25;
 
     gContact = {true, 190, 20};
     TEST_ASSERT_TRUE(context.pollTouch(10));
     context.beginFrame(1);
-    TEST_ASSERT_FALSE(context.stepper({0, 0, 200, 40}, "Focus", 25, 1, 180, 1, " min").changed);
+    TEST_ASSERT_FALSE(context.stepper({0, 0, 200, 40}, "Focus", value, 1, 180, 1, " min"));
     context.endFrame();
 
     gContact = {};
     TEST_ASSERT_TRUE(context.pollTouch(20));
     context.beginFrame(1);
-    const auto tapped = context.stepper({0, 0, 200, 40}, "Focus", 25, 1, 180, 1, " min");
+    TEST_ASSERT_TRUE(context.stepper({0, 0, 200, 40}, "Focus", value, 1, 180, 1, " min"));
     context.endFrame();
-    TEST_ASSERT_TRUE(tapped.changed);
-    TEST_ASSERT_EQUAL(26, tapped.value);
+    TEST_ASSERT_EQUAL(26, value);
 
     gContact = {true, 190, 20};
     TEST_ASSERT_TRUE(context.pollTouch(100));
     context.beginFrame(1);
-    context.stepper({0, 0, 200, 40}, "Focus", 25, 1, 180, 1, " min");
+    context.stepper({0, 0, 200, 40}, "Focus", value, 1, 180, 1, " min");
     context.endFrame();
 
     TEST_ASSERT_TRUE(context.pollTouch(640));
     context.beginFrame(1);
-    const auto held = context.stepper({0, 0, 200, 40}, "Focus", 25, 1, 180, 1, " min");
+    TEST_ASSERT_TRUE(context.stepper({0, 0, 200, 40}, "Focus", value, 1, 180, 1, " min"));
     context.endFrame();
-    TEST_ASSERT_TRUE(held.changed);
-    TEST_ASSERT_EQUAL(27, held.value);
+    TEST_ASSERT_EQUAL(28, value);
 }
 
 void test_disabled_button_ignores_touch() {
@@ -270,7 +269,8 @@ void test_setting_gives_long_values_the_full_card_width() {
 
     gfx.textWrites = 0;
     context.beginFrame(3);
-    context.slider({0, 0, 200, 50}, "Long words", 150, 0, 600, 50, " ms");
+    int longWordDelay = 150;
+    context.slider({0, 0, 200, 50}, "Long words", longWordDelay, 0, 600, 50, " ms");
     context.endFrame();
     TEST_ASSERT_EQUAL(16, gfx.textWrites);
 }
@@ -282,14 +282,16 @@ void test_slider_redraws_with_its_active_color() {
     colors.definition.colors.accent = 0x1111;
     colors.definition.colors.breakAccent = 0x2222;
     context.setTheme(colors);
+    int focusMinutes = 25;
 
     context.beginFrame(3);
-    context.slider({0, 0, 200, 40}, "Focus", 25, 1, 180, 1, " min");
+    context.slider({0, 0, 200, 40}, "Focus", focusMinutes, 1, 180, 1, " min");
     context.endFrame();
 
     gfx.writes = 0;
     context.beginFrame(3);
-    context.slider({0, 0, 200, 40}, "Focus", 25, 1, 180, 1, " min", ui::themes::ColorRole::BreakAccent);
+    context.slider({0, 0, 200, 40}, "Focus", focusMinutes, 1, 180, 1, " min",
+                   ui::themes::ColorRole::BreakAccent);
     context.endFrame();
     TEST_ASSERT_GREATER_THAN(0, gfx.writes);
     TEST_ASSERT_EQUAL_HEX16(0x2222, gfx.lastFillColor);

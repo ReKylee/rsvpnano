@@ -22,7 +22,7 @@ internal fun sampleSettings(): NanoSettings = NanoSettings(
         ),
         pacing = NanoSettings.Pacing(longWordDelayMs = 0, complexWordDelayMs = 0, punctuationDelayMs = 0),
     ),
-    `interface` = NanoSettings.Interface(brightnessIndex = 1),
+    `interface` = NanoSettings.Interface(brightnessPercent = 10),
 )
 
 internal fun sampleBook(

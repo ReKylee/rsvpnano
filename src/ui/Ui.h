@@ -71,11 +71,6 @@ namespace ui {
         }
     };
 
-    struct ScalarResult {
-        int value = 0;
-        bool changed = false;
-    };
-
     enum class KeyboardMode : uint8_t {
         Letters,
         Numbers,
@@ -143,7 +138,7 @@ namespace ui {
         void separator(Rect rect, std::string_view text);
         bool setting(Rect rect, std::string_view label, std::string_view value,
                      SettingLayout layout = SettingLayout::Stacked);
-        bool toggle(Rect rect, std::string_view label, bool enabled);
+        bool toggle(Rect rect, std::string_view label, bool& enabled);
         bool tap(Rect rect, bool enabled = true);
         bool button(Rect rect, std::string_view text, bool enabled = true, Icon icon = Icon::None,
                     uint8_t textLines = 1, std::string_view detailLeft = {}, std::string_view detailRight = {});
@@ -153,14 +148,41 @@ namespace ui {
         void progress(Rect rect, int value, int minimum = 0, int maximum = 100);
         void steps(Rect rect, uint8_t current, uint8_t total,
                    ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);
-        ScalarResult slider(Rect rect, int value, int minimum, int maximum, int step = 1,
-                            ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);
-        ScalarResult slider(Rect rect, std::string_view label, int value, int minimum, int maximum, int step = 1,
-                            std::string_view suffix = {},
-                            ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);
-        ScalarResult stepper(Rect rect, std::string_view label, int value, int minimum, int maximum, int step = 1,
-                             std::string_view suffix = {},
-                             ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);
+        template<typename T>
+            requires requires { T::min(); T::max(); T::step(); }
+        bool slider(Rect rect, std::string_view label, T& value, std::string_view suffix = {},
+                    ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent) {
+            return slider(rect, label, value, T::min(), T::max(), T::step(), suffix, activeRole);
+        }
+
+        template<typename T>
+        bool slider(Rect rect, std::string_view label, T& value, int minimum, int maximum, int step = 1,
+                    std::string_view suffix = {},
+                    ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent) {
+            int scalar = static_cast<int>(value);
+            if (!sliderValue(rect, label, scalar, minimum, maximum, step, suffix, activeRole))
+                return false;
+            value = scalar;
+            return true;
+        }
+
+        template<typename T>
+            requires requires { T::min(); T::max(); T::step(); }
+        bool stepper(Rect rect, std::string_view label, T& value, std::string_view suffix = {},
+                     ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent) {
+            return stepper(rect, label, value, T::min(), T::max(), T::step(), suffix, activeRole);
+        }
+
+        template<typename T>
+        bool stepper(Rect rect, std::string_view label, T& value, int minimum, int maximum, int step = 1,
+                     std::string_view suffix = {},
+                     ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent) {
+            int scalar = static_cast<int>(value);
+            if (!stepperValue(rect, label, scalar, minimum, maximum, step, suffix, activeRole))
+                return false;
+            value = scalar;
+            return true;
+        }
         KeyboardAction keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state,
                                 std::string_view label = {}, bool masked = false);
         void dial(Rect rect, int value, int minimum, int maximum, std::string_view label = {});
@@ -231,6 +253,10 @@ namespace ui {
         void drawPowerIcon(Rect rect, uint16_t ink, uint16_t surface);
         int valueAt(Rect rect, uint16_t x, int minimum, int maximum, int step) const;
         bool tapped(size_t slot, Rect rect);
+        bool sliderValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,
+                         std::string_view suffix, ui::themes::ColorRole activeRole);
+        bool stepperValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,
+                          std::string_view suffix, ui::themes::ColorRole activeRole);
         void resetTouchGesture();
         bool beginTouch(uint32_t nowMs);
         TouchContact mapTouch(TouchContact contact) const;

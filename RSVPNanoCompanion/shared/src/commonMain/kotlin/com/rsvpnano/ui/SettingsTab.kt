@@ -511,11 +511,11 @@ private fun DisplaySettings(
             SliderRow(
                 label = "Brightness",
                 description = "Applied immediately.",
-                valueLabel = { value -> "${(value.toInt() + 1) * 5}%" },
-                value = settings.`interface`.brightnessIndex.toFloat(),
+                valueLabel = { value -> "${value.toInt()}%" },
+                value = settings.`interface`.brightnessPercent.toFloat(),
                 valueRange = NanoSettingsSchema.BRIGHTNESS_MIN.toFloat()..NanoSettingsSchema.BRIGHTNESS_MAX.toFloat(),
                 steps = 18,
-                onValueChangeFinished = { value -> onUpdateSettings { it.withBrightnessIndex(value.toInt()) } },
+                onValueChangeFinished = { value -> onUpdateSettings { it.withBrightnessPercent(value.toInt()) } },
             )
             SegmentedChoiceRow(
                 label = "Reader hand",

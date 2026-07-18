@@ -33,7 +33,7 @@ class NanoSettingsUpdateHelpersTest {
             .withWpm(103)
             .withPacingLongWordMs(626)
             .withPacingComplexWordMs(-20)
-            .withBrightnessIndex(99)
+            .withBrightnessPercent(101)
             .withFontSizeIndex(-1)
             .withTracking(10)
             .withAnchorPercent(12)
@@ -43,7 +43,7 @@ class NanoSettingsUpdateHelpersTest {
         assertEquals(100, updated.reading.wpm)
         assertEquals(600, updated.reading.pacing.longWordDelayMs)
         assertEquals(0, updated.reading.pacing.complexWordDelayMs)
-        assertEquals(19, updated.`interface`.brightnessIndex)
+        assertEquals(100, updated.`interface`.brightnessPercent)
         assertEquals(0, updated.reading.typography.fontSizeIndex)
         assertEquals(3, updated.reading.typography.tracking)
         assertEquals(30, updated.reading.typography.anchor)
@@ -55,7 +55,7 @@ class NanoSettingsUpdateHelpersTest {
     fun displayHelpersReturnUpdatedCopiesWithoutMutatingOriginal() {
         val original = sampleSettings()
         val updated = original
-            .withBrightnessIndex(4)
+            .withBrightnessPercent(25)
             .withHandedness("left")
             .withFooterMetric("chapterTime")
             .withBatteryLabel("timeRemaining")
@@ -64,8 +64,8 @@ class NanoSettingsUpdateHelpersTest {
             .withFontSizeIndex(2)
 
         assertNotSame(original, updated)
-        assertEquals(1, original.`interface`.brightnessIndex)
-        assertEquals(4, updated.`interface`.brightnessIndex)
+        assertEquals(10, original.`interface`.brightnessPercent)
+        assertEquals(25, updated.`interface`.brightnessPercent)
         assertTrue(updated.reading.leftHanded)
         assertEquals("chapterTime", updated.reading.footerMetric)
         assertEquals("timeRemaining", updated.reading.batteryLabel)

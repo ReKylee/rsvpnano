@@ -211,7 +211,7 @@ namespace ui {
         return tapped(slot, rect);
     }
 
-    bool Context::toggle(Rect rect, std::string_view label, bool enabled) {
+    bool Context::toggle(Rect rect, std::string_view label, bool& enabled) {
         const size_t slot = nextSlot_;
         uint32_t state = combine(signature(label), enabled);
         if (claim(Kind::Toggle, rect, state).changed) {
@@ -229,7 +229,10 @@ namespace ui {
                       static_cast<int16_t>(std::max<int16_t>(0, switchX - rect.x - 14)), rect.h},
                      label, 2, color(ui::themes::ColorRole::Foreground));
         }
-        return tapped(slot, rect);
+        if (!tapped(slot, rect))
+            return false;
+        enabled = !enabled;
+        return true;
     }
 
     bool Context::tap(Rect rect, bool enabled) {
@@ -407,13 +410,8 @@ namespace ui {
         }
     }
 
-    ScalarResult Context::slider(Rect rect, int value, int minimum, int maximum, int step,
-                                 ui::themes::ColorRole activeRole) {
-        return slider(rect, {}, value, minimum, maximum, step, {}, activeRole);
-    }
-
-    ScalarResult Context::slider(Rect rect, std::string_view label, int value, int minimum, int maximum, int step,
-                                 std::string_view suffix, ui::themes::ColorRole activeRole) {
+    bool Context::sliderValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,
+                              std::string_view suffix, ui::themes::ColorRole activeRole) {
         const size_t slot = nextSlot_;
         const Touch* event = touch();
         const bool labeled = !label.empty();
@@ -429,7 +427,8 @@ namespace ui {
             capturedScalarValue_ = valueAt(track, event->x, minimum, maximum, step);
         }
 
-        ScalarResult result{std::clamp(value, minimum, maximum), false};
+        int displayedValue = std::clamp(value, minimum, maximum);
+        bool changed = false;
         const bool moving =
             event != nullptr
             && (hasTouch(*event, TouchStart) || hasTouch(*event, TouchMove) || hasTouch(*event, TouchRelease));
@@ -437,12 +436,12 @@ namespace ui {
             capturedScalarValue_ = valueAt(track, event->x, minimum, maximum, step);
         }
         if (capturedSlot_ == slot)
-            result.value = capturedScalarValue_;
+            displayedValue = capturedScalarValue_;
         if (capturedSlot_ == slot && event != nullptr && hasTouch(*event, TouchRelease))
-            result.changed = result.value != capturedScalarInitialValue_;
+            changed = displayedValue != capturedScalarInitialValue_;
 
         uint32_t state = signature(suffix, signature(label));
-        state = combine(state, static_cast<uint32_t>(result.value));
+        state = combine(state, static_cast<uint32_t>(displayedValue));
         state = combine(state, static_cast<uint32_t>(minimum));
         state = combine(state, static_cast<uint32_t>(maximum));
         state = combine(state, static_cast<uint32_t>(step));
@@ -453,7 +452,7 @@ namespace ui {
                 gfx_.fillRoundRect(visual.x, visual.y, visual.w, visual.h, 5, surface);
                 gfx_.drawRoundRect(visual.x, visual.y, visual.w, visual.h, 5, color(ui::themes::ColorRole::Outline));
                 char valueText[24];
-                std::snprintf(valueText, sizeof(valueText), "%d%.*s", result.value, static_cast<int>(suffix.size()),
+                std::snprintf(valueText, sizeof(valueText), "%d%.*s", displayedValue, static_cast<int>(suffix.size()),
                               suffix.data());
                 const std::string_view valueView{valueText};
                 const int16_t headerWidth = static_cast<int16_t>(visual.w - 14);
@@ -485,7 +484,7 @@ namespace ui {
                 maximum == minimum
                     ? track.x
                     : static_cast<int16_t>(track.x
-                                           + (static_cast<int32_t>(track.w - 1) * (result.value - minimum))
+                                           + (static_cast<int32_t>(track.w - 1) * (displayedValue - minimum))
                                                  / (maximum - minimum));
             const int16_t trackCenterY = static_cast<int16_t>(track.y + track.h / 2);
             if (step > 0 && maximum > minimum) {
@@ -512,11 +511,13 @@ namespace ui {
         if (capturedSlot_ == slot && event != nullptr && hasTouch(*event, TouchRelease)) {
             capturedSlot_ = kSlotCapacity;
         }
-        return result;
+        if (changed)
+            value = displayedValue;
+        return changed;
     }
 
-    ScalarResult Context::stepper(Rect rect, std::string_view label, int value, int minimum, int maximum, int step,
-                                  std::string_view suffix, ui::themes::ColorRole activeRole) {
+    bool Context::stepperValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,
+                               std::string_view suffix, ui::themes::ColorRole activeRole) {
         const size_t slot = nextSlot_;
         const int safeStep = std::max(1, step);
         const int16_t buttonWidth = std::min<int16_t>(42, std::max<int16_t>(16, rect.w / 5));
@@ -536,7 +537,8 @@ namespace ui {
             }
         }
 
-        ScalarResult result{std::clamp(value, minimum, maximum), false};
+        int displayedValue = std::clamp(value, minimum, maximum);
+        bool changed = false;
         if (capturedSlot_ == slot) {
             const Rect target = capturedStepperDirection_ < 0 ? decrement : increment;
             const bool overTarget = event != nullptr && contains(target, event->x, event->y);
@@ -551,8 +553,8 @@ namespace ui {
                 capturedScalarValue_ =
                     std::clamp(capturedScalarInitialValue_ + capturedStepperDirection_ * delta, minimum, maximum);
             }
-            result.value = capturedScalarValue_;
-            result.changed = result.value != value;
+            displayedValue = capturedScalarValue_;
+            changed = displayedValue != value;
             if (event != nullptr && hasTouch(*event, TouchRelease)) {
                 capturedSlot_ = kSlotCapacity;
                 capturedStepperDirection_ = 0;
@@ -560,7 +562,7 @@ namespace ui {
         }
 
         uint32_t state = signature(suffix, signature(label));
-        state = combine(state, static_cast<uint32_t>(result.value));
+        state = combine(state, static_cast<uint32_t>(displayedValue));
         state = combine(state, static_cast<uint32_t>(minimum));
         state = combine(state, static_cast<uint32_t>(maximum));
         state = combine(state, activeRole);
@@ -575,11 +577,11 @@ namespace ui {
                                static_cast<int16_t>(rect.h - 8), outline);
 
             const uint16_t muted = color(ui::themes::ColorRole::Muted);
-            drawText(decrement, "-", 2, result.value > minimum ? color(activeRole) : muted, TextAlign::Center);
-            drawText(increment, "+", 2, result.value < maximum ? color(activeRole) : muted, TextAlign::Center);
+            drawText(decrement, "-", 2, displayedValue > minimum ? color(activeRole) : muted, TextAlign::Center);
+            drawText(increment, "+", 2, displayedValue < maximum ? color(activeRole) : muted, TextAlign::Center);
 
             char valueText[24];
-            std::snprintf(valueText, sizeof(valueText), "%d%.*s", result.value, static_cast<int>(suffix.size()),
+            std::snprintf(valueText, sizeof(valueText), "%d%.*s", displayedValue, static_cast<int>(suffix.size()),
                           suffix.data());
             const Rect middle{static_cast<int16_t>(decrement.x + decrement.w + 6), rect.y,
                               static_cast<int16_t>(rect.w - buttonWidth * 2 - 12), rect.h};
@@ -596,7 +598,9 @@ namespace ui {
                          valueText, 2, color(activeRole), TextAlign::Right);
             }
         }
-        return result;
+        if (changed)
+            value = displayedValue;
+        return changed;
     }
 
     void Context::dial(Rect rect, int value, int minimum, int maximum, std::string_view labelText) {

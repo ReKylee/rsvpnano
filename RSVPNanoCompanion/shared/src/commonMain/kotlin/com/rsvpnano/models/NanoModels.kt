@@ -169,7 +169,7 @@ data class NanoSettings(
 
     @Serializable
     data class Interface(
-        val brightnessIndex: Int = 13,
+        val brightnessPercent: Int = 70,
         val language: String = NanoSettingsSchema.LANGUAGE_ENGLISH,
         val standbyTimerIndex: Int = NanoSettingsSchema.STANDBY_TIMER_NEVER,
         val screensaver: String = NanoSettingsSchema.SCREENSAVER_LIFE,
@@ -215,8 +215,8 @@ data class NanoSettings(
             ),
         )
 
-    fun withBrightnessIndex(value: Int): NanoSettings =
-        copy(`interface` = `interface`.copy(brightnessIndex = NanoSettingsSchema.coerceBrightnessIndex(value)))
+    fun withBrightnessPercent(value: Int): NanoSettings =
+        copy(`interface` = `interface`.copy(brightnessPercent = NanoSettingsSchema.coerceBrightnessPercent(value)))
 
     fun withThemeId(value: String): NanoSettings {
         return copy(`interface` = `interface`.copy(selectedThemeId = value.ifBlank { NanoSettingsSchema.THEME_DEFAULT }))
@@ -337,8 +337,8 @@ object NanoSettingsSchema {
     const val PACING_MS_MIN = 0
     const val PACING_MS_MAX = 600
     const val PACING_MS_STEP = 50
-    const val BRIGHTNESS_MIN = 0
-    const val BRIGHTNESS_MAX = 19
+    const val BRIGHTNESS_MIN = 5
+    const val BRIGHTNESS_MAX = 100
     const val STANDBY_TIMER_NEVER = 0
     const val STANDBY_TIMER_1_MIN = 1
     const val STANDBY_TIMER_5_MIN = 2
@@ -367,7 +367,7 @@ object NanoSettingsSchema {
     fun snapPacingMs(value: Int): Int =
         snapToStep(value, PACING_MS_STEP).coerceIn(PACING_MS_MIN, PACING_MS_MAX)
 
-    fun coerceBrightnessIndex(value: Int): Int =
+    fun coerceBrightnessPercent(value: Int): Int =
         value.coerceIn(BRIGHTNESS_MIN, BRIGHTNESS_MAX)
 
     fun coerceScreensaver(value: String): String =

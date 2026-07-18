@@ -61,23 +61,23 @@ void test_bounded_values_clamp_during_deserialization() {
 }
 
 void test_bounded_values_clamp_on_every_assignment() {
-    settings::BoundedValue<uint8_t, 0, 19> brightness{-1};
-    TEST_ASSERT_EQUAL_UINT8(0, brightness);
-    brightness = 99;
-    TEST_ASSERT_EQUAL_UINT8(19, brightness);
+    settings::BoundedValue<uint8_t, 5, 100, 5> brightness{-1};
+    TEST_ASSERT_EQUAL_UINT8(5, brightness);
+    brightness = 101;
+    TEST_ASSERT_EQUAL_UINT8(100, brightness);
     brightness.cycle();
-    TEST_ASSERT_EQUAL_UINT8(0, brightness);
+    TEST_ASSERT_EQUAL_UINT8(5, brightness);
 }
 
 void test_invalid_input_cannot_mutate_a_live_value() {
     settings::DeviceSettings live;
     live.reading.wpm = 450;
     auto candidate = settings::codec::decodeToml(
-        "schemaVersion = 1\n[reading]\nwpm = 600\n[interface]\nbrightnessIndex = 99\n",
+        "schemaVersion = 1\n[reading]\nwpm = 600\n[interface]\nbrightnessPercent = 101\n",
         settings::SettingsSource::Sd);
     TEST_ASSERT_TRUE(candidate.has_value());
     TEST_ASSERT_EQUAL_UINT16(600, candidate->reading.wpm);
-    TEST_ASSERT_EQUAL_UINT8(19, candidate->interface.brightnessIndex);
+    TEST_ASSERT_EQUAL_UINT8(100, candidate->interface.brightnessPercent);
     TEST_ASSERT_EQUAL_UINT16(450, live.reading.wpm);
 }
 

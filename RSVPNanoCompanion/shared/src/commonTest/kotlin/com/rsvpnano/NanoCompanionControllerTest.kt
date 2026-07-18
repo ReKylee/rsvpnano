@@ -152,7 +152,7 @@ class NanoCompanionControllerTest {
     fun saveSettingsPersistsDeviceSettings() = runBlocking {
         val client = RecordingNanoClient()
         val controller = controller(InMemoryPendingStore(), client)
-        val settings = sampleSettings().withWpm(320).withBrightnessIndex(3)
+        val settings = sampleSettings().withWpm(320).withBrightnessPercent(20)
 
         val snapshot = controller.saveSettings(
             baseUrl = "http://device.local",

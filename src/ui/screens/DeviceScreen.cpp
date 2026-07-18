@@ -113,8 +113,7 @@ namespace screens {
         ui.label(actions.next(22), ui.text(UiText::StorageEncryption), 2,
                  ui::themes::ColorRole::Foreground, ui::TextAlign::Center);
         const int16_t controlHeight = std::max<int16_t>(1, static_cast<int16_t>((height - 34) / 2));
-        if (ui.toggle(actions.next(controlHeight), ui.text(UiText::IUnderstand), encryptionAcknowledged))
-            encryptionAcknowledged = !encryptionAcknowledged;
+        ui.toggle(actions.next(controlHeight), ui.text(UiText::IUnderstand), encryptionAcknowledged);
 
         ui::Row buttons{actions.next(controlHeight), 8};
         const int16_t buttonWidth = static_cast<int16_t>((buttons.bounds.w - buttons.gap) / 2);

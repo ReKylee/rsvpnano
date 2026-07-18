@@ -277,16 +277,11 @@ namespace screens {
             save = ui.button(saveAction, ui.text(creating_ ? UiText::Add : UiText::Save),
                              writable_ && focus::valid(draft_));
 
-        if (const auto value = ui.stepper(focusControl, ui.text(UiText::FocusMinutes), draft_.focusMinutes, 1, 180, 1,
-                                          " min", ui::themes::ColorRole::Accent);
-            value.changed)
-            draft_.focusMinutes = static_cast<uint16_t>(value.value);
-        if (const auto value = ui.stepper(breakControl, ui.text(UiText::BreakMinutes), draft_.breakMinutes, 1, 60, 1,
-                                          " min", ui::themes::ColorRole::BreakAccent);
-            value.changed)
-            draft_.breakMinutes = static_cast<uint16_t>(value.value);
-        if (const auto value = ui.stepper(roundsControl, ui.text(UiText::Rounds), draft_.rounds, 1, 12); value.changed)
-            draft_.rounds = static_cast<uint8_t>(value.value);
+        ui.stepper(focusControl, ui.text(UiText::FocusMinutes), draft_.focusMinutes, " min",
+                   ui::themes::ColorRole::Accent);
+        ui.stepper(breakControl, ui.text(UiText::BreakMinutes), draft_.breakMinutes, " min",
+                   ui::themes::ColorRole::BreakAccent);
+        ui.stepper(roundsControl, ui.text(UiText::Rounds), draft_.rounds);
 
         if (!creating_ && ui.button(deleteAction, ui.text(UiText::Delete), writable_ && timers_.timers.size() > 1)) {
             if (!deleteConfirm_) {

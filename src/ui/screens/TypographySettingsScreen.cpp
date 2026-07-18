@@ -55,10 +55,7 @@ namespace screens {
             changed = true;
         }
 
-        if (ui.toggle(font.next(focusWidth), ui.text(UiText::Focus), config.focusHighlight)) {
-            config.focusHighlight = !config.focusHighlight;
-            changed = true;
-        }
+        changed |= ui.toggle(font.next(focusWidth), ui.text(UiText::Focus), config.focusHighlight);
 
         const int16_t geometryY = static_cast<int16_t>(fontY + 38);
         ui.separator({content.x, geometryY, content.w, 10}, ui.text(UiText::GeometrySection));
@@ -67,37 +64,10 @@ namespace screens {
                           2,
                           32,
                           4};
-        if (const auto value =
-                ui.slider(geometry.next(), ui.text(UiText::Tracking), config.tracking,
-                          decltype(config.tracking)::min(), decltype(config.tracking)::max(),
-                          decltype(config.tracking)::step(), " px");
-            value.changed) {
-            config.tracking = value.value;
-            changed = true;
-        }
-        if (const auto value =
-                ui.slider(geometry.next(), ui.text(UiText::Anchor), config.anchor, decltype(config.anchor)::min(),
-                          decltype(config.anchor)::max(), decltype(config.anchor)::step(), "%");
-            value.changed) {
-            config.anchor = static_cast<uint8_t>(value.value);
-            changed = true;
-        }
-        if (const auto value =
-                ui.slider(geometry.next(), ui.text(UiText::GuideWidth), config.guideWidth,
-                          decltype(config.guideWidth)::min(), decltype(config.guideWidth)::max(),
-                          decltype(config.guideWidth)::step(), " px");
-            value.changed) {
-            config.guideWidth = static_cast<uint8_t>(value.value);
-            changed = true;
-        }
-        if (const auto value =
-                ui.slider(geometry.next(), ui.text(UiText::GuideGap), config.guideGap,
-                          decltype(config.guideGap)::min(), decltype(config.guideGap)::max(),
-                          decltype(config.guideGap)::step(), " px");
-            value.changed) {
-            config.guideGap = static_cast<uint8_t>(value.value);
-            changed = true;
-        }
+        changed |= ui.slider(geometry.next(), ui.text(UiText::Tracking), config.tracking, " px");
+        changed |= ui.slider(geometry.next(), ui.text(UiText::Anchor), config.anchor, "%");
+        changed |= ui.slider(geometry.next(), ui.text(UiText::GuideWidth), config.guideWidth, " px");
+        changed |= ui.slider(geometry.next(), ui.text(UiText::GuideGap), config.guideGap, " px");
         if (changed && !reset)
             bookOverride = std::move(config);
         return changed;

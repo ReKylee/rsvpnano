@@ -1,10 +1,12 @@
 #include <unity.h>
+#include <glaze/json.hpp>
 
 #include <string>
 #include <utility>
 
 #include "timer/FocusSession.h"
 #include "timer/FocusTimers.h"
+#include "settings/SettingsGlaze.h"
 
 void setUp() {}
 
@@ -46,6 +48,13 @@ void test_focus_config_round_trip_and_validation() {
     TEST_ASSERT_EQUAL_STRING(timers.timers[0].name.c_str(), parsed->timers[0].name.c_str());
     TEST_ASSERT_EQUAL_STRING(timers.timers[1].name.c_str(), parsed->timers[1].name.c_str());
     TEST_ASSERT_EQUAL(45, parsed->timers[1].focusMinutes);
+
+    std::string json;
+    TEST_ASSERT_FALSE(glz::write_json(*parsed, json));
+    focus::Timers fromJson;
+    TEST_ASSERT_FALSE(glz::read_json(fromJson, json));
+    TEST_ASSERT_EQUAL(2, fromJson.timers.size());
+    TEST_ASSERT_EQUAL(45, fromJson.timers[1].focusMinutes);
 
     const std::string clamped =
         "schemaVersion = 1\n[[timers]]\nname = \"Bounded\"\nfocusMinutes = 181\nbreakMinutes = 0\nrounds = 99\n";

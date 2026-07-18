@@ -188,9 +188,14 @@ You can set Wi-Fi credentials from:
 
 User preferences are mirrored to `/config/settings.toml` on the SD card. Wi-Fi passwords are deliberately excluded
 from that file and remain in device storage; configure or change them through one of the settings interfaces above.
+The settings document is versionless: missing fields receive current defaults, unknown fields are discarded, and a
+successful load rewrites both the SD mirror and NVS blob into the current canonical TOML shape. See
+[`docs/configuration.md`](docs/configuration.md) for the file formats and recovery behavior.
 Hardware-backed NVS encryption is optional under `Device -> Storage encryption`. Enabling it permanently reserves one
-per-device eFuse key block, clears the saved Wi-Fi password, and cannot be undone. It protects NVS against raw flash
-access; without Secure Boot it does not prevent unauthorized firmware from accessing settings while running on the device.
+per-device eFuse key block and cannot be undone. The firmware keeps the current public settings and Wi-Fi password in
+RAM while NVS is erased and reinitialized, then writes both into encrypted NVS before restarting. Encryption protects
+NVS against raw flash access; without Secure Boot it does not prevent unauthorized firmware from accessing settings
+while running on the device.
 
 RSS feeds are managed from the web companion or the native app, then checked from the device with
 `Articles -> Update RSS`. New articles are saved into `/books/articles`.
@@ -243,6 +248,7 @@ reader screens, subtle handles at the top and bottom edges hint that those menus
 - Swipe down while paused: decrease WPM.
 - Tap the bottom-right footer label: switch between progress, chapter time remaining, book time remaining, and battery display modes.
 - Tap the top-right battery label: switch between percentage, time remaining, and voltage.
+- Hold the battery area: show or hide the battery icon. The setting is also available in the web and native companions.
 
 Pause behavior is configurable. In `Settings -> Word pacing`, choose whether reader shortcuts pause instantly or at the end of the sentence.
 
@@ -314,6 +320,7 @@ Settings are grouped by how people actually use the device.
 - Screen saver: Life, Maze, Voronoi, Reaction, or Screen off.
 - Standby timer.
 - Footer and battery label behavior.
+- Battery icon visibility.
 - Optional battery, chapter, and book percentage labels while actively reading.
 - Menu repeat speed.
 

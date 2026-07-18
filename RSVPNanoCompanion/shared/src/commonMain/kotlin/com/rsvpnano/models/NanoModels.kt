@@ -82,22 +82,20 @@ data class NanoUploadResponse(
 
 @Serializable
 data class NanoRssFeeds(
-    val schemaVersion: Int = 1,
-    val feeds: List<String>,
+    val feeds: List<String> = emptyList(),
 )
 
 @Serializable
 data class NanoFocusTimer(
-    val name: String,
-    val focusMinutes: Int,
-    val breakMinutes: Int,
-    val rounds: Int,
+    val name: String = "",
+    val focusMinutes: Int = 25,
+    val breakMinutes: Int = 5,
+    val rounds: Int = 4,
 )
 
 @Serializable
 data class NanoFocusTimers(
-    val schemaVersion: Int = 1,
-    val timers: List<NanoFocusTimer>,
+    val timers: List<NanoFocusTimer> = emptyList(),
 )
 
 @Serializable
@@ -119,6 +117,17 @@ data class NanoFontCatalogItem(
 )
 
 @Serializable
+data class NanoFontSummary(
+    val id: String,
+    val name: String,
+)
+
+@Serializable
+data class NanoFontsResponse(
+    val fonts: List<NanoFontSummary> = emptyList(),
+)
+
+@Serializable
 data class NanoThemeCatalogItem(
     val id: String,
     val name: String,
@@ -126,8 +135,18 @@ data class NanoThemeCatalogItem(
 )
 
 @Serializable
+data class NanoThemeSummary(
+    val id: String,
+    val name: String,
+)
+
+@Serializable
+data class NanoThemesResponse(
+    val themes: List<NanoThemeSummary> = emptyList(),
+)
+
+@Serializable
 data class NanoSettings(
-    val schemaVersion: Int = 1,
     val reading: Reading = Reading(),
     val `interface`: Interface = Interface(),
     val network: Network = Network(),
@@ -231,6 +250,9 @@ data class NanoSettings(
 
     fun withBatteryLabel(value: String): NanoSettings =
         copy(reading = reading.copy(batteryLabel = value))
+
+    fun withBatteryIconVisible(value: Boolean): NanoSettings =
+        copy(reading = reading.copy(batteryIconVisible = value))
 
     fun withReadingBattery(value: Boolean): NanoSettings =
         copy(reading = reading.copy(batteryVisibleWhileReading = value))

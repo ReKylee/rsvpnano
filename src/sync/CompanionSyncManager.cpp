@@ -161,6 +161,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <label>Reader hand</label><select id="handedness"><option value="right">Right</option><option value="left">Left</option></select>
 <label>Footer label</label><select id="footerMetric"><option value="percentage">Percentage</option><option value="chapterTime">Chapter time</option><option value="bookTime">Book time</option></select>
 <label>Battery label</label><select id="batteryLabel"><option value="percentage">Percentage</option><option value="timeRemaining">Time remaining</option><option value="voltage">Voltage</option></select>
+<label><input id="batteryIcon" type="checkbox" style="width:auto"> Show battery icon</label>
 <label><input id="readingBattery" type="checkbox" style="width:auto"> Show battery while reading</label>
 <label><input id="readingChapter" type="checkbox" style="width:auto"> Show chapter while reading</label>
 <label><input id="readingProgress" type="checkbox" style="width:auto"> Show book percent while reading</label>
@@ -214,7 +215,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 </section>
 </main>
 <script>
-const $=id=>document.getElementById(id);let settings=null,rssConfig={schemaVersion:1,feeds:[]},focusTimers={schemaVersion:1,timers:[]};let themeCatalog=[];let themeCatalogUrl='';let fontCatalog=[];let fontCatalogUrl='';
+const $=id=>document.getElementById(id);let settings=null,rssConfig={feeds:[]},focusTimers={timers:[]};let deviceThemes=[],deviceFonts=[];let themeCatalog=[];let themeCatalogUrl='';let fontCatalog=[];let fontCatalogUrl='';
 function status(msg){$('status').textContent=msg}
 function catalogUrl(path){const u=(settings&&settings.updates)||{};let owner=String(u.repositoryOwner||'').trim(),repo='rsvpnano',tag=String(u.releaseTag||'').trim();const apply=v=>{const p=v.trim().split('/');if(p.length!==2||!p[0]||!p[1])return false;owner=p[0];repo=p[1];return true};apply(owner);const at=tag.indexOf('@');if(at>0&&at<tag.length-1){const r=tag.slice(0,at).trim();tag=tag.slice(at+1).trim();if(!apply(r)&&r)repo=r}if(!owner||!repo)throw new Error('Configure a GitHub release owner first.');return 'https://raw.githubusercontent.com/'+[owner,repo,tag||'main'].map(encodeURIComponent).join('/')+'/'+path}
 async function api(path,opts){const r=await fetch(path,opts);const t=await r.text();let j={};try{j=t?JSON.parse(t):{}}catch(e){throw new Error(t||'Bad response')}if(!r.ok)throw new Error((j.error&&j.error.message)||r.statusText);return j.data}
@@ -243,12 +244,12 @@ function saveDraft(){localStorage.setItem('rsvpArticleDraft',JSON.stringify({tit
 function loadDraft(){try{const d=JSON.parse(localStorage.getItem('rsvpArticleDraft')||'{}');$('articleTitle').value=d.title||'';$('articleAuthor').value=d.author||'';$('articleBody').value=d.body||''}catch(e){}}
 function val(id){const e=$(id);return e.type==='checkbox'?e.checked:e.value}
 function setVal(id,v){const e=$(id);if(e.type==='checkbox')e.checked=!!v;else e.value=v}
-function setThemeOptions(){const id=(settings&&settings.interface&&settings.interface.selectedThemeId)||'default';$('themeId').innerHTML=`<option value="${html(id)}">${html(id)}</option>`}
-function setFontOptions(){const id=(settings&&settings.reading&&settings.reading.typography&&settings.reading.typography.fontId)||'literata';$('typeface').innerHTML=`<option value="${html(id)}">${html(id)}</option>`}
+function setThemeOptions(){const id=(settings&&settings.interface&&settings.interface.selectedThemeId)||'default';const themes=deviceThemes.some(t=>t.id===id)?deviceThemes:[...deviceThemes,{id,name:id}];$('themeId').innerHTML=themes.map(t=>`<option value="${html(t.id)}">${html(t.name||t.id)}</option>`).join('');setVal('themeId',id)}
+function setFontOptions(){const id=(settings&&settings.reading&&settings.reading.typography&&settings.reading.typography.fontId)||'literata';const fonts=deviceFonts.some(f=>f.id===id)?deviceFonts:[...deviceFonts,{id,name:id}];$('typeface').innerHTML=fonts.map(f=>`<option value="${html(f.id)}">${html(f.name||f.id)}</option>`).join('');setVal('typeface',id)}
 function snapWpm(v){v=Math.max(10,Math.min(1000,Math.round(+v||300)));return Math.round(v/10)*10}
 function updateLabels(){['wpm','longWordMs','complexWordMs','punctuationMs','brightnessPercent','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>{const l=$(id+'Value')||$(id.replace('Percent','')+'Value')||$(id.replace('Index','')+'Value');if(l)l.textContent=$(id).value+(id==='wpm'?' WPM':id.includes('Ms')?' ms':id==='brightnessPercent'?'%':'')})}
-async function loadSettings(){try{settings=await api('/api/v1/settings');setThemeOptions();setFontOptions();if(!themeCatalog.length)loadThemeCatalog();if(!fontCatalog.length)loadFontCatalog();const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;setVal('pauseMode',r.pauseMode);setVal('wpm',snapWpm(r.wpm));setVal('longWordMs',p.longWordDelayMs);setVal('complexWordMs',p.complexWordDelayMs);setVal('punctuationMs',p.punctuationDelayMs);setVal('themeId',i.selectedThemeId||'default');setVal('brightnessPercent',i.brightnessPercent);setVal('handedness',r.leftHanded?'left':'right');setVal('footerMetric',r.footerMetric);setVal('batteryLabel',r.batteryLabel);setVal('readingBattery',r.batteryVisibleWhileReading);setVal('readingChapter',r.chapterVisibleWhileReading);setVal('readingProgress',r.progressVisibleWhileReading);setVal('typeface',t.fontId);setVal('fontSizeIndex',t.fontSizeIndex);setVal('tracking',t.tracking);setVal('anchorPercent',t.anchor);setVal('guideWidth',t.guideWidth);setVal('guideGap',t.guideGap);setVal('focusHighlight',t.focusHighlight);setVal('phantomWords',r.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
-async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;r.wpm=+val('wpm');r.pauseMode=val('pauseMode');p.longWordDelayMs=+val('longWordMs');p.complexWordDelayMs=+val('complexWordMs');p.punctuationDelayMs=+val('punctuationMs');i.selectedThemeId=val('themeId');i.brightnessPercent=+val('brightnessPercent');r.leftHanded=val('handedness')==='left';r.footerMetric=val('footerMetric');r.batteryLabel=val('batteryLabel');r.batteryVisibleWhileReading=val('readingBattery');r.chapterVisibleWhileReading=val('readingChapter');r.progressVisibleWhileReading=val('readingProgress');r.phantomWords=val('phantomWords');t.fontId=val('typeface');t.fontSizeIndex=+val('fontSizeIndex');t.focusHighlight=val('focusHighlight');t.tracking=+val('tracking');t.anchor=+val('anchorPercent');t.guideWidth=+val('guideWidth');t.guideGap=+val('guideGap');try{settings=await api('/api/v1/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});status('Settings saved and applied.')}catch(e){status('Settings save failed: '+e.message)}}
+async function loadSettings(){try{[settings,{themes:deviceThemes=[]},{fonts:deviceFonts=[]}]=await Promise.all([api('/api/v1/settings'),api('/api/v1/appearance/themes'),api('/api/v1/appearance/fonts')]);setThemeOptions();setFontOptions();if(!themeCatalog.length)loadThemeCatalog();if(!fontCatalog.length)loadFontCatalog();const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;setVal('pauseMode',r.pauseMode);setVal('wpm',snapWpm(r.wpm));setVal('longWordMs',p.longWordDelayMs);setVal('complexWordMs',p.complexWordDelayMs);setVal('punctuationMs',p.punctuationDelayMs);setVal('themeId',i.selectedThemeId||'default');setVal('brightnessPercent',i.brightnessPercent);setVal('handedness',r.leftHanded?'left':'right');setVal('footerMetric',r.footerMetric);setVal('batteryLabel',r.batteryLabel);setVal('batteryIcon',r.batteryIconVisible);setVal('readingBattery',r.batteryVisibleWhileReading);setVal('readingChapter',r.chapterVisibleWhileReading);setVal('readingProgress',r.progressVisibleWhileReading);setVal('typeface',t.fontId);setVal('fontSizeIndex',t.fontSizeIndex);setVal('tracking',t.tracking);setVal('anchorPercent',t.anchor);setVal('guideWidth',t.guideWidth);setVal('guideGap',t.guideGap);setVal('focusHighlight',t.focusHighlight);setVal('phantomWords',r.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
+async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;r.wpm=+val('wpm');r.pauseMode=val('pauseMode');p.longWordDelayMs=+val('longWordMs');p.complexWordDelayMs=+val('complexWordMs');p.punctuationDelayMs=+val('punctuationMs');i.selectedThemeId=val('themeId');i.brightnessPercent=+val('brightnessPercent');r.leftHanded=val('handedness')==='left';r.footerMetric=val('footerMetric');r.batteryLabel=val('batteryLabel');r.batteryIconVisible=val('batteryIcon');r.batteryVisibleWhileReading=val('readingBattery');r.chapterVisibleWhileReading=val('readingChapter');r.progressVisibleWhileReading=val('readingProgress');r.phantomWords=val('phantomWords');t.fontId=val('typeface');t.fontSizeIndex=+val('fontSizeIndex');t.focusHighlight=val('focusHighlight');t.tracking=+val('tracking');t.anchor=+val('anchorPercent');t.guideWidth=+val('guideWidth');t.guideGap=+val('guideGap');try{settings=await api('/api/v1/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});status('Settings saved and applied.')}catch(e){status('Settings save failed: '+e.message)}}
 async function loadWifi(){try{await api('/api/v1/network');const ssid=(settings&&settings.network&&settings.network.wifiSsid)||'';$('wifiSsid').value=ssid;$('wifiPassword').value='';$('wifiCurrent').textContent=ssid?'Saved network: '+ssid:'No home Wi-Fi saved.'}catch(e){status('Wi-Fi load failed: '+e.message)}}
 async function saveWifi(){const ssid=$('wifiSsid').value.trim();if(!ssid){status('Enter a Wi-Fi SSID first.');return}try{await api('/api/v1/network',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password:$('wifiPassword').value})});settings.network.wifiSsid=ssid;$('wifiPassword').value='';$('wifiCurrent').textContent='Saved network: '+ssid;status('Wi-Fi saved for RSS and OTA.')}catch(e){status('Wi-Fi save failed: '+e.message)}}
 async function forgetWifi(){if(!confirm('Forget saved Wi-Fi?'))return;try{await api('/api/v1/network',{method:'DELETE'});settings.network.wifiSsid='';$('wifiSsid').value='';$('wifiPassword').value='';$('wifiCurrent').textContent='No home Wi-Fi saved.';status('Wi-Fi credentials cleared.')}catch(e){status('Forget Wi-Fi failed: '+e.message)}}
@@ -641,7 +642,9 @@ bool CompanionSyncManager::startServer() {
     server_.on("/api/v1/library", HTTP_DELETE, handleBookDeleteStatic);
     server_.on("/api/v1/library", HTTP_POST, handleBooksStatic, handleBookUploadStatic);
     server_.on("/api/v1/library/position", HTTP_PATCH, handleBookPositionStatic);
+    server_.on("/api/v1/appearance/themes", HTTP_GET, handleThemesStatic);
     server_.on("/api/v1/appearance/themes", HTTP_POST, handleThemesStatic, handleThemeUploadStatic);
+    server_.on("/api/v1/appearance/fonts", HTTP_GET, handleFontsStatic);
     server_.on("/api/v1/appearance/fonts", HTTP_POST, handleFontsStatic, handleFontUploadStatic);
     server_.on("/api/v1/settings", HTTP_GET, handleSettingsStatic);
     server_.on("/api/v1/settings", HTTP_PUT, handleSettingsStatic);
@@ -779,15 +782,15 @@ void CompanionSyncManager::handleBooksList() {
 }
 
 void CompanionSyncManager::handleSettings() {
-    FontCatalog fontCatalog;
-    fontCatalog.loadFromSd();
-    ThemeStore themeStore;
-    themeStore.loadFromSd(fontCatalog, settingsStore_.settings().reading.typography);
-
     if (server_.method() == HTTP_GET) {
         sendData(server_, jsonBuffer_, 200, settingsStore_.settings());
         return;
     }
+
+    FontCatalog fontCatalog;
+    fontCatalog.loadFromSd();
+    ThemeStore themeStore;
+    themeStore.loadFromSd(fontCatalog, settingsStore_.settings().reading.typography);
 
     const String body = server_.arg("plain");
     if (body.length() > settings::kMaxSettingsBytes) {
@@ -947,6 +950,20 @@ void CompanionSyncManager::handleBooks() {
 }
 
 void CompanionSyncManager::handleThemes() {
+    if (server_.method() == HTTP_GET) {
+        FontCatalog fonts;
+        fonts.loadFromSd();
+        ThemeStore store;
+        store.loadFromSd(fonts, settingsStore_.settings().reading.typography);
+
+        api::ThemesResponse response;
+        response.themes.reserve(store.themes().size());
+        for (const auto& theme: store.themes())
+            response.themes.push_back({theme.id, theme.definition.name});
+        sendData(server_, jsonBuffer_, 200, response);
+        return;
+    }
+
     if (uploadFile_) {
         uploadFile_.close();
     }
@@ -1026,6 +1043,18 @@ void CompanionSyncManager::handleThemes() {
 }
 
 void CompanionSyncManager::handleFonts() {
+    if (server_.method() == HTTP_GET) {
+        FontCatalog catalog;
+        catalog.loadFromSd();
+
+        api::FontsResponse response;
+        response.fonts.reserve(catalog.families().size());
+        for (const auto& family: catalog.families())
+            response.fonts.push_back({family.id, family.label});
+        sendData(server_, jsonBuffer_, 200, response);
+        return;
+    }
+
     if (uploadFile_) {
         uploadFile_.close();
     }

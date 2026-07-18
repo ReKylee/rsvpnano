@@ -85,7 +85,6 @@ namespace settings {
         }
 
         void sanitize(DeviceSettings& value) {
-            value.schemaVersion = kSettingsSchemaVersion;
             auto& typography = value.reading.typography;
             if (typography.fontId.empty())
                 typography.fontId = TypographySettings{}.fontId;
@@ -136,14 +135,14 @@ namespace settings {
         filesystem_ = filesystem;
         mirrorEnabled_ = filesystem != nullptr;
 
-        auto nvsSettings = readBlob(preferences_, kSettingsKey, kMaxSettingsBytes, SettingsSource::Nvs)
-                               .and_then([](std::string content) {
-                                   return codec::decodeToml(content, SettingsSource::Nvs);
-                               });
-        auto nvsSecrets = readBlob(preferences_, kSecretsKey, kMaxSecretsBytes, SettingsSource::Nvs)
-                              .and_then([](std::string content) {
-                                  return codec::decodeSecrets(content, SettingsSource::Nvs);
-                              });
+        auto nvsContent = readBlob(preferences_, kSettingsKey, kMaxSettingsBytes, SettingsSource::Nvs);
+        auto nvsSettings = nvsContent.and_then([](const std::string& content) {
+            return codec::decodeToml(content, SettingsSource::Nvs);
+        });
+        auto nvsSecretsContent = readBlob(preferences_, kSecretsKey, kMaxSecretsBytes, SettingsSource::Nvs);
+        auto nvsSecrets = nvsSecretsContent.and_then([](const std::string& content) {
+            return codec::decodeSecrets(content, SettingsSource::Nvs);
+        });
 
         SettingsResult<std::string> fileContent =
             filesystem
@@ -182,10 +181,16 @@ namespace settings {
         lastAcceptedSecrets_ = secrets_;
 
         mirrorEnabled_ = filesystem && !invalidFile;
-        const bool nvsNeedsWrite = !hasNvsSettings || *nvsSettings != settings_;
-        const bool fileNeedsWrite = mirrorEnabled_ && (!hasFileSettings || fileWasEdited || *fileSettings != settings_);
+        auto canonical = codec::encodeToml(settings_, SettingsSource::Nvs);
+        if (!canonical)
+            return std::unexpected(canonical.error());
+        auto canonicalSecrets = codec::encodeSecrets(secrets_, SettingsSource::Nvs);
+        if (!canonicalSecrets)
+            return std::unexpected(canonicalSecrets.error());
+        const bool nvsNeedsWrite = !nvsContent || *nvsContent != *canonical;
+        const bool fileNeedsWrite = mirrorEnabled_ && (!fileContent || fileWasEdited || *fileContent != *canonical);
         dirty_ = nvsNeedsWrite || fileNeedsWrite;
-        secretsDirty_ = !nvsSecrets;
+        secretsDirty_ = !nvsSecretsContent || *nvsSecretsContent != *canonicalSecrets;
         dirtyAtMs_ = millis();
 
         if (auto result = flush(); !result)

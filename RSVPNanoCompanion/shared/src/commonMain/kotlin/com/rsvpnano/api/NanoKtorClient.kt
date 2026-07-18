@@ -6,7 +6,11 @@ import com.rsvpnano.models.NanoFocusTimers
 import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoThemeCatalogItem
+import com.rsvpnano.models.NanoThemeSummary
+import com.rsvpnano.models.NanoThemesResponse
 import com.rsvpnano.models.NanoFontCatalogItem
+import com.rsvpnano.models.NanoFontSummary
+import com.rsvpnano.models.NanoFontsResponse
 import com.rsvpnano.models.NanoUploadResponse
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.NanoWifiUpdate
@@ -88,6 +92,12 @@ class NanoKtorClient(
 
     override suspend fun fetchSettings(baseUrl: String): NanoSettings =
         requestData(baseUrl, "api/v1/settings", NanoSettings.serializer())
+
+    override suspend fun fetchThemes(baseUrl: String): List<NanoThemeSummary> =
+        requestData(baseUrl, "api/v1/appearance/themes", NanoThemesResponse.serializer()).themes
+
+    override suspend fun fetchFonts(baseUrl: String): List<NanoFontSummary> =
+        requestData(baseUrl, "api/v1/appearance/fonts", NanoFontsResponse.serializer()).fonts
 
     override suspend fun updateSettings(baseUrl: String, settings: NanoSettings): NanoSettings {
         val response = httpClient.put(buildUrl(baseUrl, "api/v1/settings")) {

@@ -10,9 +10,17 @@
 namespace settings::codec {
     namespace {
 
+        constexpr glz::opts kSettingsTomlReadOptions{
+            .format = glz::TOML,
+            .error_on_unknown_keys = false,
+        };
+
+        constexpr glz::opts kSettingsJsonReadOptions{
+            .format = glz::JSON,
+            .error_on_unknown_keys = false,
+        };
+
         SettingsErrorCategory categoryFor(glz::error_code code) {
-            if (code == glz::error_code::unknown_key)
-                return SettingsErrorCategory::UnknownKey;
             if (code == glz::error_code::unexpected_enum)
                 return SettingsErrorCategory::InvalidEnum;
             if (code == glz::error_code::constraint_violated)
@@ -31,16 +39,6 @@ namespace settings::codec {
             return {.category = SettingsErrorCategory::TooLarge,
                     .source = source,
                     .message = "input exceeds " + std::to_string(maximum) + " bytes"};
-        }
-
-        SettingsResult<DeviceSettings> checkSchema(DeviceSettings value, SettingsSource source) {
-            if (value.schemaVersion == kSettingsSchemaVersion)
-                return value;
-            return std::unexpected(SettingsError{.category = SettingsErrorCategory::UnsupportedSchema,
-                                                 .source = source,
-                                                 .path = "schemaVersion",
-                                                 .message = "unsupported settings schema version "
-                                                          + std::to_string(value.schemaVersion)});
         }
 
         template<typename T, typename Reader>
@@ -66,11 +64,8 @@ namespace settings::codec {
     SettingsResult<DeviceSettings> decodeToml(std::string_view input, SettingsSource source) {
         return decode<DeviceSettings>(input, source, kMaxSettingsBytes,
                                       [](auto& value, std::string_view text) {
-                                          return glz::read_toml(value, text);
-                                      })
-            .and_then([source](DeviceSettings value) {
-                return checkSchema(std::move(value), source);
-            });
+                                          return glz::read<kSettingsTomlReadOptions>(value, text);
+                                      });
     }
 
     SettingsResult<std::string> encodeToml(const DeviceSettings& value, SettingsSource source) {
@@ -82,11 +77,8 @@ namespace settings::codec {
     SettingsResult<DeviceSettings> decodeJson(std::string_view input, SettingsSource source) {
         return decode<DeviceSettings>(input, source, kMaxSettingsBytes,
                                       [](auto& value, std::string_view text) {
-                                          return glz::read_json(value, text);
-                                      })
-            .and_then([source](DeviceSettings value) {
-                return checkSchema(std::move(value), source);
-            });
+                                          return glz::read<kSettingsJsonReadOptions>(value, text);
+                                      });
     }
 
     SettingsResult<std::string> encodeJson(const DeviceSettings& value, SettingsSource source) {
@@ -97,7 +89,7 @@ namespace settings::codec {
 
     SettingsResult<DeviceSecrets> decodeSecrets(std::string_view input, SettingsSource source) {
         return decode<DeviceSecrets>(input, source, kMaxSecretsBytes, [](auto& value, std::string_view text) {
-            return glz::read_toml(value, text);
+            return glz::read<kSettingsTomlReadOptions>(value, text);
         });
     }
 

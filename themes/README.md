@@ -5,28 +5,38 @@ at startup and appends valid themes after the built-in default theme.
 
 Theme files are plain text:
 
-```ini
-TOML
-name=Catppuccin Mocha
-typeface=literata
+```toml
+name = "Catppuccin Mocha"
 
-background=#1e1e2e
-foreground=#cdd6f4
-muted=#a6adc8
-subtle=#7f849c
-accent=#f38ba8
-accent_bar=#f38ba8
-break_accent=#a6e3a1
-on_accent=#11111b
-surface=#181825
-surface_muted=#313244
-surface_active=#45475a
-outline=#585b70
-guide=#6c7086
-guide_focus=#f38ba8
-phantom=#6c7086
-progress_track=#313244
+[typography]
+fontId = "literata"
+fontSizeIndex = 0
+focusHighlight = true
+tracking = 0
+anchor = 30
+guideWidth = 30
+guideGap = 5
+
+[colors]
+background = "#1E1E2E"
+foreground = "#CDD6F4"
+muted = "#A6ADC8"
+subtle = "#7F849C"
+accent = "#F38BA8"
+accentBar = "#F38BA8"
+breakAccent = "#A6E3A1"
+onAccent = "#11111B"
+surface = "#181825"
+surfaceMuted = "#313244"
+surfaceActive = "#45475A"
+outline = "#585B70"
+guide = "#6C7086"
+guideFocus = "#F38BA8"
+phantom = "#6C7086"
+progressTrack = "#313244"
 ```
 
-Required color roles are RGB values written as `#RRGGBB`. `typeface` is a font catalog family ID;
-missing or invalid values are replaced with the embedded `literata` font.
+Colors are quoted `#RRGGBB` values; without quotes, `#` starts a TOML comment. Missing fields keep
+the built-in defaults and unknown fields are ignored. `fontId` is a font catalog family ID;
+unavailable fonts fall back through the device font catalog, normally to the embedded `literata`
+font. Theme files do not use a schema version.

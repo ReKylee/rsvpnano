@@ -54,8 +54,10 @@ class NanoKtorClientAndroidTest {
             when (request.url.encodedPath) {
                 "/api/v1/device" -> """{"data":{"name":"Nano","apiVersion":1}}"""
                 "/api/v1/library" -> """{"data":{"books":[{"id":"b12345678","name":"books/Book.rsvp","category":"book","bytes":1234,"metadata":{"title":"Book","wordCount":1000,"chapterCount":1,"chapters":[{"title":"Chapter 1","wordIndex":0}]},"source":{"size":1234,"fingerprint":3456},"reading":{"wordIndex":249,"percent":24,"remainingWords":750,"estimatedMinutes":3,"currentChapter":{"number":1,"title":"Chapter 1"}}}]}}"""
-                "/api/v1/feeds" -> """{"data":{"schemaVersion":1,"feeds":["https://example.com/feed"]}}"""
-                "/api/v1/focus" -> """{"data":{"schemaVersion":1,"timers":[{"name":"Pomodoro","focusMinutes":25,"breakMinutes":5,"rounds":4}]}}"""
+                "/api/v1/feeds" -> """{"data":{"feeds":["https://example.com/feed"]}}"""
+                "/api/v1/focus" -> """{"data":{"timers":[{"name":"Pomodoro","focusMinutes":25,"breakMinutes":5,"rounds":4}]}}"""
+                "/api/v1/appearance/themes" -> """{"data":{"themes":[{"id":"default","name":"Default"},{"id":"night","name":"Night"}]}}"""
+                "/api/v1/appearance/fonts" -> """{"data":{"fonts":[{"id":"literata","name":"Literata"},{"id":"atkinson","name":"Atkinson Hyperlegible"}]}}"""
                 else -> error("Unexpected request: ${request.url}")
             }
         })
@@ -70,7 +72,19 @@ class NanoKtorClientAndroidTest {
         assertEquals("Chapter 1", book.metadata.chapters.single().title)
         assertEquals(listOf("https://example.com/feed"), client.fetchRssFeeds("http://device.local").feeds)
         assertEquals("Pomodoro", client.fetchFocusTimers("http://device.local").timers.single().name)
-        assertEquals(listOf("GET /api/v1/device", "GET /api/v1/library", "GET /api/v1/feeds", "GET /api/v1/focus"), seen)
+        assertEquals(listOf("default", "night"), client.fetchThemes("http://device.local").map { it.id })
+        assertEquals(listOf("literata", "atkinson"), client.fetchFonts("http://device.local").map { it.id })
+        assertEquals(
+            listOf(
+                "GET /api/v1/device",
+                "GET /api/v1/library",
+                "GET /api/v1/feeds",
+                "GET /api/v1/focus",
+                "GET /api/v1/appearance/themes",
+                "GET /api/v1/appearance/fonts",
+            ),
+            seen,
+        )
     }
 
     @Test
@@ -79,7 +93,7 @@ class NanoKtorClientAndroidTest {
         val client = NanoKtorClient(mockHttpClient { request ->
             seen += "${request.method.value} ${request.url.encodedPath}"
             val wpm = if (request.method == HttpMethod.Put) 450 else 300
-            """{"data":{"schemaVersion":1,"reading":{"wpm":$wpm,"pauseMode":"sentenceEnd","phantomWords":true,"chapterScrollReversed":false,"footerMetric":"chapterTime","batteryLabel":"timeRemaining","batteryIconVisible":true,"batteryVisibleWhileReading":true,"chapterVisibleWhileReading":false,"progressVisibleWhileReading":true,"leftHanded":false,"typography":{"fontId":"literata","fontSizeIndex":1,"focusHighlight":true,"tracking":0,"anchor":30,"guideWidth":30,"guideGap":5},"pacing":{"longWordDelayMs":200,"complexWordDelayMs":250,"punctuationDelayMs":300}},"interface":{"brightnessPercent":70,"language":"english","standbyTimerIndex":1,"screensaver":"reaction","selectedThemeId":"night"},"network":{"wifiSsid":"Home"},"updates":{"automatic":true,"repositoryOwner":"reader","releaseTag":"preview"}}}"""
+            """{"data":{"reading":{"wpm":$wpm,"pauseMode":"sentenceEnd","phantomWords":true,"chapterScrollReversed":false,"footerMetric":"chapterTime","batteryLabel":"timeRemaining","batteryIconVisible":true,"batteryVisibleWhileReading":true,"chapterVisibleWhileReading":false,"progressVisibleWhileReading":true,"leftHanded":false,"typography":{"fontId":"literata","fontSizeIndex":1,"focusHighlight":true,"tracking":0,"anchor":30,"guideWidth":30,"guideGap":5},"pacing":{"longWordDelayMs":200,"complexWordDelayMs":250,"punctuationDelayMs":300}},"interface":{"brightnessPercent":70,"language":"english","standbyTimerIndex":1,"screensaver":"reaction","selectedThemeId":"night"},"network":{"wifiSsid":"Home"},"updates":{"automatic":true,"repositoryOwner":"reader","releaseTag":"preview"}}}"""
         })
 
         val fetched = client.fetchSettings("http://device.local")

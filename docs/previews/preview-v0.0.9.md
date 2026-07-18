@@ -25,10 +25,12 @@ editing, and OTA release-channel cleanup.
   16 px column offset.
 - Cleaned OTA assets so releases use board-specific OTA binaries only.
 - Added `github_tag` OTA channel pinning from `/config/ota.conf` and the device Wi-Fi settings menu.
-- Added hidden `.rpos` reading-progress sidecars next to each book. NVS stays the fast cache, while
-  `.rpos` is the durable source after reflashes, NVS erases, and normal reopen.
-- Restores `.rpos` first, falls back to per-book NVS when needed, migrates the old single-book NVS
-  key, and ignores stale `.rpos` files when a book changes.
+- Added hidden `.rstate.toml` book-state sidecars for durable reading progress and optional per-book
+  typography. Stale state is ignored when the source book changes.
+- Replaced per-setting persistence with versionless Glaze TOML mirrored between `/config/settings.toml`
+  and one NVS blob. Missing fields receive defaults, unknown fields are removed on canonical rewrite,
+  and Wi-Fi passwords remain in a separate NVS-only secrets document.
+- Converted themes, RSS feeds, and focus timers to versionless Glaze TOML.
 - Exposes opaque book IDs, source size, source fingerprint, word count, exact saved word index, and
   chapter markers from the companion book API.
 - Added `PATCH /api/books/position` so companion apps can set saved book progress without relying on

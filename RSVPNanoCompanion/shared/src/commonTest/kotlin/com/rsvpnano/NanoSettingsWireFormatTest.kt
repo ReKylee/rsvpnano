@@ -7,15 +7,19 @@ import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class NanoSettingsWireFormatTest {
-    private val json = Json { encodeDefaults = true }
+    private val json = Json {
+        encodeDefaults = true
+        ignoreUnknownKeys = true
+    }
 
     @Test
     fun serializesTheFirmwareDeviceSettingsShapeWithoutLegacyFields() {
         val document = json.parseToJsonElement(json.encodeToString(sampleSettings())).jsonObject
 
-        assertEquals(setOf("schemaVersion", "reading", "interface", "network", "updates"), document.keys)
+        assertEquals(setOf("reading", "interface", "network", "updates"), document.keys)
         assertFalse("display" in document)
         assertFalse("themes" in document)
         assertFalse("fonts" in document)
@@ -34,7 +38,7 @@ class NanoSettingsWireFormatTest {
     @Test
     fun decodesStableEnumNamesFromFirmware() {
         val settings = json.decodeFromString<NanoSettings>(
-            """{"interface":{"language":"russian","screensaver":"screenOff"},"reading":{"pauseMode":"sentenceEnd","footerMetric":"bookTime","batteryLabel":"timeRemaining"}}""",
+            """{"obsolete":true,"interface":{"language":"russian","screensaver":"screenOff"},"reading":{"pauseMode":"sentenceEnd","footerMetric":"bookTime","batteryLabel":"timeRemaining"}}""",
         )
 
         assertEquals("russian", settings.`interface`.language)
@@ -42,5 +46,6 @@ class NanoSettingsWireFormatTest {
         assertEquals("sentenceEnd", settings.reading.pauseMode)
         assertEquals("bookTime", settings.reading.footerMetric)
         assertEquals("timeRemaining", settings.reading.batteryLabel)
+        assertTrue(settings.reading.batteryIconVisible)
     }
 }

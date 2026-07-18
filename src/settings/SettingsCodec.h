@@ -27,10 +27,8 @@ namespace settings {
         Io,
         TooLarge,
         Syntax,
-        UnknownKey,
         InvalidEnum,
         Constraint,
-        UnsupportedSchema,
         Contextual,
     };
 

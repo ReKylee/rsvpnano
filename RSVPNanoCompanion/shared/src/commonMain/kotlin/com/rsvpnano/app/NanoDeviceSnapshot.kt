@@ -4,7 +4,9 @@ import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoFocusTimers
+import com.rsvpnano.models.NanoFontSummary
 import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.models.NanoThemeSummary
 import com.rsvpnano.models.NanoWifiSettings
 
 /**
@@ -14,6 +16,8 @@ data class NanoDeviceSnapshot(
     val info: NanoInfo? = null,
     val books: List<NanoBook> = emptyList(),
     val settings: NanoSettings? = null,
+    val themes: List<NanoThemeSummary> = emptyList(),
+    val fonts: List<NanoFontSummary> = emptyList(),
     val wifiSettings: NanoWifiSettings? = null,
     val rssFeeds: NanoRssFeeds? = null,
     val focusTimers: NanoFocusTimers? = null,

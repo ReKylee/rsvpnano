@@ -900,6 +900,7 @@ class CompanionPresenter(
                 updateState {
                     it.copy(
                         settings = snapshot.settings,
+                        availableThemes = snapshot.themes,
                         notice = CompanionNotice.Success("Uploaded $displayName."),
                     )
                 }
@@ -945,6 +946,7 @@ class CompanionPresenter(
                 updateState {
                     it.copy(
                         settings = snapshot.settings,
+                        availableThemes = snapshot.themes,
                         selectedCatalogThemeId = theme.id,
                         notice = CompanionNotice.Success("Installed ${theme.name}."),
                     )
@@ -985,6 +987,7 @@ class CompanionPresenter(
                 updateState {
                     it.copy(
                         settings = snapshot.settings,
+                        availableFonts = snapshot.fonts,
                         notice = CompanionNotice.Success("Uploaded $displayName as $family / $inferredSize."),
                     )
                 }
@@ -1037,6 +1040,7 @@ class CompanionPresenter(
                 updateState {
                     it.copy(
                         settings = snapshot.settings,
+                        availableFonts = snapshot.fonts,
                         selectedCatalogFontId = font.id,
                         notice = CompanionNotice.Success("Installed ${font.name} $size."),
                     )
@@ -1182,6 +1186,8 @@ class CompanionPresenter(
             it.copy(
                 books = device.books,
                 settings = device.settings,
+                availableThemes = device.themes,
+                availableFonts = device.fonts,
                 firmwareVersion = device.info?.firmwareVersion.orEmpty(),
                 otaAsset = device.info?.otaAsset.orEmpty(),
                 wifiSettings = device.wifiSettings,
@@ -1228,6 +1234,8 @@ class CompanionPresenter(
             it.copy(
                 books = emptyList(),
                 settings = null,
+                availableThemes = emptyList(),
+                availableFonts = emptyList(),
                 firmwareVersion = "",
                 otaAsset = "",
                 wifiSettings = null,

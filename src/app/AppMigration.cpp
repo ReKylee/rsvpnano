@@ -714,7 +714,8 @@ void App::migrateLegacyStorage() {
                 std::string content;
                 LegacyFocusConfig legacy;
                 if (readFile(*filesystem, legacyFocusPath, kMaxLegacyFocusBytes, content)
-                    && !glz::read_toml(legacy, content) && legacy.version == 1 && !legacy.timer.empty()) {
+                    && !glz::read<glz::opts{.format = glz::TOML, .error_on_unknown_keys = false}>(legacy, content)
+                    && legacy.version == 1 && !legacy.timer.empty()) {
                     focus::Timers migrated;
                     migrated.timers.reserve(std::min(legacy.timer.size(), focus::kMaxTimers));
                     for (const LegacyFocusTimer& source: legacy.timer) {
@@ -812,7 +813,9 @@ void App::migrateLegacyStorage() {
                 std::string current;
                 ReadingProgress::BookState currentState;
                 converted = readFile(*filesystem, newPath.c_str(), 2048, current)
-                         && !glz::read_toml(currentState, current) && currentState.sourceSize > 0
+                         && !glz::read<glz::opts{.format = glz::TOML, .error_on_unknown_keys = false}>(currentState,
+                                                                                                     current)
+                         && currentState.sourceSize > 0
                          && currentState.wordCount > 0;
             }
             if (!converted && recoverable)

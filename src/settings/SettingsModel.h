@@ -10,8 +10,6 @@
 
 namespace settings {
 
-    inline constexpr uint32_t kSettingsSchemaVersion = 1;
-
     // Persisted enum spellings are their TOML/JSON names.
     enum class PauseMode : uint8_t {
         sentenceEnd,
@@ -101,7 +99,6 @@ namespace settings {
     };
 
     struct DeviceSettings {
-        uint32_t schemaVersion = kSettingsSchemaVersion;
         ReadingSettings reading;
         InterfaceSettings interface;
         NetworkSettings network;

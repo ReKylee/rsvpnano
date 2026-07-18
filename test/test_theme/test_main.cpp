@@ -13,8 +13,7 @@ namespace fs = std::filesystem;
 namespace {
 
     std::string validThemeText() {
-        return R"(schemaVersion = 1
-name = "Valid Theme"
+        return R"(name = "Valid Theme"
 
 [typography]
 fontId = "atkinson"
@@ -95,7 +94,7 @@ void test_missing_fields_retain_application_defaults() {
     settings::TypographySettings defaults;
     defaults.fontId = "application-font";
     defaults.tracking = 2;
-    auto theme = ui::themes::decodeToml("schemaVersion = 1\nname = \"Sparse\"\n", "sparse", defaults);
+    auto theme = ui::themes::decodeToml("name = \"Sparse\"\n", "sparse", defaults);
     TEST_ASSERT_TRUE_MESSAGE(theme.has_value(), theme ? "" : theme.error().message.c_str());
     TEST_ASSERT_EQUAL_STRING("application-font", theme->definition.typography.fontId.c_str());
     TEST_ASSERT_EQUAL_INT(2, theme->definition.typography.tracking);
@@ -110,12 +109,14 @@ void test_rejects_bad_color_transactionally() {
     TEST_ASSERT_EQUAL(settings::SettingsErrorCategory::Constraint, theme.error().category);
 }
 
-void test_rejects_unknown_key() {
+void test_ignores_unknown_key() {
     std::string text = validThemeText();
     text += "\n[extra]\ndecorativeOrb = \"#FF00FF\"\n";
     auto theme = ui::themes::decodeToml(text, "unknown");
-    TEST_ASSERT_FALSE(theme.has_value());
-    TEST_ASSERT_EQUAL(settings::SettingsErrorCategory::UnknownKey, theme.error().category);
+    TEST_ASSERT_TRUE(theme.has_value());
+    auto canonical = ui::themes::encodeToml(theme->definition);
+    TEST_ASSERT_TRUE(canonical.has_value());
+    TEST_ASSERT_EQUAL(std::string::npos, canonical->find("decorativeOrb"));
 }
 
 void test_theme_id_from_path() {
@@ -160,7 +161,7 @@ int main() {
     RUN_TEST(test_round_trip_is_canonical_toml);
     RUN_TEST(test_missing_fields_retain_application_defaults);
     RUN_TEST(test_rejects_bad_color_transactionally);
-    RUN_TEST(test_rejects_unknown_key);
+    RUN_TEST(test_ignores_unknown_key);
     RUN_TEST(test_theme_id_from_path);
     RUN_TEST(test_repo_themes_parse);
     RUN_TEST(test_theme_catalog_references_existing_files);

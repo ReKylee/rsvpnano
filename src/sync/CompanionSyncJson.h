@@ -113,6 +113,24 @@ namespace companion::api {
         std::string id;
     };
 
+    struct ThemeSummary {
+        std::string id;
+        std::string name;
+    };
+
+    struct ThemesResponse {
+        std::vector<ThemeSummary> themes;
+    };
+
+    struct FontSummary {
+        std::string id;
+        std::string name;
+    };
+
+    struct FontsResponse {
+        std::vector<FontSummary> fonts;
+    };
+
     struct ErrorEnvelope {
         ApiError error;
     };
@@ -134,8 +152,8 @@ namespace companion::api {
 
     template<typename T>
     std::expected<T, std::string> decode(std::string_view input) {
-        T value;
-        if (const auto error = glz::read_json(value, input)) {
+        T value{};
+        if (const auto error = glz::read<glz::opts{.error_on_unknown_keys = false}>(value, input)) {
             return std::unexpected(glz::format_error(error, input));
         }
         return value;

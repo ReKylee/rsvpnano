@@ -26,8 +26,7 @@ namespace ui::themes {
 
         settings::SettingsError errorFrom(glz::error_ctx error, std::string_view input) {
             const settings::SettingsErrorCategory category =
-                error.ec == glz::error_code::unknown_key           ? settings::SettingsErrorCategory::UnknownKey
-                : error.ec == glz::error_code::unexpected_enum     ? settings::SettingsErrorCategory::InvalidEnum
+                error.ec == glz::error_code::unexpected_enum       ? settings::SettingsErrorCategory::InvalidEnum
                 : error.ec == glz::error_code::constraint_violated ? settings::SettingsErrorCategory::Constraint
                                                                    : settings::SettingsErrorCategory::Syntax;
             return {.category = category,
@@ -103,16 +102,9 @@ namespace ui::themes {
                                                     const settings::TypographySettings& defaults) {
         ThemeFile candidate;
         candidate.typography = defaults;
-        if (const glz::error_ctx error = glz::read_toml(candidate, text))
+        if (const glz::error_ctx error =
+                glz::read<glz::opts{.format = glz::TOML, .error_on_unknown_keys = false}>(candidate, text))
             return std::unexpected(errorFrom(error, text));
-        if (candidate.schemaVersion != kThemeSchemaVersion) {
-            return std::unexpected(settings::SettingsError{.category =
-                                                               settings::SettingsErrorCategory::UnsupportedSchema,
-                                                           .source = settings::SettingsSource::Theme,
-                                                           .path = "schemaVersion",
-                                                           .message = "unsupported theme schema version "
-                                                                    + std::to_string(candidate.schemaVersion)});
-        }
         if (candidate.name.empty())
             candidate.name = "Unnamed";
         if (candidate.name.size() > settings::rules::kThemeNameMaxLength)

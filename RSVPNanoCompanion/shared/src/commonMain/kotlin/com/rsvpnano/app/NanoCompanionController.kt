@@ -7,7 +7,9 @@ import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoThemeCatalogItem
+import com.rsvpnano.models.NanoThemeSummary
 import com.rsvpnano.models.NanoFontCatalogItem
+import com.rsvpnano.models.NanoFontSummary
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.needsArticleFetch
@@ -31,6 +33,8 @@ class NanoCompanionController(
             info = client.fetchInfo(baseUrl),
             books = runCatching { client.listBooks(baseUrl) }.getOrDefault(emptyList()),
             settings = runCatching { client.fetchSettings(baseUrl) }.getOrNull(),
+            themes = runCatching { client.fetchThemes(baseUrl) }.getOrDefault(emptyList()),
+            fonts = runCatching { client.fetchFonts(baseUrl) }.getOrDefault(emptyList()),
             wifiSettings = runCatching { client.fetchWifiSettings(baseUrl) }.getOrNull(),
             rssFeeds = runCatching { client.fetchRssFeeds(baseUrl) }.getOrNull(),
             focusTimers = runCatching { client.fetchFocusTimers(baseUrl) }.getOrNull(),
@@ -182,7 +186,11 @@ class NanoCompanionController(
         val selected = uploaded.id
             ?.let { id -> client.updateSettings(baseUrl, refreshed.withThemeId(id)) }
             ?: refreshed
-        return CompanionSettingsSnapshot(settings = selected, wifiSettings = null)
+        return CompanionSettingsSnapshot(
+            settings = selected,
+            wifiSettings = null,
+            themes = client.fetchThemes(baseUrl),
+        )
     }
 
     suspend fun uploadFont(
@@ -202,7 +210,11 @@ class NanoCompanionController(
             data = data,
             onProgress = onProgress,
         )
-        return CompanionSettingsSnapshot(settings = client.fetchSettings(baseUrl), wifiSettings = null)
+        return CompanionSettingsSnapshot(
+            settings = client.fetchSettings(baseUrl),
+            wifiSettings = null,
+            fonts = client.fetchFonts(baseUrl),
+        )
     }
 
     suspend fun deleteBooks(baseUrl: String, bookIds: List<String>): List<NanoBook> {
@@ -337,4 +349,6 @@ data class CompanionFontFile(
 data class CompanionSettingsSnapshot(
     val settings: NanoSettings,
     val wifiSettings: NanoWifiSettings?,
+    val themes: List<NanoThemeSummary> = emptyList(),
+    val fonts: List<NanoFontSummary> = emptyList(),
 )

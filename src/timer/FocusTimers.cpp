@@ -72,7 +72,7 @@ namespace focus {
     }
 
     bool valid(const Timers& timers) {
-        return timers.schemaVersion == kSchemaVersion && !timers.timers.empty() && timers.timers.size() <= kMaxTimers
+        return !timers.timers.empty() && timers.timers.size() <= kMaxTimers
             && std::ranges::all_of(timers.timers, [](const Timer& timer) {
                    return valid(timer);
                });
@@ -84,7 +84,7 @@ namespace focus {
                                                                         : std::errc::value_too_large));
 
         Timers parsed;
-        if (glz::read_toml(parsed, content) || parsed.schemaVersion != kSchemaVersion)
+        if (glz::read<glz::opts{.format = glz::TOML, .error_on_unknown_keys = false}>(parsed, content))
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         if (parsed.timers.empty())
             parsed.timers.push_back(defaultTimer());

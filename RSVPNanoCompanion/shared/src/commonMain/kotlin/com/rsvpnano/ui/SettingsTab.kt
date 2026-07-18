@@ -505,7 +505,9 @@ private fun DisplaySettings(
                 label = "Theme",
                 description = "Colors and typeface settings used by the Nano.",
                 selected = settings.`interface`.selectedThemeId,
-                options = listOf(settings.`interface`.selectedThemeId to settings.`interface`.selectedThemeId),
+                options = uiState.availableThemes
+                    .map { theme -> theme.id to theme.name }
+                    .ifEmpty { listOf(settings.`interface`.selectedThemeId to settings.`interface`.selectedThemeId) },
                 onSelected = { themeId -> onUpdateSettings { it.withThemeId(themeId) } },
             )
             SliderRow(
@@ -556,6 +558,11 @@ private fun DisplaySettings(
                     NanoSettingsSchema.BATTERY_VOLTAGE to "Voltage",
                 ),
                 onSelected = { label -> onUpdateSettings { it.withBatteryLabel(label) } },
+            )
+            SwitchRow(
+                label = "Battery icon",
+                checked = settings.reading.batteryIconVisible,
+                onCheckedChange = { checked -> onUpdateSettings { it.withBatteryIconVisible(checked) } },
             )
             SwitchRow(
                 label = "Battery while reading",
@@ -690,7 +697,9 @@ private fun TypographySettings(
                 label = "Typeface",
                 description = "Changing this updates only the selected theme.",
                 selected = settings.reading.typography.fontId,
-                options = listOf(settings.reading.typography.fontId to settings.reading.typography.fontId),
+                options = uiState.availableFonts
+                    .map { font -> font.id to font.name }
+                    .ifEmpty { listOf(settings.reading.typography.fontId to settings.reading.typography.fontId) },
                 onSelected = { typeface -> onUpdateSettings { it.withTypeface(typeface) } },
             )
             SegmentedChoiceRow(

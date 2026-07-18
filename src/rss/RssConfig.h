@@ -14,19 +14,14 @@
 
 namespace rss {
 
-    constexpr uint32_t kSchemaVersion = 1;
     constexpr size_t kMaxConfigBytes = 4096;
     constexpr size_t kMaxFeeds = 24;
 
     struct Config {
-        uint32_t schemaVersion = kSchemaVersion;
         std::vector<std::string> feeds;
     };
 
     inline std::expected<void, std::error_code> normalize(Config& config) {
-        if (config.schemaVersion != kSchemaVersion)
-            return std::unexpected(std::make_error_code(std::errc::not_supported));
-
         std::erase_if(config.feeds, [](std::string& feed) {
             const size_t first = feed.find_first_not_of(" \t\r\n");
             if (first == std::string::npos)
@@ -56,7 +51,7 @@ namespace rss {
             return std::unexpected(std::make_error_code(input.empty() ? std::errc::invalid_argument
                                                                       : std::errc::value_too_large));
         Config config;
-        if (glz::read_toml(config, input))
+        if (glz::read<glz::opts{.format = glz::TOML, .error_on_unknown_keys = false}>(config, input))
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         return normalize(config).transform([&config] {
             return std::move(config);

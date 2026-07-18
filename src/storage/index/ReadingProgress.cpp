@@ -54,7 +54,8 @@ namespace ReadingProgress {
                 return std::unexpected(std::make_error_code(std::errc::io_error));
 
             BookState candidate;
-            if (const glz::error_ctx error = glz::read_toml(candidate, input)) {
+            if (const glz::error_ctx error =
+                    glz::read<glz::opts{.format = glz::TOML, .error_on_unknown_keys = false}>(candidate, input)) {
                 return std::unexpected(std::make_error_code(std::errc::invalid_argument));
             }
             if (!matches(candidate, identity))

@@ -180,14 +180,14 @@ void test_rss_config_round_trip_and_normalization() {
   rss::Config config{.feeds = {" https://example.com/feed ", "https://example.com/feed", "http://example.org/rss"}};
   const auto encoded = rss::encodeToml(config);
   TEST_ASSERT_TRUE(encoded.has_value());
-  TEST_ASSERT_NOT_EQUAL(std::string::npos, encoded->find("schemaVersion = 1"));
+  TEST_ASSERT_EQUAL(std::string::npos, encoded->find("schemaVersion"));
 
   const auto decoded = rss::decodeToml(*encoded);
   TEST_ASSERT_TRUE(decoded.has_value());
   TEST_ASSERT_EQUAL(2, decoded->feeds.size());
   TEST_ASSERT_EQUAL_STRING("https://example.com/feed", decoded->feeds[0].c_str());
-  TEST_ASSERT_FALSE(rss::decodeToml("schemaVersion = 2\n").has_value());
-  TEST_ASSERT_FALSE(rss::decodeToml("schemaVersion = 1\nfeeds = [\"ftp://example.com/feed\"]\n").has_value());
+  TEST_ASSERT_TRUE(rss::decodeToml("obsolete = true\n").has_value());
+  TEST_ASSERT_FALSE(rss::decodeToml("feeds = [\"ftp://example.com/feed\"]\n").has_value());
 
   std::string json;
   TEST_ASSERT_FALSE(glz::write_json(*decoded, json));
@@ -197,8 +197,7 @@ void test_rss_config_round_trip_and_normalization() {
 }
 
 void test_standard_error_codes_are_preserved() {
-  TEST_ASSERT_TRUE(rss::decodeToml("schemaVersion = 2\n").error() == std::errc::not_supported);
-  TEST_ASSERT_TRUE(rss::decodeToml("schemaVersion = 1\nfeeds = [\"ftp://example.com/feed\"]\n").error()
+  TEST_ASSERT_TRUE(rss::decodeToml("feeds = [\"ftp://example.com/feed\"]\n").error()
                    == std::errc::invalid_argument);
 
   rss::Config tooMany;

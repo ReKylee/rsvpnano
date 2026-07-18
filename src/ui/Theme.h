@@ -11,7 +11,6 @@
 
 namespace ui::themes {
 
-    inline constexpr uint32_t kThemeSchemaVersion = 1;
     inline constexpr std::string_view kDefaultThemeId = "default";
     inline constexpr std::string_view kThemeExtension = ".toml";
     inline constexpr std::string_view kDefaultTypefaceId = "literata";
@@ -38,7 +37,6 @@ namespace ui::themes {
     };
 
     struct ThemeFile {
-        uint32_t schemaVersion = kThemeSchemaVersion;
         std::string name = "Default";
         settings::TypographySettings typography;
         ThemeColors colors;

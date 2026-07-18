@@ -40,7 +40,7 @@ void test_focus_config_round_trip_and_validation() {
 
     const auto serialized = focus::encodeToml(timers);
     TEST_ASSERT_TRUE(serialized.has_value());
-    TEST_ASSERT_NOT_EQUAL(std::string::npos, serialized->find("schemaVersion = 1"));
+    TEST_ASSERT_EQUAL(std::string::npos, serialized->find("schemaVersion"));
     TEST_ASSERT_NOT_EQUAL(std::string::npos, serialized->find("[[timers]]"));
     auto parsed = focus::decodeToml(*serialized);
     TEST_ASSERT_TRUE(parsed.has_value());
@@ -57,14 +57,13 @@ void test_focus_config_round_trip_and_validation() {
     TEST_ASSERT_EQUAL(45, fromJson.timers[1].focusMinutes);
 
     const std::string clamped =
-        "schemaVersion = 1\n[[timers]]\nname = \"Bounded\"\nfocusMinutes = 181\nbreakMinutes = 0\nrounds = 99\n";
+        "obsolete = true\n[[timers]]\nname = \"Bounded\"\nfocusMinutes = 181\nbreakMinutes = 0\nrounds = 99\n";
     parsed = focus::decodeToml(clamped);
     TEST_ASSERT_TRUE(parsed.has_value());
     TEST_ASSERT_EQUAL(180, parsed->timers[0].focusMinutes);
     TEST_ASSERT_EQUAL(1, parsed->timers[0].breakMinutes);
     TEST_ASSERT_EQUAL(12, parsed->timers[0].rounds);
-    TEST_ASSERT_TRUE(focus::decodeToml("schemaVersion = 2\n").error() == std::errc::invalid_argument);
-    TEST_ASSERT_TRUE(focus::decodeToml("schemaVersion = 1\nunknown = true\n").error() == std::errc::invalid_argument);
+    TEST_ASSERT_TRUE(focus::decodeToml("unknown = true\n").has_value());
     TEST_ASSERT_TRUE(focus::valid(timer("12345678901234", 25, 5, 4)));
     TEST_ASSERT_FALSE(focus::valid(timer("123456789012345", 25, 5, 4)));
 

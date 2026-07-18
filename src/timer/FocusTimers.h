@@ -14,8 +14,6 @@ namespace focus {
 
     constexpr size_t kMaxTimers = 6;
     constexpr size_t kMaxTimerNameBytes = 14;
-    constexpr uint32_t kSchemaVersion = 1;
-
     struct Timer {
         std::string name;
         settings::BoundedValue<uint16_t, 1, 180> focusMinutes{25};
@@ -24,7 +22,6 @@ namespace focus {
     };
 
     struct Timers {
-        uint32_t schemaVersion = kSchemaVersion;
         std::vector<Timer> timers;
     };
 

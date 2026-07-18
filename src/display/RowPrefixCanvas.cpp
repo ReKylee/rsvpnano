@@ -90,7 +90,6 @@ void RowPrefixCanvas::writeFastVLine(int16_t x, int16_t y, int16_t h, uint16_t c
 }
 
 void RowPrefixCanvas::writeFastVLineCore(int16_t x, int16_t y, int16_t h, uint16_t color) {
-    // log_i("writeFastVLineCore(x: %d, y: %d, h: %d)", x, y, h);
     if (_ordered_in_range(x, 0, MAX_X) && h) { // X on screen, nonzero height
         if (h < 0) { // If negative height...
             y += h + 1; //   Move Y to top edge
@@ -119,7 +118,6 @@ void RowPrefixCanvas::writeFastVLineCore(int16_t x, int16_t y, int16_t h, uint16
 }
 
 void RowPrefixCanvas::writeFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color) {
-    // log_i("writeFastHLine(x: %d, y: %d, w: %d)", x, y, w);
     markDirtyRect(x, y, w, 1);
 
     switch (_rotation) {
@@ -138,7 +136,6 @@ void RowPrefixCanvas::writeFastHLine(int16_t x, int16_t y, int16_t w, uint16_t c
 }
 
 void RowPrefixCanvas::writeFastHLineCore(int16_t x, int16_t y, int16_t w, uint16_t color) {
-    // log_i("writeFastHLineCore(x: %d, y: %d, w: %d)", x, y, w);
     if (_ordered_in_range(y, 0, MAX_Y) && w) { // Y on screen, nonzero width
         if (w < 0) { // If negative width...
             x += w + 1; //   Move X to left edge
@@ -166,7 +163,6 @@ void RowPrefixCanvas::writeFastHLineCore(int16_t x, int16_t y, int16_t w, uint16
 }
 
 void RowPrefixCanvas::writeFillRectPreclipped(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) {
-    // log_i("writeFillRectPreclipped(x: %d, y: %d, w: %d, h: %d)", x, y, w, h);
     markDirtyRect(x, y, w, h);
 
     if (_rotation > 0) {
@@ -192,8 +188,6 @@ void RowPrefixCanvas::writeFillRectPreclipped(int16_t x, int16_t y, int16_t w, i
             break;
         }
     }
-    // log_i("adjusted writeFillRectPreclipped(x: %d, y: %d, w: %d, h: %d)", x, y,
-    // w, h);
     uint16_t* row = _framebuffer;
     row += y * WIDTH;
     row += x;

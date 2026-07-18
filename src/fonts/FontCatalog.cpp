@@ -1,4 +1,5 @@
 #include "fonts/FontCatalog.h"
+#include "logging/Logger.h"
 
 #include <algorithm>
 #include <cctype>
@@ -196,7 +197,7 @@ const ui::fonts::AlphaFont* FontCatalog::load(size_t familyIndex, size_t sizeInd
             loadedSizeIndex_ = safeSize;
             return &runtimeFont_;
         }
-        Serial.printf("[font] load failed %s: %s\n", family.paths[safeSize].c_str(), loaded.error().c_str());
+        Logger::error("font", "load failed %s: %s", family.paths[safeSize].c_str(), loaded.error().c_str());
     }
 
     clearRuntimeFont();
@@ -312,30 +313,35 @@ std::expected<void, std::string> FontCatalog::loadRecords(File& file, const RFon
     if (auto read = readSection(file, header.bitmapOffset, std::span{bitmap_}); !read)
         return read;
 
-    if (auto read = readRecords<RFont4::GlyphRecord>(
-            file, header.glyphsOffset, header.glyphCount, glyphs_, [](const RFont4::GlyphRecord& item) {
-                return ui::fonts::AlphaGlyph{item.codepoint, item.bitmapOffset, item.rowOffset, item.kernOffset,
-                                             item.width,     item.height,       item.rowStride, item.xAdvance,
-                                             item.xOffset,   item.yOffset,      item.kernCount};
-            });
+    if (auto read = readRecords<RFont4::GlyphRecord>(file, header.glyphsOffset, header.glyphCount, glyphs_,
+                                                     [](const RFont4::GlyphRecord& item) {
+                                                         return ui::fonts::AlphaGlyph{item.codepoint, item.bitmapOffset,
+                                                                                      item.rowOffset, item.kernOffset,
+                                                                                      item.width,     item.height,
+                                                                                      item.rowStride, item.xAdvance,
+                                                                                      item.xOffset,   item.yOffset,
+                                                                                      item.kernCount};
+                                                     });
         !read)
         return read;
-    if (auto read = readRecords<RFont4::RowRecord>(
-            file, header.rowsOffset, header.rowCount, rows_, [](const RFont4::RowRecord& item) {
-                return ui::fonts::AlphaRow{item.spanOffset, item.spanCount};
-            });
+    if (auto read = readRecords<RFont4::RowRecord>(file, header.rowsOffset, header.rowCount, rows_,
+                                                   [](const RFont4::RowRecord& item) {
+                                                       return ui::fonts::AlphaRow{item.spanOffset, item.spanCount};
+                                                   });
         !read)
         return read;
-    if (auto read = readRecords<RFont4::SpanRecord>(
-            file, header.spansOffset, header.spanCount, spans_, [](const RFont4::SpanRecord& item) {
-                return ui::fonts::AlphaSpan{item.x, item.width};
-            });
+    if (auto read = readRecords<RFont4::SpanRecord>(file, header.spansOffset, header.spanCount, spans_,
+                                                    [](const RFont4::SpanRecord& item) {
+                                                        return ui::fonts::AlphaSpan{item.x, item.width};
+                                                    });
         !read)
         return read;
-    if (auto read = readRecords<RFont4::KerningRecord>(
-            file, header.kerningOffset, header.kerningPairCount, kerningPairs_, [](const RFont4::KerningRecord& item) {
-                return ui::fonts::AlphaKerningPair{item.rightCodepoint, item.xAdjust};
-            });
+    if (auto read =
+            readRecords<RFont4::KerningRecord>(file, header.kerningOffset, header.kerningPairCount, kerningPairs_,
+                                               [](const RFont4::KerningRecord& item) {
+                                                   return ui::fonts::AlphaKerningPair{item.rightCodepoint,
+                                                                                      item.xAdjust};
+                                               });
         !read)
         return read;
 

@@ -1,4 +1,5 @@
 #include "board/BoardPower.h"
+#include "logging/Logger.h"
 
 #include <Wire.h>
 #include <algorithm>
@@ -19,7 +20,7 @@ namespace {
     bool beginPmu() {
         gPmuReady = gPmu.init(Wire);
         if (!gPmuReady) {
-            Serial.println("[board] AXP2101 not responding");
+            Logger::warning("board", "AXP2101 not responding");
             return false;
         }
 
@@ -119,7 +120,7 @@ namespace Board::Power {
         if (!ensurePmuReady()) {
             return false;
         }
-        Serial.println("[board] AXP2101 shutdown requested");
+        Logger::debug("board", "AXP2101 shutdown requested");
         gPmu.shutdown();
         return true;
     }

@@ -1,4 +1,5 @@
 #include "board/BoardPower.h"
+#include "logging/Logger.h"
 
 #include <driver/gpio.h>
 
@@ -108,7 +109,7 @@ namespace Board::Power {
 
         digitalWrite(WaveshareAmoled241::Power::kBatteryHoldPin, LOW);
         gPower.batteryPowerHoldEnabled = false;
-        Serial.println("[board] Battery power hold released");
+        Logger::info("board", "Battery power hold released");
         return true;
     }
 

@@ -1,4 +1,5 @@
 #include "board/BoardDisplay.h"
+#include "logging/Logger.h"
 
 #include "board/BacklightBrightness.h"
 
@@ -59,23 +60,23 @@ namespace {
     }
 
     void logDisplayMemory() {
-        Serial.printf("[display] host=%d mode=%d\n", static_cast<int>(ESP32QSPI_SPI_HOST),
+        Logger::debug("display", "host=%d mode=%d", static_cast<int>(ESP32QSPI_SPI_HOST),
                       static_cast<int>(ESP32QSPI_SPI_MODE));
 
-        Serial.printf("[display] psramFound=%s size=%u free=%u\n", psramFound() ? "yes" : "no", ESP.getPsramSize(),
+        Logger::debug("display", "psramFound=%s size=%u free=%u", psramFound() ? "yes" : "no", ESP.getPsramSize(),
                       ESP.getFreePsram());
 
-        Serial.printf("[display] heap internal=%u spiram=%u\n", heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+        Logger::debug("display", "heap internal=%u spiram=%u", heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
                       heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     }
 
     void logCanvasMemory() {
         uint16_t* framebuffer = gCanvas.getFramebuffer();
 
-        Serial.printf("[display] canvas framebuffer=%p external=%s\n", framebuffer,
+        Logger::debug("display", "canvas framebuffer=%p external=%s", framebuffer,
                       esp_ptr_external_ram(framebuffer) ? "yes" : "no");
 
-        Serial.printf("[display] after canvas: heap internal=%u spiram=%u\n",
+        Logger::debug("display", "after canvas: heap internal=%u spiram=%u",
                       heap_caps_get_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     }
 
@@ -92,8 +93,11 @@ namespace Board::Display {
 
         const bool ok = gCanvas.begin(kPanelBusHz);
 
-        Serial.printf("[display] gCanvas.begin: %s\n", ok ? "ok" : "failed");
-        Serial.printf("[display] canvas size=%dx%d\n", gCanvas.width(), gCanvas.height());
+        if (ok)
+            Logger::info("display", "canvas ready");
+        else
+            Logger::error("display", "canvas initialization failed");
+        Logger::debug("display", "canvas size=%dx%d", gCanvas.width(), gCanvas.height());
 
         if (!ok) {
             setBacklight(false);

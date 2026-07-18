@@ -1,4 +1,5 @@
 #include "storage/StorageManager.h"
+#include "logging/Logger.h"
 
 #include <Arduino.h>
 #include <cstdint>
@@ -43,13 +44,13 @@ bool StorageManager::begin() {
     int mountedFrequencyKhz = 0;
     if (SdDiagnostics::mountCard(mounted_, &mountedFrequencyKhz)) {
         const uint64_t sizeMb = Board::Storage::cardSize() / kBytesPerMegabyte;
-        Serial.printf("[storage] SD initialized (%llu MB, %d kHz)\n", sizeMb, mountedFrequencyKhz);
+        Logger::info("storage", "SD initialized (%llu MB, %d kHz)", sizeMb, mountedFrequencyKhz);
         statusCallback_(statusContext_, "SD", "Scanning books", "EPUB converts on open", 10);
         refreshBookPaths(false);
         return true;
     }
 
-    Serial.println("[storage] SD init failed after retries");
+    Logger::error("storage", "SD init failed after retries");
     return false;
 }
 
@@ -69,7 +70,7 @@ void StorageManager::listBooks() {
     listedOnce_ = true;
 
     if (!StorageFiles::directoryExists(StoragePaths::kBooksPath)) {
-        Serial.println("[storage] /books directory not found");
+        Logger::error("storage", "/books directory not found");
         return;
     }
 
@@ -77,7 +78,7 @@ void StorageManager::listBooks() {
         refreshBookPaths();
     }
     if (library_.paths.empty()) {
-        Serial.println("[storage] No readable .rsvp, .txt, or .epub books found under /books");
+        Logger::debug("storage", "No readable .rsvp, .txt, or .epub books found under /books");
         return;
     }
 
@@ -115,7 +116,7 @@ std::string StorageManager::bookAuthorName(size_t index) const {
 bool StorageManager::loadIndexedBook(size_t index, IndexedBookStore& store, BookMetadata& metadata,
                                      const IndexedBookLoadOptions& options) {
     if (!mounted_) {
-        Serial.println("[storage] SD not mounted, cannot load indexed book");
+        Logger::error("storage", "SD not mounted, cannot load indexed book");
         statusCallback_(statusContext_, "Book open failed", "SD not mounted", "Check card", 100);
         return false;
     }
@@ -161,15 +162,15 @@ StorageManager::DiagnosticResult StorageManager::diagnoseSdCard() {
         } else {
             result.detail = "Upload to /books/books";
         }
-        Serial.printf("[sd-check] no supported books; unsupported=%u\n",
-                      static_cast<unsigned int>(result.unsupportedCount));
+        Logger::warning("sd-check", "no supported books; unsupported=%u",
+                        static_cast<unsigned int>(result.unsupportedCount));
         return result;
     }
 
     result.summary = String(result.bookCount) + " books OK";
     result.detail = result.cardType + " " + String(static_cast<unsigned int>(result.sizeMb)) + " MB";
-    Serial.printf("[sd-check] OK books=%u unsupported=%u writable=%u\n", static_cast<unsigned int>(result.bookCount),
-                  static_cast<unsigned int>(result.unsupportedCount), result.writable ? 1 : 0);
+    Logger::warning("sd-check", "OK books=%u unsupported=%u writable=%u", static_cast<unsigned int>(result.bookCount),
+                    static_cast<unsigned int>(result.unsupportedCount), result.writable ? 1 : 0);
     return result;
 }
 

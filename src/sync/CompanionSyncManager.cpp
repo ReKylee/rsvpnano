@@ -1,4 +1,5 @@
 #include "sync/CompanionSyncManager.h"
+#include "logging/Logger.h"
 
 #include <ESPmDNS.h>
 #include <WiFi.h>
@@ -22,8 +23,8 @@
 #include "storage/fs/StoragePaths.h"
 #include "storage/index/IndexedBook.h"
 #include "storage/index/ReadingProgress.h"
-#include "text/AsciiText.h"
 #include "sync/CompanionSyncJson.h"
+#include "text/AsciiText.h"
 #include "timer/FocusTimerStorage.h"
 #include "ui/Localization.h"
 #include "update/OtaUpdater.h"
@@ -49,9 +50,10 @@ namespace {
     template<typename T>
     bool sendData(WebServer& server, std::string& jsonBuffer, int status, const T& data) {
         if (auto encoded = api::encodeData(data, jsonBuffer); !encoded) {
-            Serial.printf("[sync] response encode failed: %s\n", encoded.error().c_str());
-            server.send(500, "application/json",
-                        "{\"error\":{\"code\":\"serialization_failed\",\"message\":\"Response could not be encoded\"}}");
+            Logger::error("sync", "response encode failed: %s", encoded.error().c_str());
+            server
+                .send(500, "application/json",
+                      "{\"error\":{\"code\":\"serialization_failed\",\"message\":\"Response could not be encoded\"}}");
             return false;
         }
         server.sendHeader("Cache-Control", "no-store");
@@ -345,7 +347,6 @@ loadDraft();refresh();
         return value;
     }
 
-
     api::NetworkResponse makeNetworkResponse(const settings::DeviceSecrets& secrets) {
         return {!secrets.wifiPassword.empty()};
     }
@@ -421,7 +422,7 @@ bool CompanionSyncManager::begin() {
     active_ = true;
     statusLine1_ = networkSsid_;
     statusLine2_ = baseUrl();
-    Serial.printf("[sync] ready ssid=%s url=%s\n", networkSsid_.c_str(), statusLine2_.c_str());
+    Logger::info("sync", "ready ssid=%s url=%s", networkSsid_.c_str(), statusLine2_.c_str());
     return true;
 }
 
@@ -578,12 +579,12 @@ bool CompanionSyncManager::startAccessPoint() {
     networkSsid_ = ssid;
     WiFi.mode(WIFI_AP);
     if (!WiFi.softAP(ssid.c_str())) {
-        Serial.println("[sync] softAP failed");
+        Logger::error("sync", "softAP failed");
         return false;
     }
 
     networkMode_ = NetworkMode::AccessPoint;
-    Serial.printf("[sync] softAP ssid=%s ip=%s\n", ssid.c_str(), ipToString(WiFi.softAPIP()).c_str());
+    Logger::debug("sync", "softAP ssid=%s ip=%s", ssid.c_str(), ipToString(WiFi.softAPIP()).c_str());
     return true;
 }
 
@@ -597,7 +598,7 @@ bool CompanionSyncManager::startStation() {
     statusLine2_ = ssid;
     auto connected = net::connectStation(ssid.c_str(), settingsStore_.secrets().wifiPassword.c_str());
     if (!connected) {
-        Serial.printf("[sync] station failed ssid=%s error=%s code=%d; starting access point\n", ssid.c_str(),
+        Logger::error("sync", "station failed ssid=%s error=%s code=%d; starting access point", ssid.c_str(),
                       connected.error().message().c_str(), connected.error().value());
         net::disconnect();
         return false;
@@ -610,7 +611,7 @@ bool CompanionSyncManager::startStation() {
     const String instanceName = "RSVP-Nano-" + suffix;
     hostname.toLowerCase();
     if (!MDNS.begin(hostname.c_str())) {
-        Serial.println("[sync] mDNS failed; starting access point");
+        Logger::error("sync", "mDNS failed; starting access point");
         net::disconnect();
         networkMode_ = NetworkMode::None;
         networkSsid_.clear();
@@ -619,7 +620,7 @@ bool CompanionSyncManager::startStation() {
 
     MDNS.setInstanceName(instanceName.c_str());
     if (!MDNS.addService("rsvpnano", "tcp", 80)) {
-        Serial.println("[sync] mDNS service failed; starting access point");
+        Logger::error("sync", "mDNS service failed; starting access point");
         MDNS.end();
         net::disconnect();
         networkMode_ = NetworkMode::None;
@@ -629,7 +630,7 @@ bool CompanionSyncManager::startStation() {
     MDNS.addServiceTxt("rsvpnano", "tcp", "id", suffix.c_str());
     MDNS.addServiceTxt("rsvpnano", "tcp", "api", "1");
     mdnsStarted_ = true;
-    Serial.printf("[sync] station ssid=%s ip=%s\n", ssid.c_str(), ipToString(WiFi.localIP()).c_str());
+    Logger::debug("sync", "station ssid=%s ip=%s", ssid.c_str(), ipToString(WiFi.localIP()).c_str());
     return true;
 }
 
@@ -753,11 +754,10 @@ void CompanionSyncManager::handleBooksList() {
                         }
                         reading.remainingWords =
                             indexHeader.wordCount > wordIndex + 1 ? indexHeader.wordCount - wordIndex - 1 : 0;
-                        reading.estimatedMinutes =
-                            wpm == 0 ? 0 : (reading.remainingWords + wpm - 1) / wpm;
+                        reading.estimatedMinutes = wpm == 0 ? 0 : (reading.remainingWords + wpm - 1) / wpm;
                         if (hasChapter) {
-                            reading.currentChapter = api::CurrentChapter{
-                                static_cast<uint32_t>(chapterIndex + 1), indexedMetadata.chapters[chapterIndex].title};
+                            reading.currentChapter = api::CurrentChapter{static_cast<uint32_t>(chapterIndex + 1),
+                                                                         indexedMetadata.chapters[chapterIndex].title};
                         }
                         item.reading = std::move(reading);
                     }
@@ -807,12 +807,10 @@ void CompanionSyncManager::handleSettings() {
         return;
     }
     if (fontCatalog.find(decoded->reading.typography.fontId.c_str()) == nullptr) {
-        sendError(422, "invalid_setting", "fontId does not match an available font",
-                  "reading.typography.fontId");
+        sendError(422, "invalid_setting", "fontId does not match an available font", "reading.typography.fontId");
         return;
     }
-    if (auto replaced = settingsStore_.replace(std::move(*decoded), settings::SettingsSource::Companion);
-        !replaced) {
+    if (auto replaced = settingsStore_.replace(std::move(*decoded), settings::SettingsSource::Companion); !replaced) {
         sendError(422, "invalid_setting", replaced.error().message.c_str(), replaced.error().path.c_str());
         return;
     }
@@ -823,8 +821,7 @@ void CompanionSyncManager::handleSettings() {
 
 void CompanionSyncManager::handleWifi() {
     if (server_.method() == HTTP_GET) {
-        sendData(server_, jsonBuffer_, 200,
-                 makeNetworkResponse(settingsStore_.secrets()));
+        sendData(server_, jsonBuffer_, 200, makeNetworkResponse(settingsStore_.secrets()));
         return;
     }
 
@@ -836,8 +833,7 @@ void CompanionSyncManager::handleWifi() {
         settingsChanged_ = true;
         statusLine1_ = "Wi-Fi cleared";
         statusLine2_ = "";
-        sendData(server_, jsonBuffer_, 200,
-                 makeNetworkResponse(settingsStore_.secrets()));
+        sendData(server_, jsonBuffer_, 200, makeNetworkResponse(settingsStore_.secrets()));
         return;
     }
 
@@ -859,8 +855,7 @@ void CompanionSyncManager::handleWifi() {
 
     std::string ssid = trimCopy(*update->ssid);
     if (ssid.empty() || ssid.size() > 32) {
-        sendError(422, "invalid_network", ssid.empty() ? "Wi-Fi SSID is required" : "Wi-Fi SSID is too long",
-                  "ssid");
+        sendError(422, "invalid_network", ssid.empty() ? "Wi-Fi SSID is required" : "Wi-Fi SSID is too long", "ssid");
         return;
     }
     const std::string password = update->password.value_or("");
@@ -876,8 +871,7 @@ void CompanionSyncManager::handleWifi() {
     settingsChanged_ = true;
     statusLine1_ = "Wi-Fi saved";
     statusLine2_ = settingsStore_.settings().network.wifiSsid;
-    sendData(server_, jsonBuffer_, 200,
-             makeNetworkResponse(settingsStore_.secrets()));
+    sendData(server_, jsonBuffer_, 200, makeNetworkResponse(settingsStore_.secrets()));
 }
 
 void CompanionSyncManager::handleRssFeeds() {
@@ -930,7 +924,7 @@ void CompanionSyncManager::handleFocusTimers() {
     }
     auto saved = focus::save(Board::Storage::filesystem(), *timers);
     if (!saved) {
-        StorageFiles::logError("sync", "save focus timers", StoragePaths::kFocusConfigPath, saved.error());
+        Logger::failure("sync", "save focus timers", StoragePaths::kFocusConfigPath, saved.error());
         sendError(500, "focus_save_failed", "Could not save focus timers");
         return;
     }
@@ -986,10 +980,10 @@ void CompanionSyncManager::handleThemes() {
     }
 
     const std::string id = ui::themes::themeIdFromPath({uploadFinalPath_.c_str(), uploadFinalPath_.length()});
-    auto themeText = StorageFiles::readTextFile(Board::Storage::filesystem(), uploadTmpPath_.c_str(),
-                                                kMaxThemeUploadBytes);
+    auto themeText =
+        StorageFiles::readTextFile(Board::Storage::filesystem(), uploadTmpPath_.c_str(), kMaxThemeUploadBytes);
     if (!themeText) {
-        StorageFiles::logError("sync", "read uploaded theme", uploadTmpPath_.c_str(), themeText.error());
+        Logger::failure("sync", "read uploaded theme", uploadTmpPath_.c_str(), themeText.error());
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
@@ -1015,8 +1009,7 @@ void CompanionSyncManager::handleThemes() {
 
     auto replaced = replaceUploadedFile(uploadTmpPath_, uploadFinalPath_);
     if (!replaced) {
-        StorageFiles::logError("sync", "install theme", uploadTmpPath_.c_str(), uploadFinalPath_.c_str(),
-                               replaced.error());
+        Logger::failure("sync", "install theme", uploadTmpPath_.c_str(), uploadFinalPath_.c_str(), replaced.error());
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
@@ -1026,7 +1019,7 @@ void CompanionSyncManager::handleThemes() {
 
     statusLine1_ = "Theme received";
     statusLine2_ = uploadFinalPath_.c_str();
-    Serial.printf("[sync] theme ready %s\n", uploadFinalPath_.c_str());
+    Logger::info("sync", "theme ready %s", uploadFinalPath_.c_str());
     sendData(server_, jsonBuffer_, 201, api::ThemeUploadResponse{toStdString(uploadFinalPath_), id});
     uploadTmpPath_ = "";
     uploadFinalPath_ = "";
@@ -1084,8 +1077,7 @@ void CompanionSyncManager::handleFonts() {
 
     auto replaced = replaceUploadedFile(uploadTmpPath_, uploadFinalPath_);
     if (!replaced) {
-        StorageFiles::logError("sync", "install font", uploadTmpPath_.c_str(), uploadFinalPath_.c_str(),
-                               replaced.error());
+        Logger::failure("sync", "install font", uploadTmpPath_.c_str(), uploadFinalPath_.c_str(), replaced.error());
         Board::Storage::filesystem().remove(uploadTmpPath_);
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
@@ -1095,7 +1087,7 @@ void CompanionSyncManager::handleFonts() {
 
     statusLine1_ = "Font received";
     statusLine2_ = uploadFinalPath_.c_str();
-    Serial.printf("[sync] font ready %s\n", uploadFinalPath_.c_str());
+    Logger::info("sync", "font ready %s", uploadFinalPath_.c_str());
     sendData(server_, jsonBuffer_, 201, api::UploadResponse{toStdString(uploadFinalPath_)});
     uploadTmpPath_ = "";
     uploadFinalPath_ = "";
@@ -1155,7 +1147,7 @@ void CompanionSyncManager::handleFontUpload() {
         uploadError_ = "";
         statusLine1_ = "Receiving font";
         statusLine2_ = (family + " " + RFont4::sizeId(sizeIndex)).c_str();
-        Serial.printf("[sync] font upload start %s\n", uploadFinalPath_.c_str());
+        Logger::info("sync", "font upload start %s", uploadFinalPath_.c_str());
         return;
     }
 
@@ -1216,7 +1208,7 @@ void CompanionSyncManager::handleBookDelete() {
 
     statusLine1_ = "Book deleted";
     statusLine2_ = relativeLibraryName(path).c_str();
-    Serial.printf("[sync] deleted %s\n", path.c_str());
+    Logger::debug("sync", "deleted %s", path.c_str());
     sendData(server_, jsonBuffer_, 200, api::DeleteResponse{toStdString(id), true});
 }
 
@@ -1256,11 +1248,11 @@ void CompanionSyncManager::handleBookPosition() {
     }
 
     const uint32_t wordIndex = std::min<uint32_t>(*update->wordIndex, header.wordCount - 1);
-    auto written = ReadingProgress::writeBookStatePosition(
-        path, {header.sourceSize, header.sourceFingerprint, header.wordCount}, wordIndex);
+    auto written =
+        ReadingProgress::writeBookStatePosition(path, {header.sourceSize, header.sourceFingerprint, header.wordCount},
+                                                wordIndex);
     if (!written) {
-        StorageFiles::logError("sync", "save reading position", StoragePaths::bookStatePathFor(path).c_str(),
-                               written.error());
+        Logger::failure("sync", "save reading position", StoragePaths::bookStatePathFor(path).c_str(), written.error());
         sendError(500, "storage_error", "Reading position could not be saved");
         return;
     }
@@ -1315,7 +1307,7 @@ void CompanionSyncManager::handleBookUpload() {
         uploadError_ = "";
         statusLine1_ = "Receiving book";
         statusLine2_ = filename.c_str();
-        Serial.printf("[sync] upload start %s\n", uploadFinalPath_.c_str());
+        Logger::info("sync", "upload start %s", uploadFinalPath_.c_str());
         return;
     }
 
@@ -1331,7 +1323,7 @@ void CompanionSyncManager::handleBookUpload() {
     }
 
     if (upload.status == UPLOAD_FILE_END) {
-        Serial.printf("[sync] upload end bytes=%u error=%s\n", upload.totalSize, uploadError_.c_str());
+        Logger::debug("sync", "upload end bytes=%u error=%s", upload.totalSize, uploadError_.c_str());
         return;
     }
 
@@ -1376,7 +1368,7 @@ void CompanionSyncManager::handleThemeUpload() {
         uploadError_ = "";
         statusLine1_ = "Receiving theme";
         statusLine2_ = filename.c_str();
-        Serial.printf("[sync] theme upload start %s\n", uploadFinalPath_.c_str());
+        Logger::info("sync", "theme upload start %s", uploadFinalPath_.c_str());
         return;
     }
 
@@ -1410,7 +1402,7 @@ void CompanionSyncManager::sendError(int status, const char* code, const String&
     if (field != nullptr && *field != '\0')
         error.field = field;
     if (auto encoded = api::encodeError(std::move(error), jsonBuffer_); !encoded) {
-        Serial.printf("[sync] error response encode failed: %s\n", encoded.error().c_str());
+        Logger::error("sync", "error response encode failed: %s", encoded.error().c_str());
         jsonBuffer_ =
             "{\"error\":{\"code\":\"serialization_failed\",\"message\":\"Error response could not be encoded\"}}";
         status = 500;
@@ -1587,14 +1579,13 @@ void CompanionSyncManager::finishUpload(bool success) {
     if (success && uploadError_.isEmpty()) {
         auto replaced = replaceUploadedFile(uploadTmpPath_, uploadFinalPath_);
         if (!replaced) {
-            StorageFiles::logError("sync", "install book", uploadTmpPath_.c_str(), uploadFinalPath_.c_str(),
-                                   replaced.error());
+            Logger::failure("sync", "install book", uploadTmpPath_.c_str(), uploadFinalPath_.c_str(), replaced.error());
             uploadError_ = "Rename failed";
             Board::Storage::filesystem().remove(uploadTmpPath_);
         } else {
             statusLine1_ = "Book received";
             statusLine2_ = uploadFinalPath_.c_str();
-            Serial.printf("[sync] upload ready %s\n", uploadFinalPath_.c_str());
+            Logger::info("sync", "upload ready %s", uploadFinalPath_.c_str());
         }
     } else {
         Board::Storage::filesystem().remove(uploadTmpPath_);

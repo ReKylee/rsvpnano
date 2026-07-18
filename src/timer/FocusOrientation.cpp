@@ -1,4 +1,5 @@
 #include "timer/FocusOrientation.h"
+#include "logging/Logger.h"
 
 #include <Arduino.h>
 
@@ -55,18 +56,18 @@ namespace focus {
             if (value != 0x80 || !Board::Imu::readRegister(address_, kWhoAmIReg, value) || value != kWhoAmI)
                 continue;
             if (!updateRegister(kCtrl1Reg, 0x40, 0x40) || !Board::Imu::writeRegister(address_, kCtrl8Reg, 0x80)
-                || !Board::Imu::writeRegister(address_, kCtrl2Reg, 0x16)
-                || !updateRegister(kCtrl5Reg, 0x07, 0x07) || !updateRegister(kCtrl7Reg, 0x01, 0x01))
+                || !Board::Imu::writeRegister(address_, kCtrl2Reg, 0x16) || !updateRegister(kCtrl5Reg, 0x07, 0x07)
+                || !updateRegister(kCtrl7Reg, 0x01, 0x01))
                 continue;
 
             available_ = true;
             candidate_ = stable_ = Orientation::Unknown;
             candidateSinceMs_ = 0;
             lastSampleMs_ = millis() - kSampleIntervalMs;
-            Serial.printf("[focus] IMU ready addr=0x%02X bus=%s\n", address_, Board::Imu::wireName());
+            Logger::info("focus", "IMU ready addr=0x%02X bus=%s", address_, Board::Imu::wireName());
             return true;
         }
-        Serial.printf("[focus] IMU unavailable bus=%s\n", Board::Imu::wireName());
+        Logger::warning("focus", "IMU unavailable bus=%s", Board::Imu::wireName());
         return false;
     }
 

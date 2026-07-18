@@ -1,4 +1,5 @@
 #include "settings/SettingsStore.h"
+#include "logging/Logger.h"
 
 #include <Arduino.h>
 #include <FS.h>
@@ -144,10 +145,11 @@ namespace settings {
                                   return codec::decodeSecrets(content, SettingsSource::Nvs);
                               });
 
-        SettingsResult<std::string> fileContent = filesystem
-            ? readFile(*filesystem)
-            : SettingsResult<std::string>{std::unexpected(
-                  error(SettingsErrorCategory::Missing, SettingsSource::Sd, "SD storage is unavailable"))};
+        SettingsResult<std::string> fileContent =
+            filesystem
+                ? readFile(*filesystem)
+                : SettingsResult<std::string>{std::unexpected(error(SettingsErrorCategory::Missing, SettingsSource::Sd,
+                                                                    "SD storage is unavailable"))};
 
         SettingsResult<DeviceSettings> fileSettings = fileContent.and_then([](const std::string& content) {
             return codec::decodeToml(content, SettingsSource::Sd);
@@ -181,8 +183,7 @@ namespace settings {
 
         mirrorEnabled_ = filesystem && !invalidFile;
         const bool nvsNeedsWrite = !hasNvsSettings || *nvsSettings != settings_;
-        const bool fileNeedsWrite = mirrorEnabled_
-            && (!hasFileSettings || fileWasEdited || *fileSettings != settings_);
+        const bool fileNeedsWrite = mirrorEnabled_ && (!hasFileSettings || fileWasEdited || *fileSettings != settings_);
         dirty_ = nvsNeedsWrite || fileNeedsWrite;
         secretsDirty_ = !nvsSecrets;
         dirtyAtMs_ = millis();
@@ -226,7 +227,7 @@ namespace settings {
     void SettingsStore::update(uint32_t nowMs) {
         if ((dirty_ || secretsDirty_) && nowMs - dirtyAtMs_ >= kPersistenceDelayMs) {
             if (auto result = flush(); !result)
-                Serial.printf("[settings] persistence failed: %s\n", result.error().message.c_str());
+                Logger::error("settings", "persistence failed: %s", result.error().message.c_str());
         }
     }
 
@@ -251,8 +252,10 @@ namespace settings {
 
     SettingsResult<> SettingsStore::flush() {
         if (dirty_) {
-            auto result = codec::encodeToml(settings_, SettingsSource::Nvs).and_then(
-                [this](const std::string& content) { return writeSettings(content); });
+            auto result =
+                codec::encodeToml(settings_, SettingsSource::Nvs).and_then([this](const std::string& content) {
+                    return writeSettings(content);
+                });
             if (!result)
                 return result;
             dirty_ = false;
@@ -289,8 +292,7 @@ namespace settings {
         if (count != content.size()) {
             filesystem_->remove(StoragePaths::kSettingsConfigTempPath);
             return std::unexpected(error(SettingsErrorCategory::Io, SettingsSource::Sd,
-                                         "settings file write was incomplete",
-                                         StoragePaths::kSettingsConfigTempPath));
+                                         "settings file write was incomplete", StoragePaths::kSettingsConfigTempPath));
         }
 
         filesystem_->remove(StoragePaths::kSettingsConfigBackupPath);

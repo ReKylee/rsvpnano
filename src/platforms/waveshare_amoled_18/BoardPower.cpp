@@ -1,4 +1,5 @@
 #include "board/BoardPower.h"
+#include "logging/Logger.h"
 
 #include <Wire.h>
 #include <algorithm>
@@ -21,7 +22,7 @@ namespace {
         BoardDrivers::Tca9554::PortState state = {};
         if (!BoardDrivers::Tca9554::readPortState(Wire1, WaveshareAmoled18::Tca9554Wiring::kAddress, state,
                                                   WaveshareAmoled18::Tca9554Wiring::kReleaseBusBeforeRead)) {
-            Serial.println("[board] TCA9554 not detected");
+            Logger::warning("board", "TCA9554 not detected");
             return;
         }
 
@@ -31,7 +32,7 @@ namespace {
         state.config |= WaveshareAmoled18::Tca9554Wiring::kInputMask;
 
         if (!BoardDrivers::Tca9554::writePortState(Wire1, WaveshareAmoled18::Tca9554Wiring::kAddress, state)) {
-            Serial.println("[board] TCA9554 output setup failed");
+            Logger::error("board", "TCA9554 output setup failed");
             return;
         }
     }
@@ -39,7 +40,7 @@ namespace {
     bool beginPmu() {
         gPmuReady = gPmu.init(Wire);
         if (!gPmuReady) {
-            Serial.println("[board] AXP2101 not responding");
+            Logger::warning("board", "AXP2101 not responding");
             return false;
         }
 
@@ -138,7 +139,7 @@ namespace Board::Power {
         if (!ensurePmuReady()) {
             return false;
         }
-        Serial.println("[board] AXP2101 shutdown requested");
+        Logger::debug("board", "AXP2101 shutdown requested");
         gPmu.shutdown();
         return true;
     }

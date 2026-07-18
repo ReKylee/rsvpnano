@@ -1,4 +1,5 @@
 #include "display/ThemeStore.h"
+#include "logging/Logger.h"
 
 #include <algorithm>
 #include <iterator>
@@ -23,7 +24,7 @@ namespace {
             return false;
         auto encoded = ui::themes::encodeToml(theme.definition);
         if (!encoded) {
-            Serial.printf("[theme] encode failed: %s\n", encoded.error().message.c_str());
+            Logger::error("theme", "encode failed: %s", encoded.error().message.c_str());
             return false;
         }
         const std::string tmpPath = std::string{path} + ".tmp";
@@ -94,8 +95,8 @@ void ThemeStore::loadFromSd(const FontCatalog& fonts, const settings::Typography
         }
 
         if (entry.size() > kMaxThemeBytes) {
-            Serial.printf("[theme] skipped %s: file exceeds %u bytes\n", path.c_str(),
-                          static_cast<unsigned>(kMaxThemeBytes));
+            Logger::warning("theme", "skipped %s: file exceeds %u bytes", path.c_str(),
+                            static_cast<unsigned>(kMaxThemeBytes));
             entry.close();
             continue;
         }
@@ -103,19 +104,19 @@ void ThemeStore::loadFromSd(const FontCatalog& fonts, const settings::Typography
         const size_t count = entry.read(reinterpret_cast<uint8_t*>(text.data()), text.size());
         entry.close();
         if (count != text.size()) {
-            Serial.printf("[theme] skipped %s: incomplete read\n", path.c_str());
+            Logger::warning("theme", "skipped %s: incomplete read", path.c_str());
             continue;
         }
         auto parsed = ui::themes::decodeToml(text, ui::themes::themeIdFromPath(path), defaults);
         if (!parsed) {
-            Serial.printf("[theme] skipped %s: %s\n", path.c_str(), parsed.error().message.c_str());
+            Logger::warning("theme", "skipped %s: %s", path.c_str(), parsed.error().message.c_str());
             continue;
         }
 
         auto& fontId = parsed->definition.typography.fontId;
         if (fonts.find(fontId) == nullptr && !fonts.families().empty()) {
-            Serial.printf("[theme] %s references missing font '%s'; using '%s'\n", path.c_str(), fontId.c_str(),
-                          fonts.families().front().id.c_str());
+            Logger::warning("theme", "%s references missing font '%s'; using '%s'", path.c_str(), fontId.c_str(),
+                            fonts.families().front().id.c_str());
             fontId = fonts.families().front().id;
             repairs.push_back({path, loaded.size()});
         }
@@ -125,7 +126,7 @@ void ThemeStore::loadFromSd(const FontCatalog& fonts, const settings::Typography
 
     for (const Repair& repair: repairs) {
         if (!writeThemeFile(repair.path.c_str(), loaded[repair.themeIndex]))
-            Serial.printf("[theme] could not repair typeface in %s\n", repair.path.c_str());
+            Logger::error("theme", "could not repair typeface in %s", repair.path.c_str());
     }
 
     std::ranges::sort(loaded, {}, &ui::themes::Theme::id);

@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <esp_log.h>
+#include "logging/Logger.h"
 
 #include "app/App.h"
 #if RSVP_BENCHMARK_MODE
@@ -12,7 +12,7 @@ App app;
 
 void setup() {
     Serial.begin(115200);
-    esp_log_level_set("*", ESP_LOG_INFO);
+    Logger::begin();
     delay(50);
     Board::System::begin();
     const uint32_t serialWaitStart = millis();
@@ -21,16 +21,16 @@ void setup() {
     }
     Board::System::logStartupDiagnostics();
     if (!settings::initializeNvsEncryption()) {
-        Serial.println("[main] encrypted NVS initialization failed; restarting");
+        Logger::error("main", "encrypted NVS initialization failed; restarting");
         delay(1000);
         ESP.restart();
         return;
     }
 #if RSVP_BENCHMARK_MODE
-    Serial.println("[main] benchmark setup");
+    Logger::info("main", "benchmark setup");
     Benchmark::run();
 #else
-    Serial.println("[main] app setup");
+    Logger::info("main", "app setup");
     app.begin();
 #endif
 }

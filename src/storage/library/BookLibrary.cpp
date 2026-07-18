@@ -1,4 +1,5 @@
 #include "storage/library/BookLibrary.h"
+#include "logging/Logger.h"
 
 #include <Arduino.h>
 #include <algorithm>
@@ -133,8 +134,7 @@ namespace BookLibrary {
                 return leftKey < rightKey;
             });
 
-            Serial.printf("[storage] Directory inventory: %u files, %u books, %u cache "
-                          "probes in %lu ms\n",
+            Logger::debug("storage", "Directory inventory: %u files, %u books, %u cache probes in %lu ms",
                           static_cast<unsigned int>(entries.size()), static_cast<unsigned int>(bookPaths.size()),
                           static_cast<unsigned int>(cacheProbeCount), static_cast<unsigned long>(millis() - startedMs));
 
@@ -196,7 +196,7 @@ namespace BookLibrary {
                 listing.authors.emplace_back(author.c_str(), author.length());
             }
 
-            Serial.printf("[storage] Metadata cache: %u entries (%u rsvp) in %lu ms\n",
+            Logger::debug("storage", "Metadata cache: %u entries (%u rsvp) in %lu ms",
                           static_cast<unsigned int>(listing.paths.size()), static_cast<unsigned int>(rsvpMetadataCount),
                           static_cast<unsigned long>(millis() - startedMs));
         };
@@ -207,18 +207,18 @@ namespace BookLibrary {
         } else {
             listing.titles.clear();
             listing.authors.clear();
-            Serial.printf("[storage] Metadata cache skipped for %u entries\n",
-                          static_cast<unsigned int>(listing.paths.size()));
+            Logger::warning("storage", "Metadata cache skipped for %u entries",
+                            static_cast<unsigned int>(listing.paths.size()));
         }
 
-        Serial.printf("[storage] Library scan: %u books (%u rsvp, %u txt, %u pending epub)\n",
+        Logger::debug("storage", "Library scan: %u books (%u rsvp, %u txt, %u pending epub)",
                       static_cast<unsigned int>(listing.paths.size()), static_cast<unsigned int>(counts.rsvp),
                       static_cast<unsigned int>(counts.text), static_cast<unsigned int>(counts.pendingEpub));
     }
 
     void printListing(const Listing& listing) {
-        Serial.println("[storage] Listing /books, /books/books, /books/articles "
-                       "(.rsvp/.txt/.epub pending conversion):");
+        Logger::debug("storage",
+                      "Listing /books, /books/books, /books/articles (.rsvp/.txt/.epub pending conversion):");
         for (const std::string& path: listing.paths) {
             File entry = Board::Storage::filesystem().open(path.c_str());
             if (!entry || entry.isDirectory()) {
@@ -228,7 +228,7 @@ namespace BookLibrary {
                 continue;
             }
 
-            Serial.printf("  %s (%lu bytes)\n", path.c_str(), static_cast<unsigned long>(entry.size()));
+            Logger::debug("storage", "  %s (%lu bytes)", path.c_str(), static_cast<unsigned long>(entry.size()));
             entry.close();
         }
     }
@@ -288,8 +288,9 @@ namespace BookLibrary {
     }
 
     int indexOfPath(const Listing& listing, std::string_view target) {
-        const auto item = std::find_if(listing.paths.begin(), listing.paths.end(),
-                                       [target](const std::string& path) { return path == target; });
+        const auto item = std::find_if(listing.paths.begin(), listing.paths.end(), [target](const std::string& path) {
+            return path == target;
+        });
         if (item == listing.paths.end()) {
             return -1;
         }

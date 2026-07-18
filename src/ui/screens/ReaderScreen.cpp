@@ -1,4 +1,5 @@
 #include "ui/screens/ReaderScreen.h"
+#include "logging/Logger.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -171,7 +172,7 @@ namespace screens {
             const int savedBook = storage.bookIndex(savedPath);
             if (savedBook >= 0 && openBook(ui, storage, preferences, static_cast<size_t>(savedBook), nowMs))
                 return;
-            Serial.printf("[reader] saved book not found: %s\n", savedPath.c_str());
+            Logger::error("reader", "saved book not found: %s", savedPath.c_str());
         }
         if (storage.bookCount() > 0 && openBook(ui, storage, preferences, 0, nowMs))
             return;
@@ -210,9 +211,8 @@ namespace screens {
             }
             const uint32_t minutes =
                 reader.wpm() == 0 ? 0 : static_cast<uint32_t>((remainingWords + reader.wpm() - 1) / reader.wpm());
-            footer =
-                ui.text(settings.footerMetric == settings::FooterMetric::chapterTime ? UiText::ChapterShort
-                                                                                     : UiText::BookShort);
+            footer = ui.text(settings.footerMetric == settings::FooterMetric::chapterTime ? UiText::ChapterShort
+                                                                                          : UiText::BookShort);
             footer += ' ';
             footer += minutes >= 60 ? std::to_string(minutes / 60) + "h" : std::to_string(minutes) + "m";
         }
@@ -662,8 +662,7 @@ namespace screens {
     }
 
     uint32_t ReaderScreen::frameSignature(std::string_view before, std::string_view word, std::string_view after,
-                                          std::string_view overlay,
-                                          const settings::ReadingSettings& settings) const {
+                                          std::string_view overlay, const settings::ReadingSettings& settings) const {
         uint32_t value = ui::Context::signature(before);
         value = ui::Context::signature(word, value);
         value = ui::Context::signature(after, value);

@@ -1,4 +1,5 @@
 #include "storage/fs/SdDiagnostics.h"
+#include "logging/Logger.h"
 
 #include <Preferences.h>
 #include <algorithm>
@@ -92,19 +93,19 @@ namespace SdDiagnostics {
         FrequencyCache readFrequencyCache() {
             Preferences preferences;
             if (!preferences.begin(kPreferencesNamespace, true)) {
-                Serial.println("[sd-check] frequency cache unavailable");
+                Logger::warning("sd-check", "frequency cache unavailable");
                 return FrequencyCache{};
             }
             FrequencyCache cache;
             cache.frequencyKhz = preferences.getInt(kPreferenceFrequencyKhz, 0);
-            cache.cardType = cardTypeFromByte(
-                preferences.getUChar(kPreferenceCardType, cardTypeByte(Board::Storage::CardType::None)));
+            cache.cardType = cardTypeFromByte(preferences.getUChar(kPreferenceCardType,
+                                                                   cardTypeByte(Board::Storage::CardType::None)));
             cache.sizeMb = preferences.getUInt(kPreferenceCardSizeMb, 0);
             preferences.end();
             if (!isSupportedFrequency(cache.frequencyKhz) || cache.cardType == Board::Storage::CardType::None
                 || cache.sizeMb == 0) {
                 if (cache.frequencyKhz != 0) {
-                    Serial.printf("[sd-check] ignoring incomplete cached frequency %d kHz\n", cache.frequencyKhz);
+                    Logger::debug("sd-check", "ignoring incomplete cached frequency %d kHz", cache.frequencyKhz);
                 }
                 return FrequencyCache{};
             }
@@ -131,7 +132,7 @@ namespace SdDiagnostics {
 
             Preferences preferences;
             if (!preferences.begin(kPreferencesNamespace)) {
-                Serial.println("[sd-check] frequency cache write unavailable");
+                Logger::warning("sd-check", "frequency cache write unavailable");
                 return;
             }
             preferences.putInt(kPreferenceFrequencyKhz, frequencyKhz);
@@ -165,15 +166,14 @@ namespace SdDiagnostics {
             const bool removed = Board::Storage::filesystem().remove(path);
             const int removeErrno = errno;
             if (!removed && StorageFiles::fileExists(path.c_str())) {
-                StorageFiles::logError(tag, "remove probe", path.c_str(), removeErrno);
+                Logger::failure(tag, "remove probe", path.c_str(), removeErrno);
                 return false;
             }
             return true;
         }
 
         bool writeReadProbeFile(const String& path, size_t bytes, const char* tag) {
-            Serial.printf("[%s] write/read probe path=%s bytes=%u\n", tag, path.c_str(),
-                          static_cast<unsigned int>(bytes));
+            Logger::debug(tag, "write/read probe path=%s bytes=%u", path.c_str(), static_cast<unsigned int>(bytes));
             Board::Storage::filesystem().remove(path);
 
             static uint8_t writeBuffer[kProbeChunkBytes];
@@ -185,7 +185,7 @@ namespace SdDiagnostics {
                 File file = Board::Storage::filesystem().open(path, FILE_WRITE);
                 const int openErrno = errno;
                 if (!file) {
-                    StorageFiles::logError(tag, "open FILE_WRITE", path.c_str(), openErrno);
+                    Logger::failure(tag, "open FILE_WRITE", path.c_str(), openErrno);
                     return false;
                 }
 
@@ -195,7 +195,7 @@ namespace SdDiagnostics {
                     fillProbeBuffer(writeBuffer, chunk, static_cast<uint32_t>(writtenTotal));
                     const size_t written = file.write(writeBuffer, chunk);
                     if (written != chunk) {
-                        Serial.printf("[%s] probe short write path=%s offset=%u wanted=%u got=%u\n", tag, path.c_str(),
+                        Logger::error(tag, "probe short write path=%s offset=%u wanted=%u got=%u", path.c_str(),
                                       static_cast<unsigned int>(writtenTotal), static_cast<unsigned int>(chunk),
                                       static_cast<unsigned int>(written));
                         file.close();
@@ -216,13 +216,13 @@ namespace SdDiagnostics {
                     if (file) {
                         file.close();
                     }
-                    Serial.printf("[%s] probe reopen failed path=%s\n", tag, path.c_str());
+                    Logger::error(tag, "probe reopen failed path=%s", path.c_str());
                     removeProbeFile(path, tag);
                     return false;
                 }
 
                 if (file.size() != bytes) {
-                    Serial.printf("[%s] probe size mismatch path=%s size=%u expected=%u\n", tag, path.c_str(),
+                    Logger::error(tag, "probe size mismatch path=%s size=%u expected=%u", path.c_str(),
                                   static_cast<unsigned int>(file.size()), static_cast<unsigned int>(bytes));
                     file.close();
                     removeProbeFile(path, tag);
@@ -235,9 +235,9 @@ namespace SdDiagnostics {
                     fillProbeBuffer(writeBuffer, chunk, static_cast<uint32_t>(readTotal));
                     const size_t read = file.read(readBuffer, chunk);
                     if (read != chunk || std::memcmp(readBuffer, writeBuffer, chunk) != 0) {
-                        Serial.printf("[%s] probe verify failed path=%s offset=%u wanted=%u got=%u\n", tag,
-                                      path.c_str(), static_cast<unsigned int>(readTotal),
-                                      static_cast<unsigned int>(chunk), static_cast<unsigned int>(read));
+                        Logger::error(tag, "probe verify failed path=%s offset=%u wanted=%u got=%u", path.c_str(),
+                                      static_cast<unsigned int>(readTotal), static_cast<unsigned int>(chunk),
+                                      static_cast<unsigned int>(read));
                         file.close();
                         removeProbeFile(path, tag);
                         return false;
@@ -263,14 +263,14 @@ namespace SdDiagnostics {
         }
 
         bool tryMountFrequency(bool& mounted, int frequencyKhz) {
-            Serial.printf("[sd-check] trying mount at %d kHz\n", frequencyKhz);
+            Logger::debug("sd-check", "trying mount at %d kHz", frequencyKhz);
             Board::Storage::end();
             mounted = Board::Storage::mount(StoragePaths::kMountPoint, frequencyKhz);
             if (!mounted) {
                 return false;
             }
             if (!writeReadProbeFile(StoragePaths::kSdFrequencyProbePath, kFrequencyProbeBytes, "sd-probe")) {
-                Serial.printf("[sd-check] frequency %d kHz failed sustained probe\n", frequencyKhz);
+                Logger::error("sd-check", "frequency %d kHz failed sustained probe", frequencyKhz);
                 Board::Storage::end();
                 mounted = false;
                 return false;
@@ -310,7 +310,7 @@ namespace SdDiagnostics {
         }
 
         if (!Board::Storage::setSdMmcPins()) {
-            Serial.println("[sd-check] SD pin setup failed");
+            Logger::error("sd-check", "SD pin setup failed");
             return false;
         }
 
@@ -319,16 +319,15 @@ namespace SdDiagnostics {
 
         const FrequencyCache cache = allowCache ? readFrequencyCache() : FrequencyCache{};
         if (allowCache && cache.valid) {
-            Serial.printf("[sd-check] trying cached SD frequency %d kHz\n", cache.frequencyKhz);
+            Logger::debug("sd-check", "trying cached SD frequency %d kHz", cache.frequencyKhz);
             if (tryMountFrequency(mounted, cache.frequencyKhz)) {
                 if (cacheMatchesMountedCard(cache)) {
                     recordMountedFrequency(cache.frequencyKhz, mountedFrequencyKhz);
-                    Serial.printf("[sd-check] selected cached SD frequency %d kHz\n", cache.frequencyKhz);
+                    Logger::info("sd-check", "selected cached SD frequency %d kHz", cache.frequencyKhz);
                     return true;
                 }
 
-                Serial.println("[sd-check] cached SD frequency belongs to a different "
-                               "card; rediscovering");
+                Logger::debug("sd-check", "cached SD frequency belongs to a different card; rediscovering");
                 unmountCard(mounted);
             }
         }
@@ -337,7 +336,7 @@ namespace SdDiagnostics {
             const int frequencyKhz = frequencyOrder[i];
             if (tryMountFrequency(mounted, frequencyKhz)) {
                 recordMountedFrequency(frequencyKhz, mountedFrequencyKhz);
-                Serial.printf("[sd-check] selected SD frequency %d kHz\n", frequencyKhz);
+                Logger::info("sd-check", "selected SD frequency %d kHz", frequencyKhz);
                 writeFrequencyCache(frequencyKhz);
                 return true;
             }
@@ -355,12 +354,12 @@ namespace SdDiagnostics {
             return mountCard(mounted, mountedFrequencyKhz);
         }
         if (!isSupportedFrequency(sMountedFrequencyKhz)) {
-            Serial.println("[sd-check] mounted frequency unknown; rediscovering");
+            Logger::info("sd-check", "mounted frequency unknown; rediscovering");
             unmountCard(mounted);
             return mountCardWithCache(mounted, mountedFrequencyKhz, false);
         }
 
-        Serial.printf("[sd-check] validating mounted frequency %d kHz\n", sMountedFrequencyKhz);
+        Logger::info("sd-check", "validating mounted frequency %d kHz", sMountedFrequencyKhz);
         if (writeReadProbeFile(StoragePaths::kSdFrequencyProbePath, kFrequencyProbeBytes, "sd-probe")) {
             if (mountedFrequencyKhz != nullptr) {
                 *mountedFrequencyKhz = sMountedFrequencyKhz;
@@ -368,14 +367,14 @@ namespace SdDiagnostics {
             return true;
         }
 
-        Serial.printf("[sd-check] mounted frequency %d kHz failed; rediscovering\n", sMountedFrequencyKhz);
+        Logger::error("sd-check", "mounted frequency %d kHz failed; rediscovering", sMountedFrequencyKhz);
         unmountCard(mounted);
         return mountCardWithCache(mounted, mountedFrequencyKhz, false);
     }
 
     bool verifyWritableFolder(const char* directoryPath) {
         if (!StorageFiles::directoryExists(directoryPath)) {
-            Serial.printf("[sd-check] write probe skipped, not a directory: %s\n", directoryPath);
+            Logger::warning("sd-check", "write probe skipped, not a directory: %s", directoryPath);
             return false;
         }
 
@@ -402,16 +401,15 @@ namespace SdDiagnostics {
         if (!mounted) {
             result.summary = "Card not mounted";
             result.detail = "Format FAT32 MBR";
-            Serial.println("[sd-check] mount failed; likely format/partition issue, "
-                           "seating, or card fault");
+            Logger::error("sd-check", "mount failed; likely format/partition issue, seating, or card fault");
             return result;
         }
 
         result.sizeMb = Board::Storage::cardSize() / kBytesPerMegabyte;
         result.cardType = cardTypeLabel(Board::Storage::cardType(), result.sizeMb);
         result.frequencyKhz = sMountedFrequencyKhz;
-        Serial.printf("[sd-check] mounted type=%s size=%llu MB freq=%d kHz\n", result.cardType.c_str(), result.sizeMb,
-                      result.frequencyKhz);
+        Logger::info("sd-check", "mounted type=%s size=%llu MB freq=%d kHz", result.cardType.c_str(), result.sizeMb,
+                     result.frequencyKhz);
 
         report("Checking folders", "", 30);
         result.booksDirectory = StorageFiles::directoryExists(StoragePaths::kBooksPath);
@@ -424,11 +422,12 @@ namespace SdDiagnostics {
             || !result.configDirectory || !result.themesDirectory || !result.fontsDirectory) {
             result.summary = "Folders missing";
             result.detail = "Can create layout";
-            Serial.printf("[sd-check] v0.0.4 folders missing /books=%u /books/books=%u "
-                          "/books/articles=%u /config=%u /themes=%u /fonts=%u\n",
-                          result.booksDirectory ? 1 : 0, result.bookFilesDirectory ? 1 : 0,
-                          result.articleFilesDirectory ? 1 : 0, result.configDirectory ? 1 : 0,
-                          result.themesDirectory ? 1 : 0, result.fontsDirectory ? 1 : 0);
+            Logger::warning("sd-check",
+                            "v0.0.4 folders missing /books=%u /books/books=%u /books/articles=%u /config=%u /themes=%u "
+                            "/fonts=%u",
+                            result.booksDirectory ? 1 : 0, result.bookFilesDirectory ? 1 : 0,
+                            result.articleFilesDirectory ? 1 : 0, result.configDirectory ? 1 : 0,
+                            result.themesDirectory ? 1 : 0, result.fontsDirectory ? 1 : 0);
             report("Folders missing", "Confirm repair", 38);
             return result;
         }
@@ -453,15 +452,14 @@ namespace SdDiagnostics {
         if (!result.writable) {
             result.summary = "Write test failed";
             result.detail = "Format FAT32 MBR";
-            Serial.println("[sd-check] /books write/delete probe failed");
+            Logger::error("sd-check", "/books write/delete probe failed");
             return;
         }
         if (!result.booksWritable || !result.articlesWritable || !result.configWritable || !result.themesWritable
             || !result.fontsWritable) {
             result.summary = "Folder write failed";
             result.detail = "Format FAT32 MBR";
-            Serial.printf("[sd-check] folder write failed books=%u articles=%u "
-                          "config=%u themes=%u fonts=%u\n",
+            Logger::error("sd-check", "folder write failed books=%u articles=%u config=%u themes=%u fonts=%u",
                           result.booksWritable ? 1 : 0, result.articlesWritable ? 1 : 0, result.configWritable ? 1 : 0,
                           result.themesWritable ? 1 : 0, result.fontsWritable ? 1 : 0);
             return;
@@ -474,13 +472,13 @@ namespace SdDiagnostics {
 
     bool repairFolderLayout(bool mounted) {
         if (!mounted) {
-            Serial.println("[sd-check] folder repair skipped: card not mounted");
+            Logger::warning("sd-check", "folder repair skipped: card not mounted");
             return false;
         }
 
-        Serial.println("[sd-check] repairing v0.0.4 folder layout");
+        Logger::debug("sd-check", "repairing v0.0.4 folder layout");
         const bool rootWritable = verifyWritableFolder("/");
-        Serial.printf("[sd-check] root write probe=%u\n", rootWritable ? 1 : 0);
+        Logger::debug("sd-check", "root write probe=%u", rootWritable ? 1 : 0);
 
         const bool foldersOk = ensureLibraryFolderLayout();
         const bool booksOk = StorageFiles::directoryExists(StoragePaths::kBooksPath);
@@ -491,13 +489,14 @@ namespace SdDiagnostics {
         const bool fontsOk = StorageFiles::directoryExists(StoragePaths::kFontsPath);
         const bool ok = rootWritable && foldersOk;
         if (ok) {
-            Serial.println("[sd-check] repaired v0.0.4 folder layout");
+            Logger::debug("sd-check", "repaired v0.0.4 folder layout");
         } else {
-            Serial.printf("[sd-check] folder repair failed rootWritable=%u /books=%u "
-                          "/books/books=%u "
-                          "/books/articles=%u /config=%u /themes=%u /fonts=%u\n",
-                          rootWritable ? 1 : 0, booksOk ? 1 : 0, bookFilesOk ? 1 : 0, articleFilesOk ? 1 : 0,
-                          configOk ? 1 : 0, themesOk ? 1 : 0, fontsOk ? 1 : 0);
+            Logger::
+                error("sd-check",
+                      "folder repair failed rootWritable=%u /books=%u /books/books=%u /books/articles=%u /config=%u "
+                      "/themes=%u /fonts=%u",
+                      rootWritable ? 1 : 0, booksOk ? 1 : 0, bookFilesOk ? 1 : 0, articleFilesOk ? 1 : 0,
+                      configOk ? 1 : 0, themesOk ? 1 : 0, fontsOk ? 1 : 0);
         }
         return ok;
     }

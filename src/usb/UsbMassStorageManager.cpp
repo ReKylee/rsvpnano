@@ -1,4 +1,5 @@
 #include "usb/UsbMassStorageManager.h"
+#include "logging/Logger.h"
 
 #include <algorithm>
 #include <cstring>
@@ -7,7 +8,6 @@
 #include <driver/sdmmc_host.h>
 #include <esp_err.h>
 #include <esp_heap_caps.h>
-#include <esp_log.h>
 #include <sdmmc_cmd.h>
 #include <tusb.h>
 #endif
@@ -29,7 +29,7 @@ namespace {
     void deinitHostIfNeeded() {
         const esp_err_t err = sdmmc_host_deinit();
         if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-            ESP_LOGW(kUsbMscTag, "SDMMC host deinit returned 0x%x", err);
+            Logger::warning(kUsbMscTag, "SDMMC host deinit returned 0x%x", err);
         }
     }
 
@@ -79,14 +79,13 @@ bool UsbMassStorageManager::begin(bool writeEnabled) {
     statusMessage_ = writeEnabled_ ? "Mounted read/write" : "Mounted read-only";
     msc_.mediaPresent(true);
     pulseUsbReconnect();
-    Serial.printf("[usb-msc] active blocks=%lu blockSize=%u write=%u\n", static_cast<unsigned long>(blockCount_),
+    Logger::debug("usb-msc", "active blocks=%lu blockSize=%u write=%u", static_cast<unsigned long>(blockCount_),
                   blockSize_, writeEnabled_ ? 1 : 0);
     return true;
 #else
     (void) writeEnabled;
     statusMessage_ = "USB transfer disabled";
-    Serial.println("[usb-msc] unsupported: build a USB-transfer-enabled board "
-                   "target to enable it");
+    Logger::warning("usb-msc", "unsupported: build a USB-transfer-enabled board target to enable it");
     return false;
 #endif
 }
@@ -150,7 +149,7 @@ bool UsbMassStorageManager::beginSdCard() {
         sectorBuffer_ = static_cast<uint8_t*>(heap_caps_malloc(kUsbBlockSize, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
     }
     if (sectorBuffer_ == nullptr) {
-        Serial.println("[usb-msc] failed to allocate DMA sector buffer");
+        Logger::error("usb-msc", "failed to allocate DMA sector buffer");
         return false;
     }
 
@@ -170,27 +169,27 @@ bool UsbMassStorageManager::beginSdCard() {
         deinitHostIfNeeded();
         esp_err_t err = host.init();
         if (err != ESP_OK) {
-            Serial.printf("[usb-msc] host init failed at %d kHz: 0x%x\n", frequencyKhz, err);
+            Logger::error("usb-msc", "host init failed at %d kHz: 0x%x", frequencyKhz, err);
             continue;
         }
 
         err = sdmmc_host_init_slot(host.slot, &slotConfig);
         if (err != ESP_OK) {
-            Serial.printf("[usb-msc] slot init failed at %d kHz: 0x%x\n", frequencyKhz, err);
+            Logger::error("usb-msc", "slot init failed at %d kHz: 0x%x", frequencyKhz, err);
             deinitHostIfNeeded();
             continue;
         }
 
         err = sdmmc_card_init(&host, &card_);
         if (err != ESP_OK) {
-            Serial.printf("[usb-msc] card init failed at %d kHz: 0x%x\n", frequencyKhz, err);
+            Logger::error("usb-msc", "card init failed at %d kHz: 0x%x", frequencyKhz, err);
             deinitHostIfNeeded();
             continue;
         }
 
         if (card_.csd.sector_size != kUsbBlockSize || card_.csd.capacity == 0) {
-            Serial.printf("[usb-msc] unsupported SD geometry: sectors=%d sectorSize=%d\n", card_.csd.capacity,
-                          card_.csd.sector_size);
+            Logger::warning("usb-msc", "unsupported SD geometry: sectors=%d sectorSize=%d", card_.csd.capacity,
+                            card_.csd.sector_size);
             deinitHostIfNeeded();
             continue;
         }
@@ -198,8 +197,8 @@ bool UsbMassStorageManager::beginSdCard() {
         blockCount_ = static_cast<uint32_t>(card_.csd.capacity);
         blockSize_ = static_cast<uint16_t>(card_.csd.sector_size);
         cardReady_ = true;
-        Serial.printf("[usb-msc] SD ready for USB at %d kHz (%lu MB)\n", frequencyKhz,
-                      static_cast<unsigned long>(cardSizeBytes() / (1024ULL * 1024ULL)));
+        Logger::info("usb-msc", "SD ready for USB at %d kHz (%lu MB)", frequencyKhz,
+                     static_cast<unsigned long>(cardSizeBytes() / (1024ULL * 1024ULL)));
         return true;
     }
 
@@ -262,7 +261,7 @@ int32_t UsbMassStorageManager::readSectors(uint32_t lba, uint32_t offset, void* 
         const uint32_t bytesThisSector = std::min<uint32_t>(blockSize_ - currentOffset, bufsize - copied);
         const esp_err_t err = sdmmc_read_sectors(&card_, sectorBuffer_, currentLba, 1);
         if (err != ESP_OK) {
-            Serial.printf("[usb-msc] read failed lba=%lu err=0x%x\n", static_cast<unsigned long>(currentLba), err);
+            Logger::error("usb-msc", "read failed lba=%lu err=0x%x", static_cast<unsigned long>(currentLba), err);
             return copied > 0 ? static_cast<int32_t>(copied) : -1;
         }
 
@@ -300,7 +299,7 @@ int32_t UsbMassStorageManager::writeSectors(uint32_t lba, uint32_t offset, uint8
         if (currentOffset != 0 || bytesThisSector != blockSize_) {
             const esp_err_t readErr = sdmmc_read_sectors(&card_, sectorBuffer_, currentLba, 1);
             if (readErr != ESP_OK) {
-                Serial.printf("[usb-msc] write pre-read failed lba=%lu err=0x%x\n",
+                Logger::error("usb-msc", "write pre-read failed lba=%lu err=0x%x",
                               static_cast<unsigned long>(currentLba), readErr);
                 return written > 0 ? static_cast<int32_t>(written) : -1;
             }
@@ -310,8 +309,7 @@ int32_t UsbMassStorageManager::writeSectors(uint32_t lba, uint32_t offset, uint8
 
         const esp_err_t writeErr = sdmmc_write_sectors(&card_, sectorBuffer_, currentLba, 1);
         if (writeErr != ESP_OK) {
-            Serial.printf("[usb-msc] write failed lba=%lu err=0x%x\n", static_cast<unsigned long>(currentLba),
-                          writeErr);
+            Logger::error("usb-msc", "write failed lba=%lu err=0x%x", static_cast<unsigned long>(currentLba), writeErr);
             return written > 0 ? static_cast<int32_t>(written) : -1;
         }
 
@@ -331,8 +329,7 @@ int32_t UsbMassStorageManager::writeSectors(uint32_t lba, uint32_t offset, uint8
 }
 
 bool UsbMassStorageManager::handleStartStop(uint8_t powerCondition, bool start, bool loadEject) {
-    Serial.printf("[usb-msc] start-stop power=%u start=%u eject=%u\n", powerCondition, start ? 1 : 0,
-                  loadEject ? 1 : 0);
+    Logger::info("usb-msc", "start-stop power=%u start=%u eject=%u", powerCondition, start ? 1 : 0, loadEject ? 1 : 0);
 
     if (loadEject && !start) {
         ejected_ = true;

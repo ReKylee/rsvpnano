@@ -1,4 +1,5 @@
 #include "platforms/waveshare_amoled_18/BoardDisplayPower.h"
+#include "logging/Logger.h"
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -12,7 +13,7 @@ namespace WaveshareAmoled18::DisplayPower {
         BoardDrivers::Tca9554::PortState state = {};
         if (!BoardDrivers::Tca9554::readPortState(Wire1, Tca9554Wiring::kAddress, state,
                                                   Tca9554Wiring::kReleaseBusBeforeRead)) {
-            Serial.println("[board] TCA9554 not detected");
+            Logger::warning("board", "TCA9554 not detected");
             return;
         }
 
@@ -20,14 +21,14 @@ namespace WaveshareAmoled18::DisplayPower {
         state.config &= Tca9554Wiring::kOutputClearMask;
         state.config |= Tca9554Wiring::kInputMask;
         if (!BoardDrivers::Tca9554::writePortState(Wire1, Tca9554Wiring::kAddress, state)) {
-            Serial.println("[board] TCA9554 display hold failed");
+            Logger::error("board", "TCA9554 display hold failed");
             return;
         }
 
         delay(20);
         state.output |= Tca9554Wiring::kDisplayMask;
         if (!BoardDrivers::Tca9554::writeOutput(Wire1, Tca9554Wiring::kAddress, state.output)) {
-            Serial.println("[board] TCA9554 display release failed");
+            Logger::error("board", "TCA9554 display release failed");
             return;
         }
         delay(50);

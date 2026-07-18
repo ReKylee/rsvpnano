@@ -1,10 +1,10 @@
 #pragma once
 
 #include <Arduino.h>
-#include <esp_log.h>
 
 #include "board/BoardPower.h"
 #include "drivers/audio/es8311/Es8311.h"
+#include "logging/Logger.h"
 
 namespace {
 
@@ -63,7 +63,7 @@ namespace BoardPlatform::Es8311BoardAudio {
         fillBeepBuffer();
 
         if (!enableAudioRail()) {
-            ESP_LOGW(kAudioTag, "Audio rail unavailable");
+            Logger::warning(kAudioTag, "Audio rail unavailable");
             return false;
         }
 
@@ -80,7 +80,7 @@ namespace BoardPlatform::Es8311BoardAudio {
             return true;
         }
 
-        ESP_LOGW(kAudioTag, "Retrying speaker beep after recovering output path");
+        Logger::warning(kAudioTag, "Retrying speaker beep after recovering output path");
         if (!enableAudioRail() || !BoardDrivers::Es8311::recoverOutputPath(context)) {
             return false;
         }

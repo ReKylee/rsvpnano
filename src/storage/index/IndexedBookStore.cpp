@@ -1,4 +1,5 @@
 #include "storage/index/IndexedBookStore.h"
+#include "logging/Logger.h"
 
 #include <algorithm>
 #include <limits>
@@ -72,7 +73,7 @@ bool IndexedBookStore::open(const char* indexPath, const char* dataPath, const H
     }
 
     if (!validateLayout(header, nextIndexFile.size(), nextDataFile.size())) {
-        Serial.printf("[storage-index] invalid store layout index=%s data=%s\n", indexPath, dataPath);
+        Logger::warning("storage-index", "invalid store layout index=%s data=%s", indexPath, dataPath);
         nextIndexFile.close();
         nextDataFile.close();
         return false;

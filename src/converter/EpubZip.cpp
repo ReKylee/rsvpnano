@@ -1,4 +1,5 @@
 #include "converter/EpubZip.h"
+#include "logging/Logger.h"
 
 #include <algorithm>
 #include <array>
@@ -54,8 +55,7 @@ namespace EpubZip {
                 const uint32_t beforePosition = static_cast<uint32_t>(file.position());
                 const int bytesRead = file.read(buffer + offset, chunk);
                 if (bytesRead != static_cast<int>(chunk)) {
-                    Serial.printf("[epub-zip] Short read at pos=%lu wanted=%u got=%d "
-                                  "totalWanted=%u offset=%u\n",
+                    Logger::debug("epub-zip", "Short read at pos=%lu wanted=%u got=%d totalWanted=%u offset=%u",
                                   static_cast<unsigned long>(beforePosition), static_cast<unsigned int>(chunk),
                                   bytesRead, static_cast<unsigned int>(length), static_cast<unsigned int>(offset));
                     return false;
@@ -121,18 +121,18 @@ namespace EpubZip {
         bool seekToEntryPayload(File& file, const ZipEntry& entry, const char* context, uint32_t& dataOffset) {
             std::array<uint8_t, 30> localHeader;
             if (!file.seek(entry.localHeaderOffset)) {
-                Serial.printf("[epub-zip] Could not seek to %s local header: %s offset=%lu\n", context,
+                Logger::error("epub-zip", "Could not seek to %s local header: %s offset=%lu", context,
                               entry.name.c_str(), static_cast<unsigned long>(entry.localHeaderOffset));
                 return false;
             }
             if (!readExact(file, localHeader.data(), localHeader.size())) {
-                Serial.printf("[epub-zip] Could not read %s local header: %s\n", context, entry.name.c_str());
+                Logger::error("epub-zip", "Could not read %s local header: %s", context, entry.name.c_str());
                 return false;
             }
 
             const uint32_t localSignature = readLe32(localHeader.data());
             if (localSignature != kZipLocalFileSignature) {
-                Serial.printf("[epub-zip] Bad %s local signature for %s signature=0x%08lx\n", context,
+                Logger::debug("epub-zip", "Bad %s local signature for %s signature=0x%08lx", context,
                               entry.name.c_str(), static_cast<unsigned long>(localSignature));
                 return false;
             }
@@ -140,10 +140,10 @@ namespace EpubZip {
             const uint16_t fileNameLength = readLe16(localHeader.data() + 26);
             const uint16_t extraLength = readLe16(localHeader.data() + 28);
             dataOffset = entry.localHeaderOffset + localHeader.size() + fileNameLength + extraLength;
-            Serial.printf("[epub-zip] %s data: %s nameLen=%u extraLen=%u dataOffset=%lu\n", context, entry.name.c_str(),
+            Logger::debug("epub-zip", "%s data: %s nameLen=%u extraLen=%u dataOffset=%lu", context, entry.name.c_str(),
                           fileNameLength, extraLength, static_cast<unsigned long>(dataOffset));
             if (!file.seek(dataOffset)) {
-                Serial.printf("[epub-zip] Could not seek to %s data: %s offset=%lu\n", context, entry.name.c_str(),
+                Logger::error("epub-zip", "Could not seek to %s data: %s offset=%lu", context, entry.name.c_str(),
                               static_cast<unsigned long>(dataOffset));
                 return false;
             }
@@ -156,7 +156,7 @@ namespace EpubZip {
                                const char* context) {
             uint8_t* buffer = static_cast<uint8_t*>(allocateInternalBuffer(kReadChunkBytes));
             if (buffer == nullptr) {
-                Serial.printf("[epub-zip] No internal buffer for stored %s: %s\n", context, entry.name.c_str());
+                Logger::debug("epub-zip", "No internal buffer for stored %s: %s", context, entry.name.c_str());
                 return false;
             }
 
@@ -165,7 +165,7 @@ namespace EpubZip {
             while (remaining > 0) {
                 const size_t chunk = std::min(kReadChunkBytes, static_cast<size_t>(remaining));
                 if (!readExact(file, buffer, chunk)) {
-                    Serial.printf("[epub-zip] Stored %s read failed: %s remaining=%lu\n", context, entry.name.c_str(),
+                    Logger::error("epub-zip", "Stored %s read failed: %s remaining=%lu", context, entry.name.c_str(),
                                   static_cast<unsigned long>(remaining));
                     ok = false;
                     break;
@@ -192,8 +192,7 @@ namespace EpubZip {
             tinfl_decompressor* inflator =
                 static_cast<tinfl_decompressor*>(allocateInternalBuffer(sizeof(tinfl_decompressor)));
             if (inputBuffer == nullptr || dictionary == nullptr || inflator == nullptr) {
-                Serial.printf("[epub-zip] No internal inflate buffers for %s: %s input=%s "
-                              "dict=%s inflator=%s\n",
+                Logger::debug("epub-zip", "No internal inflate buffers for %s: %s input=%s dict=%s inflator=%s",
                               context, entry.name.c_str(), inputBuffer == nullptr ? "no" : "yes",
                               dictionary == nullptr ? "no" : "yes", inflator == nullptr ? "no" : "yes");
                 freeBuffer(inputBuffer);
@@ -214,7 +213,7 @@ namespace EpubZip {
                 if (inputAvailable == 0 && compressedRemaining > 0) {
                     const size_t chunk = std::min(kInflateInputChunkBytes, static_cast<size_t>(compressedRemaining));
                     if (!readExact(file, inputBuffer, chunk)) {
-                        Serial.printf("[epub-zip] Deflated %s read failed: %s remaining=%lu\n", context,
+                        Logger::error("epub-zip", "Deflated %s read failed: %s remaining=%lu", context,
                                       entry.name.c_str(), static_cast<unsigned long>(compressedRemaining));
                         ok = false;
                         break;
@@ -247,7 +246,7 @@ namespace EpubZip {
                 serviceBackground();
 
                 if (status < TINFL_STATUS_DONE) {
-                    Serial.printf("[epub-zip] Inflate failed for %s status=%d context=%s\n", entry.name.c_str(),
+                    Logger::error("epub-zip", "Inflate failed for %s status=%d context=%s", entry.name.c_str(),
                                   static_cast<int>(status), context);
                     ok = false;
                     break;
@@ -255,7 +254,7 @@ namespace EpubZip {
 
                 if (inSize == 0 && outSize == 0 && status != TINFL_STATUS_DONE && inputAvailable == 0
                     && compressedRemaining == 0) {
-                    Serial.printf("[epub-zip] Inflate stalled for %s status=%d context=%s\n", entry.name.c_str(),
+                    Logger::error("epub-zip", "Inflate stalled for %s status=%d context=%s", entry.name.c_str(),
                                   static_cast<int>(status), context);
                     ok = false;
                     break;
@@ -280,17 +279,16 @@ namespace EpubZip {
         };
 
         if (!file_ || file_.isDirectory()) {
-            Serial.printf("[epub-zip] Open failed: %s\n", path.c_str());
+            Logger::error("epub-zip", "Open failed: %s", path.c_str());
             return failWithClosedArchive();
         }
 
-        Serial.printf("[epub-zip] Opened archive: %s size=%lu\n", path.c_str(),
-                      static_cast<unsigned long>(file_.size()));
+        Logger::info("epub-zip", "Opened archive: %s size=%lu", path.c_str(), static_cast<unsigned long>(file_.size()));
         if (!readCentralDirectory()) {
-            Serial.printf("[epub-zip] Central directory read failed: %s\n", path.c_str());
+            Logger::error("epub-zip", "Central directory read failed: %s", path.c_str());
             return failWithClosedArchive();
         }
-        Serial.printf("[epub-zip] Archive ready: %u file entries\n", static_cast<unsigned int>(entries_.size()));
+        Logger::info("epub-zip", "Archive ready: %u file entries", static_cast<unsigned int>(entries_.size()));
         logArchiveHints("open");
         return true;
     }
@@ -323,18 +321,18 @@ namespace EpubZip {
             return toLowerCopy(entry.name) == lowered;
         });
         if (insensitive != entries_.end()) {
-            Serial.printf("[epub-zip] Case-insensitive ZIP match: requested=%s actual=%s\n", normalized.c_str(),
+            Logger::debug("epub-zip", "Case-insensitive ZIP match: requested=%s actual=%s", normalized.c_str(),
                           insensitive->name.c_str());
             return &(*insensitive);
         }
 
-        Serial.printf("[epub-zip] Entry not found: %s\n", normalized.c_str());
+        Logger::error("epub-zip", "Entry not found: %s", normalized.c_str());
         logArchiveHints("missing entry");
         return nullptr;
     }
 
     bool Archive::extractToString(const String& name, String& output, size_t maxBytes) {
-        Serial.printf("[epub-zip] Request string entry: %s\n", name.c_str());
+        Logger::debug("epub-zip", "Request string entry: %s", name.c_str());
         Serial.flush();
         const ZipEntry* entry = find(name);
         if (entry == nullptr) {
@@ -351,7 +349,7 @@ namespace EpubZip {
                                                        size_t itemCount) {
         const ZipEntry* entry = find(name);
         if (entry == nullptr) {
-            Serial.printf("[epub-zip] Content entry not found: %s\n", name.c_str());
+            Logger::error("epub-zip", "Content entry not found: %s", name.c_str());
             return ContentExtractStatus::Failed;
         }
         return extractContentToRsvp(*entry, output, wordCount, maxWords, lastChapterTitle, chapterCount, tocEntries,
@@ -359,13 +357,12 @@ namespace EpubZip {
     }
 
     void Archive::logArchiveHints(const char* reason) const {
-        Serial.printf("[epub-zip] Archive hints (%s): entries=%u\n", reason == nullptr ? "" : reason,
+        Logger::debug("epub-zip", "Archive hints (%s): entries=%u", reason == nullptr ? "" : reason,
                       static_cast<unsigned int>(entries_.size()));
 
         auto logEntry = [](const char* label, size_t displayIndex, const ZipEntry& entry) {
-            Serial.printf("[epub-zip]   %s[%u] %s method=%u flags=0x%04x c=%lu "
-                          "u=%lu local=%lu\n",
-                          label, static_cast<unsigned int>(displayIndex), entry.name.c_str(), entry.method, entry.flags,
+            Logger::debug("epub-zip", "  %s[%u] %s method=%u flags=0x%04x c=%lu u=%lu local=%lu", label,
+                          static_cast<unsigned int>(displayIndex), entry.name.c_str(), entry.method, entry.flags,
                           static_cast<unsigned long>(entry.compressedSize),
                           static_cast<unsigned long>(entry.uncompressedSize),
                           static_cast<unsigned long>(entry.localHeaderOffset));
@@ -390,7 +387,7 @@ namespace EpubZip {
     bool Archive::readCentralDirectory() {
         const uint32_t fileSize = static_cast<uint32_t>(file_.size());
         if (fileSize < 22) {
-            Serial.printf("[epub-zip] File too small for ZIP EOCD: %lu\n", static_cast<unsigned long>(fileSize));
+            Logger::debug("epub-zip", "File too small for ZIP EOCD: %lu", static_cast<unsigned long>(fileSize));
             return false;
         }
 
@@ -403,13 +400,13 @@ namespace EpubZip {
             const size_t tailSize = fileSize < kZipEocdMaxSearch ? static_cast<size_t>(fileSize) : kZipEocdMaxSearch;
             uint8_t* tail = static_cast<uint8_t*>(allocateBuffer(tailSize));
             if (tail == nullptr) {
-                Serial.printf("[epub-zip] No memory for EOCD tail buffer: %u bytes\n",
+                Logger::error("epub-zip", "No memory for EOCD tail buffer: %u bytes",
                               static_cast<unsigned int>(tailSize));
                 return false;
             }
 
             const uint32_t tailOffset = fileSize - static_cast<uint32_t>(tailSize);
-            Serial.printf("[epub-zip] Searching EOCD: fileSize=%lu tailOffset=%lu tailSize=%u\n",
+            Logger::debug("epub-zip", "Searching EOCD: fileSize=%lu tailOffset=%lu tailSize=%u",
                           static_cast<unsigned long>(fileSize), static_cast<unsigned long>(tailOffset),
                           static_cast<unsigned int>(tailSize));
             const bool ok = file_.seek(tailOffset) && readExact(file_, tail, tailSize);
@@ -426,7 +423,7 @@ namespace EpubZip {
             }();
 
             if (eocdIndex < 0) {
-                Serial.printf("[epub-zip] EOCD signature not found (tailRead=%s)\n", ok ? "yes" : "no");
+                Logger::error("epub-zip", "EOCD signature not found (tailRead=%s)", ok ? "yes" : "no");
                 freeBuffer(tail);
                 return false;
             }
@@ -438,15 +435,14 @@ namespace EpubZip {
             const uint32_t centralDirectorySize = readLe32(tail + eocdIndex + 12);
             freeBuffer(tail);
 
-            Serial.printf("[epub-zip] EOCD found: eocdOffset=%lu entries=%u "
-                          "cdOffset=%lu cdSize=%lu disk=%u "
-                          "dirDisk=%u\n",
+            Logger::debug("epub-zip",
+                          "EOCD found: eocdOffset=%lu entries=%u cdOffset=%lu cdSize=%lu disk=%u dirDisk=%u",
                           static_cast<unsigned long>(tailOffset + static_cast<uint32_t>(eocdIndex)), entryCount,
                           static_cast<unsigned long>(centralDirectoryOffset),
                           static_cast<unsigned long>(centralDirectorySize), diskNumber, directoryDisk);
 
             if (diskNumber != 0 || directoryDisk != 0 || entryCount == 0 || entryCount > kMaxZipEntries) {
-                Serial.printf("[epub] Unsupported ZIP directory entry count: %u\n", entryCount);
+                Logger::warning("epub", "Unsupported ZIP directory entry count: %u", entryCount);
                 return false;
             }
         }
@@ -454,7 +450,7 @@ namespace EpubZip {
         entries_.clear();
         entries_.reserve(entryCount);
         if (!file_.seek(centralDirectoryOffset)) {
-            Serial.printf("[epub-zip] Could not seek to central directory offset=%lu\n",
+            Logger::error("epub-zip", "Could not seek to central directory offset=%lu",
                           static_cast<unsigned long>(centralDirectoryOffset));
             return false;
         }
@@ -473,7 +469,7 @@ namespace EpubZip {
                 std::array<uint8_t, 46> header;
                 if (!readExact(file_, header.data(), header.size())
                     || readLe32(header.data()) != kZipCentralFileSignature) {
-                    Serial.printf("[epub-zip] Bad central header at index=%u pos=%lu\n", i,
+                    Logger::debug("epub-zip", "Bad central header at index=%u pos=%lu", i,
                                   static_cast<unsigned long>(file_.position()));
                     return false;
                 }
@@ -482,13 +478,13 @@ namespace EpubZip {
                 extraLength = readLe16(header.data() + 30);
                 commentLength = readLe16(header.data() + 32);
                 if (fileNameLength == 0 || fileNameLength > kMaxZipNameLength) {
-                    Serial.printf("[epub] Unsupported ZIP filename length: %u\n", fileNameLength);
+                    Logger::warning("epub", "Unsupported ZIP filename length: %u", fileNameLength);
                     return false;
                 }
 
                 char* nameBuffer = static_cast<char*>(allocateBuffer(fileNameLength + 1));
                 if (nameBuffer == nullptr) {
-                    Serial.printf("[epub-zip] No memory for filename buffer: %u bytes\n", fileNameLength + 1);
+                    Logger::error("epub-zip", "No memory for filename buffer: %u bytes", fileNameLength + 1);
                     return false;
                 }
 
@@ -510,7 +506,7 @@ namespace EpubZip {
 
             const uint32_t nextPosition = static_cast<uint32_t>(file_.position()) + extraLength + commentLength;
             if (!file_.seek(nextPosition)) {
-                Serial.printf("[epub-zip] Could not seek past central extras for %s next=%lu\n", entry.name.c_str(),
+                Logger::error("epub-zip", "Could not seek past central extras for %s next=%lu", entry.name.c_str(),
                               static_cast<unsigned long>(nextPosition));
                 return false;
             }
@@ -520,7 +516,7 @@ namespace EpubZip {
             }
         }
 
-        Serial.printf("[epub-zip] Central directory parsed: kept=%u rawEntries=%u\n",
+        Logger::debug("epub-zip", "Central directory parsed: kept=%u rawEntries=%u",
                       static_cast<unsigned int>(entries_.size()), entryCount);
         return true;
     }
@@ -528,17 +524,16 @@ namespace EpubZip {
     bool Archive::extractToString(const ZipEntry& entry, String& output, size_t maxBytes) {
         output = "";
 
-        Serial.printf("[epub-zip] Extract string: %s method=%u flags=0x%04x c=%lu "
-                      "u=%lu max=%u\n",
-                      entry.name.c_str(), entry.method, entry.flags, static_cast<unsigned long>(entry.compressedSize),
+        Logger::debug("epub-zip", "Extract string: %s method=%u flags=0x%04x c=%lu u=%lu max=%u", entry.name.c_str(),
+                      entry.method, entry.flags, static_cast<unsigned long>(entry.compressedSize),
                       static_cast<unsigned long>(entry.uncompressedSize), static_cast<unsigned int>(maxBytes));
         Serial.flush();
 
         if (entry.uncompressedSize == 0 || entry.uncompressedSize > maxBytes || entry.compressedSize == 0
             || entry.compressedSize > maxBytes) {
-            Serial.printf("[epub] Skipping %s (%lu compressed, %lu uncompressed bytes)\n", entry.name.c_str(),
-                          static_cast<unsigned long>(entry.compressedSize),
-                          static_cast<unsigned long>(entry.uncompressedSize));
+            Logger::warning("epub", "Skipping %s (%lu compressed, %lu uncompressed bytes)", entry.name.c_str(),
+                            static_cast<unsigned long>(entry.compressedSize),
+                            static_cast<unsigned long>(entry.uncompressedSize));
             return false;
         }
 
@@ -548,7 +543,7 @@ namespace EpubZip {
         }
 
         if (!output.reserve(static_cast<unsigned int>(entry.uncompressedSize + 1))) {
-            Serial.printf("[epub-zip] No memory to reserve string for %s (%lu bytes)\n", entry.name.c_str(),
+            Logger::error("epub-zip", "No memory to reserve string for %s (%lu bytes)", entry.name.c_str(),
                           static_cast<unsigned long>(entry.uncompressedSize));
             return false;
         }
@@ -559,11 +554,11 @@ namespace EpubZip {
                 return true;
             }
             if (totalOutputBytes + length > maxBytes) {
-                Serial.printf("[epub-zip] String extraction exceeded limit for %s\n", entry.name.c_str());
+                Logger::error("epub-zip", "String extraction exceeded limit for %s", entry.name.c_str());
                 return false;
             }
             if (!output.concat(reinterpret_cast<const char*>(data), static_cast<unsigned int>(length))) {
-                Serial.printf("[epub-zip] String append failed for %s length=%u\n", entry.name.c_str(),
+                Logger::error("epub-zip", "String append failed for %s length=%u", entry.name.c_str(),
                               static_cast<unsigned int>(length));
                 return false;
             }
@@ -572,26 +567,26 @@ namespace EpubZip {
 
         bool ok = [&]() {
             if (entry.method == kZipStored) {
-                Serial.printf("[epub-zip] Reading stored string payload: %s\n", entry.name.c_str());
+                Logger::debug("epub-zip", "Reading stored string payload: %s", entry.name.c_str());
                 return readStoredPayload(file_, entry, totalOutputBytes, appendBytes, "string");
             }
             if (entry.method == kZipDeflated) {
-                Serial.printf("[epub-zip] Streaming inflate string payload: %s\n", entry.name.c_str());
+                Logger::debug("epub-zip", "Streaming inflate string payload: %s", entry.name.c_str());
                 return inflatePayload(file_, entry, totalOutputBytes, appendBytes, "string");
             }
-            Serial.printf("[epub] Unsupported ZIP method %u for %s\n", entry.method, entry.name.c_str());
+            Logger::warning("epub", "Unsupported ZIP method %u for %s", entry.method, entry.name.c_str());
             return false;
         }();
 
         if (ok && totalOutputBytes != entry.uncompressedSize) {
-            Serial.printf("[epub-zip] String inflate size mismatch for %s (%lu of %lu bytes)\n", entry.name.c_str(),
+            Logger::error("epub-zip", "String inflate size mismatch for %s (%lu of %lu bytes)", entry.name.c_str(),
                           static_cast<unsigned long>(totalOutputBytes),
                           static_cast<unsigned long>(entry.uncompressedSize));
             ok = false;
         }
 
         if (ok) {
-            Serial.printf("[epub-zip] Extracted string OK: %s textLen=%u\n", entry.name.c_str(),
+            Logger::debug("epub-zip", "Extracted string OK: %s textLen=%u", entry.name.c_str(),
                           static_cast<unsigned int>(output.length()));
         }
 
@@ -604,16 +599,15 @@ namespace EpubZip {
                                                        const String& fallbackChapterTitle, const String& bookTitle,
                                                        const EpubConverter::Options& options, size_t itemIndex,
                                                        size_t itemCount) {
-        Serial.printf("[epub-zip] Extract content: %s method=%u flags=0x%04x c=%lu u=%lu\n", entry.name.c_str(),
+        Logger::debug("epub-zip", "Extract content: %s method=%u flags=0x%04x c=%lu u=%lu", entry.name.c_str(),
                       entry.method, entry.flags, static_cast<unsigned long>(entry.compressedSize),
                       static_cast<unsigned long>(entry.uncompressedSize));
 
         if (entry.uncompressedSize == 0 || entry.compressedSize == 0 || entry.uncompressedSize > options.maxContentBytes
             || entry.compressedSize > options.maxContentBytes) {
-            Serial.printf("[epub] Skipping oversized content %s (%lu compressed, %lu "
-                          "uncompressed bytes)\n",
-                          entry.name.c_str(), static_cast<unsigned long>(entry.compressedSize),
-                          static_cast<unsigned long>(entry.uncompressedSize));
+            Logger::warning("epub", "Skipping oversized content %s (%lu compressed, %lu uncompressed bytes)",
+                            entry.name.c_str(), static_cast<unsigned long>(entry.compressedSize),
+                            static_cast<unsigned long>(entry.uncompressedSize));
             return ContentExtractStatus::Unsupported;
         }
 
@@ -623,7 +617,7 @@ namespace EpubZip {
         }
 
         EpubContent::RsvpContentWriter writer(output, wordCount, maxWords, lastChapterTitle, chapterCount, tocEntries,
-                                               hasToc, fallbackChapterTitle, bookTitle);
+                                              hasToc, fallbackChapterTitle, bookTitle);
         uint32_t totalOutputBytes = 0;
         uint32_t lastProgressBytes = 0;
         ContentExtractStatus result = ContentExtractStatus::Complete;
@@ -661,7 +655,7 @@ namespace EpubZip {
             if (entry.method == kZipDeflated) {
                 return inflatePayload(file_, entry, totalOutputBytes, writeChunk, "content");
             }
-            Serial.printf("[epub] Unsupported ZIP method %u for %s\n", entry.method, entry.name.c_str());
+            Logger::warning("epub", "Unsupported ZIP method %u for %s", entry.method, entry.name.c_str());
             result = ContentExtractStatus::Unsupported;
             return false;
         };
@@ -673,7 +667,7 @@ namespace EpubZip {
         }
 
         if (totalOutputBytes != entry.uncompressedSize) {
-            Serial.printf("[epub] Inflate size mismatch for %s (%lu of %lu bytes)\n", entry.name.c_str(),
+            Logger::error("epub", "Inflate size mismatch for %s (%lu of %lu bytes)", entry.name.c_str(),
                           static_cast<unsigned long>(totalOutputBytes),
                           static_cast<unsigned long>(entry.uncompressedSize));
             return ContentExtractStatus::Failed;

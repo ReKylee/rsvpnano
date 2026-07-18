@@ -1,3 +1,4 @@
+#include "logging/Logger.h"
 #include "ui/screens/ScreenCommon.h"
 
 #include <algorithm>
@@ -21,10 +22,9 @@ namespace screens {
                 auto saved = focus::save(*filesystem_, timers_);
                 writable_ = saved.has_value();
                 if (!saved)
-                    StorageFiles::logError("focus", "save defaults", StoragePaths::kFocusConfigPath, saved.error());
+                    Logger::failure("focus", "save defaults", StoragePaths::kFocusConfigPath, saved.error());
             } else {
-                StorageFiles::logError("focus", "load; using defaults", StoragePaths::kFocusConfigPath,
-                                       loaded.error());
+                Logger::failure("focus", "load; using defaults", StoragePaths::kFocusConfigPath, loaded.error());
             }
         }
         orientation_.begin();
@@ -363,7 +363,7 @@ namespace screens {
             return false;
         auto saved = focus::save(*filesystem_, timers);
         if (!saved)
-            StorageFiles::logError("focus", "save", StoragePaths::kFocusConfigPath, saved.error());
+            Logger::failure("focus", "save", StoragePaths::kFocusConfigPath, saved.error());
         return saved.has_value();
     }
 

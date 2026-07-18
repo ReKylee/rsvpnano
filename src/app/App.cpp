@@ -1,4 +1,5 @@
 #include "app/App.h"
+#include "logging/Logger.h"
 
 #include <array>
 #include <string>
@@ -32,7 +33,7 @@ void App::begin() {
                                 bootMs_);
 
     if (!Board::Display::begin()) {
-        Serial.println("[app] display init failed");
+        Logger::error("app", "display init failed");
     }
     immediateUi_.setOrientation(Board::Display::defaultUiOrientation());
     immediateUi_.setTheme(interfaceScreen_.themes.selected());
@@ -40,13 +41,12 @@ void App::begin() {
 
     storage_.begin();
     if (auto result = settingsStore_.begin(storage_.mounted() ? &Board::Storage::filesystem() : nullptr); !result)
-        Serial.printf("[settings] startup warning: %s\n", result.error().message.c_str());
+        Logger::warning("settings", "startup warning: %s", result.error().message.c_str());
     migrateLegacyStorage();
     readerScreen_.fonts.loadFromSd();
     auto& deviceSettings = settingsStore_.settings();
     interfaceScreen_.begin(immediateUi_, deviceSettings.interface, deviceSettings.reading.typography,
-                           readerScreen_.fonts,
-                           &Board::Display::setBrightness);
+                           readerScreen_.fonts, &Board::Display::setBrightness);
     readerScreen_.begin(deviceSettings.reading, interfaceScreen_.themes.selected(), bootMs_);
     networkScreen_.begin(settingsStore_);
     focusScreen_.begin(storage_.mounted() ? &Board::Storage::filesystem() : nullptr);
@@ -183,8 +183,8 @@ void App::renderScreen(uint32_t nowMs) {
     case screens::Screen::TypographySettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         if (screens::typographySettings(immediateUi_, readerScreen_.book.state.bookTypographyOverride,
-                                        interfaceScreen_.themes.selected().definition.typography,
-                                        readerScreen_.fonts, screen_)) {
+                                        interfaceScreen_.themes.selected().definition.typography, readerScreen_.fonts,
+                                        screen_)) {
             readerScreen_.book.mirror(readerScreen_.store, readerScreen_.reader);
             readerScreen_.refreshTypography();
         }
@@ -271,8 +271,7 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
         return;
     case screens::Action::CompanionSync:
         immediateUi_.invalidate();
-        screens::status(immediateUi_, immediateUi_.text(UiText::CompanionSync),
-                        immediateUi_.text(UiText::Connecting));
+        screens::status(immediateUi_, immediateUi_.text(UiText::CompanionSync), immediateUi_.text(UiText::Connecting));
         sync_.begin();
         renderScreen(nowMs);
         return;
@@ -413,8 +412,8 @@ void App::handleTouch(uint32_t nowMs) {
 void App::runRss() {
     readerScreen_.reader.pause();
     screens::status(immediateUi_, "RSS", immediateUi_.text(UiText::CheckingFeeds));
-    const RssFeeds::Result result = RssFeeds::check(prefs_, settingsStore_.settings(), settingsStore_.secrets(),
-                                                   &App::renderStorageStatus, this);
+    const RssFeeds::Result result =
+        RssFeeds::check(prefs_, settingsStore_.settings(), settingsStore_.secrets(), &App::renderStorageStatus, this);
     storage_.refreshBooks();
     libraryScreen_.invalidate();
     screens::status(immediateUi_, "RSS", result.summary.c_str(), result.detail.c_str());
@@ -508,7 +507,7 @@ void App::exitStandby(uint32_t nowMs) {
 }
 
 void App::deepSleepFromStandby(uint32_t nowMs) {
-    Serial.println("[app] standby timeout reached; entering deep sleep");
+    Logger::warning("app", "standby timeout reached; entering deep sleep");
     readerScreen_.book.save(prefs_, readerScreen_.reader, true, nowMs);
     readerScreen_.book.mirror(readerScreen_.store, readerScreen_.reader);
     standbyScreen_.reset();

@@ -1,4 +1,5 @@
 #include "storage/index/ReadingProgress.h"
+#include "logging/Logger.h"
 
 #include <FS.h>
 #include <Preferences.h>
@@ -83,7 +84,7 @@ namespace ReadingProgress {
         }
 
         std::expected<void, std::error_code> writeSessionSidecar(const Session& session, const IndexedBookStore& store,
-                                                                uint32_t wordIndex, uint32_t wordCount) {
+                                                                 uint32_t wordIndex, uint32_t wordCount) {
             if (!session.fromStorage || session.path.empty() || !store.isOpen() || wordCount == 0)
                 return std::unexpected(std::make_error_code(std::errc::invalid_argument));
             BookState state = session.state;
@@ -95,7 +96,7 @@ namespace ReadingProgress {
         }
 
         std::expected<uint32_t, std::error_code> readSessionSidecar(Session& session, const IndexedBookStore& store,
-                                                                   const ReadingLoop& reader) {
+                                                                    const ReadingLoop& reader) {
             const BookIdentity identity{store.sourceSize(), store.sourceFingerprint(),
                                         static_cast<uint32_t>(reader.wordCount())};
             if (!session.fromStorage || session.path.empty() || !store.isOpen())
@@ -111,7 +112,9 @@ namespace ReadingProgress {
 
     std::expected<uint32_t, std::error_code> readBookStatePosition(const String& bookPath,
                                                                    const BookIdentity& identity) {
-        return readBookState(bookPath, identity).transform([](const BookState& state) { return state.wordIndex; });
+        return readBookState(bookPath, identity).transform([](const BookState& state) {
+            return state.wordIndex;
+        });
     }
 
     std::expected<void, std::error_code> writeBookStatePosition(const String& bookPath, const BookIdentity& identity,
@@ -127,9 +130,9 @@ namespace ReadingProgress {
         if (auto written = writeBookState(bookPath, std::move(state)); !written)
             return written;
 
-        Serial.printf("[storage-progress] mirrored position word=%u count=%u state=%s\n",
-                      static_cast<unsigned int>(wordIndex), static_cast<unsigned int>(identity.wordCount),
-                      StoragePaths::bookStatePathFor(bookPath).c_str());
+        Logger::info("storage-progress", "mirrored position word=%u count=%u state=%s",
+                     static_cast<unsigned int>(wordIndex), static_cast<unsigned int>(identity.wordCount),
+                     StoragePaths::bookStatePathFor(bookPath).c_str());
         return {};
     }
 
@@ -147,8 +150,8 @@ namespace ReadingProgress {
             return;
         lastSaveMs = nowMs;
         cache(preferences, reader, static_cast<uint32_t>(wordIndex));
-        Serial.printf("[storage-progress] saved position word=%u path=%s\n", static_cast<unsigned int>(wordIndex),
-                      path.c_str());
+        Logger::info("storage-progress", "saved position word=%u path=%s", static_cast<unsigned int>(wordIndex),
+                     path.c_str());
     }
 
     void Session::cache(Preferences& preferences, const ReadingLoop& reader, uint32_t wordIndex) {
@@ -165,8 +168,8 @@ namespace ReadingProgress {
         auto written = writeSessionSidecar(*this, store, static_cast<uint32_t>(reader.currentIndex()),
                                            static_cast<uint32_t>(reader.wordCount()));
         if (!written)
-            StorageFiles::logError("storage-progress", "mirror", StoragePaths::bookStatePathFor(path.c_str()).c_str(),
-                                   written.error());
+            Logger::failure("storage-progress", "mirror", StoragePaths::bookStatePathFor(path.c_str()).c_str(),
+                            written.error());
     }
 
     uint32_t Session::restore(const IndexedBookStore& store, const ReadingLoop& reader) {
@@ -175,8 +178,8 @@ namespace ReadingProgress {
             return *wordIndex;
         if (wordIndex.error() != std::errc::no_such_file_or_directory
             && wordIndex.error() != std::errc::state_not_recoverable)
-            StorageFiles::logError("storage-progress", "restore", StoragePaths::bookStatePathFor(path.c_str()).c_str(),
-                                   wordIndex.error());
+            Logger::failure("storage-progress", "restore", StoragePaths::bookStatePathFor(path.c_str()).c_str(),
+                            wordIndex.error());
         return kNoSavedWordIndex;
     }
 

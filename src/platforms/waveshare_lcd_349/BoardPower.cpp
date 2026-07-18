@@ -1,4 +1,5 @@
 #include "board/BoardPower.h"
+#include "logging/Logger.h"
 
 #include <Wire.h>
 #include <algorithm>
@@ -31,7 +32,7 @@ namespace Board::Power {
                                                          WaveshareLcd349::Tca9554Wiring::kSysEnablePin, true,
                                                          WaveshareLcd349::Tca9554Wiring::kReleaseBusBeforeRead)) {
             gPower.batteryPowerHoldEnabled = true;
-            Serial.println("[board] Battery power hold enabled");
+            Logger::info("board", "Battery power hold enabled");
         }
     }
 
@@ -110,12 +111,12 @@ namespace Board::Power {
         if (!BoardDrivers::Tca9554::configureOutputPin(Wire1, WaveshareLcd349::Tca9554Wiring::kAddress,
                                                        WaveshareLcd349::Tca9554Wiring::kSysEnablePin, false,
                                                        WaveshareLcd349::Tca9554Wiring::kReleaseBusBeforeRead)) {
-            Serial.println("[board] Battery power hold release failed");
+            Logger::error("board", "Battery power hold release failed");
             return false;
         }
 
         gPower.batteryPowerHoldEnabled = false;
-        Serial.println("[board] Battery power hold released");
+        Logger::info("board", "Battery power hold released");
         return true;
     }
 

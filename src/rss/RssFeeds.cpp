@@ -1,4 +1,5 @@
 #include "rss/RssFeeds.h"
+#include "logging/Logger.h"
 
 #include <HTTPClient.h>
 #include <WiFi.h>
@@ -201,7 +202,7 @@ namespace {
     }
 
     void report(RssFeeds::StatusCallback callback, void* context, const String& line1, const String& line2,
-                                int progressPercent) {
+                int progressPercent) {
         if (callback == nullptr) {
             return;
         }
@@ -210,9 +211,11 @@ namespace {
 
     bool connectWiFi(const String& wifiSsid, const String& wifiPassword, RssFeeds::StatusCallback callback,
                      void* context) {
-        return net::connectStation(wifiSsid.c_str(), wifiPassword.c_str(), [&](int percent) {
-                   report(callback, context, "Connecting Wi-Fi", wifiSsid, percent);
-               }).has_value();
+        return net::connectStation(wifiSsid.c_str(), wifiPassword.c_str(),
+                                   [&](int percent) {
+                                       report(callback, context, "Connecting Wi-Fi", wifiSsid, percent);
+                                   })
+            .has_value();
     }
 
     void disconnectWiFi() {
@@ -249,7 +252,7 @@ namespace {
                 if (location.isEmpty())
                     return std::unexpected(std::string{"Feed moved but gave no link"});
                 currentUrl = resolveRedirectUrl(currentUrl, location);
-                Serial.printf("[rss] redirect %u url=%s\n", static_cast<unsigned int>(statusCode), currentUrl.c_str());
+                Logger::debug("rss", "redirect %u url=%s", static_cast<unsigned int>(statusCode), currentUrl.c_str());
                 report(callback, context, feedProgressLabel(feedIndex, feedCount),
                        "Redirecting to " + feedparser::hostLabelForUrl(currentUrl), 18 + feedIndex * 7);
                 delay(250);
@@ -286,10 +289,9 @@ namespace {
                 if (nowMs - startedMs > kFeedTotalTimeoutMs) {
                     if (completeItemsRead > 0) {
                         acceptedPartialFeed = true;
-                        Serial.printf("[rss] total timeout after usable items url=%s "
-                                      "bytes=%u items=%u\n",
-                                      currentUrl.c_str(), static_cast<unsigned int>(totalRead),
-                                      static_cast<unsigned int>(completeItemsRead));
+                        Logger::warning("rss", "total timeout after usable items url=%s bytes=%u items=%u",
+                                        currentUrl.c_str(), static_cast<unsigned int>(totalRead),
+                                        static_cast<unsigned int>(completeItemsRead));
                         break;
                     }
                     http.end();
@@ -298,12 +300,13 @@ namespace {
                 if (nowMs - lastByteMs > kFeedIdleTimeoutMs) {
                     if (completeItemsRead > 0) {
                         acceptedPartialFeed = true;
-                        Serial.printf("[rss] idle after usable items url=%s bytes=%u items=%u\n", currentUrl.c_str(),
-                                      static_cast<unsigned int>(totalRead), static_cast<unsigned int>(completeItemsRead));
+                        Logger::debug("rss", "idle after usable items url=%s bytes=%u items=%u", currentUrl.c_str(),
+                                      static_cast<unsigned int>(totalRead),
+                                      static_cast<unsigned int>(completeItemsRead));
                         break;
                     }
                     if (totalRead > 0 && feedparser::hasCompleteFeed(body)) {
-                        Serial.printf("[rss] idle after complete feed url=%s bytes=%u\n", currentUrl.c_str(),
+                        Logger::debug("rss", "idle after complete feed url=%s bytes=%u", currentUrl.c_str(),
                                       static_cast<unsigned int>(totalRead));
                         break;
                     }
@@ -313,7 +316,8 @@ namespace {
                 if (nowMs - lastReportMs >= kFeedProgressIntervalMs) {
                     lastReportMs = nowMs;
                     report(callback, context, feedProgressLabel(feedIndex, feedCount),
-                           "Downloaded " + String(static_cast<unsigned int>(totalRead / 1024)) + " KB", 20 + feedIndex * 7);
+                           "Downloaded " + String(static_cast<unsigned int>(totalRead / 1024)) + " KB",
+                           20 + feedIndex * 7);
                 }
                 if (reportedSize > 0 && totalRead >= static_cast<size_t>(reportedSize)) {
                     break;
@@ -338,13 +342,14 @@ namespace {
                 for (int i = 0; i < bytesRead; ++i) {
                     body += static_cast<char>(buffer[i]);
                 }
-                while (completeItemsRead < kMaxItemsPerFeed && feedparser::advancePastItem(body, completeItemSearchStart)) {
+                while (completeItemsRead < kMaxItemsPerFeed
+                       && feedparser::advancePastItem(body, completeItemSearchStart)) {
                     ++completeItemsRead;
                 }
                 if (completeItemsRead >= kMaxItemsPerFeed) {
                     stoppedAfterItems = true;
-                    Serial.printf("[rss] downloaded item limit url=%s bytes=%u items=%u\n", currentUrl.c_str(),
-                                  static_cast<unsigned int>(totalRead), static_cast<unsigned int>(completeItemsRead));
+                    Logger::info("rss", "downloaded item limit url=%s bytes=%u items=%u", currentUrl.c_str(),
+                                 static_cast<unsigned int>(totalRead), static_cast<unsigned int>(completeItemsRead));
                     break;
                 }
                 const size_t closeSearchStart = previousRead > 16 ? previousRead - 16 : 0;
@@ -357,15 +362,16 @@ namespace {
             if (body.isEmpty())
                 return std::unexpected(std::string{"Feed was empty"});
             if (totalRead >= kMaxFeedBytes) {
-                Serial.printf("[rss] feed capped url=%s bytes=%u\n", currentUrl.c_str(),
-                              static_cast<unsigned int>(totalRead));
+                Logger::warning("rss", "feed capped url=%s bytes=%u", currentUrl.c_str(),
+                                static_cast<unsigned int>(totalRead));
                 report(callback, context, feedProgressLabel(feedIndex, feedCount),
                        "Reached " + String(static_cast<unsigned int>(kMaxFeedBytes / 1024)) + " KB cap",
                        20 + feedIndex * 7);
                 delay(500);
             } else if (stoppedAfterItems) {
                 report(callback, context, feedProgressLabel(feedIndex, feedCount),
-                       "Downloaded " + String(static_cast<unsigned int>(completeItemsRead)) + " items", 20 + feedIndex * 7);
+                       "Downloaded " + String(static_cast<unsigned int>(completeItemsRead)) + " items",
+                       20 + feedIndex * 7);
             } else if (acceptedPartialFeed) {
                 report(callback, context, feedProgressLabel(feedIndex, feedCount), "Downloaded partial feed",
                        20 + feedIndex * 7);
@@ -425,13 +431,12 @@ namespace {
 
         markItemSeen(item, preferences);
         ++result.articlesSaved;
-        Serial.printf("[rss] saved %s\n", finalPath.c_str());
+        Logger::info("rss", "saved %s", finalPath.c_str());
         return {};
     }
 
-    bool processFeed(const String& feedUrl, const String& feedBody, Preferences& preferences,
-                                     RssFeeds::Result& result, uint8_t feedIndex, uint8_t feedCount, RssFeeds::StatusCallback callback,
-                                     void* context) {
+    bool processFeed(const String& feedUrl, const String& feedBody, Preferences& preferences, RssFeeds::Result& result,
+                     uint8_t feedIndex, uint8_t feedCount, RssFeeds::StatusCallback callback, void* context) {
         size_t searchStart = 0;
         uint8_t itemCount = 0;
         uint8_t savedBefore = result.articlesSaved;
@@ -451,7 +456,7 @@ namespace {
             }
             report(callback, context, "Saving article " + String(itemCount), item.title, 24 + feedIndex * 7);
             if (auto saved = saveItem(item, preferences, result); !saved)
-                Serial.printf("[rss] save failed title=%s error=%s code=%d\n", item.title.c_str(),
+                Logger::error("rss", "save failed title=%s error=%s code=%d", item.title.c_str(),
                               saved.error().message().c_str(), saved.error().value());
         }
         const uint8_t savedHere = result.articlesSaved - savedBefore;
@@ -462,16 +467,16 @@ namespace {
             report(callback, context, feedProgressLabel(feedIndex, feedCount),
                    String(savedHere) + " saved, " + String(skippedHere) + " skipped", 24 + feedIndex * 7);
         }
-        Serial.printf("[rss] feed url=%s items=%u saved=%u skipped=%u\n", feedUrl.c_str(),
-                      static_cast<unsigned int>(itemCount), static_cast<unsigned int>(savedHere),
-                      static_cast<unsigned int>(skippedHere));
+        Logger::warning("rss", "feed url=%s items=%u saved=%u skipped=%u", feedUrl.c_str(),
+                        static_cast<unsigned int>(itemCount), static_cast<unsigned int>(savedHere),
+                        static_cast<unsigned int>(skippedHere));
         delay(600);
         return itemCount > 0;
     }
 } // namespace
 
 RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::DeviceSettings& settings,
-                                const settings::DeviceSecrets& secrets, StatusCallback callback, void* context) {
+                                 const settings::DeviceSecrets& secrets, StatusCallback callback, void* context) {
     const String wifiSsid = settings.network.wifiSsid.c_str();
     const String wifiPassword = secrets.wifiPassword.c_str();
 
@@ -524,7 +529,7 @@ RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::Devic
         auto feedBody = fetchUrl(line, displayIndex, feedCount, callback, context);
         if (!feedBody) {
             const String error = feedBody.error().c_str();
-            Serial.printf("[rss] feed failed url=%s error=%s\n", line.c_str(), error.c_str());
+            Logger::error("rss", "feed failed url=%s error=%s", line.c_str(), error.c_str());
             ++feedFailures;
             if (firstFeedError.isEmpty()) {
                 firstFeedError = error;

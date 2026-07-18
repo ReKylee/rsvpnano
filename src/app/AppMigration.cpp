@@ -1,4 +1,5 @@
 #include "app/App.h"
+#include "logging/Logger.h"
 
 #include <FS.h>
 #include <glaze/toml.hpp>
@@ -6,8 +7,8 @@
 
 #include <algorithm>
 #include <array>
-#include <charconv>
 #include <cctype>
+#include <charconv>
 #include <cstdio>
 #include <string>
 #include <string_view>
@@ -125,11 +126,20 @@ void App::migrateLegacyStorage() {
                 return false;
             switch (text[index]) {
             case '\\':
-            case '"': value.push_back(text[index]); break;
-            case 'n': value.push_back('\n'); break;
-            case 'r': value.push_back('\r'); break;
-            case 't': value.push_back('\t'); break;
-            default: return false;
+            case '"':
+                value.push_back(text[index]);
+                break;
+            case 'n':
+                value.push_back('\n');
+                break;
+            case 'r':
+                value.push_back('\r');
+                break;
+            case 't':
+                value.push_back('\t');
+                break;
+            default:
+                return false;
             }
         }
         return true;
@@ -191,50 +201,70 @@ void App::migrateLegacyStorage() {
         legacySettingsSeen = true;
     };
 
-    readU16("wpm", [&](uint16_t value) { candidate.reading.wpm = value; });
-    readU8("bright", [&](uint8_t value) { candidate.interface.brightnessPercent = migrateBrightnessIndex(value); });
+    readU16("wpm", [&](uint16_t value) {
+        candidate.reading.wpm = value;
+    });
+    readU8("bright", [&](uint8_t value) {
+        candidate.interface.brightnessPercent = migrateBrightnessIndex(value);
+    });
     readStringKey("theme_id", candidate.interface.selectedThemeId);
     readU8("ui_lang", [&](uint8_t value) {
-        candidate.interface.language = value < std::to_underlying(UiLanguage::Count)
-            ? static_cast<UiLanguage>(value)
-            : UiLanguage::english;
+        candidate.interface.language =
+            value < std::to_underlying(UiLanguage::Count) ? static_cast<UiLanguage>(value) : UiLanguage::english;
     });
     readBoolKey("handed", candidate.reading.leftHanded);
     readBoolKey("phantom_on", candidate.reading.phantomWords);
     readBoolKey("ch_scroll_rev", candidate.reading.chapterScrollReversed);
     readU8("prog_md", [&](uint8_t value) {
         candidate.reading.footerMetric = value < std::to_underlying(settings::FooterMetric::Count)
-            ? static_cast<settings::FooterMetric>(value)
-            : settings::FooterMetric::percentage;
+                                           ? static_cast<settings::FooterMetric>(value)
+                                           : settings::FooterMetric::percentage;
     });
     readU8("bat_md", [&](uint8_t value) {
         candidate.reading.batteryLabel = value < std::to_underlying(settings::BatteryLabel::Count)
-            ? static_cast<settings::BatteryLabel>(value)
-            : settings::BatteryLabel::percentage;
+                                           ? static_cast<settings::BatteryLabel>(value)
+                                           : settings::BatteryLabel::percentage;
     });
     readU8("scrn_sv", [&](uint8_t value) {
-        candidate.interface.screensaver = value < std::to_underlying(standby::Kind::Count)
-            ? static_cast<standby::Kind>(value)
-            : standby::Kind::life;
+        candidate.interface.screensaver =
+            value < std::to_underlying(standby::Kind::Count) ? static_cast<standby::Kind>(value) : standby::Kind::life;
     });
     readBoolKey("read_bat", candidate.reading.batteryVisibleWhileReading);
     readBoolKey("read_ch", candidate.reading.chapterVisibleWhileReading);
     readBoolKey("read_pct", candidate.reading.progressVisibleWhileReading);
-    readU8("font_size", [&](uint8_t value) { candidate.reading.typography.fontSizeIndex = value; });
+    readU8("font_size", [&](uint8_t value) {
+        candidate.reading.typography.fontSizeIndex = value;
+    });
     readBoolKey("type_hlt", candidate.reading.typography.focusHighlight);
-    readI8("type_trk", [&](int8_t value) { candidate.reading.typography.tracking = value; });
-    readU8("type_anc", [&](uint8_t value) { candidate.reading.typography.anchor = value; });
-    readU8("type_wid", [&](uint8_t value) { candidate.reading.typography.guideWidth = value; });
-    readU8("type_gap", [&](uint8_t value) { candidate.reading.typography.guideGap = value; });
-    readU16("pace_lms", [&](uint16_t value) { candidate.reading.pacing.longWordDelayMs = value; });
-    readU16("pace_cms", [&](uint16_t value) { candidate.reading.pacing.complexWordDelayMs = value; });
-    readU16("pace_pms", [&](uint16_t value) { candidate.reading.pacing.punctuationDelayMs = value; });
+    readI8("type_trk", [&](int8_t value) {
+        candidate.reading.typography.tracking = value;
+    });
+    readU8("type_anc", [&](uint8_t value) {
+        candidate.reading.typography.anchor = value;
+    });
+    readU8("type_wid", [&](uint8_t value) {
+        candidate.reading.typography.guideWidth = value;
+    });
+    readU8("type_gap", [&](uint8_t value) {
+        candidate.reading.typography.guideGap = value;
+    });
+    readU16("pace_lms", [&](uint16_t value) {
+        candidate.reading.pacing.longWordDelayMs = value;
+    });
+    readU16("pace_cms", [&](uint16_t value) {
+        candidate.reading.pacing.complexWordDelayMs = value;
+    });
+    readU16("pace_pms", [&](uint16_t value) {
+        candidate.reading.pacing.punctuationDelayMs = value;
+    });
     readU8("pause_md", [&](uint8_t value) {
         candidate.reading.pauseMode = value < std::to_underlying(settings::PauseMode::Count)
-            ? static_cast<settings::PauseMode>(value)
-            : settings::PauseMode::sentenceEnd;
+                                        ? static_cast<settings::PauseMode>(value)
+                                        : settings::PauseMode::sentenceEnd;
     });
-    readU8("stby_tmr", [&](uint8_t value) { candidate.interface.standbyTimerIndex = value; });
+    readU8("stby_tmr", [&](uint8_t value) {
+        candidate.interface.standbyTimerIndex = value;
+    });
     readStringKey("wifi_ssid", candidate.network.wifiSsid);
     readBoolKey("ota_auto", candidate.updates.automatic);
     readStringKey("ota_owner", candidate.updates.repositoryOwner);
@@ -276,76 +306,106 @@ void App::migrateLegacyStorage() {
             field = parsedValue;
             return true;
         };
-        auto assigned = [](bool valid) { return valid ? AssignResult::applied : AssignResult::invalid; };
+        auto assigned = [](bool valid) {
+            return valid ? AssignResult::applied : AssignResult::invalid;
+        };
         auto assignLegacySetting = [&](std::string_view key, std::string_view value) {
-            if (key == "wpm") return assigned(assignUnsigned(value, parsed.reading.wpm));
+            if (key == "wpm")
+                return assigned(assignUnsigned(value, parsed.reading.wpm));
             if (key == "bright") {
                 uint64_t legacyValue = 0;
-                if (!parseUnsigned(value, legacyValue)) return AssignResult::invalid;
+                if (!parseUnsigned(value, legacyValue))
+                    return AssignResult::invalid;
                 parsed.interface.brightnessPercent = migrateBrightnessIndex(legacyValue);
                 return AssignResult::applied;
             }
-            if (key == "theme_id") return assigned(parseString(value, parsed.interface.selectedThemeId));
-            if (key == "handed") return assigned(parseBool(value, parsed.reading.leftHanded));
-            if (key == "phantom_on") return assigned(parseBool(value, parsed.reading.phantomWords));
-            if (key == "ch_scroll_rev") return assigned(parseBool(value, parsed.reading.chapterScrollReversed));
-            if (key == "read_bat") return assigned(parseBool(value, parsed.reading.batteryVisibleWhileReading));
-            if (key == "read_ch") return assigned(parseBool(value, parsed.reading.chapterVisibleWhileReading));
-            if (key == "read_pct") return assigned(parseBool(value, parsed.reading.progressVisibleWhileReading));
-            if (key == "font_size") return assigned(assignUnsigned(value, parsed.reading.typography.fontSizeIndex));
-            if (key == "type_hlt") return assigned(parseBool(value, parsed.reading.typography.focusHighlight));
+            if (key == "theme_id")
+                return assigned(parseString(value, parsed.interface.selectedThemeId));
+            if (key == "handed")
+                return assigned(parseBool(value, parsed.reading.leftHanded));
+            if (key == "phantom_on")
+                return assigned(parseBool(value, parsed.reading.phantomWords));
+            if (key == "ch_scroll_rev")
+                return assigned(parseBool(value, parsed.reading.chapterScrollReversed));
+            if (key == "read_bat")
+                return assigned(parseBool(value, parsed.reading.batteryVisibleWhileReading));
+            if (key == "read_ch")
+                return assigned(parseBool(value, parsed.reading.chapterVisibleWhileReading));
+            if (key == "read_pct")
+                return assigned(parseBool(value, parsed.reading.progressVisibleWhileReading));
+            if (key == "font_size")
+                return assigned(assignUnsigned(value, parsed.reading.typography.fontSizeIndex));
+            if (key == "type_hlt")
+                return assigned(parseBool(value, parsed.reading.typography.focusHighlight));
             if (key == "type_trk") {
                 int64_t parsedValue = 0;
-                if (!parseSigned(value, parsedValue)) return AssignResult::invalid;
+                if (!parseSigned(value, parsedValue))
+                    return AssignResult::invalid;
                 parsed.reading.typography.tracking = parsedValue;
                 return AssignResult::applied;
             }
-            if (key == "type_anc") return assigned(assignUnsigned(value, parsed.reading.typography.anchor));
-            if (key == "type_wid") return assigned(assignUnsigned(value, parsed.reading.typography.guideWidth));
-            if (key == "type_gap") return assigned(assignUnsigned(value, parsed.reading.typography.guideGap));
-            if (key == "pace_lms") return assigned(assignUnsigned(value, parsed.reading.pacing.longWordDelayMs));
-            if (key == "pace_cms") return assigned(assignUnsigned(value, parsed.reading.pacing.complexWordDelayMs));
-            if (key == "pace_pms") return assigned(assignUnsigned(value, parsed.reading.pacing.punctuationDelayMs));
-            if (key == "stby_tmr") return assigned(assignUnsigned(value, parsed.interface.standbyTimerIndex));
-            if (key == "wifi_ssid") return assigned(parseString(value, parsed.network.wifiSsid));
-            if (key == "ota_auto") return assigned(parseBool(value, parsed.updates.automatic));
-            if (key == "ota_owner") return assigned(parseString(value, parsed.updates.repositoryOwner));
-            if (key == "ota_tag") return assigned(parseString(value, parsed.updates.releaseTag));
+            if (key == "type_anc")
+                return assigned(assignUnsigned(value, parsed.reading.typography.anchor));
+            if (key == "type_wid")
+                return assigned(assignUnsigned(value, parsed.reading.typography.guideWidth));
+            if (key == "type_gap")
+                return assigned(assignUnsigned(value, parsed.reading.typography.guideGap));
+            if (key == "pace_lms")
+                return assigned(assignUnsigned(value, parsed.reading.pacing.longWordDelayMs));
+            if (key == "pace_cms")
+                return assigned(assignUnsigned(value, parsed.reading.pacing.complexWordDelayMs));
+            if (key == "pace_pms")
+                return assigned(assignUnsigned(value, parsed.reading.pacing.punctuationDelayMs));
+            if (key == "stby_tmr")
+                return assigned(assignUnsigned(value, parsed.interface.standbyTimerIndex));
+            if (key == "wifi_ssid")
+                return assigned(parseString(value, parsed.network.wifiSsid));
+            if (key == "ota_auto")
+                return assigned(parseBool(value, parsed.updates.automatic));
+            if (key == "ota_owner")
+                return assigned(parseString(value, parsed.updates.repositoryOwner));
+            if (key == "ota_tag")
+                return assigned(parseString(value, parsed.updates.releaseTag));
 
             uint64_t enumValue = 0;
             if (key == "ui_lang") {
-                if (!parseUnsigned(value, enumValue)) return AssignResult::invalid;
+                if (!parseUnsigned(value, enumValue))
+                    return AssignResult::invalid;
                 parsed.interface.language = enumValue < std::to_underlying(UiLanguage::Count)
-                    ? static_cast<UiLanguage>(enumValue)
-                    : UiLanguage::english;
+                                              ? static_cast<UiLanguage>(enumValue)
+                                              : UiLanguage::english;
                 return AssignResult::applied;
             }
             if (key == "prog_md") {
-                if (!parseUnsigned(value, enumValue)) return AssignResult::invalid;
+                if (!parseUnsigned(value, enumValue))
+                    return AssignResult::invalid;
                 parsed.reading.footerMetric = enumValue < std::to_underlying(settings::FooterMetric::Count)
-                    ? static_cast<settings::FooterMetric>(enumValue)
-                    : settings::FooterMetric::percentage;
+                                                ? static_cast<settings::FooterMetric>(enumValue)
+                                                : settings::FooterMetric::percentage;
                 return AssignResult::applied;
             }
             if (key == "bat_md") {
-                if (!parseUnsigned(value, enumValue)) return AssignResult::invalid;
+                if (!parseUnsigned(value, enumValue))
+                    return AssignResult::invalid;
                 parsed.reading.batteryLabel = enumValue < std::to_underlying(settings::BatteryLabel::Count)
-                    ? static_cast<settings::BatteryLabel>(enumValue)
-                    : settings::BatteryLabel::percentage;
+                                                ? static_cast<settings::BatteryLabel>(enumValue)
+                                                : settings::BatteryLabel::percentage;
                 return AssignResult::applied;
             }
             if (key == "scrn_sv") {
-                if (!parseUnsigned(value, enumValue)) return AssignResult::invalid;
+                if (!parseUnsigned(value, enumValue))
+                    return AssignResult::invalid;
                 parsed.interface.screensaver = enumValue < std::to_underlying(standby::Kind::Count)
-                    ? static_cast<standby::Kind>(enumValue)
-                    : standby::Kind::life;
+                                                 ? static_cast<standby::Kind>(enumValue)
+                                                 : standby::Kind::life;
                 return AssignResult::applied;
             }
             if (key == "pause_md") {
-                if (!parseUnsigned(value, enumValue)) return AssignResult::invalid;
+                if (!parseUnsigned(value, enumValue))
+                    return AssignResult::invalid;
                 parsed.reading.pauseMode = enumValue < std::to_underlying(settings::PauseMode::Count)
-                    ? static_cast<settings::PauseMode>(enumValue)
-                    : settings::PauseMode::sentenceEnd;
+                                             ? static_cast<settings::PauseMode>(enumValue)
+                                             : settings::PauseMode::sentenceEnd;
                 return AssignResult::applied;
             }
             return key == "wifi_pass" ? AssignResult::applied : AssignResult::unknown;
@@ -380,7 +440,7 @@ void App::migrateLegacyStorage() {
             legacySettingsSeen = true;
         } else {
             configComplete = false;
-            Serial.printf("[migration] preserved invalid %s\n", legacyConfigPath);
+            Logger::warning("migration", "preserved invalid %s", legacyConfigPath);
         }
     }
 
@@ -389,46 +449,45 @@ void App::migrateLegacyStorage() {
         if (auto result = settingsStore_.replace(std::move(candidate), settings::SettingsSource::Programmatic);
             !result) {
             settingsPersisted = false;
-            Serial.printf("[migration] settings import failed: %s\n", result.error().message.c_str());
+            Logger::error("migration", "settings import failed: %s", result.error().message.c_str());
         }
     }
     if (settingsPersisted && legacySecretsSeen) {
         settingsStore_.secrets() = std::move(secrets);
         if (auto result = settingsStore_.acceptSecretChanges(); !result) {
             settingsPersisted = false;
-            Serial.printf("[migration] secret import failed: %s\n", result.error().message.c_str());
+            Logger::error("migration", "secret import failed: %s", result.error().message.c_str());
         }
     }
     if (settingsPersisted && (legacySettingsSeen || legacySecretsSeen)) {
         if (auto result = settingsStore_.flush(); !result) {
             settingsPersisted = false;
-            Serial.printf("[migration] settings persistence failed: %s\n", result.error().message.c_str());
+            Logger::error("migration", "settings persistence failed: %s", result.error().message.c_str());
         }
     }
 
     constexpr std::array legacySettingKeys = {
-        "wpm",       "bright",    "theme_id",  "ui_lang",   "handed",    "phantom_on", "ch_scroll_rev",
-        "prog_md",   "bat_md",    "scrn_sv",   "read_bat",  "read_ch",   "read_pct",   "font_size",
-        "type_hlt",  "type_trk",  "type_anc",  "type_wid",  "type_gap",  "pace_lms",   "pace_cms",
-        "pace_pms",  "pause_md",  "stby_tmr",  "wifi_ssid", "wifi_pass", "ota_auto",   "ota_owner",
-        "ota_tag",   "cfg_hash",
+        "wpm",       "bright",    "theme_id", "ui_lang",   "handed",   "phantom_on", "ch_scroll_rev", "prog_md",
+        "bat_md",    "scrn_sv",   "read_bat", "read_ch",   "read_pct", "font_size",  "type_hlt",      "type_trk",
+        "type_anc",  "type_wid",  "type_gap", "pace_lms",  "pace_cms", "pace_pms",   "pause_md",      "stby_tmr",
+        "wifi_ssid", "wifi_pass", "ota_auto", "ota_owner", "ota_tag",  "cfg_hash",
     };
     if (settingsPersisted) {
         for (const char* key: legacySettingKeys) {
             if (prefs_.isKey(key) && !prefs_.remove(key)) {
                 settingsPersisted = false;
-                Serial.printf("[migration] could not remove legacy NVS key %s\n", key);
+                Logger::error("migration", "could not remove legacy NVS key %s", key);
             }
         }
         if (legacyConfigPath != nullptr && configComplete && !settingsStore_.sdMirrorEnabled()) {
             configComplete = false;
-            Serial.println("[migration] preserved legacy settings because the TOML mirror is unavailable");
+            Logger::warning("migration", "preserved legacy settings because the TOML mirror is unavailable");
         }
         if (legacyConfigPath != nullptr && configComplete) {
             for (const char* path: {kLegacySettingsPath, kLegacySettingsBackupPath, kLegacySettingsTempPath}) {
                 if (StorageFiles::fileExists(path) && !filesystem->remove(path)) {
                     configComplete = false;
-                    Serial.printf("[migration] could not remove %s\n", path);
+                    Logger::error("migration", "could not remove %s", path);
                 }
             }
         }
@@ -445,10 +504,11 @@ void App::migrateLegacyStorage() {
                     if (path.size() >= sizeof(kLegacyThemeExtension) - 1) {
                         const std::string_view suffix{path.data() + path.size() - (sizeof(kLegacyThemeExtension) - 1),
                                                       sizeof(kLegacyThemeExtension) - 1};
-                        if (std::ranges::equal(suffix, std::string_view{kLegacyThemeExtension}, [](char left, char right) {
-                                return std::tolower(static_cast<unsigned char>(left))
-                                    == std::tolower(static_cast<unsigned char>(right));
-                            }))
+                        if (std::ranges::equal(suffix, std::string_view{kLegacyThemeExtension},
+                                               [](char left, char right) {
+                                                   return std::tolower(static_cast<unsigned char>(left))
+                                                       == std::tolower(static_cast<unsigned char>(right));
+                                               }))
                             legacyThemePaths.push_back(std::move(path));
                     }
                 }
@@ -463,13 +523,13 @@ void App::migrateLegacyStorage() {
                 if (StorageFiles::fileExists(newPath.c_str())) {
                     std::string current;
                     converted = readFile(*filesystem, newPath.c_str(), kMaxLegacyThemeBytes, current)
-                        && ui::themes::decodeToml(current, ui::themes::themeIdFromPath(newPath),
-                                                  settingsStore_.settings().reading.typography)
-                               .has_value();
+                             && ui::themes::decodeToml(current, ui::themes::themeIdFromPath(newPath),
+                                                       settingsStore_.settings().reading.typography)
+                                    .has_value();
                     if (!converted) {
                         themesComplete = false;
-                        Serial.printf("[migration] preserved %s beside invalid %s\n", legacyPath.c_str(),
-                                      newPath.c_str());
+                        Logger::warning("migration", "preserved %s beside invalid %s", legacyPath.c_str(),
+                                        newPath.c_str());
                         continue;
                     }
                 }
@@ -508,8 +568,8 @@ void App::migrateLegacyStorage() {
                         }
 
                         const bool rgb = value.size() == 7 && value.front() == '#';
-                        const bool encoded = value.size() == 6 && value[0] == '0'
-                            && (value[1] == 'x' || value[1] == 'X');
+                        const bool encoded =
+                            value.size() == 6 && value[0] == '0' && (value[1] == 'x' || value[1] == 'X');
                         if (!rgb && !encoded) {
                             valid = false;
                             break;
@@ -520,9 +580,9 @@ void App::migrateLegacyStorage() {
                             valid = false;
                             break;
                         }
-                        const ui::themes::Rgb565 color = rgb
-                            ? ui::themes::rgb565(*parsedColor >> 16U, *parsedColor >> 8U, *parsedColor)
-                            : static_cast<uint16_t>(*parsedColor);
+                        const ui::themes::Rgb565 color =
+                            rgb ? ui::themes::rgb565(*parsedColor >> 16U, *parsedColor >> 8U, *parsedColor)
+                                : static_cast<uint16_t>(*parsedColor);
                         auto setColor = [&](std::string_view expected, auto& field, size_t index) {
                             if (key != expected)
                                 return false;
@@ -531,26 +591,27 @@ void App::migrateLegacyStorage() {
                             return true;
                         };
                         const bool known = setColor("background", theme.colors.background, 0)
-                            || setColor("foreground", theme.colors.foreground, 1)
-                            || setColor("muted", theme.colors.muted, 2)
-                            || setColor("subtle", theme.colors.subtle, 3)
-                            || setColor("accent", theme.colors.accent, 4)
-                            || setColor("accent_bar", theme.colors.accentBar, 5)
-                            || setColor("break_accent", theme.colors.breakAccent, 6)
-                            || setColor("on_accent", theme.colors.onAccent, 7)
-                            || setColor("surface", theme.colors.surface, 8)
-                            || setColor("surface_muted", theme.colors.surfaceMuted, 9)
-                            || setColor("surface_active", theme.colors.surfaceActive, 10)
-                            || setColor("outline", theme.colors.outline, 11)
-                            || setColor("guide", theme.colors.guide, 12)
-                            || setColor("guide_focus", theme.colors.guideFocus, 13)
-                            || setColor("phantom", theme.colors.phantom, 14)
-                            || setColor("progress_track", theme.colors.progressTrack, 15);
+                                        || setColor("foreground", theme.colors.foreground, 1)
+                                        || setColor("muted", theme.colors.muted, 2)
+                                        || setColor("subtle", theme.colors.subtle, 3)
+                                        || setColor("accent", theme.colors.accent, 4)
+                                        || setColor("accent_bar", theme.colors.accentBar, 5)
+                                        || setColor("break_accent", theme.colors.breakAccent, 6)
+                                        || setColor("on_accent", theme.colors.onAccent, 7)
+                                        || setColor("surface", theme.colors.surface, 8)
+                                        || setColor("surface_muted", theme.colors.surfaceMuted, 9)
+                                        || setColor("surface_active", theme.colors.surfaceActive, 10)
+                                        || setColor("outline", theme.colors.outline, 11)
+                                        || setColor("guide", theme.colors.guide, 12)
+                                        || setColor("guide_focus", theme.colors.guideFocus, 13)
+                                        || setColor("phantom", theme.colors.phantom, 14)
+                                        || setColor("progress_track", theme.colors.progressTrack, 15);
                         if (!known)
                             continue;
                     }
-                    valid = valid && magicSeen && !theme.name.empty()
-                        && std::ranges::all_of(colorsSeen, [](bool seen) { return seen; });
+                    valid = valid && magicSeen && !theme.name.empty() && std::ranges::all_of(colorsSeen, [](bool seen) {
+                                return seen;
+                            });
                     if (valid) {
                         auto encodedTheme = ui::themes::encodeToml(theme);
                         if (encodedTheme) {
@@ -558,12 +619,13 @@ void App::migrateLegacyStorage() {
                             filesystem->remove(temporaryPath.c_str());
                             File output = filesystem->open(temporaryPath.c_str(), FILE_WRITE);
                             if (output && !output.isDirectory()) {
-                                const size_t count = output.write(
-                                    reinterpret_cast<const uint8_t*>(encodedTheme->data()), encodedTheme->size());
+                                const size_t count =
+                                    output.write(reinterpret_cast<const uint8_t*>(encodedTheme->data()),
+                                                 encodedTheme->size());
                                 output.flush();
                                 output.close();
                                 converted = count == encodedTheme->size()
-                                    && filesystem->rename(temporaryPath.c_str(), newPath.c_str());
+                                         && filesystem->rename(temporaryPath.c_str(), newPath.c_str());
                             } else if (output) {
                                 output.close();
                             }
@@ -574,12 +636,12 @@ void App::migrateLegacyStorage() {
                 }
                 if (!converted) {
                     themesComplete = false;
-                    Serial.printf("[migration] preserved invalid theme %s\n", legacyPath.c_str());
+                    Logger::warning("migration", "preserved invalid theme %s", legacyPath.c_str());
                 } else if (!filesystem->remove(legacyPath.c_str())) {
                     themesComplete = false;
-                    Serial.printf("[migration] could not remove %s\n", legacyPath.c_str());
+                    Logger::error("migration", "could not remove %s", legacyPath.c_str());
                 } else {
-                    Serial.printf("[migration] converted theme %s\n", legacyPath.c_str());
+                    Logger::info("migration", "converted theme %s", legacyPath.c_str());
                 }
             }
         } else if (directory) {
@@ -620,16 +682,16 @@ void App::migrateLegacyStorage() {
 
             if (!converted) {
                 rssComplete = false;
-                Serial.printf("[migration] preserved invalid RSS config %s\n", legacyRssPath);
+                Logger::warning("migration", "preserved invalid RSS config %s", legacyRssPath);
             } else {
                 for (const char* path: {kLegacyRssPath, kLegacyRssBackupPath, kLegacyRssTempPath}) {
                     if (StorageFiles::fileExists(path) && !filesystem->remove(path)) {
                         rssComplete = false;
-                        Serial.printf("[migration] could not remove %s\n", path);
+                        Logger::error("migration", "could not remove %s", path);
                     }
                 }
                 if (rssComplete)
-                    Serial.printf("[migration] converted RSS feeds to %s\n", StoragePaths::kRssConfigPath);
+                    Logger::info("migration", "converted RSS feeds to %s", StoragePaths::kRssConfigPath);
             }
         }
     }
@@ -671,16 +733,16 @@ void App::migrateLegacyStorage() {
 
             if (!converted) {
                 focusComplete = false;
-                Serial.printf("[migration] preserved invalid focus config %s\n", legacyFocusPath);
+                Logger::warning("migration", "preserved invalid focus config %s", legacyFocusPath);
             } else {
                 for (const char* path: {kLegacyFocusPath, kLegacyFocusBackupPath, kLegacyFocusTempPath}) {
                     if (StorageFiles::fileExists(path) && !filesystem->remove(path)) {
                         focusComplete = false;
-                        Serial.printf("[migration] could not remove %s\n", path);
+                        Logger::error("migration", "could not remove %s", path);
                     }
                 }
                 if (focusComplete)
-                    Serial.printf("[migration] converted focus timers to %s\n", StoragePaths::kFocusConfigPath);
+                    Logger::info("migration", "converted focus timers to %s", StoragePaths::kFocusConfigPath);
             }
         }
     }
@@ -690,7 +752,8 @@ void App::migrateLegacyStorage() {
         storage_.refreshBooks(false);
         for (size_t index = 0; index < storage_.bookCount(); ++index) {
             const std::string bookPath = storage_.bookPath(index);
-            const String legacyPath = StoragePaths::siblingPathWithExtension(bookPath.c_str(), kLegacyProgressExtension);
+            const String legacyPath =
+                StoragePaths::siblingPathWithExtension(bookPath.c_str(), kLegacyProgressExtension);
             const String newPath = StoragePaths::bookStatePathFor(bookPath.c_str());
             const bool legacyFileSeen = StorageFiles::fileExists(legacyPath.c_str());
 
@@ -709,7 +772,7 @@ void App::migrateLegacyStorage() {
             const auto sizeKey = progressKey('s');
             const auto fingerprintKey = progressKey('f');
             const bool legacyNvsSeen = prefs_.isKey(positionKey.data()) || prefs_.isKey(countKey.data())
-                || prefs_.isKey(sizeKey.data()) || prefs_.isKey(fingerprintKey.data());
+                                    || prefs_.isKey(sizeKey.data()) || prefs_.isKey(fingerprintKey.data());
             if (!legacyFileSeen && !legacyNvsSeen)
                 continue;
 
@@ -749,25 +812,25 @@ void App::migrateLegacyStorage() {
                 std::string current;
                 ReadingProgress::BookState currentState;
                 converted = readFile(*filesystem, newPath.c_str(), 2048, current)
-                    && !glz::read_toml(currentState, current) && currentState.sourceSize > 0
-                    && currentState.wordCount > 0;
+                         && !glz::read_toml(currentState, current) && currentState.sourceSize > 0
+                         && currentState.wordCount > 0;
             }
             if (!converted && recoverable)
                 converted = ReadingProgress::writeBookStatePosition(bookPath.c_str(), identity, wordIndex).has_value();
             if (!converted && legacyFileSeen) {
                 booksComplete = false;
-                Serial.printf("[migration] preserved invalid progress %s\n", legacyPath.c_str());
+                Logger::warning("migration", "preserved invalid progress %s", legacyPath.c_str());
                 continue;
             }
             if (legacyFileSeen && !filesystem->remove(legacyPath.c_str())) {
                 booksComplete = false;
-                Serial.printf("[migration] could not remove %s\n", legacyPath.c_str());
+                Logger::error("migration", "could not remove %s", legacyPath.c_str());
             }
             if (converted || !recoverable) {
                 for (const char* key: {positionKey.data(), countKey.data(), sizeKey.data(), fingerprintKey.data()}) {
                     if (prefs_.isKey(key) && !prefs_.remove(key)) {
                         booksComplete = false;
-                        Serial.printf("[migration] could not remove legacy progress key %s\n", key);
+                        Logger::error("migration", "could not remove legacy progress key %s", key);
                     }
                 }
             }
@@ -781,7 +844,8 @@ void App::migrateLegacyStorage() {
                 nvs_entry_info_t info{};
                 if (nvs_entry_info(iterator, &info) == ESP_OK) {
                     const std::string_view key{info.key};
-                    const bool legacyProgressKey = key.size() == 9
+                    const bool legacyProgressKey =
+                        key.size() == 9
                         && (key.front() == 'p' || key.front() == 'c' || key.front() == 's' || key.front() == 'f')
                         && std::ranges::all_of(key.substr(1), [](unsigned char character) {
                                return std::isxdigit(character) != 0;
@@ -797,7 +861,7 @@ void App::migrateLegacyStorage() {
             for (const std::string& key: orphanedProgressKeys) {
                 if (!prefs_.remove(key.c_str())) {
                     booksComplete = false;
-                    Serial.printf("[migration] could not remove orphaned progress key %s\n", key.c_str());
+                    Logger::error("migration", "could not remove orphaned progress key %s", key.c_str());
                 }
             }
         }
@@ -809,11 +873,11 @@ void App::migrateLegacyStorage() {
                 if (prefs_.isKey(marker))
                     prefs_.remove(marker);
             }
-            Serial.println("[migration] legacy storage migration complete");
+            Logger::debug("migration", "legacy storage migration complete");
         } else {
-            Serial.println("[migration] could not save completion marker; migration will retry");
+            Logger::error("migration", "could not save completion marker; migration will retry");
         }
     } else if (filesystem == nullptr) {
-        Serial.println("[migration] SD migration deferred until storage is available");
+        Logger::debug("migration", "SD migration deferred until storage is available");
     }
 }

@@ -1,51 +1,17 @@
 #include "storage/fs/StorageFiles.h"
 
 #include <cerrno>
-#include <cstring>
 #include <string>
 #include "board/BoardStorage.h"
 
 namespace StorageFiles {
     namespace {
-
-        void logErrorMessage(const char* tag, const char* operation, const std::string& target, int error) {
-            if (error != 0) {
-                Serial.printf("[%s] %s failed %s errno=%d (%s)\n", tag, operation, target.c_str(), error,
-                              std::strerror(error));
-            } else {
-                Serial.printf("[%s] %s failed %s errno=0\n", tag, operation, target.c_str());
-            }
-        }
-
-        void logErrorMessage(const char* tag, const char* operation, const std::string& target,
-                             std::error_code error) {
-            Serial.printf("[%s] %s failed %s error=%s code=%d category=%s\n", tag, operation, target.c_str(),
-                          error.message().c_str(), error.value(), error.category().name());
-        }
-
         std::error_code ioError() {
             return errno == 0 ? std::make_error_code(std::errc::io_error)
                               : std::error_code{errno, std::generic_category()};
         }
 
     } // namespace
-
-    void logError(const char* tag, const char* operation, const char* path, int error) {
-        logErrorMessage(tag, operation, std::string{"path="} + path, error);
-    }
-
-    void logError(const char* tag, const char* operation, const char* sourcePath, const char* targetPath, int error) {
-        logErrorMessage(tag, operation, std::string{"from="} + sourcePath + " to=" + targetPath, error);
-    }
-
-    void logError(const char* tag, const char* operation, const char* path, std::error_code error) {
-        logErrorMessage(tag, operation, std::string{"path="} + path, error);
-    }
-
-    void logError(const char* tag, const char* operation, const char* sourcePath, const char* targetPath,
-                  std::error_code error) {
-        logErrorMessage(tag, operation, std::string{"from="} + sourcePath + " to=" + targetPath, error);
-    }
 
     bool directoryExists(const char* path) {
         File dir = Board::Storage::filesystem().open(path);
@@ -89,12 +55,11 @@ namespace StorageFiles {
         errno = 0;
         File file = filesystem.open(path, FILE_READ);
         if (!file)
-            return std::unexpected(errno == 0 ? std::make_error_code(std::errc::no_such_file_or_directory)
-                                              : ioError());
+            return std::unexpected(errno == 0 ? std::make_error_code(std::errc::no_such_file_or_directory) : ioError());
         const size_t size = file.size();
         if (file.isDirectory() || size == 0 || size > maximum) {
-            const auto error = file.isDirectory() || size == 0 ? std::errc::invalid_argument
-                                                               : std::errc::value_too_large;
+            const auto error =
+                file.isDirectory() || size == 0 ? std::errc::invalid_argument : std::errc::value_too_large;
             file.close();
             return std::unexpected(std::make_error_code(error));
         }
@@ -107,7 +72,7 @@ namespace StorageFiles {
     }
 
     std::expected<void, std::error_code> writeFileAtomic(fs::FS& filesystem, const char* path, const char* tempPath,
-                                                        const char* backupPath, std::string_view content) {
+                                                         const char* backupPath, std::string_view content) {
         filesystem.remove(tempPath);
         errno = 0;
         File file = filesystem.open(tempPath, FILE_WRITE);
@@ -127,8 +92,8 @@ namespace StorageFiles {
         return replaceFileAtomic(filesystem, path, tempPath, backupPath);
     }
 
-    std::expected<void, std::error_code> replaceFileAtomic(fs::FS& filesystem, const char* path,
-                                                          const char* tempPath, const char* backupPath) {
+    std::expected<void, std::error_code> replaceFileAtomic(fs::FS& filesystem, const char* path, const char* tempPath,
+                                                           const char* backupPath) {
         filesystem.remove(backupPath);
         File original = filesystem.open(path, FILE_READ);
         const bool hadOriginal = original && !original.isDirectory();

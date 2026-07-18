@@ -1,6 +1,7 @@
 #include "board/BoardSystem.h"
 #include "board/BoardDisplay.h"
 #include "board/BoardPower.h"
+#include "logging/Logger.h"
 
 #include <Wire.h>
 #include <driver/gpio.h>
@@ -144,17 +145,16 @@ namespace Board {
         void logStartupDiagnostics() {
             const esp_reset_reason_t resetReason = esp_reset_reason();
             const esp_sleep_wakeup_cause_t wakeupCause = esp_sleep_get_wakeup_cause();
-            Serial.printf("[diag] reset=%s(%d) sleep_wake=%s(%d)\n", resetReasonName(resetReason),
+            Logger::debug("diag", "reset=%s(%d) sleep_wake=%s(%d)", resetReasonName(resetReason),
                           static_cast<int>(resetReason), wakeupCauseName(wakeupCause), static_cast<int>(wakeupCause));
 
             const Board::Power::DiagnosticSnapshot power = Board::Power::diagnosticSnapshot();
             if (!power.available) {
-                Serial.println("[diag] power_snapshot=unavailable");
+                Logger::warning("diag", "power_snapshot=unavailable");
                 return;
             }
 
-            Serial.printf("[diag] power_snapshot=vbus:%u axp_status1:0x%02X axp_status2:0x%02X "
-                          "axp_pwr_irq:0x%02X\n",
+            Logger::debug("diag", "power_snapshot=vbus:%u axp_status1:0x%02X axp_status2:0x%02X axp_pwr_irq:0x%02X",
                           power.externalPowerPresent ? 1 : 0, power.status1, power.status2, power.powerKeyIrqStatus);
         }
 

@@ -32,8 +32,7 @@ namespace screens {
         }
 
         size_t readingIndex = 0;
-        while (readingIndex + 1 < chapters.size()
-               && chapters[readingIndex + 1].wordIndex <= reader.currentIndex()) {
+        while (readingIndex + 1 < chapters.size() && chapters[readingIndex + 1].wordIndex <= reader.currentIndex()) {
             ++readingIndex;
         }
 
@@ -107,19 +106,18 @@ namespace screens {
             lastTickMs_ = nowMs;
             const int32_t halfHeight = std::max<int16_t>(1, viewport.h / 2);
             const int32_t center = viewport.y + halfHeight;
-            const int32_t distance = std::clamp<int32_t>(static_cast<int32_t>(lastY_) - center, -halfHeight,
-                                                         halfHeight);
+            const int32_t distance =
+                std::clamp<int32_t>(static_cast<int32_t>(lastY_) - center, -halfHeight, halfHeight);
             const int32_t deadzone = std::min<int32_t>(kRowStep / 2, halfHeight - 1);
             const int32_t magnitude = std::abs(distance);
             if (dragDistance_ > kDragThreshold && magnitude > deadzone) {
                 const int32_t activeDistance = (distance < 0 ? -1 : 1) * (magnitude - deadzone);
                 const int32_t activeRange = halfHeight - deadzone;
                 const int32_t direction = settings.chapterScrollReversed ? 1 : -1;
-                const int32_t target =
-                    direction * static_cast<int32_t>(static_cast<int64_t>(kMaximumVelocity) * activeDistance
-                                                     * std::abs(activeDistance) / (activeRange * activeRange));
-                velocity_ +=
-                    static_cast<int32_t>(static_cast<int64_t>(target - velocity_) * elapsed / kAccelerationMs);
+                const int32_t target = direction
+                                     * static_cast<int32_t>(static_cast<int64_t>(kMaximumVelocity) * activeDistance
+                                                            * std::abs(activeDistance) / (activeRange * activeRange));
+                velocity_ += static_cast<int32_t>(static_cast<int64_t>(target - velocity_) * elapsed / kAccelerationMs);
                 scrollRemainder_ += static_cast<int32_t>(static_cast<int64_t>(velocity_) * elapsed);
                 const int16_t pixels = static_cast<int16_t>(scrollRemainder_ / kScrollScale);
                 scrollRemainder_ %= kScrollScale;
@@ -164,9 +162,9 @@ namespace screens {
         const size_t first = centeredIndex_ > 4 ? centeredIndex_ - 4 : 0;
         const size_t last = std::min(chapters.size(), centeredIndex_ + 5);
         for (size_t index = first; index < last; ++index)
-            state = ui::Context::signature(
-                chapters[index].title,
-                ui::Context::combine(state, static_cast<uint32_t>(chapters[index].wordIndex)));
+            state =
+                ui::Context::signature(chapters[index].title,
+                                       ui::Context::combine(state, static_cast<uint32_t>(chapters[index].wordIndex)));
 
         if (ui.redraw(viewport, state)) {
             Arduino_GFX& gfx = ui.gfx();
@@ -179,15 +177,13 @@ namespace screens {
                 const int curved = raw * (2 * viewport.h - magnitude) / (2 * viewport.h);
                 const int16_t y = static_cast<int16_t>(centerY + curved);
                 const bool centered = index == centeredIndex_;
-                const uint8_t alpha = centered
-                                        ? 255
-                                        : static_cast<uint8_t>(std::max(48, 220 - std::abs(curved) * 172 / halfHeight));
+                const uint8_t alpha =
+                    centered ? 255 : static_cast<uint8_t>(std::max(48, 220 - std::abs(curved) * 172 / halfHeight));
                 const int16_t height = centered ? 28 : 18;
-                const int16_t width = centered
-                                        ? maximumWidth
-                                        : static_cast<int16_t>(maximumWidth
-                                                               - std::min<int>(std::abs(curved), halfHeight)
-                                                                     * (maximumWidth / 3) / halfHeight);
+                const int16_t width = centered ? maximumWidth
+                                               : static_cast<int16_t>(maximumWidth
+                                                                      - std::min<int>(std::abs(curved), halfHeight)
+                                                                            * (maximumWidth / 3) / halfHeight);
                 const int16_t x = static_cast<int16_t>(viewport.x + (viewport.w - width) / 2);
                 const int16_t top = static_cast<int16_t>(y - height / 2);
                 if (top < viewport.y || top + height > viewport.y + viewport.h)
@@ -209,8 +205,8 @@ namespace screens {
                 gfx.fillTriangle(static_cast<int16_t>(right - notch), y, right, top, right,
                                  static_cast<int16_t>(top + height - 1), background);
                 gfx.drawLine(static_cast<int16_t>(right - notch), y, right, top, outline);
-                gfx.drawLine(static_cast<int16_t>(right - notch), y, right,
-                             static_cast<int16_t>(top + height - 1), outline);
+                gfx.drawLine(static_cast<int16_t>(right - notch), y, right, static_cast<int16_t>(top + height - 1),
+                             outline);
                 if (centered)
                     gfx.fillRect(static_cast<int16_t>(x + 4), static_cast<int16_t>(top + 3), 3,
                                  static_cast<int16_t>(height - 6), ui.color(ui::themes::ColorRole::Accent));

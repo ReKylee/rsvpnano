@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstddef>
 #include <concepts>
+#include <cstddef>
 #include <type_traits>
 #include <utility>
 
@@ -15,9 +15,15 @@ namespace settings {
         static_assert(Minimum <= Maximum);
         static_assert(Step > T{});
 
-        static constexpr T min() noexcept { return Minimum; }
-        static constexpr T max() noexcept { return Maximum; }
-        static constexpr T step() noexcept { return Step; }
+        static constexpr T min() noexcept {
+            return Minimum;
+        }
+        static constexpr T max() noexcept {
+            return Maximum;
+        }
+        static constexpr T step() noexcept {
+            return Step;
+        }
 
         constexpr BoundedValue() noexcept = default;
 
@@ -30,7 +36,9 @@ namespace settings {
             return *this;
         }
 
-        constexpr operator T() const noexcept { return value_; }
+        constexpr operator T() const noexcept {
+            return value_;
+        }
 
         constexpr void cycle() noexcept {
             value_ = value_ >= Maximum || Maximum - value_ < Step ? Minimum : static_cast<T>(value_ + Step);
@@ -67,8 +75,7 @@ namespace settings::rules {
 
 namespace settings {
 
-    template<typename E>
-    concept CountedEnum = std::is_enum_v<E> && requires { E::Count; };
+    template<typename E> concept CountedEnum = std::is_enum_v<E> && requires { E::Count; };
 
     template<CountedEnum E>
     constexpr E cycleEnum(E current) noexcept {

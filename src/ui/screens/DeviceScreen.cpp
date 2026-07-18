@@ -4,10 +4,10 @@ namespace screens {
     namespace {
         bool encryptionAcknowledged = false;
         bool encryptionControlsVisible = false;
-    }
+    } // namespace
 
-    Action device(ui::Context& ui, bool storageReady, size_t bookCount,
-                  settings::NvsEncryptionState encryptionState, Screen& screen) {
+    Action device(ui::Context& ui, bool storageReady, size_t bookCount, settings::NvsEncryptionState encryptionState,
+                  Screen& screen) {
         if (const Action action = detail::navigation(ui, Screen::Device, screen); action != Action::None)
             return action;
         const ui::Rect content = detail::tabContent(ui);
@@ -22,10 +22,9 @@ namespace screens {
             storageStatus = ui.text(UiText::Unavailable);
         }
         const std::string_view encryptionStatus =
-            ui.text(encryptionState == settings::NvsEncryptionState::Enabled ? UiText::On
-                        : encryptionState == settings::NvsEncryptionState::Available && storageReady
-                            ? UiText::Off
-                            : UiText::Unavailable);
+            ui.text(encryptionState == settings::NvsEncryptionState::Enabled                     ? UiText::On
+                    : encryptionState == settings::NvsEncryptionState::Available && storageReady ? UiText::Off
+                                                                                                 : UiText::Unavailable);
 
         ui::Rect storageButton;
         ui::Rect encryptionButton;
@@ -38,8 +37,10 @@ namespace screens {
                                 static_cast<int16_t>(content.w - statusWidth - gap), statusHeight};
             const int16_t actionsY = static_cast<int16_t>(content.y + statusHeight + gap);
             const int16_t actionsHeight = static_cast<int16_t>(content.y + content.h - actionsY);
-            actions = {{content.x, actionsY, content.w, actionsHeight}, 2,
-                       static_cast<int16_t>((actionsHeight - gap) / 2), gap};
+            actions = {{content.x, actionsY, content.w, actionsHeight},
+                       2,
+                       static_cast<int16_t>((actionsHeight - gap) / 2),
+                       gap};
         } else {
             ui::Grid all{content, 1, static_cast<int16_t>((content.h - gap * 5) / 6), gap};
             storageButton = all.next();
@@ -50,8 +51,7 @@ namespace screens {
         if (ui.setting(storageButton, ui.text(UiText::Storage), storageStatus, ui::SettingLayout::Inline))
             return Action::StorageStatus;
         if (ui.setting(encryptionButton, ui.text(UiText::Encryption), encryptionStatus, ui::SettingLayout::Inline)
-            && storageReady
-            && encryptionState == settings::NvsEncryptionState::Available) {
+            && storageReady && encryptionState == settings::NvsEncryptionState::Available) {
             encryptionAcknowledged = false;
             encryptionControlsVisible = false;
             screen = Screen::StorageEncryption;
@@ -86,14 +86,14 @@ namespace screens {
         const ui::Rect content = detail::content(ui);
         if (!encryptionControlsVisible) {
             ui::Column notes{content, 2};
-            ui.label(notes.next(20), ui.text(UiText::StorageEncryption), 2,
-                     ui::themes::ColorRole::Foreground, ui::TextAlign::Center);
+            ui.label(notes.next(20), ui.text(UiText::StorageEncryption), 2, ui::themes::ColorRole::Foreground,
+                     ui::TextAlign::Center);
             ui.label(notes.next(36), ui.text(UiText::StorageEncryptionExplanation), 2,
                      ui::themes::ColorRole::Foreground, ui::TextAlign::Left, 3);
-            ui.label(notes.next(36), ui.text(UiText::StorageEncryptionPermanent), 2,
-                     ui::themes::ColorRole::Accent, ui::TextAlign::Left, 3);
-            ui.label(notes.next(36), ui.text(UiText::StorageEncryptionReset), 2,
-                     ui::themes::ColorRole::Foreground, ui::TextAlign::Left, 3);
+            ui.label(notes.next(36), ui.text(UiText::StorageEncryptionPermanent), 2, ui::themes::ColorRole::Accent,
+                     ui::TextAlign::Left, 3);
+            ui.label(notes.next(36), ui.text(UiText::StorageEncryptionReset), 2, ui::themes::ColorRole::Foreground,
+                     ui::TextAlign::Left, 3);
             ui.label(notes.next(20), ui.text(UiText::TapToContinue), 2, ui::themes::ColorRole::Muted,
                      ui::TextAlign::Center);
             if (ui.tap(content)) {
@@ -110,8 +110,8 @@ namespace screens {
         const ui::Rect panel{static_cast<int16_t>(content.x + (content.w - width) / 2),
                              static_cast<int16_t>(content.y + (content.h - height) / 2), width, height};
         ui::Column actions{panel, 6};
-        ui.label(actions.next(22), ui.text(UiText::StorageEncryption), 2,
-                 ui::themes::ColorRole::Foreground, ui::TextAlign::Center);
+        ui.label(actions.next(22), ui.text(UiText::StorageEncryption), 2, ui::themes::ColorRole::Foreground,
+                 ui::TextAlign::Center);
         const int16_t controlHeight = std::max<int16_t>(1, static_cast<int16_t>((height - 34) / 2));
         ui.toggle(actions.next(controlHeight), ui.text(UiText::IUnderstand), encryptionAcknowledged);
 

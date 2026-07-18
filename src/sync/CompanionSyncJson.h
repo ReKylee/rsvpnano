@@ -147,6 +147,6 @@ namespace companion::api {
 // maintaining separate string lookup tables.
 template<>
 struct glz::meta<companion::api::NetworkMode> {
-    static constexpr auto value = glz::enumerate(companion::api::NetworkMode::station,
-                                                 companion::api::NetworkMode::access_point);
+    static constexpr auto value =
+        glz::enumerate(companion::api::NetworkMode::station, companion::api::NetworkMode::access_point);
 };

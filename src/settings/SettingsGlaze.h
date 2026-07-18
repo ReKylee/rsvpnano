@@ -8,8 +8,12 @@
 template<std::integral T, T Minimum, T Maximum, T Step>
 struct glz::meta<settings::BoundedValue<T, Minimum, Maximum, Step>> {
     using Bounded = settings::BoundedValue<T, Minimum, Maximum, Step>;
-    static constexpr auto read = [](Bounded& output, T input) { output = input; };
-    static constexpr auto write = [](const Bounded& input) { return static_cast<T>(input); };
+    static constexpr auto read = [](Bounded& output, T input) {
+        output = input;
+    };
+    static constexpr auto write = [](const Bounded& input) {
+        return static_cast<T>(input);
+    };
     static constexpr auto value = glz::custom<read, write>;
 };
 

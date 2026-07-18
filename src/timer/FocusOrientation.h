@@ -10,8 +10,12 @@ namespace focus {
     public:
         bool begin();
         Orientation update(uint32_t nowMs);
-        bool available() const { return available_; }
-        Orientation orientation() const { return stable_; }
+        bool available() const {
+            return available_;
+        }
+        Orientation orientation() const {
+            return stable_;
+        }
 
     private:
         bool updateRegister(uint8_t reg, uint8_t mask, uint8_t value);

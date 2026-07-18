@@ -82,8 +82,8 @@ namespace screens {
         void begin(ui::Context& ui, settings::InterfaceSettings& settings,
                    const settings::TypographySettings& typographyDefaults, const FontCatalog& fonts,
                    void (*setBrightness)(uint8_t));
-        bool draw(ui::Context& ui, settings::InterfaceSettings& settings,
-                  std::span<const uint32_t> standbyDurations, void (*setBrightness)(uint8_t), Screen& screen);
+        bool draw(ui::Context& ui, settings::InterfaceSettings& settings, std::span<const uint32_t> standbyDurations,
+                  void (*setBrightness)(uint8_t), Screen& screen);
     };
     bool pacingSettings(ui::Context& ui, ReadingLoop& reader, settings::PacingSettings& settings, Screen& screen);
     bool typographySettings(ui::Context& ui, std::optional<settings::TypographySettings>& bookOverride,

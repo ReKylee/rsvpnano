@@ -8,7 +8,9 @@
 namespace rss {
     std::expected<Config, std::error_code> load(fs::FS& filesystem) {
         return StorageFiles::readTextFile(filesystem, StoragePaths::kRssConfigPath, kMaxConfigBytes)
-            .and_then([](const std::string& content) { return decodeToml(content); });
+            .and_then([](const std::string& content) {
+                return decodeToml(content);
+            });
     }
 
     std::expected<void, std::error_code> save(fs::FS& filesystem, Config config) {
@@ -17,9 +19,8 @@ namespace rss {
             return std::unexpected(content.error());
         if (auto directory = StorageFiles::ensureDirectory(StoragePaths::kConfigPath); !directory)
             return directory;
-        return StorageFiles::writeFileAtomic(filesystem, StoragePaths::kRssConfigPath,
-                                             StoragePaths::kRssConfigTempPath, StoragePaths::kRssConfigBackupPath,
-                                             *content);
+        return StorageFiles::writeFileAtomic(filesystem, StoragePaths::kRssConfigPath, StoragePaths::kRssConfigTempPath,
+                                             StoragePaths::kRssConfigBackupPath, *content);
     }
 
 } // namespace rss

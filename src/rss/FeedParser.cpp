@@ -243,7 +243,8 @@ namespace feedparser {
             item.author = sourceLabelForItem(item);
         }
 
-        item.body = cleanText(valueBetween(feedBody, "<content:encoded", "</content:encoded>", bounds.start, bounds.end));
+        item.body =
+            cleanText(valueBetween(feedBody, "<content:encoded", "</content:encoded>", bounds.start, bounds.end));
         if (item.body.isEmpty()) {
             item.body = cleanText(valueBetween(feedBody, "<content", "</content>", bounds.start, bounds.end));
         }

@@ -156,35 +156,9 @@ namespace EpubContent {
 
         bool isBlockTag(const String& name) {
             static constexpr std::array<const char*, 31> kBlockTags = {{
-                "address",
-                "article",
-                "aside",
-                "blockquote",
-                "body",
-                "br",
-                "dd",
-                "div",
-                "dl",
-                "dt",
-                "figcaption",
-                "figure",
-                "footer",
-                "header",
-                "hr",
-                "li",
-                "main",
-                "ol",
-                "p",
-                "pre",
-                "section",
-                "table",
-                "tbody",
-                "td",
-                "tfoot",
-                "th",
-                "thead",
-                "tr",
-                "ul",
+                "address",    "article", "aside",  "blockquote", "body",  "br", "dd",    "div", "dl", "dt",
+                "figcaption", "figure",  "footer", "header",     "hr",    "li", "main",  "ol",  "p",  "pre",
+                "section",    "table",   "tbody",  "td",         "tfoot", "th", "thead", "tr",  "ul",
             }};
             return std::any_of(kBlockTags.begin(), kBlockTags.end(), [&](const char* tag) {
                 return name == tag;
@@ -284,9 +258,8 @@ namespace EpubContent {
     }
 
     RsvpContentWriter::RsvpContentWriter(File& output, size_t& wordCount, size_t maxWords, String& lastChapterTitle,
-                                         size_t& chapterCount,
-                                         std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
-                                         String fallbackChapterTitle, String bookTitle) :
+                                         size_t& chapterCount, std::span<const EpubPackage::TocEntry> tocEntries,
+                                         bool hasToc, String fallbackChapterTitle, String bookTitle) :
             output_(output),
             wordCount_(wordCount),
             maxWords_(maxWords),

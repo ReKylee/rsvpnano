@@ -25,11 +25,11 @@ namespace ui::themes {
         }
 
         settings::SettingsError errorFrom(glz::error_ctx error, std::string_view input) {
-            const settings::SettingsErrorCategory category = error.ec == glz::error_code::unknown_key
-                ? settings::SettingsErrorCategory::UnknownKey
-                : error.ec == glz::error_code::unexpected_enum ? settings::SettingsErrorCategory::InvalidEnum
+            const settings::SettingsErrorCategory category =
+                error.ec == glz::error_code::unknown_key           ? settings::SettingsErrorCategory::UnknownKey
+                : error.ec == glz::error_code::unexpected_enum     ? settings::SettingsErrorCategory::InvalidEnum
                 : error.ec == glz::error_code::constraint_violated ? settings::SettingsErrorCategory::Constraint
-                                                                    : settings::SettingsErrorCategory::Syntax;
+                                                                   : settings::SettingsErrorCategory::Syntax;
             return {.category = category,
                     .source = settings::SettingsSource::Theme,
                     .message = glz::format_error(error, input),
@@ -40,22 +40,38 @@ namespace ui::themes {
 
     uint16_t color(const ThemeColors& colors, ColorRole role) {
         switch (role) {
-        case Background: return colors.background;
-        case Foreground: return colors.foreground;
-        case Muted: return colors.muted;
-        case Subtle: return colors.subtle;
-        case Accent: return colors.accent;
-        case AccentBar: return colors.accentBar;
-        case BreakAccent: return colors.breakAccent;
-        case OnAccent: return colors.onAccent;
-        case Surface: return colors.surface;
-        case SurfaceMuted: return colors.surfaceMuted;
-        case SurfaceActive: return colors.surfaceActive;
-        case Outline: return colors.outline;
-        case Guide: return colors.guide;
-        case GuideFocus: return colors.guideFocus;
-        case Phantom: return colors.phantom;
-        case ProgressTrack: return colors.progressTrack;
+        case Background:
+            return colors.background;
+        case Foreground:
+            return colors.foreground;
+        case Muted:
+            return colors.muted;
+        case Subtle:
+            return colors.subtle;
+        case Accent:
+            return colors.accent;
+        case AccentBar:
+            return colors.accentBar;
+        case BreakAccent:
+            return colors.breakAccent;
+        case OnAccent:
+            return colors.onAccent;
+        case Surface:
+            return colors.surface;
+        case SurfaceMuted:
+            return colors.surfaceMuted;
+        case SurfaceActive:
+            return colors.surfaceActive;
+        case Outline:
+            return colors.outline;
+        case Guide:
+            return colors.guide;
+        case GuideFocus:
+            return colors.guideFocus;
+        case Phantom:
+            return colors.phantom;
+        case ProgressTrack:
+            return colors.progressTrack;
         }
         return colors.foreground;
     }
@@ -90,11 +106,12 @@ namespace ui::themes {
         if (const glz::error_ctx error = glz::read_toml(candidate, text))
             return std::unexpected(errorFrom(error, text));
         if (candidate.schemaVersion != kThemeSchemaVersion) {
-            return std::unexpected(settings::SettingsError{
-                .category = settings::SettingsErrorCategory::UnsupportedSchema,
-                .source = settings::SettingsSource::Theme,
-                .path = "schemaVersion",
-                .message = "unsupported theme schema version " + std::to_string(candidate.schemaVersion)});
+            return std::unexpected(settings::SettingsError{.category =
+                                                               settings::SettingsErrorCategory::UnsupportedSchema,
+                                                           .source = settings::SettingsSource::Theme,
+                                                           .path = "schemaVersion",
+                                                           .message = "unsupported theme schema version "
+                                                                    + std::to_string(candidate.schemaVersion)});
         }
         if (candidate.name.empty())
             candidate.name = "Unnamed";

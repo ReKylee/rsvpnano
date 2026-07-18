@@ -73,7 +73,9 @@ namespace focus {
 
     bool valid(const Timers& timers) {
         return timers.schemaVersion == kSchemaVersion && !timers.timers.empty() && timers.timers.size() <= kMaxTimers
-            && std::ranges::all_of(timers.timers, [](const Timer& timer) { return valid(timer); });
+            && std::ranges::all_of(timers.timers, [](const Timer& timer) {
+                   return valid(timer);
+               });
     }
 
     std::expected<Timers, std::error_code> decodeToml(std::string_view content) {

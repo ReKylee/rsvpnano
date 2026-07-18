@@ -68,8 +68,7 @@ namespace standby {
             for (uint8_t direction = 0; direction < 4; ++direction) {
                 const int nx = static_cast<int>(cx) + kNeighborDx[direction];
                 const int ny = static_cast<int>(cy) + kNeighborDy[direction];
-                if (nx < 0 || ny < 0 || nx >= static_cast<int>(mazeCols)
-                    || ny >= static_cast<int>(mazeRowsValue)) {
+                if (nx < 0 || ny < 0 || nx >= static_cast<int>(mazeCols) || ny >= static_cast<int>(mazeRowsValue)) {
                     continue;
                 }
                 const uint16_t encoded = static_cast<uint16_t>(ny * mazeCols + nx);

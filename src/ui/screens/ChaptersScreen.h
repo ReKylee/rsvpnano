@@ -4,8 +4,8 @@
 #include <span>
 
 #include "book/BookMetadata.h"
-#include "settings/SettingsModel.h"
 #include "reader/ReadingLoop.h"
+#include "settings/SettingsModel.h"
 #include "ui/Ui.h"
 #include "ui/screens/Screens.h"
 

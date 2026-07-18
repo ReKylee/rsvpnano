@@ -58,7 +58,9 @@ namespace rss {
         Config config;
         if (glz::read_toml(config, input))
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-        return normalize(config).transform([&config] { return std::move(config); });
+        return normalize(config).transform([&config] {
+            return std::move(config);
+        });
     }
 
     inline std::expected<std::string, std::error_code> encodeToml(Config config) {

@@ -77,7 +77,7 @@ namespace focus {
             return 0;
         const uint32_t total = phase_ == Phase::Focus || phase_ == Phase::PausedFocus ? focusDurationMs_
                              : phase_ == Phase::Break || phase_ == Phase::PausedBreak ? breakDurationMs_
-                                                                                     : 0;
+                                                                                      : 0;
         if (total == 0)
             return phase_ == Phase::Complete ? 1000 : 0;
         const uint32_t remaining = remainingMs(nowMs);
@@ -97,7 +97,7 @@ namespace focus {
     Orientation Session::opposite(Orientation orientation) {
         return orientation == Orientation::ShortA ? Orientation::ShortB
              : orientation == Orientation::ShortB ? Orientation::ShortA
-                                                   : Orientation::Unknown;
+                                                  : Orientation::Unknown;
     }
 
     void Session::startPhase(Phase phase, uint32_t nowMs, Orientation orientation) {

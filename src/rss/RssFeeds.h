@@ -19,7 +19,6 @@ namespace RssFeeds {
     };
 
     Result check(Preferences& statePreferences, const settings::DeviceSettings& settings,
-                 const settings::DeviceSecrets& secrets, StatusCallback callback = nullptr,
-                 void* context = nullptr);
+                 const settings::DeviceSecrets& secrets, StatusCallback callback = nullptr, void* context = nullptr);
 
 } // namespace RssFeeds

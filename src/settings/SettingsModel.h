@@ -45,8 +45,8 @@ namespace settings {
         bool operator==(const TypographySettings&) const = default;
     };
 
-    inline const TypographySettings& effectiveTypography(
-        const std::optional<TypographySettings>& bookOverride, const TypographySettings& theme) {
+    inline const TypographySettings& effectiveTypography(const std::optional<TypographySettings>& bookOverride,
+                                                         const TypographySettings& theme) {
         return bookOverride ? *bookOverride : theme;
     }
 

@@ -21,9 +21,10 @@ namespace screens::detail {
             screen = Screen::Read;
         }
         if (ui.tab(tabs.next(tabHeight), ui.text(UiText::Settings),
-                   active == Screen::Settings || active == Screen::ReadingSettings || active == Screen::InterfaceSettings
-                       || active == Screen::PacingSettings || active == Screen::TypographySettings
-                       || active == Screen::ReaderSettings || active == Screen::NetworkSettings,
+                   active == Screen::Settings || active == Screen::ReadingSettings
+                       || active == Screen::InterfaceSettings || active == Screen::PacingSettings
+                       || active == Screen::TypographySettings || active == Screen::ReaderSettings
+                       || active == Screen::NetworkSettings,
                    ui::Icon::Edit)) {
             screen = Screen::Settings;
         }
@@ -34,8 +35,8 @@ namespace screens::detail {
             screen = Screen::Device;
         }
         if (ui.tab(tabs.next(static_cast<int16_t>(ui.height() - tabHeight * 3)), ui.text(UiText::Focus),
-                   active == Screen::FocusTimers || active == Screen::FocusEditor
-                       || active == Screen::FocusNameEdit || active == Screen::FocusSession,
+                   active == Screen::FocusTimers || active == Screen::FocusEditor || active == Screen::FocusNameEdit
+                       || active == Screen::FocusSession,
                    ui::Icon::Hourglass)) {
             screen = Screen::FocusTimers;
         }

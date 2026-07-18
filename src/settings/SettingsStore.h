@@ -18,10 +18,18 @@ namespace settings {
 
         SettingsResult<> begin(fs::FS* filesystem);
 
-        DeviceSettings& settings() { return settings_; }
-        const DeviceSettings& settings() const { return settings_; }
-        DeviceSecrets& secrets() { return secrets_; }
-        const DeviceSecrets& secrets() const { return secrets_; }
+        DeviceSettings& settings() {
+            return settings_;
+        }
+        const DeviceSettings& settings() const {
+            return settings_;
+        }
+        DeviceSecrets& secrets() {
+            return secrets_;
+        }
+        const DeviceSecrets& secrets() const {
+            return secrets_;
+        }
 
         SettingsResult<> acceptChanges();
         SettingsResult<> acceptSecretChanges();
@@ -31,7 +39,9 @@ namespace settings {
         void closeNvs();
         SettingsResult<> reopenNvsAndPersist();
 
-        bool sdMirrorEnabled() const { return mirrorEnabled_; }
+        bool sdMirrorEnabled() const {
+            return mirrorEnabled_;
+        }
 
     private:
         SettingsResult<> writeSettings(std::string_view canonicalToml);

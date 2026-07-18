@@ -149,7 +149,11 @@ namespace ui {
         void steps(Rect rect, uint8_t current, uint8_t total,
                    ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);
         template<typename T>
-            requires requires { T::min(); T::max(); T::step(); }
+            requires requires {
+                T::min();
+                T::max();
+                T::step();
+            }
         bool slider(Rect rect, std::string_view label, T& value, std::string_view suffix = {},
                     ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent) {
             return slider(rect, label, value, T::min(), T::max(), T::step(), suffix, activeRole);
@@ -157,8 +161,7 @@ namespace ui {
 
         template<typename T>
         bool slider(Rect rect, std::string_view label, T& value, int minimum, int maximum, int step = 1,
-                    std::string_view suffix = {},
-                    ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent) {
+                    std::string_view suffix = {}, ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent) {
             int scalar = static_cast<int>(value);
             if (!sliderValue(rect, label, scalar, minimum, maximum, step, suffix, activeRole))
                 return false;
@@ -167,7 +170,11 @@ namespace ui {
         }
 
         template<typename T>
-            requires requires { T::min(); T::max(); T::step(); }
+            requires requires {
+                T::min();
+                T::max();
+                T::step();
+            }
         bool stepper(Rect rect, std::string_view label, T& value, std::string_view suffix = {},
                      ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent) {
             return stepper(rect, label, value, T::min(), T::max(), T::step(), suffix, activeRole);
@@ -175,8 +182,7 @@ namespace ui {
 
         template<typename T>
         bool stepper(Rect rect, std::string_view label, T& value, int minimum, int maximum, int step = 1,
-                     std::string_view suffix = {},
-                     ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent) {
+                     std::string_view suffix = {}, ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent) {
             int scalar = static_cast<int>(value);
             if (!stepperValue(rect, label, scalar, minimum, maximum, step, suffix, activeRole))
                 return false;

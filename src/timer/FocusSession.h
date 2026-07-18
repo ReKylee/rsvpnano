@@ -29,9 +29,15 @@ namespace focus {
         void update(uint32_t nowMs, Orientation orientation);
         void stop();
 
-        Phase phase() const { return phase_; }
-        uint8_t round() const { return round_; }
-        uint8_t rounds() const { return rounds_; }
+        Phase phase() const {
+            return phase_;
+        }
+        uint8_t round() const {
+            return round_;
+        }
+        uint8_t rounds() const {
+            return rounds_;
+        }
         uint32_t remainingMs(uint32_t nowMs) const;
         uint16_t progressPermille(uint32_t nowMs) const;
         bool consumeCompletionCue();

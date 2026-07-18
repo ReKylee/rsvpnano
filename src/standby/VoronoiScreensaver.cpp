@@ -108,8 +108,7 @@ namespace standby {
                 else if (gap < 580 + nearest / 180)
                     dimWord |= mask;
 
-                if ((cellIndex % kPackedBitsPerWord) == kPackedBitsPerWord - 1U
-                    || cellIndex + 1U == cellCount) {
+                if ((cellIndex % kPackedBitsPerWord) == kPackedBitsPerWord - 1U || cellIndex + 1U == cellCount) {
                     const size_t word = cellIndex / kPackedBitsPerWord;
                     dirtyCells_[word] = (cells_[word] ^ brightWord) | (dimCells_[word] ^ dimWord);
                     cells_[word] = brightWord;

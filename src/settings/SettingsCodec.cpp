@@ -64,23 +64,35 @@ namespace settings::codec {
     } // namespace
 
     SettingsResult<DeviceSettings> decodeToml(std::string_view input, SettingsSource source) {
-        return decode<DeviceSettings>(input, source, kMaxSettingsBytes, [](auto& value, std::string_view text) {
-                   return glz::read_toml(value, text);
-               }).and_then([source](DeviceSettings value) { return checkSchema(std::move(value), source); });
+        return decode<DeviceSettings>(input, source, kMaxSettingsBytes,
+                                      [](auto& value, std::string_view text) {
+                                          return glz::read_toml(value, text);
+                                      })
+            .and_then([source](DeviceSettings value) {
+                return checkSchema(std::move(value), source);
+            });
     }
 
     SettingsResult<std::string> encodeToml(const DeviceSettings& value, SettingsSource source) {
-        return encode(value, source, [](auto& input, std::string& output) { return glz::write_toml(input, output); });
+        return encode(value, source, [](auto& input, std::string& output) {
+            return glz::write_toml(input, output);
+        });
     }
 
     SettingsResult<DeviceSettings> decodeJson(std::string_view input, SettingsSource source) {
-        return decode<DeviceSettings>(input, source, kMaxSettingsBytes, [](auto& value, std::string_view text) {
-                   return glz::read_json(value, text);
-               }).and_then([source](DeviceSettings value) { return checkSchema(std::move(value), source); });
+        return decode<DeviceSettings>(input, source, kMaxSettingsBytes,
+                                      [](auto& value, std::string_view text) {
+                                          return glz::read_json(value, text);
+                                      })
+            .and_then([source](DeviceSettings value) {
+                return checkSchema(std::move(value), source);
+            });
     }
 
     SettingsResult<std::string> encodeJson(const DeviceSettings& value, SettingsSource source) {
-        return encode(value, source, [](auto& input, std::string& output) { return glz::write_json(input, output); });
+        return encode(value, source, [](auto& input, std::string& output) {
+            return glz::write_json(input, output);
+        });
     }
 
     SettingsResult<DeviceSecrets> decodeSecrets(std::string_view input, SettingsSource source) {
@@ -90,7 +102,9 @@ namespace settings::codec {
     }
 
     SettingsResult<std::string> encodeSecrets(const DeviceSecrets& value, SettingsSource source) {
-        return encode(value, source, [](auto& input, std::string& output) { return glz::write_toml(input, output); });
+        return encode(value, source, [](auto& input, std::string& output) {
+            return glz::write_toml(input, output);
+        });
     }
 
 } // namespace settings::codec

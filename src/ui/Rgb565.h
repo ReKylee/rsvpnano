@@ -21,7 +21,9 @@ namespace ui::themes {
 
         constexpr Rgb565() = default;
         constexpr Rgb565(uint16_t value) : value(value) {}
-        constexpr operator uint16_t() const { return value; }
+        constexpr operator uint16_t() const {
+            return value;
+        }
         bool operator==(const Rgb565&) const = default;
     };
 
@@ -64,6 +66,5 @@ namespace ui::themes {
 
 template<>
 struct glz::meta<ui::themes::Rgb565> {
-    static constexpr auto value =
-        glz::custom<ui::themes::detail::readRgb565, ui::themes::detail::writeRgb565>;
+    static constexpr auto value = glz::custom<ui::themes::detail::readRgb565, ui::themes::detail::writeRgb565>;
 };

@@ -680,8 +680,9 @@ namespace {
 
     bool looksLikeAbbreviation(std::string_view word, bool nextWordStartsLowercase) {
         std::string lowered{word};
-        std::transform(lowered.begin(), lowered.end(), lowered.begin(),
-                       [](char value) { return static_cast<char>(LatinText::toLowercaseByte(value)); });
+        std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](char value) {
+            return static_cast<char>(LatinText::toLowercaseByte(value));
+        });
 
         constexpr const char* kKnownAbbreviations[] = {
             "mr.",  "mrs.", "ms.", "dr.",  "prof.", "sr.",  "jr.",  "st.", "vs.",   "etc.", "e.g.",

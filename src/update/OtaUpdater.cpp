@@ -195,9 +195,12 @@ String OtaUpdater::currentVersion() const {
 }
 
 bool OtaUpdater::connectWiFi(const Config& config, StatusCallback callback, void* context) const {
-    return net::connectStation(config.wifiSsid.c_str(), config.wifiPassword.c_str(), [&](int percent) {
-               reportStatus(callback, context, kStatusTitle, "Connecting Wi-Fi", config.wifiSsid, percent);
-           }).has_value();
+    return net::connectStation(config.wifiSsid.c_str(), config.wifiPassword.c_str(),
+                               [&](int percent) {
+                                   reportStatus(callback, context, kStatusTitle, "Connecting Wi-Fi", config.wifiSsid,
+                                                percent);
+                               })
+        .has_value();
 }
 
 void OtaUpdater::disconnectWiFi() const {
@@ -236,8 +239,8 @@ std::expected<OtaUpdater::LatestRelease, std::string> OtaUpdater::fetchRelease(c
     const int statusCode = http.GET();
     if (statusCode != HTTP_CODE_OK) {
         const String errorDetail = statusCode == HTTP_CODE_NOT_FOUND
-            ? (source.tag.isEmpty() ? "No published release" : "Release tag not found")
-            : httpClientErrorDetail("GitHub", statusCode);
+                                     ? (source.tag.isEmpty() ? "No published release" : "Release tag not found")
+                                     : httpClientErrorDetail("GitHub", statusCode);
         http.end();
         return std::unexpected(toStdString(errorDetail));
     }

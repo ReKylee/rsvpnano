@@ -66,8 +66,7 @@ namespace screens {
             moved_ = moved_ || std::abs(dx) > 5 || std::abs(dy) > 5;
             if (lastDrawMs_ == 0 || nowMs - lastDrawMs_ >= 33) {
                 offset_ = clampOffset(items, static_cast<int16_t>(startOffset_ + dx), viewport.w);
-                selectedIndex_ =
-                    nearest(items, offset_, static_cast<int16_t>(viewport.x + viewport.w / 2), viewport.x);
+                selectedIndex_ = nearest(items, offset_, static_cast<int16_t>(viewport.x + viewport.w / 2), viewport.x);
                 lastDrawMs_ = nowMs;
             }
         }
@@ -95,8 +94,7 @@ namespace screens {
         }
 
         if (items.empty()) {
-            ui.label(viewport, ui.text(UiText::NoLibraryItems), 2, ui::themes::ColorRole::Muted,
-                     ui::TextAlign::Center);
+            ui.label(viewport, ui.text(UiText::NoLibraryItems), 2, ui::themes::ColorRole::Muted, ui::TextAlign::Center);
             return result;
         }
 
@@ -159,8 +157,7 @@ namespace screens {
                  ui::themes::ColorRole::Muted);
         ui.label({detailRect.x, static_cast<int16_t>(detailRect.y + 28), detailRect.w, 8}, item.chapter, 1,
                  ui::themes::ColorRole::Muted);
-        ui.label({static_cast<int16_t>(detailRect.x + detailRect.w - progressWidth),
-                  detailRect.y, progressWidth, 16},
+        ui.label({static_cast<int16_t>(detailRect.x + detailRect.w - progressWidth), detailRect.y, progressWidth, 16},
                  item.progressLabel, 2, ui::themes::ColorRole::Accent, ui::TextAlign::Right);
         return result;
     }

@@ -7,7 +7,7 @@ namespace screens {
             return action;
         const ui::Rect content = detail::tabContent(ui);
         ui::Column column{content, 8};
-        if (ui.button(column.next(28), ui.text(UiText::Back)))
+        if (ui.button(column.next(detail::kBackButtonHeight), ui.text(UiText::Back)))
             screen = Screen::Device;
         if (ui.button(column.next(40), ui.text(UiText::CheckOnly)))
             return Action::OtaCheck;

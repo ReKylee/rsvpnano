@@ -22,7 +22,7 @@ namespace screens {
                                Screen& screen) {
         bool changed = false;
         const ui::Rect content = detail::content(ui);
-        if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
+        if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, ui.text(UiText::Back)))
             screen = Screen::Settings;
         ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
                  ui.text(UiText::Interface), 2);
@@ -46,8 +46,7 @@ namespace screens {
 
         const int16_t firstRowY = static_cast<int16_t>(sectionsY + 14);
         const int16_t secondRowY = static_cast<int16_t>(firstRowY + 37);
-        if (ui.setting({content.x, firstRowY, halfWidth, 32}, ui.text(UiText::Theme),
-                       themes.selected().definition.name,
+        if (ui.setting({content.x, firstRowY, halfWidth, 32}, ui.text(UiText::Theme), themes.selected().definition.name,
                        ui::SettingLayout::Inline)) {
             themes.selectNext();
             config.selectedThemeId = themes.selected().id;
@@ -74,9 +73,9 @@ namespace screens {
         }
 
         const UiText screensaver = config.screensaver == standby::Kind::maze      ? UiText::Maze
-                                  : config.screensaver == standby::Kind::voronoi   ? UiText::Voronoi
-                                  : config.screensaver == standby::Kind::reaction  ? UiText::Reaction
-                                  : config.screensaver == standby::Kind::screenOff ? UiText::ScreenOff
+                                 : config.screensaver == standby::Kind::voronoi   ? UiText::Voronoi
+                                 : config.screensaver == standby::Kind::reaction  ? UiText::Reaction
+                                 : config.screensaver == standby::Kind::screenOff ? UiText::ScreenOff
                                                                                   : UiText::Life;
         if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), secondRowY, halfWidth, 32},
                        ui.text(UiText::Screensaver), ui.text(screensaver), ui::SettingLayout::Inline)) {

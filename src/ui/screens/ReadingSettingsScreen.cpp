@@ -8,7 +8,7 @@ namespace screens {
     bool readingSettings(ui::Context& ui, ReadingLoop& reader, settings::ReadingSettings& config, Screen& screen) {
         bool changed = false;
         const ui::Rect content = detail::content(ui);
-        if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
+        if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, ui.text(UiText::Back)))
             screen = Screen::Settings;
         ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
                  ui.text(UiText::Reading), 2);
@@ -29,7 +29,7 @@ namespace screens {
         const int16_t rowY = static_cast<int16_t>(controlsY + 56);
         if (ui.setting({content.x, rowY, halfWidth, 42}, ui.text(UiText::Pause),
                        ui.text(config.pauseMode == settings::PauseMode::sentenceEnd ? UiText::SentenceEnd
-                                                                                   : UiText::Instant),
+                                                                                    : UiText::Instant),
                        ui::SettingLayout::Inline)) {
             config.pauseMode = settings::cycleEnum(config.pauseMode);
             changed = true;

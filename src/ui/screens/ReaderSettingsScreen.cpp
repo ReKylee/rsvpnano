@@ -7,7 +7,7 @@ namespace screens {
     bool readerSettings(ui::Context& ui, settings::ReadingSettings& config, Screen& screen) {
         bool changed = false;
         const ui::Rect content = detail::content(ui);
-        if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
+        if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, ui.text(UiText::Back)))
             screen = Screen::Settings;
         ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
                  ui.text(UiText::ReaderScreen), 2);
@@ -16,7 +16,10 @@ namespace screens {
         const int16_t sectionsY = static_cast<int16_t>(content.y + 30);
         ui.separator({content.x, sectionsY, content.w, 10}, ui.text(UiText::BehaviorMetricsSection));
         ui::Grid grid{{content.x, static_cast<int16_t>(sectionsY + 14), content.w,
-                       static_cast<int16_t>(content.h - 44)}, 2, 32, gap};
+                       static_cast<int16_t>(content.h - 44)},
+                      2,
+                      32,
+                      gap};
         if (ui.setting(grid.next(), ui.text(UiText::ReaderHand),
                        ui.text(config.leftHanded ? UiText::Left : UiText::Right), ui::SettingLayout::Inline)) {
             config.leftHanded = !config.leftHanded;
@@ -31,7 +34,7 @@ namespace screens {
 
         const UiText footer = config.footerMetric == settings::FooterMetric::chapterTime ? UiText::ChapterTime
                             : config.footerMetric == settings::FooterMetric::bookTime    ? UiText::BookTime
-                                                                                          : UiText::Percentage;
+                                                                                         : UiText::Percentage;
         if (ui.setting(grid.next(), ui.text(UiText::Footer), ui.text(footer), ui::SettingLayout::Inline)) {
             config.footerMetric = settings::cycleEnum(config.footerMetric);
             changed = true;
@@ -39,7 +42,7 @@ namespace screens {
 
         const UiText battery = config.batteryLabel == settings::BatteryLabel::timeRemaining ? UiText::TimeLeft
                              : config.batteryLabel == settings::BatteryLabel::voltage       ? UiText::Voltage
-                                                                                             : UiText::Percentage;
+                                                                                            : UiText::Percentage;
         if (ui.setting(grid.next(), ui.text(UiText::BatteryLabel), ui.text(battery), ui::SettingLayout::Inline)) {
             config.batteryLabel = settings::cycleEnum(config.batteryLabel);
             changed = true;
@@ -48,7 +51,10 @@ namespace screens {
         const int16_t visibilityY = static_cast<int16_t>(sectionsY + 84);
         ui.separator({content.x, visibilityY, content.w, 10}, ui.text(UiText::VisibleWhileReadingSection));
         ui::Grid visibility{{content.x, static_cast<int16_t>(visibilityY + 14), content.w,
-                             static_cast<int16_t>(content.h - 107)}, 3, 28, gap};
+                             static_cast<int16_t>(content.h - 107)},
+                            3,
+                            28,
+                            gap};
         changed |= ui.toggle(visibility.next(), ui.text(UiText::Battery), config.batteryVisibleWhileReading);
         changed |= ui.toggle(visibility.next(), ui.text(UiText::Chapter), config.chapterVisibleWhileReading);
         changed |= ui.toggle(visibility.next(), ui.text(UiText::Progress), config.progressVisibleWhileReading);

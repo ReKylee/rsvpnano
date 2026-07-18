@@ -23,7 +23,7 @@ namespace screens {
 
     void NetworkScreen::draw(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
         const ui::Rect content = detail::content(ui);
-        if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
+        if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, ui.text(UiText::Back)))
             screen = Screen::Settings;
         ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
                  ui.text(UiText::NetworkUpdates), 2);
@@ -34,8 +34,7 @@ namespace screens {
         const int16_t firstRowY = static_cast<int16_t>(sectionY + 14);
         const int16_t networkWidth = static_cast<int16_t>((content.w - gap) * 2 / 3);
         if (ui.setting({content.x, firstRowY, networkWidth, 32}, ui.text(UiText::Network),
-                       ssid.empty() ? ui.text(UiText::NotSet) : std::string_view{ssid},
-                       ui::SettingLayout::Inline)) {
+                       ssid.empty() ? ui.text(UiText::NotSet) : std::string_view{ssid}, ui::SettingLayout::Inline)) {
             openWifiScan();
             screen = Screen::WifiScan;
         }
@@ -56,8 +55,7 @@ namespace screens {
             screen = Screen::NetworkEdit;
         }
         if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), secondRowY, halfWidth, 32},
-                       ui.text(UiText::ReleaseTag),
-                       tag.empty() ? ui.text(UiText::Latest) : std::string_view{tag})) {
+                       ui.text(UiText::ReleaseTag), tag.empty() ? ui.text(UiText::Latest) : std::string_view{tag})) {
             editField_ = EditField::Tag;
             editValue_ = tag;
             keyboard_ = {};
@@ -65,7 +63,10 @@ namespace screens {
         }
 
         ui::Grid actions{{content.x, static_cast<int16_t>(sectionY + 88), content.w,
-                          static_cast<int16_t>(content.h - 88)}, static_cast<uint8_t>(ssidStored ? 3 : 2), 36, gap};
+                          static_cast<int16_t>(content.h - 88)},
+                         static_cast<uint8_t>(ssidStored ? 3 : 2),
+                         36,
+                         gap};
         if (ui.button(actions.next(), ui.text(UiText::CompanionSetup)))
             screen = Screen::Sync;
         if (ui.button(actions.next(), ui.text(UiText::FirmwareUpdates)))
@@ -92,7 +93,7 @@ namespace screens {
 
     void NetworkScreen::drawWifiScan(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
         const ui::Rect content = detail::content(ui);
-        if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back))) {
+        if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, ui.text(UiText::Back))) {
             closeWifi();
             screen = Screen::NetworkSettings;
             return;
@@ -102,8 +103,7 @@ namespace screens {
 
         if (scanState_ == WifiScanState::Idle) {
             WiFi.mode(WIFI_STA);
-            scanState_ = WiFi.scanNetworks(true) == WIFI_SCAN_RUNNING ? WifiScanState::Scanning
-                                                                      : WifiScanState::Failed;
+            scanState_ = WiFi.scanNetworks(true) == WIFI_SCAN_RUNNING ? WifiScanState::Scanning : WifiScanState::Failed;
         }
         if (scanState_ == WifiScanState::Scanning) {
             const int16_t found = WiFi.scanComplete();
@@ -124,8 +124,8 @@ namespace screens {
                             networks_[networkCount_] = {candidate, rssi, secured};
                             ++networkCount_;
                         } else {
-                            const auto weakest = std::ranges::min_element(networks_, std::ranges::less{},
-                                                                          &WifiNetwork::rssi);
+                            const auto weakest =
+                                std::ranges::min_element(networks_, std::ranges::less{}, &WifiNetwork::rssi);
                             if (rssi > weakest->rssi)
                                 *weakest = {candidate, rssi, secured};
                         }
@@ -144,8 +144,7 @@ namespace screens {
         const ui::Rect list{content.x, static_cast<int16_t>(content.y + 30), content.w,
                             static_cast<int16_t>(content.h - 30)};
         if (scanState_ == WifiScanState::Idle || scanState_ == WifiScanState::Scanning) {
-            ui.label(list, ui.text(UiText::ScanningNetworks), 2, ui::themes::ColorRole::Muted,
-                     ui::TextAlign::Center);
+            ui.label(list, ui.text(UiText::ScanningNetworks), 2, ui::themes::ColorRole::Muted, ui::TextAlign::Center);
             return;
         }
         if (scanState_ == WifiScanState::Failed || networkCount_ == 0) {

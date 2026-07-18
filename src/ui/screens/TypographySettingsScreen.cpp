@@ -14,14 +14,15 @@ namespace screens {
         bool changed = false;
         bool reset = false;
         const ui::Rect content = detail::content(ui);
-        if (ui.button({content.x, content.y, 64, 24}, ui.text(UiText::Back)))
+        constexpr int16_t headerHeight = 26;
+        if (ui.button({content.x, content.y, 64, headerHeight}, ui.text(UiText::Back)))
             screen = Screen::Settings;
         constexpr int16_t resetWidth = 80;
         const int16_t resetX = static_cast<int16_t>(content.x + content.w - resetWidth);
         ui.label({static_cast<int16_t>(content.x + 74), content.y,
-                  std::max<int16_t>(0, static_cast<int16_t>(resetX - content.x - 80)), 24},
+                  std::max<int16_t>(0, static_cast<int16_t>(resetX - content.x - 80)), headerHeight},
                  ui.text(UiText::Typography), 2);
-        if (ui.button({resetX, content.y, resetWidth, 24}, ui.text(UiText::Reset))) {
+        if (ui.button({resetX, content.y, resetWidth, headerHeight}, ui.text(UiText::Reset))) {
             changed = bookOverride.has_value();
             bookOverride.reset();
             config = inherited;

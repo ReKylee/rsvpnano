@@ -60,6 +60,8 @@ internal fun pendingFirmwareUpdate(
     lastNotifiedVersion: String?,
 ): FirmwareUpdate? {
     if (release.version == target.currentVersion || target.otaAsset !in release.assets) return null
+    val currentCommit = target.currentVersion.substringAfter('+', "")
+    if (currentCommit.isNotEmpty() && currentCommit == release.version.substringAfter('+', "")) return null
     if (release.version == lastNotifiedVersion) return null
     return FirmwareUpdate(target.currentVersion, release.version)
 }

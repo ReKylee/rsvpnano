@@ -205,17 +205,10 @@ jobs:
           AMOLED241_FULL_BIN: ${{ steps.assets.outputs.amoled241_full }}
           AMOLED241_OTA_BIN: ${{ steps.assets.outputs.amoled241_ota }}
         run: |
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG" \
-              --title "$RELEASE_TITLE" \
-              --notes-file release-notes.md \
-              --target "$BUILD_SHA" \
-              --prerelease
-          else
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" \
               --title "$RELEASE_TITLE" \
               --notes-file release-notes.md \
-              --target "$BUILD_SHA" \
               --prerelease
           fi
 
@@ -235,3 +228,9 @@ jobs:
             "$AMOLED241_FULL_BIN" \
             "$AMOLED241_OTA_BIN" \
             --clobber
+
+          gh release edit "$RELEASE_TAG" \
+            --title "$RELEASE_TITLE" \
+            --notes-file release-notes.md \
+            --target "$BUILD_SHA" \
+            --prerelease

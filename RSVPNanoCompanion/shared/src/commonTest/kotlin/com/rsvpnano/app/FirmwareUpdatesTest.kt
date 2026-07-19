@@ -32,6 +32,13 @@ class FirmwareUpdatesTest {
         assertNull(pendingFirmwareUpdate(target, FirmwareRelease("v2", listOf("other-board-ota.bin")), null))
         assertNull(pendingFirmwareUpdate(target, FirmwareRelease("v1", listOf(target.otaAsset)), null))
         assertNull(pendingFirmwareUpdate(target, FirmwareRelease("v2", listOf(target.otaAsset)), "v2"))
+        assertNull(
+            pendingFirmwareUpdate(
+                target.copy(currentVersion = "preview-old+0123456789ab"),
+                FirmwareRelease("preview-new+0123456789ab", listOf(target.otaAsset)),
+                null,
+            ),
+        )
         assertEquals(
             FirmwareUpdate("v1", "v2"),
             pendingFirmwareUpdate(target, FirmwareRelease("v2", listOf(target.otaAsset)), null),

@@ -63,19 +63,9 @@ class NanoKtorClient(
             throw NanoClientError("Firmware release lookup returned HTTP ${response.status}")
         }
         val release = json.decodeFromString(GithubRelease.serializer(), response.body<String>())
-        val commitUrl = URLBuilder("https://api.github.com").apply {
-            appendPathSegments("repos", owner, repository, "commits", release.tagName)
-        }.build()
-        val commitResponse = httpClient.get(commitUrl) {
-            headers.append(HttpHeaders.Accept, "application/vnd.github.sha")
-            headers.append(HttpHeaders.UserAgent, "RSVP-Nano-Companion")
-        }
-        if (!commitResponse.status.isSuccess()) {
-            throw NanoClientError("Firmware commit lookup returned HTTP ${commitResponse.status}")
-        }
-        val commit = commitResponse.body<String>().trim()
+        val commit = release.targetCommitish.trim()
         if (commit.length != 40 || !commit.all { it.digitToIntOrNull(16) != null }) {
-            throw NanoClientError("Firmware commit lookup returned an invalid SHA.")
+            throw NanoClientError("Firmware release target is not a commit SHA.")
         }
         return FirmwareRelease(
             version = "${release.tagName}+${commit.take(12)}",
@@ -366,6 +356,7 @@ class NanoKtorClient(
     @Serializable
     private data class GithubRelease(
         @SerialName("tag_name") val tagName: String,
+        @SerialName("target_commitish") val targetCommitish: String,
         val assets: List<GithubAsset> = emptyList(),
     )
 

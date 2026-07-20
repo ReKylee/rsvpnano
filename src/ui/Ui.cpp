@@ -82,7 +82,8 @@ namespace ui {
         touchLastPollMs_ = nowMs;
 
         TouchContact contact;
-        if (touchSource_.ready != nullptr && !touchSource_.ready()) {
+        // IRQ starts a contact; the controller packet, not the IRQ level, ends it.
+        if (touchSource_.ready != nullptr && !touchSource_.ready() && !touchActive_) {
             contact = {};
         } else if (!touchSource_.read(contact)) {
             touchBackoffUntilMs_ = nowMs + touchSource_.timing.failureBackoffMs;

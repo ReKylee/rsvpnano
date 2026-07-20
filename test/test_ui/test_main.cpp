@@ -6,12 +6,13 @@
 namespace {
 
     ui::TouchContact gContact;
+    bool gTouchReady;
 
     bool beginTouch() {
         return true;
     }
     bool touchReady() {
-        return true;
+        return gTouchReady;
     }
     bool readTouch(ui::TouchContact& contact) {
         contact = gContact;
@@ -32,6 +33,7 @@ namespace {
 
 void setUp() {
     gContact = {};
+    gTouchReady = true;
 }
 void tearDown() {}
 
@@ -109,6 +111,26 @@ void test_button_and_slider_consume_touch() {
     TEST_ASSERT_TRUE(context.slider({0, 30, 101, 20}, "", value));
     context.endFrame();
     TEST_ASSERT_EQUAL(25, value);
+}
+
+void test_active_touch_outlives_irq_and_emits_hold_before_release() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx);
+    enableTouch(context);
+
+    gContact = {true, 20, 10};
+    TEST_ASSERT_TRUE(context.pollTouch(1));
+    TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchStart));
+
+    gTouchReady = false;
+    TEST_ASSERT_TRUE(context.pollTouch(500));
+    TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchHold));
+    TEST_ASSERT_FALSE(ui::hasTouch(*context.touch(), ui::TouchRelease));
+
+    gContact = {};
+    TEST_ASSERT_TRUE(context.pollTouch(501));
+    TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchRelease));
+    TEST_ASSERT_FALSE(ui::hasTouch(*context.touch(), ui::TouchTap));
 }
 
 void test_stepper_taps_and_repeats() {
@@ -546,6 +568,7 @@ int main(int, char**) {
     RUN_TEST(test_unchanged_widget_does_not_draw_or_flush);
     RUN_TEST(test_changed_and_removed_widgets_redraw);
     RUN_TEST(test_button_and_slider_consume_touch);
+    RUN_TEST(test_active_touch_outlives_irq_and_emits_hold_before_release);
     RUN_TEST(test_stepper_taps_and_repeats);
     RUN_TEST(test_disabled_button_ignores_touch);
     RUN_TEST(test_tap_target_handles_touch_without_drawing);

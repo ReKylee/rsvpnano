@@ -1,5 +1,5 @@
 #include "fonts/FontCatalog.h"
-#include "logging/Logger.h"
+#include <esp_log.h>
 
 #include <algorithm>
 #include <cctype>
@@ -197,7 +197,7 @@ const ui::fonts::AlphaFont* FontCatalog::load(size_t familyIndex, size_t sizeInd
             loadedSizeIndex_ = safeSize;
             return &runtimeFont_;
         }
-        Logger::error("font", "load failed %s: %s", family.paths[safeSize].c_str(), loaded.error().c_str());
+        ESP_LOGE("font", "load failed %s: %s", family.paths[safeSize].c_str(), loaded.error().c_str());
     }
 
     clearRuntimeFont();

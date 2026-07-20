@@ -1,4 +1,5 @@
 #include "sync/CompanionSyncManager.h"
+#include <esp_log.h>
 #include "logging/Logger.h"
 
 #include <ESPmDNS.h>
@@ -50,7 +51,7 @@ namespace {
     template<typename T>
     bool sendData(WebServer& server, std::string& jsonBuffer, int status, const T& data) {
         if (auto encoded = api::encodeData(data, jsonBuffer); !encoded) {
-            Logger::error("sync", "response encode failed: %s", encoded.error().c_str());
+            ESP_LOGE("sync", "response encode failed: %s", encoded.error().c_str());
             server
                 .send(500, "application/json",
                       "{\"error\":{\"code\":\"serialization_failed\",\"message\":\"Response could not be encoded\"}}");
@@ -423,7 +424,7 @@ bool CompanionSyncManager::begin() {
     active_ = true;
     statusLine1_ = networkSsid_;
     statusLine2_ = baseUrl();
-    Logger::info("sync", "ready ssid=%s url=%s", networkSsid_.c_str(), statusLine2_.c_str());
+    ESP_LOGI("sync", "ready ssid=%s url=%s", networkSsid_.c_str(), statusLine2_.c_str());
     return true;
 }
 
@@ -580,12 +581,12 @@ bool CompanionSyncManager::startAccessPoint() {
     networkSsid_ = ssid;
     WiFi.mode(WIFI_AP);
     if (!WiFi.softAP(ssid.c_str())) {
-        Logger::error("sync", "softAP failed");
+        ESP_LOGE("sync", "softAP failed");
         return false;
     }
 
     networkMode_ = NetworkMode::AccessPoint;
-    Logger::debug("sync", "softAP ssid=%s ip=%s", ssid.c_str(), ipToString(WiFi.softAPIP()).c_str());
+    ESP_LOGD("sync", "softAP ssid=%s ip=%s", ssid.c_str(), ipToString(WiFi.softAPIP()).c_str());
     return true;
 }
 
@@ -599,7 +600,7 @@ bool CompanionSyncManager::startStation() {
     statusLine2_ = ssid;
     auto connected = net::connectStation(ssid.c_str(), settingsStore_.secrets().wifiPassword.c_str());
     if (!connected) {
-        Logger::error("sync", "station failed ssid=%s error=%s code=%d; starting access point", ssid.c_str(),
+        ESP_LOGE("sync", "station failed ssid=%s error=%s code=%d; starting access point", ssid.c_str(),
                       connected.error().message().c_str(), connected.error().value());
         net::disconnect();
         return false;
@@ -612,7 +613,7 @@ bool CompanionSyncManager::startStation() {
     const String instanceName = "RSVP-Nano-" + suffix;
     hostname.toLowerCase();
     if (!MDNS.begin(hostname.c_str())) {
-        Logger::error("sync", "mDNS failed; starting access point");
+        ESP_LOGE("sync", "mDNS failed; starting access point");
         net::disconnect();
         networkMode_ = NetworkMode::None;
         networkSsid_.clear();
@@ -621,7 +622,7 @@ bool CompanionSyncManager::startStation() {
 
     MDNS.setInstanceName(instanceName.c_str());
     if (!MDNS.addService("rsvpnano", "tcp", 80)) {
-        Logger::error("sync", "mDNS service failed; starting access point");
+        ESP_LOGE("sync", "mDNS service failed; starting access point");
         MDNS.end();
         net::disconnect();
         networkMode_ = NetworkMode::None;
@@ -631,7 +632,7 @@ bool CompanionSyncManager::startStation() {
     MDNS.addServiceTxt("rsvpnano", "tcp", "id", suffix.c_str());
     MDNS.addServiceTxt("rsvpnano", "tcp", "api", "1");
     mdnsStarted_ = true;
-    Logger::debug("sync", "station ssid=%s ip=%s", ssid.c_str(), ipToString(WiFi.localIP()).c_str());
+    ESP_LOGD("sync", "station ssid=%s ip=%s", ssid.c_str(), ipToString(WiFi.localIP()).c_str());
     return true;
 }
 
@@ -1036,7 +1037,7 @@ void CompanionSyncManager::handleThemes() {
 
     statusLine1_ = "Theme received";
     statusLine2_ = uploadFinalPath_.c_str();
-    Logger::info("sync", "theme ready %s", uploadFinalPath_.c_str());
+    ESP_LOGI("sync", "theme ready %s", uploadFinalPath_.c_str());
     sendData(server_, jsonBuffer_, 201, api::ThemeUploadResponse{toStdString(uploadFinalPath_), id});
     uploadTmpPath_ = "";
     uploadFinalPath_ = "";
@@ -1116,7 +1117,7 @@ void CompanionSyncManager::handleFonts() {
 
     statusLine1_ = "Font received";
     statusLine2_ = uploadFinalPath_.c_str();
-    Logger::info("sync", "font ready %s", uploadFinalPath_.c_str());
+    ESP_LOGI("sync", "font ready %s", uploadFinalPath_.c_str());
     sendData(server_, jsonBuffer_, 201, api::UploadResponse{toStdString(uploadFinalPath_)});
     uploadTmpPath_ = "";
     uploadFinalPath_ = "";
@@ -1176,7 +1177,7 @@ void CompanionSyncManager::handleFontUpload() {
         uploadError_ = "";
         statusLine1_ = "Receiving font";
         statusLine2_ = (family + " " + RFont4::sizeId(sizeIndex)).c_str();
-        Logger::info("sync", "font upload start %s", uploadFinalPath_.c_str());
+        ESP_LOGI("sync", "font upload start %s", uploadFinalPath_.c_str());
         return;
     }
 
@@ -1237,7 +1238,7 @@ void CompanionSyncManager::handleBookDelete() {
 
     statusLine1_ = "Book deleted";
     statusLine2_ = relativeLibraryName(path).c_str();
-    Logger::debug("sync", "deleted %s", path.c_str());
+    ESP_LOGD("sync", "deleted %s", path.c_str());
     sendData(server_, jsonBuffer_, 200, api::DeleteResponse{toStdString(id), true});
 }
 
@@ -1336,7 +1337,7 @@ void CompanionSyncManager::handleBookUpload() {
         uploadError_ = "";
         statusLine1_ = "Receiving book";
         statusLine2_ = filename.c_str();
-        Logger::info("sync", "upload start %s", uploadFinalPath_.c_str());
+        ESP_LOGI("sync", "upload start %s", uploadFinalPath_.c_str());
         return;
     }
 
@@ -1352,7 +1353,7 @@ void CompanionSyncManager::handleBookUpload() {
     }
 
     if (upload.status == UPLOAD_FILE_END) {
-        Logger::debug("sync", "upload end bytes=%u error=%s", upload.totalSize, uploadError_.c_str());
+        ESP_LOGD("sync", "upload end bytes=%u error=%s", upload.totalSize, uploadError_.c_str());
         return;
     }
 
@@ -1397,7 +1398,7 @@ void CompanionSyncManager::handleThemeUpload() {
         uploadError_ = "";
         statusLine1_ = "Receiving theme";
         statusLine2_ = filename.c_str();
-        Logger::info("sync", "theme upload start %s", uploadFinalPath_.c_str());
+        ESP_LOGI("sync", "theme upload start %s", uploadFinalPath_.c_str());
         return;
     }
 
@@ -1431,7 +1432,7 @@ void CompanionSyncManager::sendError(int status, const char* code, const String&
     if (field != nullptr && *field != '\0')
         error.field = field;
     if (auto encoded = api::encodeError(std::move(error), jsonBuffer_); !encoded) {
-        Logger::error("sync", "error response encode failed: %s", encoded.error().c_str());
+        ESP_LOGE("sync", "error response encode failed: %s", encoded.error().c_str());
         jsonBuffer_ =
             "{\"error\":{\"code\":\"serialization_failed\",\"message\":\"Error response could not be encoded\"}}";
         status = 500;
@@ -1614,7 +1615,7 @@ void CompanionSyncManager::finishUpload(bool success) {
         } else {
             statusLine1_ = "Book received";
             statusLine2_ = uploadFinalPath_.c_str();
-            Logger::info("sync", "upload ready %s", uploadFinalPath_.c_str());
+            ESP_LOGI("sync", "upload ready %s", uploadFinalPath_.c_str());
         }
     } else {
         Board::Storage::filesystem().remove(uploadTmpPath_);

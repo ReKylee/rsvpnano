@@ -1,5 +1,5 @@
 #include "display/ThemeStore.h"
-#include "logging/Logger.h"
+#include <esp_log.h>
 
 #include <algorithm>
 #include <iterator>
@@ -24,7 +24,7 @@ namespace {
             return false;
         auto encoded = ui::themes::encodeToml(theme.definition);
         if (!encoded) {
-            Logger::error("theme", "encode failed: %s", encoded.error().message.c_str());
+            ESP_LOGE("theme", "encode failed: %s", encoded.error().message.c_str());
             return false;
         }
         const std::string tmpPath = std::string{path} + ".tmp";
@@ -95,7 +95,7 @@ void ThemeStore::loadFromSd(const FontCatalog& fonts, const settings::Typography
         }
 
         if (entry.size() > kMaxThemeBytes) {
-            Logger::warning("theme", "skipped %s: file exceeds %u bytes", path.c_str(),
+            ESP_LOGW("theme", "skipped %s: file exceeds %u bytes", path.c_str(),
                             static_cast<unsigned>(kMaxThemeBytes));
             entry.close();
             continue;
@@ -104,18 +104,18 @@ void ThemeStore::loadFromSd(const FontCatalog& fonts, const settings::Typography
         const size_t count = entry.read(reinterpret_cast<uint8_t*>(text.data()), text.size());
         entry.close();
         if (count != text.size()) {
-            Logger::warning("theme", "skipped %s: incomplete read", path.c_str());
+            ESP_LOGW("theme", "skipped %s: incomplete read", path.c_str());
             continue;
         }
         auto parsed = ui::themes::decodeToml(text, ui::themes::themeIdFromPath(path), defaults);
         if (!parsed) {
-            Logger::warning("theme", "skipped %s: %s", path.c_str(), parsed.error().message.c_str());
+            ESP_LOGW("theme", "skipped %s: %s", path.c_str(), parsed.error().message.c_str());
             continue;
         }
 
         auto& fontId = parsed->definition.typography.fontId;
         if (fonts.find(fontId) == nullptr && !fonts.families().empty()) {
-            Logger::warning("theme", "%s references missing font '%s'; using '%s'", path.c_str(), fontId.c_str(),
+            ESP_LOGW("theme", "%s references missing font '%s'; using '%s'", path.c_str(), fontId.c_str(),
                             fonts.families().front().id.c_str());
             fontId = fonts.families().front().id;
             repairs.push_back({path, loaded.size()});
@@ -126,7 +126,7 @@ void ThemeStore::loadFromSd(const FontCatalog& fonts, const settings::Typography
 
     for (const Repair& repair: repairs) {
         if (!writeThemeFile(repair.path.c_str(), loaded[repair.themeIndex]))
-            Logger::error("theme", "could not repair typeface in %s", repair.path.c_str());
+            ESP_LOGE("theme", "could not repair typeface in %s", repair.path.c_str());
     }
 
     std::ranges::sort(loaded, {}, &ui::themes::Theme::id);

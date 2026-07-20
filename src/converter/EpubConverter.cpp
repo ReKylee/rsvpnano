@@ -1,5 +1,5 @@
 #include "converter/EpubConverter.h"
-#include "logging/Logger.h"
+#include <esp_log.h>
 
 #include <algorithm>
 #include <iterator>
@@ -78,28 +78,28 @@ namespace {
         String containerXml;
 
         reportProgress(options, "Opening EPUB", "Reading metadata", 8);
-        Logger::debug("epub", "Reading META-INF/container.xml");
+        ESP_LOGD("epub", "Reading META-INF/container.xml");
         if (!zip.extractToString("META-INF/container.xml", containerXml, kMaxContainerBytes)) {
-            Logger::error("epub", "EPUB container.xml not found or unreadable");
+            ESP_LOGE("epub", "EPUB container.xml not found or unreadable");
             return false;
         }
-        Logger::info("epub", "container.xml loaded: %u chars", static_cast<unsigned int>(containerXml.length()));
+        ESP_LOGI("epub", "container.xml loaded: %u chars", static_cast<unsigned int>(containerXml.length()));
 
         documents.opfPath = parseRootfilePath(containerXml);
         if (documents.opfPath.isEmpty()) {
-            Logger::error("epub", "EPUB rootfile path not found");
+            ESP_LOGE("epub", "EPUB rootfile path not found");
             return false;
         }
-        Logger::debug("epub", "Rootfile OPF path: %s", documents.opfPath.c_str());
+        ESP_LOGD("epub", "Rootfile OPF path: %s", documents.opfPath.c_str());
 
         reportProgress(options, "Opening EPUB", "Reading package", 14);
-        Logger::debug("epub", "Reading OPF package: %s", documents.opfPath.c_str());
+        ESP_LOGD("epub", "Reading OPF package: %s", documents.opfPath.c_str());
         if (!zip.extractToString(documents.opfPath, documents.opfXml, kMaxOpfBytes)) {
-            Logger::error("epub", "OPF file not readable: %s", documents.opfPath.c_str());
+            ESP_LOGE("epub", "OPF file not readable: %s", documents.opfPath.c_str());
             return false;
         }
 
-        Logger::info("epub", "OPF loaded: %u chars", static_cast<unsigned int>(documents.opfXml.length()));
+        ESP_LOGI("epub", "OPF loaded: %u chars", static_cast<unsigned int>(documents.opfXml.length()));
         documents.opfBaseDir = directoryForPath(documents.opfPath);
         return true;
     }
@@ -136,7 +136,7 @@ namespace {
         const std::vector<ManifestItem> manifest = parseManifestItems(opfXml, opfBaseDir);
         const std::vector<String> spineIds = parseSpineIds(opfXml);
 
-        Logger::debug("epub", "Package parsed: manifest=%u spine=%u base=%s",
+        ESP_LOGD("epub", "Package parsed: manifest=%u spine=%u base=%s",
                       static_cast<unsigned int>(manifest.size()), static_cast<unsigned int>(spineIds.size()),
                       opfBaseDir.c_str());
 
@@ -248,7 +248,7 @@ namespace {
     }
 
     void reportReadingOrderReady(const EpubConverter::Options& options, const std::vector<String>& readingOrder) {
-        Logger::debug("epub", "Reading order contains %u content files",
+        ESP_LOGD("epub", "Reading order contains %u content files",
                       static_cast<unsigned int>(readingOrder.size()));
         const String foundDetail = String(readingOrder.size()) + " content files";
         reportProgress(options, "Opening EPUB", foundDetail.c_str(), 25);
@@ -291,7 +291,7 @@ namespace {
 
             if (extractStatus == EpubZip::ContentExtractStatus::Unsupported
                 || extractStatus == EpubZip::ContentExtractStatus::Failed) {
-                Logger::error("epub", "Skipping unreadable content file: %s", readingOrder[i].c_str());
+                ESP_LOGE("epub", "Skipping unreadable content file: %s", readingOrder[i].c_str());
                 continue;
             }
 
@@ -307,7 +307,7 @@ namespace {
             return true;
         }
 
-        Logger::error("epub", "Could not rename %s to %s", tempPath.c_str(), rsvpPath.c_str());
+        ESP_LOGE("epub", "Could not rename %s to %s", tempPath.c_str(), rsvpPath.c_str());
         Board::Storage::filesystem().remove(tempPath);
         return false;
     }
@@ -318,12 +318,12 @@ namespace {
 
         EpubZip::Archive zip;
         if (!zip.open(epubPath)) {
-            Logger::error("epub", "Could not open EPUB archive: %s", epubPath.c_str());
+            ESP_LOGE("epub", "Could not open EPUB archive: %s", epubPath.c_str());
             return false;
         }
 
         if (zip.contains("META-INF/encryption.xml")) {
-            Logger::warning("epub", "Encrypted EPUB content is unsupported");
+            ESP_LOGW("epub", "Encrypted EPUB content is unsupported");
             zip.close();
             return false;
         }
@@ -340,7 +340,7 @@ namespace {
 
         const std::vector<String> readingOrder = buildReadingOrder(documents.opfXml, documents.opfBaseDir, options);
         if (readingOrder.empty()) {
-            Logger::debug("epub", "No readable XHTML spine items found");
+            ESP_LOGD("epub", "No readable XHTML spine items found");
             return failWithClosedZip();
         }
         reportReadingOrderReady(options, readingOrder);
@@ -350,12 +350,12 @@ namespace {
             return metadataTitle.isEmpty() ? basenameWithoutExtension(epubPath) : metadataTitle;
         }();
         const std::vector<TocEntry> tocEntries = readToc(zip, documents.opfXml, documents.opfBaseDir, bookTitle);
-        Logger::debug("epub", "Usable TOC entries: %u", static_cast<unsigned int>(tocEntries.size()));
+        ESP_LOGD("epub", "Usable TOC entries: %u", static_cast<unsigned int>(tocEntries.size()));
 
         Board::Storage::filesystem().remove(tempPath);
         File output = Board::Storage::filesystem().open(tempPath, FILE_WRITE);
         if (!output) {
-            Logger::error("epub", "Could not create temporary RSVP file: %s", tempPath.c_str());
+            ESP_LOGE("epub", "Could not create temporary RSVP file: %s", tempPath.c_str());
             return failWithClosedZip();
         }
 
@@ -371,7 +371,7 @@ namespace {
         zip.close();
 
         if (wordCount == 0) {
-            Logger::debug("epub", "No readable words extracted from %s", epubPath.c_str());
+            ESP_LOGD("epub", "No readable words extracted from %s", epubPath.c_str());
             Board::Storage::filesystem().remove(tempPath);
             return false;
         }
@@ -380,7 +380,7 @@ namespace {
             return false;
         }
 
-        Logger::info("epub", "Converted %s -> %s (%u words)", epubPath.c_str(), rsvpPath.c_str(),
+        ESP_LOGI("epub", "Converted %s -> %s (%u words)", epubPath.c_str(), rsvpPath.c_str(),
                      static_cast<unsigned int>(wordCount));
         const String convertedDetail = wordCountDetail(wordCount);
         reportProgress(options, "EPUB converted", convertedDetail.c_str(), 100);
@@ -392,7 +392,7 @@ namespace {
 
         File marker = Board::Storage::filesystem().open(markerPath, FILE_WRITE);
         if (!marker) {
-            Logger::error("epub", "Could not create failure marker: %s", markerPath.c_str());
+            ESP_LOGE("epub", "Could not create failure marker: %s", markerPath.c_str());
             return;
         }
 
@@ -479,7 +479,7 @@ namespace {
             return true;
         }
 
-        Logger::warning("epub", "Rebuilding stale RSVP cache after converter update: %s", rsvpPath.c_str());
+        ESP_LOGW("epub", "Rebuilding stale RSVP cache after converter update: %s", rsvpPath.c_str());
         Board::Storage::filesystem().remove(rsvpPath);
         return false;
     }
@@ -502,11 +502,11 @@ namespace {
         Board::Storage::filesystem().remove(paths.lock);
         Board::Storage::filesystem().remove(paths.temp);
         if (!currentLock) {
-            Logger::warning("epub", "Retrying interrupted EPUB after converter update: %s", epubPath.c_str());
+            ESP_LOGW("epub", "Retrying interrupted EPUB after converter update: %s", epubPath.c_str());
             return false;
         }
 
-        Logger::warning("epub", "Previous conversion restart detected, skipping: %s", epubPath.c_str());
+        ESP_LOGW("epub", "Previous conversion restart detected, skipping: %s", epubPath.c_str());
         writeFailureMarker(paths.failed, "Previous conversion restarted before completion.");
         reportProgress(options, "Previous restart", "Skipping this EPUB", 100);
         return true;
@@ -524,7 +524,7 @@ namespace {
             return;
         }
 
-        Logger::warning("epub", "Removing stale temporary conversion file and retrying: %s", epubPath.c_str());
+        ESP_LOGW("epub", "Removing stale temporary conversion file and retrying: %s", epubPath.c_str());
         Board::Storage::filesystem().remove(tempPath);
     }
 
@@ -542,11 +542,11 @@ namespace {
             return false;
         }
         if (currentFailure) {
-            Logger::warning("epub", "Skipping EPUB with failure marker: %s", epubPath.c_str());
+            ESP_LOGW("epub", "Skipping EPUB with failure marker: %s", epubPath.c_str());
             return true;
         }
 
-        Logger::warning("epub", "Retrying EPUB after converter update: %s", epubPath.c_str());
+        ESP_LOGW("epub", "Retrying EPUB after converter update: %s", epubPath.c_str());
         Board::Storage::filesystem().remove(failedPath);
         return false;
     }
@@ -575,7 +575,7 @@ std::expected<void, std::error_code> EpubConverter::convertIfNeeded(const String
     if (shouldSkipCurrentFailure(epubPath, paths.failed))
         return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));
 
-    Logger::debug("epub", "Converting on device: %s", epubPath.c_str());
+    ESP_LOGD("epub", "Converting on device: %s", epubPath.c_str());
     writeFailureMarker(paths.lock, "Conversion in progress. Delete this file only if retrying.");
     const bool converted = convertEpubToRsvp(epubPath, paths.temp, rsvpPath, options);
     Board::Storage::filesystem().remove(paths.lock);

@@ -1,5 +1,5 @@
 #include "settings/NvsSecurity.h"
-#include "logging/Logger.h"
+#include <esp_log.h>
 
 #include <Arduino.h>
 #include <Preferences.h>
@@ -64,7 +64,7 @@ namespace settings {
         void restorePlaintextNvs(Preferences& statePreferences, SettingsStore& settingsStore) {
             if (nvs_flash_init() != ESP_OK || !statePreferences.begin(kStateNvsNamespace)
                 || !settingsStore.reopenNvsAndPersist()) {
-                Logger::error("settings", "plaintext NVS recovery failed; restarting");
+                ESP_LOGE("settings", "plaintext NVS recovery failed; restarting");
                 delay(250);
                 esp_restart();
             }
@@ -86,15 +86,15 @@ namespace settings {
         if (state == EncryptionState::Plaintext)
             return true;
         if (state == EncryptionState::KeyConflict) {
-            Logger::info("settings", "eFuse KEY5 is already assigned; NVS encryption disabled");
+            ESP_LOGI("settings", "eFuse KEY5 is already assigned; NVS encryption disabled");
             return true;
         }
 
         if (earlyInitializationResult == ESP_OK) {
-            Logger::info("settings", "encrypted NVS initialized");
+            ESP_LOGI("settings", "encrypted NVS initialized");
             return true;
         }
-        Logger::error("settings", "encrypted NVS initialization failed: %s",
+        ESP_LOGE("settings", "encrypted NVS initialization failed: %s",
                       esp_err_to_name(earlyInitializationResult));
         return false;
     }
@@ -107,7 +107,7 @@ namespace settings {
         const nvs_sec_config_hmac_t schemeConfig{.hmac_key_id = kNvsHmacKey};
         esp_err_t result = nvs_sec_provider_register_hmac(&schemeConfig, &scheme);
         if (result != ESP_OK) {
-            Logger::error("settings", "NVS encryption provider failed: %s", esp_err_to_name(result));
+            ESP_LOGE("settings", "NVS encryption provider failed: %s", esp_err_to_name(result));
             return false;
         }
 
@@ -123,12 +123,12 @@ namespace settings {
         nvs_sec_provider_deregister(scheme);
 
         if (result == ESP_OK && statePreferences.begin(kStateNvsNamespace) && settingsStore.reopenNvsAndPersist()) {
-            Logger::info("settings", "NVS encryption enabled; restarting");
+            ESP_LOGI("settings", "NVS encryption enabled; restarting");
             delay(250);
             esp_restart();
         }
 
-        Logger::error("settings", "NVS encryption migration failed: %s", esp_err_to_name(result));
+        ESP_LOGE("settings", "NVS encryption migration failed: %s", esp_err_to_name(result));
         if (encryptionState() == EncryptionState::Plaintext)
             restorePlaintextNvs(statePreferences, settingsStore);
         else {

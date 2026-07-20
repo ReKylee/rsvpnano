@@ -1,5 +1,5 @@
 #include "ui/screens/ReaderScreen.h"
-#include "logging/Logger.h"
+#include <esp_log.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -172,7 +172,7 @@ namespace screens {
             const int savedBook = storage.bookIndex(savedPath);
             if (savedBook >= 0 && openBook(ui, storage, preferences, static_cast<size_t>(savedBook), nowMs))
                 return;
-            Logger::error("reader", "saved book not found: %s", savedPath.c_str());
+            ESP_LOGE("reader", "saved book not found: %s", savedPath.c_str());
         }
         if (storage.bookCount() > 0 && openBook(ui, storage, preferences, 0, nowMs))
             return;

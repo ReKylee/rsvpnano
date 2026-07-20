@@ -1,5 +1,5 @@
 #include "benchmark/BenchmarkRunner.h"
-#include "logging/Logger.h"
+#include <esp_log.h>
 
 #include <Arduino.h>
 #include <esp_heap_caps.h>
@@ -34,7 +34,7 @@ namespace {
     bool gDisplayReady = false;
 
     void showStatus(const String& title, const String& line1 = "", const String& line2 = "") {
-        Logger::debug("bench", "screen title=%s line1=%s line2=%s", title.c_str(), line1.c_str(), line2.c_str());
+        ESP_LOGD("bench", "screen title=%s line1=%s line2=%s", title.c_str(), line1.c_str(), line2.c_str());
         if (gDisplayReady) {
             screens::status(gDisplay, title.c_str(), line1.c_str(), line2.c_str());
         }
@@ -45,7 +45,7 @@ namespace {
                                             ? static_cast<uint32_t>((static_cast<uint64_t>(bytes) * 1000ULL)
                                                                     / (static_cast<uint64_t>(elapsedMs) * 1024ULL))
                                             : 0;
-        Logger::debug("bench", "metric=%s ok=%u ms=%lu bytes=%lu rate_kib_s=%lu", name, ok ? 1 : 0,
+        ESP_LOGD("bench", "metric=%s ok=%u ms=%lu bytes=%lu rate_kib_s=%lu", name, ok ? 1 : 0,
                       static_cast<unsigned long>(elapsedMs), static_cast<unsigned long>(bytes),
                       static_cast<unsigned long>(rateKiBPerSecond));
     }
@@ -155,7 +155,7 @@ namespace {
 
     bool benchmarkDraculaConversion() {
         if (!StorageFiles::fileExistsWithBytes(kDraculaEpubPath)) {
-            Logger::warning("bench", "missing_epub path=%s", kDraculaEpubPath);
+            ESP_LOGW("bench", "missing_epub path=%s", kDraculaEpubPath);
             showStatus("EPUB missing", "Copy Dracula-epub.epub", "to /benchmark on SD");
             return false;
         }
@@ -210,7 +210,7 @@ namespace {
 
     void waitForStartInput() {
         showStatus("Benchmark", "Tap or press button", "SD data stays in /benchmark");
-        Logger::warning("bench", "waiting_for_start_input");
+        ESP_LOGW("bench", "waiting_for_start_input");
 
         const uint32_t settleStartMs = millis();
         while (millis() - settleStartMs < 500) {
@@ -233,13 +233,13 @@ namespace {
             inputWasHeld = held;
 
             if (millis() - lastReminderMs > 3000) {
-                Logger::warning("bench", "still_waiting_for_start_input");
+                ESP_LOGW("bench", "still_waiting_for_start_input");
                 lastReminderMs = millis();
             }
             delay(20);
         }
 
-        Logger::info("bench", "start_input_received");
+        ESP_LOGI("bench", "start_input_received");
         showStatus("Benchmark", "Starting", "");
         delay(300);
     }
@@ -249,7 +249,7 @@ namespace {
 namespace Benchmark {
 
     void run() {
-        Logger::info("bench", "start board=%s id=%s", Board::Config::BOARD_LABEL, Board::Config::BOARD_ID);
+        ESP_LOGI("bench", "start board=%s id=%s", Board::Config::BOARD_LABEL, Board::Config::BOARD_ID);
 
         bool mounted = false;
         int mountedFrequencyKhz = 0;
@@ -270,7 +270,7 @@ namespace Benchmark {
         const uint32_t mountStartedMs = millis();
         mounted = SdDiagnostics::mountCard(mounted, &mountedFrequencyKhz);
         logMetric("sd_mount", mounted, millis() - mountStartedMs);
-        Logger::debug("bench", "sd_frequency_khz=%d", mountedFrequencyKhz);
+        ESP_LOGD("bench", "sd_frequency_khz=%d", mountedFrequencyKhz);
         if (mounted) {
             runTimed("sd_write_read", benchmarkSdWriteRead, kSdProbeBytes * 2);
             runTimed("epub_dracula_convert", benchmarkDraculaConversion);
@@ -279,7 +279,7 @@ namespace Benchmark {
             logMetric("epub_dracula_convert", false, 0);
         }
 
-        Logger::info("bench", "done");
+        ESP_LOGI("bench", "done");
         showStatus("Benchmark", "Done", "Check serial log");
     }
 

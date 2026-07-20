@@ -1,4 +1,5 @@
 #include "storage/fs/SdDiagnostics.h"
+#include <esp_log.h>
 #include "logging/Logger.h"
 
 #include <Preferences.h>
@@ -7,6 +8,7 @@
 #include <cerrno>
 #include <cstring>
 #include <driver/sdmmc_types.h>
+#include <system_error>
 
 #include "board/BoardStorage.h"
 #include "storage/fs/StorageFiles.h"
@@ -93,7 +95,7 @@ namespace SdDiagnostics {
         FrequencyCache readFrequencyCache() {
             Preferences preferences;
             if (!preferences.begin(kPreferencesNamespace, true)) {
-                Logger::warning("sd-check", "frequency cache unavailable");
+                ESP_LOGW("sd-check", "frequency cache unavailable");
                 return FrequencyCache{};
             }
             FrequencyCache cache;
@@ -105,7 +107,7 @@ namespace SdDiagnostics {
             if (!isSupportedFrequency(cache.frequencyKhz) || cache.cardType == Board::Storage::CardType::None
                 || cache.sizeMb == 0) {
                 if (cache.frequencyKhz != 0) {
-                    Logger::debug("sd-check", "ignoring incomplete cached frequency %d kHz", cache.frequencyKhz);
+                    ESP_LOGD("sd-check", "ignoring incomplete cached frequency %d kHz", cache.frequencyKhz);
                 }
                 return FrequencyCache{};
             }
@@ -132,7 +134,7 @@ namespace SdDiagnostics {
 
             Preferences preferences;
             if (!preferences.begin(kPreferencesNamespace)) {
-                Logger::warning("sd-check", "frequency cache write unavailable");
+                ESP_LOGW("sd-check", "frequency cache write unavailable");
                 return;
             }
             preferences.putInt(kPreferenceFrequencyKhz, frequencyKhz);
@@ -166,14 +168,15 @@ namespace SdDiagnostics {
             const bool removed = Board::Storage::filesystem().remove(path);
             const int removeErrno = errno;
             if (!removed && StorageFiles::fileExists(path.c_str())) {
-                Logger::failure(tag, "remove probe", path.c_str(), removeErrno);
+                Logger::failure(tag, "remove probe", path.c_str(),
+                                std::error_code{removeErrno, std::generic_category()});
                 return false;
             }
             return true;
         }
 
         bool writeReadProbeFile(const String& path, size_t bytes, const char* tag) {
-            Logger::debug(tag, "write/read probe path=%s bytes=%u", path.c_str(), static_cast<unsigned int>(bytes));
+            ESP_LOGD(tag, "write/read probe path=%s bytes=%u", path.c_str(), static_cast<unsigned int>(bytes));
             Board::Storage::filesystem().remove(path);
 
             static uint8_t writeBuffer[kProbeChunkBytes];
@@ -185,7 +188,8 @@ namespace SdDiagnostics {
                 File file = Board::Storage::filesystem().open(path, FILE_WRITE);
                 const int openErrno = errno;
                 if (!file) {
-                    Logger::failure(tag, "open FILE_WRITE", path.c_str(), openErrno);
+                    Logger::failure(tag, "open FILE_WRITE", path.c_str(),
+                                    std::error_code{openErrno, std::generic_category()});
                     return false;
                 }
 
@@ -195,7 +199,7 @@ namespace SdDiagnostics {
                     fillProbeBuffer(writeBuffer, chunk, static_cast<uint32_t>(writtenTotal));
                     const size_t written = file.write(writeBuffer, chunk);
                     if (written != chunk) {
-                        Logger::error(tag, "probe short write path=%s offset=%u wanted=%u got=%u", path.c_str(),
+                        ESP_LOGE(tag, "probe short write path=%s offset=%u wanted=%u got=%u", path.c_str(),
                                       static_cast<unsigned int>(writtenTotal), static_cast<unsigned int>(chunk),
                                       static_cast<unsigned int>(written));
                         file.close();
@@ -216,13 +220,13 @@ namespace SdDiagnostics {
                     if (file) {
                         file.close();
                     }
-                    Logger::error(tag, "probe reopen failed path=%s", path.c_str());
+                    ESP_LOGE(tag, "probe reopen failed path=%s", path.c_str());
                     removeProbeFile(path, tag);
                     return false;
                 }
 
                 if (file.size() != bytes) {
-                    Logger::error(tag, "probe size mismatch path=%s size=%u expected=%u", path.c_str(),
+                    ESP_LOGE(tag, "probe size mismatch path=%s size=%u expected=%u", path.c_str(),
                                   static_cast<unsigned int>(file.size()), static_cast<unsigned int>(bytes));
                     file.close();
                     removeProbeFile(path, tag);
@@ -235,7 +239,7 @@ namespace SdDiagnostics {
                     fillProbeBuffer(writeBuffer, chunk, static_cast<uint32_t>(readTotal));
                     const size_t read = file.read(readBuffer, chunk);
                     if (read != chunk || std::memcmp(readBuffer, writeBuffer, chunk) != 0) {
-                        Logger::error(tag, "probe verify failed path=%s offset=%u wanted=%u got=%u", path.c_str(),
+                        ESP_LOGE(tag, "probe verify failed path=%s offset=%u wanted=%u got=%u", path.c_str(),
                                       static_cast<unsigned int>(readTotal), static_cast<unsigned int>(chunk),
                                       static_cast<unsigned int>(read));
                         file.close();
@@ -263,14 +267,14 @@ namespace SdDiagnostics {
         }
 
         bool tryMountFrequency(bool& mounted, int frequencyKhz) {
-            Logger::debug("sd-check", "trying mount at %d kHz", frequencyKhz);
+            ESP_LOGD("sd-check", "trying mount at %d kHz", frequencyKhz);
             Board::Storage::end();
             mounted = Board::Storage::mount(StoragePaths::kMountPoint, frequencyKhz);
             if (!mounted) {
                 return false;
             }
             if (!writeReadProbeFile(StoragePaths::kSdFrequencyProbePath, kFrequencyProbeBytes, "sd-probe")) {
-                Logger::error("sd-check", "frequency %d kHz failed sustained probe", frequencyKhz);
+                ESP_LOGE("sd-check", "frequency %d kHz failed sustained probe", frequencyKhz);
                 Board::Storage::end();
                 mounted = false;
                 return false;
@@ -310,7 +314,7 @@ namespace SdDiagnostics {
         }
 
         if (!Board::Storage::setSdMmcPins()) {
-            Logger::error("sd-check", "SD pin setup failed");
+            ESP_LOGE("sd-check", "SD pin setup failed");
             return false;
         }
 
@@ -319,15 +323,15 @@ namespace SdDiagnostics {
 
         const FrequencyCache cache = allowCache ? readFrequencyCache() : FrequencyCache{};
         if (allowCache && cache.valid) {
-            Logger::debug("sd-check", "trying cached SD frequency %d kHz", cache.frequencyKhz);
+            ESP_LOGD("sd-check", "trying cached SD frequency %d kHz", cache.frequencyKhz);
             if (tryMountFrequency(mounted, cache.frequencyKhz)) {
                 if (cacheMatchesMountedCard(cache)) {
                     recordMountedFrequency(cache.frequencyKhz, mountedFrequencyKhz);
-                    Logger::info("sd-check", "selected cached SD frequency %d kHz", cache.frequencyKhz);
+                    ESP_LOGI("sd-check", "selected cached SD frequency %d kHz", cache.frequencyKhz);
                     return true;
                 }
 
-                Logger::debug("sd-check", "cached SD frequency belongs to a different card; rediscovering");
+                ESP_LOGD("sd-check", "cached SD frequency belongs to a different card; rediscovering");
                 unmountCard(mounted);
             }
         }
@@ -336,7 +340,7 @@ namespace SdDiagnostics {
             const int frequencyKhz = frequencyOrder[i];
             if (tryMountFrequency(mounted, frequencyKhz)) {
                 recordMountedFrequency(frequencyKhz, mountedFrequencyKhz);
-                Logger::info("sd-check", "selected SD frequency %d kHz", frequencyKhz);
+                ESP_LOGI("sd-check", "selected SD frequency %d kHz", frequencyKhz);
                 writeFrequencyCache(frequencyKhz);
                 return true;
             }
@@ -354,12 +358,12 @@ namespace SdDiagnostics {
             return mountCard(mounted, mountedFrequencyKhz);
         }
         if (!isSupportedFrequency(sMountedFrequencyKhz)) {
-            Logger::info("sd-check", "mounted frequency unknown; rediscovering");
+            ESP_LOGI("sd-check", "mounted frequency unknown; rediscovering");
             unmountCard(mounted);
             return mountCardWithCache(mounted, mountedFrequencyKhz, false);
         }
 
-        Logger::info("sd-check", "validating mounted frequency %d kHz", sMountedFrequencyKhz);
+        ESP_LOGI("sd-check", "validating mounted frequency %d kHz", sMountedFrequencyKhz);
         if (writeReadProbeFile(StoragePaths::kSdFrequencyProbePath, kFrequencyProbeBytes, "sd-probe")) {
             if (mountedFrequencyKhz != nullptr) {
                 *mountedFrequencyKhz = sMountedFrequencyKhz;
@@ -367,14 +371,14 @@ namespace SdDiagnostics {
             return true;
         }
 
-        Logger::error("sd-check", "mounted frequency %d kHz failed; rediscovering", sMountedFrequencyKhz);
+        ESP_LOGE("sd-check", "mounted frequency %d kHz failed; rediscovering", sMountedFrequencyKhz);
         unmountCard(mounted);
         return mountCardWithCache(mounted, mountedFrequencyKhz, false);
     }
 
     bool verifyWritableFolder(const char* directoryPath) {
         if (!StorageFiles::directoryExists(directoryPath)) {
-            Logger::warning("sd-check", "write probe skipped, not a directory: %s", directoryPath);
+            ESP_LOGW("sd-check", "write probe skipped, not a directory: %s", directoryPath);
             return false;
         }
 
@@ -401,14 +405,14 @@ namespace SdDiagnostics {
         if (!mounted) {
             result.summary = "Card not mounted";
             result.detail = "Format FAT32 MBR";
-            Logger::error("sd-check", "mount failed; likely format/partition issue, seating, or card fault");
+            ESP_LOGE("sd-check", "mount failed; likely format/partition issue, seating, or card fault");
             return result;
         }
 
         result.sizeMb = Board::Storage::cardSize() / kBytesPerMegabyte;
         result.cardType = cardTypeLabel(Board::Storage::cardType(), result.sizeMb);
         result.frequencyKhz = sMountedFrequencyKhz;
-        Logger::info("sd-check", "mounted type=%s size=%llu MB freq=%d kHz", result.cardType.c_str(), result.sizeMb,
+        ESP_LOGI("sd-check", "mounted type=%s size=%llu MB freq=%d kHz", result.cardType.c_str(), result.sizeMb,
                      result.frequencyKhz);
 
         report("Checking folders", "", 30);
@@ -422,7 +426,7 @@ namespace SdDiagnostics {
             || !result.configDirectory || !result.themesDirectory || !result.fontsDirectory) {
             result.summary = "Folders missing";
             result.detail = "Can create layout";
-            Logger::warning("sd-check",
+            ESP_LOGW("sd-check",
                             "v0.0.4 folders missing /books=%u /books/books=%u /books/articles=%u /config=%u /themes=%u "
                             "/fonts=%u",
                             result.booksDirectory ? 1 : 0, result.bookFilesDirectory ? 1 : 0,
@@ -452,14 +456,14 @@ namespace SdDiagnostics {
         if (!result.writable) {
             result.summary = "Write test failed";
             result.detail = "Format FAT32 MBR";
-            Logger::error("sd-check", "/books write/delete probe failed");
+            ESP_LOGE("sd-check", "/books write/delete probe failed");
             return;
         }
         if (!result.booksWritable || !result.articlesWritable || !result.configWritable || !result.themesWritable
             || !result.fontsWritable) {
             result.summary = "Folder write failed";
             result.detail = "Format FAT32 MBR";
-            Logger::error("sd-check", "folder write failed books=%u articles=%u config=%u themes=%u fonts=%u",
+            ESP_LOGE("sd-check", "folder write failed books=%u articles=%u config=%u themes=%u fonts=%u",
                           result.booksWritable ? 1 : 0, result.articlesWritable ? 1 : 0, result.configWritable ? 1 : 0,
                           result.themesWritable ? 1 : 0, result.fontsWritable ? 1 : 0);
             return;
@@ -472,13 +476,13 @@ namespace SdDiagnostics {
 
     bool repairFolderLayout(bool mounted) {
         if (!mounted) {
-            Logger::warning("sd-check", "folder repair skipped: card not mounted");
+            ESP_LOGW("sd-check", "folder repair skipped: card not mounted");
             return false;
         }
 
-        Logger::debug("sd-check", "repairing v0.0.4 folder layout");
+        ESP_LOGD("sd-check", "repairing v0.0.4 folder layout");
         const bool rootWritable = verifyWritableFolder("/");
-        Logger::debug("sd-check", "root write probe=%u", rootWritable ? 1 : 0);
+        ESP_LOGD("sd-check", "root write probe=%u", rootWritable ? 1 : 0);
 
         const bool foldersOk = ensureLibraryFolderLayout();
         const bool booksOk = StorageFiles::directoryExists(StoragePaths::kBooksPath);
@@ -489,14 +493,13 @@ namespace SdDiagnostics {
         const bool fontsOk = StorageFiles::directoryExists(StoragePaths::kFontsPath);
         const bool ok = rootWritable && foldersOk;
         if (ok) {
-            Logger::debug("sd-check", "repaired v0.0.4 folder layout");
+            ESP_LOGD("sd-check", "repaired v0.0.4 folder layout");
         } else {
-            Logger::
-                error("sd-check",
-                      "folder repair failed rootWritable=%u /books=%u /books/books=%u /books/articles=%u /config=%u "
-                      "/themes=%u /fonts=%u",
-                      rootWritable ? 1 : 0, booksOk ? 1 : 0, bookFilesOk ? 1 : 0, articleFilesOk ? 1 : 0,
-                      configOk ? 1 : 0, themesOk ? 1 : 0, fontsOk ? 1 : 0);
+            ESP_LOGE("sd-check",
+                     "folder repair failed rootWritable=%u /books=%u /books/books=%u /books/articles=%u /config=%u "
+                     "/themes=%u /fonts=%u",
+                     rootWritable ? 1 : 0, booksOk ? 1 : 0, bookFilesOk ? 1 : 0, articleFilesOk ? 1 : 0,
+                     configOk ? 1 : 0, themesOk ? 1 : 0, fontsOk ? 1 : 0);
         }
         return ok;
     }

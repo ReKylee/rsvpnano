@@ -1,5 +1,5 @@
 #include "board/BoardPower.h"
-#include "logging/Logger.h"
+#include <esp_log.h>
 
 #include "drivers/power/BatteryCurve.h"
 #include "platforms/waveshare_amoled_241/WaveshareAmoled241.h"
@@ -90,7 +90,7 @@ namespace Board::Power {
 
         digitalWrite(WaveshareAmoled241::Power::kBatteryHoldPin, LOW);
         gPower.batteryPowerHoldEnabled = false;
-        Logger::info("board", "Battery power hold released");
+        ESP_LOGI("board", "Battery power hold released");
         return true;
     }
 

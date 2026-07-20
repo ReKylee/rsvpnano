@@ -1,5 +1,5 @@
 #include "app/App.h"
-#include "logging/Logger.h"
+#include <esp_log.h>
 
 #include <FS.h>
 #include <glaze/toml.hpp>
@@ -440,7 +440,7 @@ void App::migrateLegacyStorage() {
             legacySettingsSeen = true;
         } else {
             configComplete = false;
-            Logger::warning("migration", "preserved invalid %s", legacyConfigPath);
+            ESP_LOGW("migration", "preserved invalid %s", legacyConfigPath);
         }
     }
 
@@ -449,20 +449,20 @@ void App::migrateLegacyStorage() {
         if (auto result = settingsStore_.replace(std::move(candidate), settings::SettingsSource::Programmatic);
             !result) {
             settingsPersisted = false;
-            Logger::error("migration", "settings import failed: %s", result.error().message.c_str());
+            ESP_LOGE("migration", "settings import failed: %s", result.error().message.c_str());
         }
     }
     if (settingsPersisted && legacySecretsSeen) {
         settingsStore_.secrets() = std::move(secrets);
         if (auto result = settingsStore_.acceptSecretChanges(); !result) {
             settingsPersisted = false;
-            Logger::error("migration", "secret import failed: %s", result.error().message.c_str());
+            ESP_LOGE("migration", "secret import failed: %s", result.error().message.c_str());
         }
     }
     if (settingsPersisted && (legacySettingsSeen || legacySecretsSeen)) {
         if (auto result = settingsStore_.flush(); !result) {
             settingsPersisted = false;
-            Logger::error("migration", "settings persistence failed: %s", result.error().message.c_str());
+            ESP_LOGE("migration", "settings persistence failed: %s", result.error().message.c_str());
         }
     }
 
@@ -476,18 +476,18 @@ void App::migrateLegacyStorage() {
         for (const char* key: legacySettingKeys) {
             if (prefs_.isKey(key) && !prefs_.remove(key)) {
                 settingsPersisted = false;
-                Logger::error("migration", "could not remove legacy NVS key %s", key);
+                ESP_LOGE("migration", "could not remove legacy NVS key %s", key);
             }
         }
         if (legacyConfigPath != nullptr && configComplete && !settingsStore_.sdMirrorEnabled()) {
             configComplete = false;
-            Logger::warning("migration", "preserved legacy settings because the TOML mirror is unavailable");
+            ESP_LOGW("migration", "preserved legacy settings because the TOML mirror is unavailable");
         }
         if (legacyConfigPath != nullptr && configComplete) {
             for (const char* path: {kLegacySettingsPath, kLegacySettingsBackupPath, kLegacySettingsTempPath}) {
                 if (StorageFiles::fileExists(path) && !filesystem->remove(path)) {
                     configComplete = false;
-                    Logger::error("migration", "could not remove %s", path);
+                    ESP_LOGE("migration", "could not remove %s", path);
                 }
             }
         }
@@ -528,7 +528,7 @@ void App::migrateLegacyStorage() {
                                     .has_value();
                     if (!converted) {
                         themesComplete = false;
-                        Logger::warning("migration", "preserved %s beside invalid %s", legacyPath.c_str(),
+                        ESP_LOGW("migration", "preserved %s beside invalid %s", legacyPath.c_str(),
                                         newPath.c_str());
                         continue;
                     }
@@ -636,12 +636,12 @@ void App::migrateLegacyStorage() {
                 }
                 if (!converted) {
                     themesComplete = false;
-                    Logger::warning("migration", "preserved invalid theme %s", legacyPath.c_str());
+                    ESP_LOGW("migration", "preserved invalid theme %s", legacyPath.c_str());
                 } else if (!filesystem->remove(legacyPath.c_str())) {
                     themesComplete = false;
-                    Logger::error("migration", "could not remove %s", legacyPath.c_str());
+                    ESP_LOGE("migration", "could not remove %s", legacyPath.c_str());
                 } else {
-                    Logger::info("migration", "converted theme %s", legacyPath.c_str());
+                    ESP_LOGI("migration", "converted theme %s", legacyPath.c_str());
                 }
             }
         } else if (directory) {
@@ -682,16 +682,16 @@ void App::migrateLegacyStorage() {
 
             if (!converted) {
                 rssComplete = false;
-                Logger::warning("migration", "preserved invalid RSS config %s", legacyRssPath);
+                ESP_LOGW("migration", "preserved invalid RSS config %s", legacyRssPath);
             } else {
                 for (const char* path: {kLegacyRssPath, kLegacyRssBackupPath, kLegacyRssTempPath}) {
                     if (StorageFiles::fileExists(path) && !filesystem->remove(path)) {
                         rssComplete = false;
-                        Logger::error("migration", "could not remove %s", path);
+                        ESP_LOGE("migration", "could not remove %s", path);
                     }
                 }
                 if (rssComplete)
-                    Logger::info("migration", "converted RSS feeds to %s", StoragePaths::kRssConfigPath);
+                    ESP_LOGI("migration", "converted RSS feeds to %s", StoragePaths::kRssConfigPath);
             }
         }
     }
@@ -734,16 +734,16 @@ void App::migrateLegacyStorage() {
 
             if (!converted) {
                 focusComplete = false;
-                Logger::warning("migration", "preserved invalid focus config %s", legacyFocusPath);
+                ESP_LOGW("migration", "preserved invalid focus config %s", legacyFocusPath);
             } else {
                 for (const char* path: {kLegacyFocusPath, kLegacyFocusBackupPath, kLegacyFocusTempPath}) {
                     if (StorageFiles::fileExists(path) && !filesystem->remove(path)) {
                         focusComplete = false;
-                        Logger::error("migration", "could not remove %s", path);
+                        ESP_LOGE("migration", "could not remove %s", path);
                     }
                 }
                 if (focusComplete)
-                    Logger::info("migration", "converted focus timers to %s", StoragePaths::kFocusConfigPath);
+                    ESP_LOGI("migration", "converted focus timers to %s", StoragePaths::kFocusConfigPath);
             }
         }
     }
@@ -822,18 +822,18 @@ void App::migrateLegacyStorage() {
                 converted = ReadingProgress::writeBookStatePosition(bookPath.c_str(), identity, wordIndex).has_value();
             if (!converted && legacyFileSeen) {
                 booksComplete = false;
-                Logger::warning("migration", "preserved invalid progress %s", legacyPath.c_str());
+                ESP_LOGW("migration", "preserved invalid progress %s", legacyPath.c_str());
                 continue;
             }
             if (legacyFileSeen && !filesystem->remove(legacyPath.c_str())) {
                 booksComplete = false;
-                Logger::error("migration", "could not remove %s", legacyPath.c_str());
+                ESP_LOGE("migration", "could not remove %s", legacyPath.c_str());
             }
             if (converted || !recoverable) {
                 for (const char* key: {positionKey.data(), countKey.data(), sizeKey.data(), fingerprintKey.data()}) {
                     if (prefs_.isKey(key) && !prefs_.remove(key)) {
                         booksComplete = false;
-                        Logger::error("migration", "could not remove legacy progress key %s", key);
+                        ESP_LOGE("migration", "could not remove legacy progress key %s", key);
                     }
                 }
             }
@@ -864,7 +864,7 @@ void App::migrateLegacyStorage() {
             for (const std::string& key: orphanedProgressKeys) {
                 if (!prefs_.remove(key.c_str())) {
                     booksComplete = false;
-                    Logger::error("migration", "could not remove orphaned progress key %s", key.c_str());
+                    ESP_LOGE("migration", "could not remove orphaned progress key %s", key.c_str());
                 }
             }
         }
@@ -876,11 +876,11 @@ void App::migrateLegacyStorage() {
                 if (prefs_.isKey(marker))
                     prefs_.remove(marker);
             }
-            Logger::debug("migration", "legacy storage migration complete");
+            ESP_LOGD("migration", "legacy storage migration complete");
         } else {
-            Logger::error("migration", "could not save completion marker; migration will retry");
+            ESP_LOGE("migration", "could not save completion marker; migration will retry");
         }
     } else if (filesystem == nullptr) {
-        Logger::debug("migration", "SD migration deferred until storage is available");
+        ESP_LOGD("migration", "SD migration deferred until storage is available");
     }
 }

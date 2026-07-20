@@ -1,5 +1,5 @@
 #include "timer/FocusOrientation.h"
-#include "logging/Logger.h"
+#include <esp_log.h>
 
 #include <Arduino.h>
 
@@ -64,10 +64,10 @@ namespace focus {
             candidate_ = stable_ = Orientation::Unknown;
             candidateSinceMs_ = 0;
             lastSampleMs_ = millis() - kSampleIntervalMs;
-            Logger::info("focus", "IMU ready addr=0x%02X bus=%s", address_, Board::Imu::wireName());
+            ESP_LOGI("focus", "IMU ready addr=0x%02X bus=%s", address_, Board::Imu::wireName());
             return true;
         }
-        Logger::warning("focus", "IMU unavailable bus=%s", Board::Imu::wireName());
+        ESP_LOGW("focus", "IMU unavailable bus=%s", Board::Imu::wireName());
         return false;
     }
 

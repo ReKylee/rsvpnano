@@ -1,4 +1,5 @@
 #include "storage/index/IndexedBook.h"
+#include <esp_log.h>
 #include "logging/Logger.h"
 
 #include <algorithm>
@@ -7,6 +8,7 @@
 #include <cstdint>
 #include <esp_heap_caps.h>
 #include <limits>
+#include <system_error>
 #include "board/BoardStorage.h"
 
 #include "storage/fs/StorageFiles.h"
@@ -333,7 +335,7 @@ namespace IndexedBook {
             IndexHeader header;
             if (!readIndexHeader(path, header)) {
                 if (StorageFiles::fileExistsWithBytes(indexedIndexPathFor(path).c_str())) {
-                    Logger::warning("storage-index", "invalid index header: %s", indexedIndexPathFor(path).c_str());
+                    ESP_LOGW("storage-index", "invalid index header: %s", indexedIndexPathFor(path).c_str());
                 }
                 return false;
             }
@@ -345,7 +347,7 @@ namespace IndexedBook {
                     if (source) {
                         source.close();
                     }
-                    Logger::warning("storage-index", "source missing while validating index: %s", path.c_str());
+                    ESP_LOGW("storage-index", "source missing while validating index: %s", path.c_str());
                     return false;
                 }
 
@@ -355,7 +357,7 @@ namespace IndexedBook {
                 source.close();
                 if (sourceBytes > UINT32_MAX || header.sourceSize != static_cast<uint32_t>(sourceBytes)
                     || header.sourceFingerprint != actualFingerprint) {
-                    Logger::warning("storage-index", "stale index: %s size=%lu/%lu fingerprint=%08lx/%08lx",
+                    ESP_LOGW("storage-index", "stale index: %s size=%lu/%lu fingerprint=%08lx/%08lx",
                                     path.c_str(), static_cast<unsigned long>(header.sourceSize),
                                     static_cast<unsigned long>(sourceBytes),
                                     static_cast<unsigned long>(header.sourceFingerprint),
@@ -372,7 +374,7 @@ namespace IndexedBook {
                     if (data) {
                         data.close();
                     }
-                    Logger::warning("storage-index", "data sidecar invalid: %s size=%lu expected=%lu",
+                    ESP_LOGW("storage-index", "data sidecar invalid: %s size=%lu expected=%lu",
                                     indexedDataPathFor(path).c_str(), static_cast<unsigned long>(dataBytes),
                                     static_cast<unsigned long>(header.dataSize));
                     return false;
@@ -385,7 +387,7 @@ namespace IndexedBook {
                 if (indexFile) {
                     indexFile.close();
                 }
-                Logger::error("storage-index", "index sidecar cannot reopen: %s", indexedIndexPathFor(path).c_str());
+                ESP_LOGE("storage-index", "index sidecar cannot reopen: %s", indexedIndexPathFor(path).c_str());
                 return false;
             }
 
@@ -398,7 +400,7 @@ namespace IndexedBook {
             if (!indexHeaderLayoutValid(header, indexFile.size(), dataBytes)) {
                 indexFile.close();
                 metadata.clear();
-                Logger::warning("storage-index", "index layout invalid: %s", indexedIndexPathFor(path).c_str());
+                ESP_LOGW("storage-index", "index layout invalid: %s", indexedIndexPathFor(path).c_str());
                 return false;
             }
 
@@ -417,7 +419,7 @@ namespace IndexedBook {
                 if (!indexFile.seek(header.paragraphsOffset)) {
                     indexFile.close();
                     metadata.clear();
-                    Logger::error("storage-index", "paragraph section seek failed: %s offset=%lu",
+                    ESP_LOGE("storage-index", "paragraph section seek failed: %s offset=%lu",
                                   indexedIndexPathFor(path).c_str(),
                                   static_cast<unsigned long>(header.paragraphsOffset));
                     return false;
@@ -427,7 +429,7 @@ namespace IndexedBook {
                     if (!readExact(indexFile, &wordIndex, sizeof(wordIndex))) {
                         indexFile.close();
                         metadata.clear();
-                        Logger::error("storage-index", "paragraph section read failed: %s item=%lu",
+                        ESP_LOGE("storage-index", "paragraph section read failed: %s item=%lu",
                                       indexedIndexPathFor(path).c_str(), static_cast<unsigned long>(i));
                         return false;
                     }
@@ -440,7 +442,7 @@ namespace IndexedBook {
                 if (!indexFile.seek(header.chaptersOffset)) {
                     indexFile.close();
                     metadata.clear();
-                    Logger::error("storage-index", "chapter section seek failed: %s offset=%lu",
+                    ESP_LOGE("storage-index", "chapter section seek failed: %s offset=%lu",
                                   indexedIndexPathFor(path).c_str(), static_cast<unsigned long>(header.chaptersOffset));
                     return false;
                 }
@@ -449,7 +451,7 @@ namespace IndexedBook {
                     if (!readExact(indexFile, &record, sizeof(record))) {
                         indexFile.close();
                         metadata.clear();
-                        Logger::error("storage-index", "chapter section read failed: %s item=%lu",
+                        ESP_LOGE("storage-index", "chapter section read failed: %s item=%lu",
                                       indexedIndexPathFor(path).c_str(), static_cast<unsigned long>(i));
                         return false;
                     }
@@ -474,7 +476,7 @@ namespace IndexedBook {
                 *headerOut = header;
             }
             if (metadata.wordCount == 0) {
-                Logger::warning("storage-index", "index has no words: %s", indexedIndexPathFor(path).c_str());
+                ESP_LOGW("storage-index", "index has no words: %s", indexedIndexPathFor(path).c_str());
                 return false;
             }
             return true;
@@ -495,7 +497,7 @@ namespace IndexedBook {
                 if (source) {
                     source.close();
                 }
-                Logger::error("storage-index", "cannot open source: %s", path.c_str());
+                ESP_LOGE("storage-index", "cannot open source: %s", path.c_str());
                 report("Index failed", displayNameForPath(path).c_str(), "File unreadable", 100);
                 return false;
             }
@@ -503,7 +505,7 @@ namespace IndexedBook {
             const size_t sourceBytes = source.size();
             if (sourceBytes == 0 || sourceBytes > UINT32_MAX) {
                 source.close();
-                Logger::warning("storage-index", "unsupported source size: %s (%lu bytes)", path.c_str(),
+                ESP_LOGW("storage-index", "unsupported source size: %s (%lu bytes)", path.c_str(),
                                 static_cast<unsigned long>(sourceBytes));
                 report("Index failed", displayNameForPath(path).c_str(),
                        sourceBytes == 0 ? "No readable words" : "Book too large", 100);
@@ -512,7 +514,7 @@ namespace IndexedBook {
             const uint32_t fingerprint = sourceFingerprint(source, static_cast<uint32_t>(sourceBytes));
             if (!source.seek(0)) {
                 source.close();
-                Logger::error("storage-index", "source rewind failed: %s", path.c_str());
+                ESP_LOGE("storage-index", "source rewind failed: %s", path.c_str());
                 report("Index failed", displayNameForPath(path).c_str(), "Source read failed", 100);
                 return false;
             }
@@ -527,7 +529,7 @@ namespace IndexedBook {
             const String sidecarDirectory = parentDirectoryForPath(path);
             if (!StorageFiles::directoryExists(sidecarDirectory.c_str())) {
                 source.close();
-                Logger::warning("storage-index", "sidecar parent missing/not directory: %s", sidecarDirectory.c_str());
+                ESP_LOGW("storage-index", "sidecar parent missing/not directory: %s", sidecarDirectory.c_str());
                 report("Index failed", label.c_str(), "Folder missing", 100);
                 return false;
             }
@@ -583,7 +585,7 @@ namespace IndexedBook {
                         if (c == '\n') {
                             keepReading = processLine(line);
                             if (!keepReading && RsvpText::kMaxBookWords > 0) {
-                                Logger::debug("storage-index", "Reached %lu word limit, truncating book",
+                                ESP_LOGD("storage-index", "Reached %lu word limit, truncating book",
                                               static_cast<unsigned long>(RsvpText::kMaxBookWords));
                             } else if (!keepReading && (stats.memoryLow || buildContext.failed)) {
                                 parseFailed = true;
@@ -627,7 +629,8 @@ namespace IndexedBook {
                 File dataFile = Board::Storage::filesystem().open(tmpDataPath, FILE_WRITE);
                 const int dataOpenErrno = errno;
                 if (!dataFile) {
-                    Logger::failure("storage-index", "open data FILE_WRITE", tmpDataPath.c_str(), dataOpenErrno);
+                    Logger::failure("storage-index", "open data FILE_WRITE", tmpDataPath.c_str(),
+                                    std::error_code{dataOpenErrno, std::generic_category()});
                     source.close();
                     removeTempSidecars();
                     report("Index failed", label.c_str(), "SD write failed", 100);
@@ -641,7 +644,7 @@ namespace IndexedBook {
                 parseFailed = !parseIndexedSource(source, dataContext, stats, true);
 
                 if (stats.longLineSplits > 0 || stats.malformedUtf8 > 0 || stats.nonAsciiCodepoints > 0) {
-                    Logger::debug("storage-index", "Parse cleanup: long_lines=%u malformed_utf8=%u non_ascii=%u",
+                    ESP_LOGD("storage-index", "Parse cleanup: long_lines=%u malformed_utf8=%u non_ascii=%u",
                                   static_cast<unsigned int>(stats.longLineSplits),
                                   static_cast<unsigned int>(stats.malformedUtf8),
                                   static_cast<unsigned int>(stats.nonAsciiCodepoints));
@@ -681,7 +684,7 @@ namespace IndexedBook {
                 header.dataSize = dataContext.dataSize;
 
                 if (!dataWriter.flush()) {
-                    Logger::error("storage-index", "data sidecar flush failed: %s", tmpDataPath.c_str());
+                    ESP_LOGE("storage-index", "data sidecar flush failed: %s", tmpDataPath.c_str());
                     parseFailed = true;
                 }
                 dataWriter.discard();
@@ -705,7 +708,7 @@ namespace IndexedBook {
                     }
                     removeTempSidecars();
                     metadata.clear();
-                    Logger::error("storage-index", "cannot reopen source for index: %s", path.c_str());
+                    ESP_LOGE("storage-index", "cannot reopen source for index: %s", path.c_str());
                     report("Index failed", label.c_str(), "Source read failed", 100);
                     return false;
                 }
@@ -714,7 +717,8 @@ namespace IndexedBook {
                 File indexFile = Board::Storage::filesystem().open(tmpIndexPath, FILE_WRITE);
                 const int indexOpenErrno = errno;
                 if (!indexFile) {
-                    Logger::failure("storage-index", "open index FILE_WRITE", tmpIndexPath.c_str(), indexOpenErrno);
+                    Logger::failure("storage-index", "open index FILE_WRITE", tmpIndexPath.c_str(),
+                                    std::error_code{indexOpenErrno, std::generic_category()});
                     source.close();
                     removeTempSidecars();
                     report("Index failed", label.c_str(), "SD write failed", 100);
@@ -736,13 +740,13 @@ namespace IndexedBook {
                 RsvpText::ParseStats indexStats;
                 parseFailed = !parseIndexedSource(source, indexContext, indexStats, false);
                 if (parseFailed) {
-                    Logger::error("storage-index", "second pass parse/write failed: %s detail=%s", path.c_str(),
+                    ESP_LOGE("storage-index", "second pass parse/write failed: %s detail=%s", path.c_str(),
                                   indexContext.failure);
                 }
 
                 if (!parseFailed
                     && (indexContext.wordCount != header.wordCount || indexContext.dataSize != header.dataSize)) {
-                    Logger::error("storage-index", "second pass mismatch words=%u/%u data=%u/%u",
+                    ESP_LOGE("storage-index", "second pass mismatch words=%u/%u data=%u/%u",
                                   static_cast<unsigned int>(indexContext.wordCount),
                                   static_cast<unsigned int>(header.wordCount),
                                   static_cast<unsigned int>(indexContext.dataSize),
@@ -755,7 +759,7 @@ namespace IndexedBook {
                 for (size_t i = 0; !parseFailed && i < metadata.paragraphStarts.size(); ++i) {
                     const uint32_t wordIndex = static_cast<uint32_t>(metadata.paragraphStarts[i]);
                     if (!indexWriter.write(&wordIndex, sizeof(wordIndex))) {
-                        Logger::error("storage-index", "paragraph table write failed: %s item=%u", tmpIndexPath.c_str(),
+                        ESP_LOGE("storage-index", "paragraph table write failed: %s item=%u", tmpIndexPath.c_str(),
                                       static_cast<unsigned int>(i));
                         parseFailed = true;
                     }
@@ -771,7 +775,7 @@ namespace IndexedBook {
                         record.title[j] = title[j];
                     }
                     if (!indexWriter.write(&record, sizeof(record))) {
-                        Logger::error("storage-index", "chapter table write failed: %s item=%u", tmpIndexPath.c_str(),
+                        ESP_LOGE("storage-index", "chapter table write failed: %s item=%u", tmpIndexPath.c_str(),
                                       static_cast<unsigned int>(i));
                         parseFailed = true;
                     }
@@ -779,15 +783,15 @@ namespace IndexedBook {
 
                 // Rewrite the header last so partially written indexes are rejected later.
                 if (!parseFailed && !indexWriter.seek(0)) {
-                    Logger::error("storage-index", "final header seek failed: %s", tmpIndexPath.c_str());
+                    ESP_LOGE("storage-index", "final header seek failed: %s", tmpIndexPath.c_str());
                     parseFailed = true;
                 }
                 if (!parseFailed && !indexWriter.write(&header, sizeof(header))) {
-                    Logger::error("storage-index", "final header write failed: %s", tmpIndexPath.c_str());
+                    ESP_LOGE("storage-index", "final header write failed: %s", tmpIndexPath.c_str());
                     parseFailed = true;
                 }
                 if (!parseFailed && !indexWriter.flush()) {
-                    Logger::error("storage-index", "index sidecar flush failed: %s", tmpIndexPath.c_str());
+                    ESP_LOGE("storage-index", "index sidecar flush failed: %s", tmpIndexPath.c_str());
                     parseFailed = true;
                 }
 
@@ -820,11 +824,11 @@ namespace IndexedBook {
             if (!renamed) {
                 if (!dataRenamed) {
                     Logger::failure("storage-index", "rename data", tmpDataPath.c_str(), dataPath.c_str(),
-                                    dataRenameErrno);
+                                    std::error_code{dataRenameErrno, std::generic_category()});
                 }
                 if (!indexRenamed) {
                     Logger::failure("storage-index", "rename index", tmpIndexPath.c_str(), indexPath.c_str(),
-                                    indexRenameErrno);
+                                    std::error_code{indexRenameErrno, std::generic_category()});
                 }
                 Board::Storage::filesystem().remove(tmpIndexPath);
                 Board::Storage::filesystem().remove(tmpDataPath);
@@ -835,7 +839,7 @@ namespace IndexedBook {
                 return false;
             }
 
-            Logger::info("storage-index", "Built %u words, %u chapters from %s in %lu ms",
+            ESP_LOGI("storage-index", "Built %u words, %u chapters from %s in %lu ms",
                          static_cast<unsigned int>(metadata.wordCount),
                          static_cast<unsigned int>(metadata.chapters.size()), path.c_str(),
                          static_cast<unsigned long>(millis() - startedMs));
@@ -860,7 +864,7 @@ namespace IndexedBook {
         {
             // Library selection and EPUB preparation.
             if (!StorageFiles::directoryExists(kBooksPath)) {
-                Logger::error("storage", "/books directory not found");
+                ESP_LOGE("storage", "/books directory not found");
                 report("Book open failed", "Folders missing", "Run SD check", 100);
                 return false;
             }
@@ -869,13 +873,13 @@ namespace IndexedBook {
                 BookLibrary::refresh(library, false, RSVP_ON_DEVICE_EPUB_CONVERSION);
             }
             if (library.paths.empty()) {
-                Logger::debug("storage", "No readable .rsvp, .txt, or .epub books found under /books");
+                ESP_LOGD("storage", "No readable .rsvp, .txt, or .epub books found under /books");
                 report("Book open failed", "No books found", "Add books to SD", 100);
                 return false;
             }
 
             if (index >= library.paths.size()) {
-                Logger::warning("storage", "Book index %u out of range", static_cast<unsigned int>(index));
+                ESP_LOGW("storage", "Book index %u out of range", static_cast<unsigned int>(index));
                 report("Book open failed", "Library changed", "Open list again", 100);
                 return false;
             }
@@ -895,7 +899,7 @@ namespace IndexedBook {
                 BookLibrary::refresh(library, true, RSVP_ON_DEVICE_EPUB_CONVERSION);
                 const int convertedIndex = BookLibrary::indexOfPath(library, rsvpPath->c_str());
                 if (convertedIndex < 0) {
-                    Logger::error("storage", "Converted RSVP not found in refreshed library: %s", rsvpPath->c_str());
+                    ESP_LOGE("storage", "Converted RSVP not found in refreshed library: %s", rsvpPath->c_str());
                     report("Book open failed", displayNameForPath(path).c_str(), "Conversion cache missing", 100);
                     return false;
                 }
@@ -912,7 +916,7 @@ namespace IndexedBook {
                 if (entry) {
                     entry.close();
                 }
-                Logger::error("storage", "selected book is not readable: %s", path.c_str());
+                ESP_LOGE("storage", "selected book is not readable: %s", path.c_str());
                 report("Book open failed", displayNameForPath(path).c_str(), "File unreadable", 100);
                 return false;
             }
@@ -933,13 +937,13 @@ namespace IndexedBook {
                     return false;
                 }
 
-                Logger::warning("storage-index", "rebuilding missing/stale index: %s", path.c_str());
+                ESP_LOGW("storage-index", "rebuilding missing/stale index: %s", path.c_str());
                 report("Opening book", displayNameForPath(path).c_str(), "Index needs rebuild", 20);
                 if (!build(path, metadata, hasRsvpExtension(path), request.statusCallback, request.statusContext)) {
                     return false;
                 }
                 if (!readIndexedMetadata(path, metadata, &header)) {
-                    Logger::error("storage-index", "freshly built index failed validation: %s", path.c_str());
+                    ESP_LOGE("storage-index", "freshly built index failed validation: %s", path.c_str());
                     report("Index failed", displayNameForPath(path).c_str(), "Validation failed", 100);
                     return false;
                 }
@@ -969,7 +973,7 @@ namespace IndexedBook {
             *request.loadedIndex = parsedIndex;
         }
 
-        Logger::info("storage", "Opened indexed book %s: %u words, %u chapters", path.c_str(),
+        ESP_LOGI("storage", "Opened indexed book %s: %u words, %u chapters", path.c_str(),
                      static_cast<unsigned int>(metadata.wordCount),
                      static_cast<unsigned int>(metadata.chapters.size()));
         return true;

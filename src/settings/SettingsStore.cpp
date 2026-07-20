@@ -1,5 +1,5 @@
 #include "settings/SettingsStore.h"
-#include "logging/Logger.h"
+#include <esp_log.h>
 
 #include <Arduino.h>
 #include <FS.h>
@@ -232,7 +232,7 @@ namespace settings {
     void SettingsStore::update(uint32_t nowMs) {
         if ((dirty_ || secretsDirty_) && nowMs - dirtyAtMs_ >= kPersistenceDelayMs) {
             if (auto result = flush(); !result)
-                Logger::error("settings", "persistence failed: %s", result.error().message.c_str());
+                ESP_LOGE("settings", "persistence failed: %s", result.error().message.c_str());
         }
     }
 

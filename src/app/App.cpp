@@ -1,5 +1,5 @@
 #include "app/App.h"
-#include "logging/Logger.h"
+#include <esp_log.h>
 
 #include <algorithm>
 #include <array>
@@ -35,7 +35,7 @@ namespace {
 
     void powerOffBoard() {
         if (!Board::Power::powerOff())
-            Logger::info("app", "hardware power off unavailable; entering light sleep");
+            ESP_LOGI("app", "hardware power off unavailable; entering light sleep");
         delay(1200);
         Board::System::lightSleep(0);
         esp_restart();
@@ -53,7 +53,7 @@ void App::begin() {
                                 bootMs_);
 
     if (!Board::Display::begin()) {
-        Logger::error("app", "display init failed");
+        ESP_LOGE("app", "display init failed");
     }
     immediateUi_.setOrientation(Board::Display::defaultUiOrientation());
     immediateUi_.setTheme(interfaceScreen_.themes.selected());
@@ -61,7 +61,7 @@ void App::begin() {
 
     storage_.begin();
     if (auto result = settingsStore_.begin(storage_.mounted() ? &Board::Storage::filesystem() : nullptr); !result)
-        Logger::warning("settings", "startup warning: %s", result.error().message.c_str());
+        ESP_LOGW("settings", "startup warning: %s", result.error().message.c_str());
     migrateLegacyStorage();
     readerScreen_.fonts.loadFromSd();
     auto& deviceSettings = settingsStore_.settings();
@@ -534,7 +534,7 @@ void App::exitStandby(uint32_t nowMs) {
 }
 
 void App::lightSleepFromStandby() {
-    Logger::info("app", "screen-off standby; entering light sleep");
+    ESP_LOGI("app", "screen-off standby; entering light sleep");
     readerScreen_.book.mirror(readerScreen_.store, readerScreen_.reader);
     standbyScreen_.reset();
     if (sync_.active())
@@ -558,13 +558,13 @@ void App::lightSleepFromStandby() {
             break;
         }
         if (wakeReason != EspLightSleep::WakeReason::timer) {
-            Logger::warning("app", "light sleep ended unexpectedly; resuming");
+            ESP_LOGW("app", "light sleep ended unexpectedly; resuming");
             break;
         }
 
         remainingMs -= sleepMs;
         if (remainingMs == 0) {
-            Logger::info("app", "screen-off standby expired; powering off");
+            ESP_LOGI("app", "screen-off standby expired; powering off");
             powerOff(millis());
             return;
         }

@@ -1,5 +1,5 @@
 #include "board/BoardPower.h"
-#include "logging/Logger.h"
+#include <esp_log.h>
 
 #include <Wire.h>
 #include <algorithm>
@@ -20,7 +20,7 @@ namespace {
     bool beginPmu() {
         gPmuReady = gPmu.init(Wire);
         if (!gPmuReady) {
-            Logger::warning("board", "AXP2101 not responding");
+            ESP_LOGW("board", "AXP2101 not responding");
             return false;
         }
 
@@ -116,7 +116,7 @@ namespace Board::Power {
         if (!ensurePmuReady()) {
             return false;
         }
-        Logger::debug("board", "AXP2101 shutdown requested");
+        ESP_LOGD("board", "AXP2101 shutdown requested");
         gPmu.shutdown();
         return true;
     }

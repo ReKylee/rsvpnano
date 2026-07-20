@@ -1,4 +1,5 @@
 #include "storage/index/ReadingProgress.h"
+#include <esp_log.h>
 #include "logging/Logger.h"
 
 #include <FS.h>
@@ -131,7 +132,7 @@ namespace ReadingProgress {
         if (auto written = writeBookState(bookPath, std::move(state)); !written)
             return written;
 
-        Logger::info("storage-progress", "mirrored position word=%u count=%u state=%s",
+        ESP_LOGI("storage-progress", "mirrored position word=%u count=%u state=%s",
                      static_cast<unsigned int>(wordIndex), static_cast<unsigned int>(identity.wordCount),
                      StoragePaths::bookStatePathFor(bookPath).c_str());
         return {};
@@ -151,7 +152,7 @@ namespace ReadingProgress {
             return;
         lastSaveMs = nowMs;
         cache(preferences, reader, static_cast<uint32_t>(wordIndex));
-        Logger::info("storage-progress", "saved position word=%u path=%s", static_cast<unsigned int>(wordIndex),
+        ESP_LOGI("storage-progress", "saved position word=%u path=%s", static_cast<unsigned int>(wordIndex),
                      path.c_str());
     }
 

@@ -1,5 +1,6 @@
 #include "board/BoardSystem.h"
 #include "board/BoardPower.h"
+#include <esp_log.h>
 #include "logging/Logger.h"
 
 #include <Wire.h>
@@ -49,7 +50,7 @@ namespace Board {
 
         EspLightSleep::WakeReason lightSleep(uint32_t timeoutMs) {
             if (!WaveshareLcd349::clearTouchExpanderInterrupt()) {
-                Logger::warning("sleep", "failed to clear touch expander interrupt");
+                ESP_LOGW("sleep", "failed to clear touch expander interrupt");
             }
             return EspLightSleep::wait<WaveshareLcd349::System::kLightSleepWakeGpio,
                                        WaveshareLcd349::System::kTouchIrqPin>(timeoutMs);
@@ -64,11 +65,11 @@ namespace Board {
 
             const Board::Power::DiagnosticSnapshot power = Board::Power::diagnosticSnapshot();
             if (!power.available) {
-                Logger::warning("diag", "power_snapshot=unavailable");
+                ESP_LOGW("diag", "power_snapshot=unavailable");
                 return;
             }
 
-            Logger::debug("diag", "power_snapshot=vbus:%u axp_status1:0x%02X axp_status2:0x%02X axp_pwr_irq:0x%02X",
+            ESP_LOGD("diag", "power_snapshot=vbus:%u axp_status1:0x%02X axp_status2:0x%02X axp_pwr_irq:0x%02X",
                           power.externalPowerPresent ? 1 : 0, power.status1, power.status2, power.powerKeyIrqStatus);
         }
 

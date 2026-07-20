@@ -1,5 +1,5 @@
 #include "rss/RssFeeds.h"
-#include "logging/Logger.h"
+#include <esp_log.h>
 
 #include <HTTPClient.h>
 #include <WiFi.h>
@@ -252,7 +252,7 @@ namespace {
                 if (location.isEmpty())
                     return std::unexpected(std::string{"Feed moved but gave no link"});
                 currentUrl = resolveRedirectUrl(currentUrl, location);
-                Logger::debug("rss", "redirect %u url=%s", static_cast<unsigned int>(statusCode), currentUrl.c_str());
+                ESP_LOGD("rss", "redirect %u url=%s", static_cast<unsigned int>(statusCode), currentUrl.c_str());
                 report(callback, context, feedProgressLabel(feedIndex, feedCount),
                        "Redirecting to " + feedparser::hostLabelForUrl(currentUrl), 18 + feedIndex * 7);
                 delay(250);
@@ -289,7 +289,7 @@ namespace {
                 if (nowMs - startedMs > kFeedTotalTimeoutMs) {
                     if (completeItemsRead > 0) {
                         acceptedPartialFeed = true;
-                        Logger::warning("rss", "total timeout after usable items url=%s bytes=%u items=%u",
+                        ESP_LOGW("rss", "total timeout after usable items url=%s bytes=%u items=%u",
                                         currentUrl.c_str(), static_cast<unsigned int>(totalRead),
                                         static_cast<unsigned int>(completeItemsRead));
                         break;
@@ -300,13 +300,13 @@ namespace {
                 if (nowMs - lastByteMs > kFeedIdleTimeoutMs) {
                     if (completeItemsRead > 0) {
                         acceptedPartialFeed = true;
-                        Logger::debug("rss", "idle after usable items url=%s bytes=%u items=%u", currentUrl.c_str(),
+                        ESP_LOGD("rss", "idle after usable items url=%s bytes=%u items=%u", currentUrl.c_str(),
                                       static_cast<unsigned int>(totalRead),
                                       static_cast<unsigned int>(completeItemsRead));
                         break;
                     }
                     if (totalRead > 0 && feedparser::hasCompleteFeed(body)) {
-                        Logger::debug("rss", "idle after complete feed url=%s bytes=%u", currentUrl.c_str(),
+                        ESP_LOGD("rss", "idle after complete feed url=%s bytes=%u", currentUrl.c_str(),
                                       static_cast<unsigned int>(totalRead));
                         break;
                     }
@@ -348,7 +348,7 @@ namespace {
                 }
                 if (completeItemsRead >= kMaxItemsPerFeed) {
                     stoppedAfterItems = true;
-                    Logger::info("rss", "downloaded item limit url=%s bytes=%u items=%u", currentUrl.c_str(),
+                    ESP_LOGI("rss", "downloaded item limit url=%s bytes=%u items=%u", currentUrl.c_str(),
                                  static_cast<unsigned int>(totalRead), static_cast<unsigned int>(completeItemsRead));
                     break;
                 }
@@ -362,7 +362,7 @@ namespace {
             if (body.isEmpty())
                 return std::unexpected(std::string{"Feed was empty"});
             if (totalRead >= kMaxFeedBytes) {
-                Logger::warning("rss", "feed capped url=%s bytes=%u", currentUrl.c_str(),
+                ESP_LOGW("rss", "feed capped url=%s bytes=%u", currentUrl.c_str(),
                                 static_cast<unsigned int>(totalRead));
                 report(callback, context, feedProgressLabel(feedIndex, feedCount),
                        "Reached " + String(static_cast<unsigned int>(kMaxFeedBytes / 1024)) + " KB cap",
@@ -431,7 +431,7 @@ namespace {
 
         markItemSeen(item, preferences);
         ++result.articlesSaved;
-        Logger::info("rss", "saved %s", finalPath.c_str());
+        ESP_LOGI("rss", "saved %s", finalPath.c_str());
         return {};
     }
 
@@ -456,7 +456,7 @@ namespace {
             }
             report(callback, context, "Saving article " + String(itemCount), item.title, 24 + feedIndex * 7);
             if (auto saved = saveItem(item, preferences, result); !saved)
-                Logger::error("rss", "save failed title=%s error=%s code=%d", item.title.c_str(),
+                ESP_LOGE("rss", "save failed title=%s error=%s code=%d", item.title.c_str(),
                               saved.error().message().c_str(), saved.error().value());
         }
         const uint8_t savedHere = result.articlesSaved - savedBefore;
@@ -467,7 +467,7 @@ namespace {
             report(callback, context, feedProgressLabel(feedIndex, feedCount),
                    String(savedHere) + " saved, " + String(skippedHere) + " skipped", 24 + feedIndex * 7);
         }
-        Logger::warning("rss", "feed url=%s items=%u saved=%u skipped=%u", feedUrl.c_str(),
+        ESP_LOGW("rss", "feed url=%s items=%u saved=%u skipped=%u", feedUrl.c_str(),
                         static_cast<unsigned int>(itemCount), static_cast<unsigned int>(savedHere),
                         static_cast<unsigned int>(skippedHere));
         delay(600);
@@ -529,7 +529,7 @@ RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::Devic
         auto feedBody = fetchUrl(line, displayIndex, feedCount, callback, context);
         if (!feedBody) {
             const String error = feedBody.error().c_str();
-            Logger::error("rss", "feed failed url=%s error=%s", line.c_str(), error.c_str());
+            ESP_LOGE("rss", "feed failed url=%s error=%s", line.c_str(), error.c_str());
             ++feedFailures;
             if (firstFeedError.isEmpty()) {
                 firstFeedError = error;

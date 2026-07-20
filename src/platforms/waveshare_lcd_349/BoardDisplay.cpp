@@ -1,5 +1,5 @@
 #include "board/BoardDisplay.h"
-#include "logging/Logger.h"
+#include <esp_log.h>
 
 #include "board/BacklightBrightness.h"
 
@@ -60,23 +60,23 @@ namespace {
     }
 
     void logDisplayMemory() {
-        Logger::debug("display", "host=%d mode=%d", static_cast<int>(ESP32QSPI_SPI_HOST),
+        ESP_LOGD("display", "host=%d mode=%d", static_cast<int>(ESP32QSPI_SPI_HOST),
                       static_cast<int>(ESP32QSPI_SPI_MODE));
 
-        Logger::debug("display", "psramFound=%s size=%u free=%u", psramFound() ? "yes" : "no", ESP.getPsramSize(),
+        ESP_LOGD("display", "psramFound=%s size=%u free=%u", psramFound() ? "yes" : "no", ESP.getPsramSize(),
                       ESP.getFreePsram());
 
-        Logger::debug("display", "heap internal=%u spiram=%u", heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+        ESP_LOGD("display", "heap internal=%u spiram=%u", heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
                       heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     }
 
     void logCanvasMemory() {
         uint16_t* framebuffer = gCanvas.getFramebuffer();
 
-        Logger::debug("display", "canvas framebuffer=%p external=%s", framebuffer,
+        ESP_LOGD("display", "canvas framebuffer=%p external=%s", framebuffer,
                       esp_ptr_external_ram(framebuffer) ? "yes" : "no");
 
-        Logger::debug("display", "after canvas: heap internal=%u spiram=%u",
+        ESP_LOGD("display", "after canvas: heap internal=%u spiram=%u",
                       heap_caps_get_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     }
 
@@ -94,10 +94,10 @@ namespace Board::Display {
         const bool ok = gCanvas.begin(kPanelBusHz);
 
         if (ok)
-            Logger::info("display", "canvas ready");
+            ESP_LOGI("display", "canvas ready");
         else
-            Logger::error("display", "canvas initialization failed");
-        Logger::debug("display", "canvas size=%dx%d", gCanvas.width(), gCanvas.height());
+            ESP_LOGE("display", "canvas initialization failed");
+        ESP_LOGD("display", "canvas size=%dx%d", gCanvas.width(), gCanvas.height());
 
         if (!ok) {
             setBacklight(false);

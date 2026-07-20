@@ -1,5 +1,5 @@
 #include "drivers/audio/es8311/Es8311.h"
-#include "logging/Logger.h"
+#include <esp_log.h>
 
 namespace BoardDrivers::Es8311 {
     namespace {
@@ -70,7 +70,7 @@ namespace BoardDrivers::Es8311 {
             context.i2s.setPins(context.bclkPin, context.wsPin, context.dataOutPin, -1, context.mclkPin);
             if (!context.i2s.begin(I2S_MODE_STD, context.sampleRateHz, I2S_DATA_BIT_WIDTH_16BIT,
                                    I2S_SLOT_MODE_STEREO)) {
-                Logger::warning(kTag, "Failed to start I2S TX: %d", context.i2s.lastError());
+                ESP_LOGW(kTag, "Failed to start I2S TX: %d", context.i2s.lastError());
                 return false;
             }
 
@@ -82,7 +82,7 @@ namespace BoardDrivers::Es8311 {
             uint8_t chipId1 = 0;
             uint8_t chipId2 = 0;
             if (readRegister(context, kChipId1RegFD, chipId1) && readRegister(context, kChipId2RegFE, chipId2)) {
-                Logger::info(kTag, "ES8311 detected: id=%02X %02X", chipId1, chipId2);
+                ESP_LOGI(kTag, "ES8311 detected: id=%02X %02X", chipId1, chipId2);
             }
             return true;
         }
@@ -168,12 +168,12 @@ namespace BoardDrivers::Es8311 {
         }
 
         if (!initI2s(context) || !detectCodec(context) || !configureCodec(context)) {
-            Logger::warning(kTag, "Audio codec setup failed");
+            ESP_LOGW(kTag, "Audio codec setup failed");
             return false;
         }
 
         context.available = true;
-        Logger::info(kTag, "Speaker path ready");
+        ESP_LOGI(kTag, "Speaker path ready");
         return true;
     }
 
@@ -199,7 +199,7 @@ namespace BoardDrivers::Es8311 {
         context.i2s.end();
         context.i2sInitialized = false;
         if (!initI2s(context)) {
-            Logger::warning(kTag, "Failed to restart I2S TX");
+            ESP_LOGW(kTag, "Failed to restart I2S TX");
             return false;
         }
 
@@ -219,7 +219,7 @@ namespace BoardDrivers::Es8311 {
         while (totalWritten < totalSize) {
             const size_t bytesWritten = context.i2s.write(data + totalWritten, totalSize - totalWritten);
             if (bytesWritten == 0) {
-                Logger::warning(kTag, "Sample write failed: %d", context.i2s.lastError());
+                ESP_LOGW(kTag, "Sample write failed: %d", context.i2s.lastError());
                 return false;
             }
             totalWritten += bytesWritten;

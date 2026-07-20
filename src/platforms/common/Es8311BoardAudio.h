@@ -4,7 +4,7 @@
 
 #include "board/BoardPower.h"
 #include "drivers/audio/es8311/Es8311.h"
-#include "logging/Logger.h"
+#include <esp_log.h>
 
 namespace {
 
@@ -63,7 +63,7 @@ namespace BoardPlatform::Es8311BoardAudio {
         fillBeepBuffer();
 
         if (!enableAudioRail()) {
-            Logger::warning(kAudioTag, "Audio rail unavailable");
+            ESP_LOGW(kAudioTag, "Audio rail unavailable");
             return false;
         }
 
@@ -80,7 +80,7 @@ namespace BoardPlatform::Es8311BoardAudio {
             return true;
         }
 
-        Logger::warning(kAudioTag, "Retrying speaker beep after recovering output path");
+        ESP_LOGW(kAudioTag, "Retrying speaker beep after recovering output path");
         if (!enableAudioRail() || !BoardDrivers::Es8311::recoverOutputPath(context)) {
             return false;
         }

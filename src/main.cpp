@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <esp_log.h>
 #include "logging/Logger.h"
 
 #include "app/App.h"
@@ -21,16 +22,16 @@ void setup() {
     }
     Board::System::logStartupDiagnostics();
     if (!settings::initializeNvsEncryption()) {
-        Logger::error("main", "encrypted NVS initialization failed; restarting");
+        ESP_LOGE("main", "encrypted NVS initialization failed; restarting");
         delay(1000);
         ESP.restart();
         return;
     }
 #if RSVP_BENCHMARK_MODE
-    Logger::info("main", "benchmark setup");
+    ESP_LOGI("main", "benchmark setup");
     Benchmark::run();
 #else
-    Logger::info("main", "app setup");
+    ESP_LOGI("main", "app setup");
     app.begin();
 #endif
 }

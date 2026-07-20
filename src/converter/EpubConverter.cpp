@@ -79,7 +79,6 @@ namespace {
 
         reportProgress(options, "Opening EPUB", "Reading metadata", 8);
         Logger::debug("epub", "Reading META-INF/container.xml");
-        Serial.flush();
         if (!zip.extractToString("META-INF/container.xml", containerXml, kMaxContainerBytes)) {
             Logger::error("epub", "EPUB container.xml not found or unreadable");
             return false;

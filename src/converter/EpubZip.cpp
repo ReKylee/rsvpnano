@@ -333,7 +333,6 @@ namespace EpubZip {
 
     bool Archive::extractToString(const String& name, String& output, size_t maxBytes) {
         Logger::debug("epub-zip", "Request string entry: %s", name.c_str());
-        Serial.flush();
         const ZipEntry* entry = find(name);
         if (entry == nullptr) {
             return false;
@@ -527,7 +526,6 @@ namespace EpubZip {
         Logger::debug("epub-zip", "Extract string: %s method=%u flags=0x%04x c=%lu u=%lu max=%u", entry.name.c_str(),
                       entry.method, entry.flags, static_cast<unsigned long>(entry.compressedSize),
                       static_cast<unsigned long>(entry.uncompressedSize), static_cast<unsigned int>(maxBytes));
-        Serial.flush();
 
         if (entry.uncompressedSize == 0 || entry.uncompressedSize > maxBytes || entry.compressedSize == 0
             || entry.compressedSize > maxBytes) {

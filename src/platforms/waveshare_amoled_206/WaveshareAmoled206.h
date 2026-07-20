@@ -55,11 +55,6 @@ namespace WaveshareAmoled206::ImuWiring {
     constexpr bool kReleaseBusBeforeRead = true;
 } // namespace WaveshareAmoled206::ImuWiring
 
-namespace WaveshareAmoled206::Power {
-    constexpr bool kRequestPmuShutdownOnPowerOff = true;
-    constexpr bool kReleaseBatteryHoldBeforeDeepSleep = false;
-} // namespace WaveshareAmoled206::Power
-
 namespace WaveshareAmoled206::Storage {
     constexpr gpio_num_t kSdClockPin = GPIO_NUM_2;
     constexpr gpio_num_t kSdCommandPin = GPIO_NUM_1;
@@ -80,8 +75,7 @@ namespace WaveshareAmoled206::System {
     constexpr int kTouchIrqPin = 38;
     constexpr uint32_t kTouchI2cClockHz = kSystemI2cClockHz;
     constexpr uint32_t kTouchI2cTimeoutMs = kSystemI2cTimeoutMs;
-    constexpr int kDeepSleepWakePin = Buttons::kBootPin;
-    constexpr gpio_num_t kDeepSleepWakeGpio = GPIO_NUM_0;
+    constexpr gpio_num_t kLightSleepWakeGpio = GPIO_NUM_0;
 } // namespace WaveshareAmoled206::System
 
 namespace WaveshareAmoled206::TouchWiring {

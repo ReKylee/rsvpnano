@@ -13,8 +13,6 @@ namespace Board::Power {
         }
     }
 
-    void prepareDeepSleepPowerHold() {}
-
     bool enableAudioPowerIfAvailable() {
         return false;
     }
@@ -67,28 +65,12 @@ namespace Board::Power {
         return false;
     }
 
-    bool releaseBatteryPowerHold() {
-        return false;
-    }
-
-    bool supportsSoftwarePowerOff() {
-        return false;
-    }
-
-    bool powerOffUsesControllerWake() {
+    bool powerOff() {
         return false;
     }
 
     bool powerButtonHeld() {
         return false;
-    }
-
-    bool shouldRequestShutdownOnPowerOff() {
-        return WaveshareC6TouchLcd147::Power::kRequestPmuShutdownOnPowerOff;
-    }
-
-    bool shouldReleaseBatteryPowerBeforeDeepSleep() {
-        return WaveshareC6TouchLcd147::Power::kReleaseBatteryHoldBeforeDeepSleep;
     }
 
 } // namespace Board::Power

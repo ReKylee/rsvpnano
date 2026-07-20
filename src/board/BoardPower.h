@@ -10,16 +10,11 @@ namespace Board::Power {
     using DiagnosticSnapshot = Board::PowerDiagnosticSnapshot;
 
     void begin();
-    void prepareDeepSleepPowerHold();
     bool enableAudioPowerIfAvailable();
     bool readBatteryStatus(BatteryStatus& status);
     DiagnosticSnapshot diagnosticSnapshot();
     bool externalPowerPresent();
-    bool releaseBatteryPowerHold();
-    bool supportsSoftwarePowerOff();
-    bool powerOffUsesControllerWake();
+    bool powerOff();
     bool powerButtonHeld();
-    bool shouldRequestShutdownOnPowerOff();
-    bool shouldReleaseBatteryPowerBeforeDeepSleep();
 
 } // namespace Board::Power

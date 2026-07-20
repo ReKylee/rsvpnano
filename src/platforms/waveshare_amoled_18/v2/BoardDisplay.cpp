@@ -33,7 +33,6 @@ namespace Board::Display {
         return gPanel;
     }
 
-    void holdBacklightOffForDeepSleep() {}
     ui::Orientation defaultUiOrientation() {
         return WaveshareAmoled18::DisplayWiring::kDefaultUiOrientation;
     }

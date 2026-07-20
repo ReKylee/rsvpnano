@@ -45,9 +45,6 @@ namespace Board::Display {
         return gPanel;
     }
 
-    void holdBacklightOffForDeepSleep() {
-        setBacklight(false);
-    }
     ui::Orientation defaultUiOrientation() {
         return WaveshareC6TouchLcd147::DisplayWiring::kDefaultUiOrientation;
     }

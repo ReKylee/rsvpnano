@@ -12,8 +12,6 @@ namespace screens {
         constexpr uint8_t kCellSize = 4;
         constexpr uint32_t kFrameMs = 160;
         constexpr uint32_t kVoronoiFrameMs = 120;
-        constexpr uint32_t kDeepSleepMs = 15UL * 60UL * 1000UL;
-
         constexpr uint16_t ceilDiv(uint16_t numerator, uint16_t denominator) {
             return static_cast<uint16_t>((numerator + denominator - 1U) / denominator);
         }
@@ -29,7 +27,6 @@ namespace screens {
         const uint32_t seed =
             nowMs ^ (static_cast<uint32_t>(bookIndex) << 16U) ^ (static_cast<uint32_t>(wordIndex) * 2654435761UL);
         screensaver_.seed(seed == 0 ? 1U : seed);
-        enteredMs_ = nowMs;
         nextFrameMs_ = nowMs;
     }
 
@@ -37,16 +34,13 @@ namespace screens {
         screensaver_.reset();
     }
 
-    bool StandbyScreen::update(ui::Context& ui, uint32_t nowMs) {
-        if (nowMs - enteredMs_ >= kDeepSleepMs)
-            return true;
+    void StandbyScreen::update(ui::Context& ui, uint32_t nowMs) {
         if (static_cast<int32_t>(nowMs - nextFrameMs_) < 0)
-            return false;
+            return;
         const uint32_t frameMs = kind_ == standby::Kind::voronoi ? kVoronoiFrameMs : kFrameMs;
         screensaver_.step();
         nextFrameMs_ = nowMs + frameMs;
         draw(ui);
-        return false;
     }
 
     void StandbyScreen::draw(ui::Context& ui) {

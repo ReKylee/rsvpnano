@@ -9,7 +9,6 @@ namespace Board::Display {
 
     bool begin();
     Arduino_GFX& gfx();
-    void holdBacklightOffForDeepSleep();
     ui::Orientation defaultUiOrientation();
     ui::Orientation rotatedUiOrientation();
     uint16_t nativeWidth();

@@ -53,8 +53,6 @@ namespace WaveshareLcd349::ImuWiring {
 
 namespace WaveshareLcd349::Power {
     constexpr int kBatteryAdcPin = 4;
-    constexpr bool kRequestPmuShutdownOnPowerOff = false;
-    constexpr bool kReleaseBatteryHoldBeforeDeepSleep = true;
 } // namespace WaveshareLcd349::Power
 
 namespace WaveshareLcd349::Storage {
@@ -73,12 +71,10 @@ namespace WaveshareLcd349::System {
     constexpr uint32_t kSystemI2cTimeoutMs = 10;
     constexpr int kTouchSdaPin = 17;
     constexpr int kTouchSclPin = 18;
-    constexpr int kTouchResetPin = -1;
-    constexpr int kTouchIrqPin = -1;
+    constexpr int kTouchIrqPin = Revision::kTouchIrqPin;
     constexpr uint32_t kTouchI2cClockHz = 300000;
     constexpr uint32_t kTouchI2cTimeoutMs = 10;
-    constexpr int kDeepSleepWakePin = Buttons::kPowerPin;
-    constexpr gpio_num_t kDeepSleepWakeGpio = GPIO_NUM_16;
+    constexpr gpio_num_t kLightSleepWakeGpio = GPIO_NUM_16;
 } // namespace WaveshareLcd349::System
 
 namespace WaveshareLcd349::Tca9554Wiring {
@@ -87,6 +83,7 @@ namespace WaveshareLcd349::Tca9554Wiring {
     constexpr uint8_t kBacklightEnablePin = 1;
     constexpr uint8_t kSysEnablePin = 6;
     constexpr uint8_t kAudioEnablePin = 7;
+    constexpr uint8_t kTouchInterruptPin = 0;
 } // namespace WaveshareLcd349::Tca9554Wiring
 
 namespace WaveshareLcd349::TouchWiring {
@@ -99,3 +96,7 @@ namespace WaveshareLcd349::TouchWiring {
     constexpr uint32_t kRecoveryRetryMs = 1000;
     constexpr uint32_t kRecoveryEventIgnoreMs = 0;
 } // namespace WaveshareLcd349::TouchWiring
+
+namespace WaveshareLcd349 {
+    bool clearTouchExpanderInterrupt();
+}

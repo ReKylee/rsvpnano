@@ -1,5 +1,7 @@
 #pragma once
 
+#include "platforms/waveshare_amoled_206/WaveshareAmoled206.h"
+
 namespace Board::Config {
 
     constexpr const char* BOARD_ID = "waveshare_esp32s3_touch_amoled_2_06";
@@ -11,6 +13,7 @@ namespace Board::Config {
     constexpr bool READER_SINGLE_TAP_PAUSES_WHILE_LOCKED = true;
     constexpr bool TOUCH_READER_PLAYBACK_ENABLED = true;
     constexpr bool ENABLE_RESTRUCTURED_MENU = true;
+    constexpr bool HAS_LIGHT_SLEEP_TOUCH_IRQ = WaveshareAmoled206::System::kTouchIrqPin >= 0;
 
     constexpr int PANEL_NATIVE_WIDTH = 410;
     constexpr int PANEL_NATIVE_HEIGHT = 502;

@@ -38,8 +38,6 @@ namespace WaveshareC6TouchLcd147::ImuWiring {
 namespace WaveshareC6TouchLcd147::Power {
     constexpr int kBatteryAdcPin = 0;
     constexpr float kBatteryDividerScale = 0.003f;
-    constexpr bool kRequestPmuShutdownOnPowerOff = false;
-    constexpr bool kReleaseBatteryHoldBeforeDeepSleep = false;
 } // namespace WaveshareC6TouchLcd147::Power
 
 namespace WaveshareC6TouchLcd147::Storage {
@@ -59,8 +57,7 @@ namespace WaveshareC6TouchLcd147::System {
     constexpr int kTouchIrqPin = 21;
     constexpr uint32_t kTouchI2cClockHz = kSystemI2cClockHz;
     constexpr uint32_t kTouchI2cTimeoutMs = kSystemI2cTimeoutMs;
-    constexpr int kDeepSleepWakePin = Buttons::kBootPin;
-    constexpr gpio_num_t kDeepSleepWakeGpio = GPIO_NUM_9;
+    constexpr gpio_num_t kLightSleepWakeGpio = GPIO_NUM_9;
 } // namespace WaveshareC6TouchLcd147::System
 
 namespace WaveshareC6TouchLcd147::TouchWiring {

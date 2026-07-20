@@ -36,8 +36,6 @@ namespace Board::Power {
         }
     }
 
-    void prepareDeepSleepPowerHold() {}
-
     bool enableAudioPowerIfAvailable() {
         return BoardDrivers::Tca9554::configureOutputPin(Wire1, WaveshareLcd349::Tca9554Wiring::kAddress,
                                                          WaveshareLcd349::Tca9554Wiring::kAudioEnablePin, true,
@@ -107,7 +105,7 @@ namespace Board::Power {
         return false;
     }
 
-    bool releaseBatteryPowerHold() {
+    bool powerOff() {
         if (!BoardDrivers::Tca9554::configureOutputPin(Wire1, WaveshareLcd349::Tca9554Wiring::kAddress,
                                                        WaveshareLcd349::Tca9554Wiring::kSysEnablePin, false,
                                                        WaveshareLcd349::Tca9554Wiring::kReleaseBusBeforeRead)) {
@@ -120,24 +118,8 @@ namespace Board::Power {
         return true;
     }
 
-    bool supportsSoftwarePowerOff() {
-        return true;
-    }
-
-    bool powerOffUsesControllerWake() {
-        return false;
-    }
-
     bool powerButtonHeld() {
         return false;
-    }
-
-    bool shouldRequestShutdownOnPowerOff() {
-        return WaveshareLcd349::Power::kRequestPmuShutdownOnPowerOff;
-    }
-
-    bool shouldReleaseBatteryPowerBeforeDeepSleep() {
-        return WaveshareLcd349::Power::kReleaseBatteryHoldBeforeDeepSleep;
     }
 
 } // namespace Board::Power

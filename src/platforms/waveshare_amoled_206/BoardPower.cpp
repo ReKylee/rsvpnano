@@ -77,8 +77,6 @@ namespace Board::Power {
         beginPmu();
     }
 
-    void prepareDeepSleepPowerHold() {}
-
     bool enableAudioPowerIfAvailable() {
         pinMode(WaveshareAmoled206::AudioWiring::kAudioEnablePin, OUTPUT);
         digitalWrite(WaveshareAmoled206::AudioWiring::kAudioEnablePin, HIGH);
@@ -116,7 +114,7 @@ namespace Board::Power {
         return ensurePmuReady() && gPmu.isVbusIn();
     }
 
-    bool releaseBatteryPowerHold() {
+    bool powerOff() {
         if (!ensurePmuReady()) {
             return false;
         }
@@ -125,25 +123,9 @@ namespace Board::Power {
         return true;
     }
 
-    bool supportsSoftwarePowerOff() {
-        return true;
-    }
-
-    bool powerOffUsesControllerWake() {
-        return WaveshareAmoled206::Power::kRequestPmuShutdownOnPowerOff;
-    }
-
     bool powerButtonHeld() {
         pollPowerKeyIfDue();
         return gPowerButtonHeld;
-    }
-
-    bool shouldRequestShutdownOnPowerOff() {
-        return WaveshareAmoled206::Power::kRequestPmuShutdownOnPowerOff;
-    }
-
-    bool shouldReleaseBatteryPowerBeforeDeepSleep() {
-        return WaveshareAmoled206::Power::kReleaseBatteryHoldBeforeDeepSleep;
     }
 
 } // namespace Board::Power

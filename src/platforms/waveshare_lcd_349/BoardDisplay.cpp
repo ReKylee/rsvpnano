@@ -106,31 +106,15 @@ namespace Board::Display {
 
         logCanvasMemory();
 
-        writeBacklight();
-
         gCanvas.fillScreen(0x0000);
         gCanvas.flush();
+        writeBacklight();
 
         return true;
     }
 
     Arduino_GFX& gfx() {
         return gCanvas;
-    }
-
-    void holdBacklightOffForDeepSleep() {
-        if constexpr (WaveshareLcd349::DisplayWiring::kBacklightPin < 0) {
-            return;
-        }
-
-        analogWrite(WaveshareLcd349::DisplayWiring::kBacklightPin, 255);
-        pinMode(WaveshareLcd349::DisplayWiring::kBacklightPin, OUTPUT);
-        digitalWrite(WaveshareLcd349::DisplayWiring::kBacklightPin, HIGH);
-
-        gpio_set_direction(WaveshareLcd349::DisplayWiring::kBacklightGpio, GPIO_MODE_OUTPUT);
-        gpio_set_level(WaveshareLcd349::DisplayWiring::kBacklightGpio, 1);
-        gpio_hold_en(WaveshareLcd349::DisplayWiring::kBacklightGpio);
-        gpio_deep_sleep_hold_en();
     }
 
     ui::Orientation defaultUiOrientation() {
@@ -164,19 +148,15 @@ namespace Board::Display {
     }
 
     void sleep() {
-        gCanvas.fillScreen(0x0000);
-        gCanvas.flush();
-
         setBacklight(false);
         gPanel.displayOff();
     }
 
     void wake() {
         gPanel.displayOn();
-        setBacklight(true);
-
         // Redraw whatever is currently in the canvas framebuffer.
         gCanvas.flush(true);
+        setBacklight(true);
     }
 
     bool pushColors(uint16_t x, uint16_t y, uint16_t width, uint16_t height, const uint16_t* data) {

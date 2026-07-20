@@ -13,6 +13,7 @@ namespace Board::Config {
     constexpr bool READER_SINGLE_TAP_PAUSES_WHILE_LOCKED = false;
     constexpr bool TOUCH_READER_PLAYBACK_ENABLED = false;
     constexpr bool ENABLE_RESTRUCTURED_MENU = true;
+    constexpr bool HAS_LIGHT_SLEEP_TOUCH_IRQ = WaveshareAmoled18::System::kTouchIrqPin >= 0;
 
     constexpr int PANEL_NATIVE_WIDTH = WaveshareAmoled18::DisplayWiring::kPanelWidth;
     constexpr int PANEL_NATIVE_HEIGHT = WaveshareAmoled18::DisplayWiring::kPanelHeight;

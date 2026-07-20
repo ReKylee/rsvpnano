@@ -1,10 +1,13 @@
 #include "app/App.h"
 #include "logging/Logger.h"
 
+#include <algorithm>
 #include <array>
+#include <esp_system.h>
 #include <string>
 
 #include "board/BoardAudio.h"
+#include "board/BoardConfig.h"
 #include "board/BoardInput.h"
 #include "board/BoardPower.h"
 #include "board/BoardStorage.h"
@@ -20,6 +23,23 @@ namespace {
     constexpr std::array<uint32_t, 5> kStandbyMs = {
         0, 1UL * 60UL * 1000UL, 5UL * 60UL * 1000UL, 15UL * 60UL * 1000UL, 30UL * 60UL * 1000UL,
     };
+    constexpr uint32_t kStandbyPowerOffMs = 15UL * 60UL * 1000UL;
+    // Boards without an exposed touch interrupt briefly wake at this cadence to sample the controller.
+    constexpr uint32_t kLightSleepTouchPollMs = 100;
+
+    constexpr uint32_t standbySleepSliceMs(uint32_t remainingMs) {
+        if constexpr (Board::Config::HAS_LIGHT_SLEEP_TOUCH_IRQ)
+            return remainingMs;
+        return std::min(remainingMs, kLightSleepTouchPollMs);
+    }
+
+    void powerOffBoard() {
+        if (!Board::Power::powerOff())
+            Logger::info("app", "hardware power off unavailable; entering light sleep");
+        delay(1200);
+        Board::System::lightSleep(0);
+        esp_restart();
+    }
 } // namespace
 
 void App::begin() {
@@ -69,8 +89,11 @@ void App::update(uint32_t nowMs) {
         settingsStore_.update(nowMs);
 
     if (screen_ == screens::Screen::Standby) {
-        if (standbyScreen_.update(immediateUi_, nowMs))
-            deepSleepFromStandby(nowMs);
+        if (nowMs - standbyEnteredMs_ >= kStandbyPowerOffMs) {
+            powerOff(nowMs);
+            return;
+        }
+        standbyScreen_.update(immediateUi_, nowMs);
         return;
     }
 
@@ -488,12 +511,16 @@ void App::runOtaCheck(bool install) {
 void App::enterStandby(uint32_t nowMs) {
     readerScreen_.book.save(prefs_, readerScreen_.reader, true, nowMs);
     readerScreen_.reader.pause();
+    if (settingsStore_.settings().interface.screensaver == standby::Kind::screenOff) {
+        screen_ = screens::Screen::Standby;
+        lightSleepFromStandby();
+        return;
+    }
     Board::Display::wake();
     immediateUi_.invalidate();
     standbyScreen_.begin(immediateUi_, nowMs, readerScreen_.book.index, readerScreen_.reader.currentIndex(),
                          settingsStore_.settings().interface.screensaver);
-    if (settingsStore_.settings().interface.screensaver == standby::Kind::screenOff)
-        Board::Display::sleep();
+    standbyEnteredMs_ = nowMs;
     screen_ = screens::Screen::Standby;
     renderScreen(nowMs);
 }
@@ -506,25 +533,64 @@ void App::exitStandby(uint32_t nowMs) {
     renderScreen(nowMs);
 }
 
-void App::deepSleepFromStandby(uint32_t nowMs) {
-    Logger::warning("app", "standby timeout reached; entering deep sleep");
-    readerScreen_.book.save(prefs_, readerScreen_.reader, true, nowMs);
+void App::lightSleepFromStandby() {
+    Logger::info("app", "screen-off standby; entering light sleep");
     readerScreen_.book.mirror(readerScreen_.store, readerScreen_.reader);
     standbyScreen_.reset();
     if (sync_.active())
         sync_.end();
-    if (!usbTransfer_.active())
-        settingsStore_.flush();
+    networkScreen_.closeWifi();
     if (usbTransfer_.active())
         usbTransfer_.end();
+    settingsStore_.flush();
     Board::Display::sleep();
-    readerScreen_.store.close();
-    storage_.end();
-    Input::end();
-    prefs_.end();
-    Board::System::holdBacklightOffForDeepSleep();
-    Serial.flush();
-    Board::System::deepSleepUntilConfiguredWake();
+    Input::cancel();
+
+    uint32_t remainingMs = kStandbyPowerOffMs;
+    bool wokeByTouch = false;
+    while (remainingMs > 0) {
+        const uint32_t sleepMs = standbySleepSliceMs(remainingMs);
+        const EspLightSleep::WakeReason wakeReason = Board::System::lightSleep(sleepMs);
+
+        if (wakeReason == EspLightSleep::WakeReason::input) {
+            ui::TouchContact contact = {};
+            wokeByTouch = Board::Input::readTouch(contact) && contact.touched;
+            break;
+        }
+        if (wakeReason != EspLightSleep::WakeReason::timer) {
+            Logger::warning("app", "light sleep ended unexpectedly; resuming");
+            break;
+        }
+
+        remainingMs -= sleepMs;
+        if (remainingMs == 0) {
+            Logger::info("app", "screen-off standby expired; powering off");
+            powerOff(millis());
+            return;
+        }
+
+        if constexpr (!Board::Config::HAS_LIGHT_SLEEP_TOUCH_IRQ) {
+            ui::TouchContact contact = {};
+            if (Board::Input::readTouch(contact) && contact.touched) {
+                wokeByTouch = true;
+                break;
+            }
+        }
+    }
+
+    const uint32_t wokeAtMs = millis();
+    Input::cancel();
+    exitStandby(wokeAtMs);
+
+    if (wokeByTouch) {
+        const uint32_t releaseWaitStartedMs = millis();
+        ui::TouchContact contact = {.touched = true};
+        while (contact.touched && millis() - releaseWaitStartedMs < 1000) {
+            delay(10);
+            if (!Board::Input::readTouch(contact))
+                break;
+        }
+    }
 }
 
 void App::powerOff(uint32_t nowMs) {
@@ -540,12 +606,7 @@ void App::powerOff(uint32_t nowMs) {
     readerScreen_.store.close();
     storage_.end();
     Input::end();
-    Board::System::holdBacklightOffForDeepSleep();
-    if (Board::Power::shouldRequestShutdownOnPowerOff() || Board::Power::shouldReleaseBatteryPowerBeforeDeepSleep()) {
-        Board::Power::releaseBatteryPowerHold();
-        delay(1200);
-    }
-    Board::System::deepSleepUntilConfiguredWake();
+    powerOffBoard();
 }
 
 void App::renderStorageStatus(void* context, const char* title, const char* line1, const char* line2,

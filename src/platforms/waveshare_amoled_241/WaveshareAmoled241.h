@@ -38,9 +38,6 @@ namespace WaveshareAmoled241::DisplayWiring {
 namespace WaveshareAmoled241::Power {
     constexpr int kBatteryAdcPin = 17;
     constexpr int kBatteryHoldPin = 16;
-    constexpr gpio_num_t kBatteryHoldGpio = GPIO_NUM_16;
-    constexpr bool kRequestPmuShutdownOnPowerOff = false;
-    constexpr bool kReleaseBatteryHoldBeforeDeepSleep = false;
 } // namespace WaveshareAmoled241::Power
 
 namespace WaveshareAmoled241::Storage {
@@ -63,8 +60,7 @@ namespace WaveshareAmoled241::System {
     constexpr int kTouchIrqPin = -1;
     constexpr uint32_t kTouchI2cClockHz = 400000;
     constexpr uint32_t kTouchI2cTimeoutMs = 10;
-    constexpr int kDeepSleepWakePin = Buttons::kPowerPin;
-    constexpr gpio_num_t kDeepSleepWakeGpio = GPIO_NUM_15;
+    constexpr gpio_num_t kLightSleepWakeGpio = GPIO_NUM_15;
 } // namespace WaveshareAmoled241::System
 
 namespace WaveshareAmoled241::Tca9554Wiring {

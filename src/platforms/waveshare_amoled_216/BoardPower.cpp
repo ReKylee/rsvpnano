@@ -77,8 +77,6 @@ namespace Board::Power {
         beginPmu();
     }
 
-    void prepareDeepSleepPowerHold() {}
-
     bool enableAudioPowerIfAvailable() {
         return true;
     }
@@ -114,7 +112,7 @@ namespace Board::Power {
         return ensurePmuReady() && gPmu.isVbusIn();
     }
 
-    bool releaseBatteryPowerHold() {
+    bool powerOff() {
         if (!ensurePmuReady()) {
             return false;
         }
@@ -123,25 +121,9 @@ namespace Board::Power {
         return true;
     }
 
-    bool supportsSoftwarePowerOff() {
-        return true;
-    }
-
-    bool powerOffUsesControllerWake() {
-        return WaveshareAmoled216::Power::kRequestPmuShutdownOnPowerOff;
-    }
-
     bool powerButtonHeld() {
         pollPowerKeyIfDue();
         return gPowerButtonHeld;
-    }
-
-    bool shouldRequestShutdownOnPowerOff() {
-        return WaveshareAmoled216::Power::kRequestPmuShutdownOnPowerOff;
-    }
-
-    bool shouldReleaseBatteryPowerBeforeDeepSleep() {
-        return WaveshareAmoled216::Power::kReleaseBatteryHoldBeforeDeepSleep;
     }
 
 } // namespace Board::Power

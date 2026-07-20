@@ -2,12 +2,12 @@
 
 #include <Arduino.h>
 
+#include "sleep/EspLightSleep.h"
+
 namespace Board::System {
 
     void begin();
-    void lightSleepUntilBootButton();
-    void holdBacklightOffForDeepSleep();
-    void deepSleepUntilConfiguredWake();
+    EspLightSleep::WakeReason lightSleep(uint32_t timeoutMs);
     const char* wakeLabel(bool externalPowerPresent);
     void logStartupDiagnostics();
 

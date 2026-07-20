@@ -13,16 +13,6 @@ namespace {
         return Wire;
     }
 
-    void resetTouchHardware() {
-        if constexpr (WaveshareLcd349::System::kTouchResetPin >= 0) {
-            pinMode(WaveshareLcd349::System::kTouchResetPin, OUTPUT);
-            digitalWrite(WaveshareLcd349::System::kTouchResetPin, LOW);
-            delay(12);
-            digitalWrite(WaveshareLcd349::System::kTouchResetPin, HIGH);
-            delay(12);
-        }
-    }
-
     bool primaryPressedRaw() {
         if constexpr (WaveshareLcd349::Buttons::kBootPin < 0) {
             return false;
@@ -95,8 +85,9 @@ namespace Board::Input {
     }
 
     bool beginTouch() {
-        resetTouchHardware();
-        return Axs15231bTouch::probe(touchWire(), WaveshareLcd349::TouchWiring::kAddress);
+        const bool ready = Axs15231bTouch::probe(touchWire(), WaveshareLcd349::TouchWiring::kAddress);
+        WaveshareLcd349::clearTouchExpanderInterrupt();
+        return ready;
     }
 
     bool touchReady() {
@@ -108,8 +99,10 @@ namespace Board::Input {
 
     bool readTouch(ui::TouchContact& contact) {
         std::array<uint8_t, Axs15231bTouch::kPacketLength> data = {};
-        if (!Axs15231bTouch::readPacket(touchWire(), WaveshareLcd349::TouchWiring::kAddress, data.data(),
-                                        data.size())) {
+        const bool read = Axs15231bTouch::readPacket(touchWire(), WaveshareLcd349::TouchWiring::kAddress,
+                                                      data.data(), data.size());
+        WaveshareLcd349::clearTouchExpanderInterrupt();
+        if (!read) {
             return false;
         }
 

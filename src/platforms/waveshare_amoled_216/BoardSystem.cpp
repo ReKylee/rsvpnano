@@ -1,12 +1,8 @@
 #include "board/BoardSystem.h"
-#include "board/BoardDisplay.h"
 #include "board/BoardPower.h"
 #include "logging/Logger.h"
 
 #include <Wire.h>
-#include <driver/gpio.h>
-#include <esp_sleep.h>
-#include <esp_system.h>
 
 #include "platforms/waveshare_amoled_216/WaveshareAmoled216.h"
 
@@ -44,100 +40,17 @@ namespace Board {
             Board::Power::begin();
         }
 
-        void lightSleepUntilBootButton() {
-            if constexpr (WaveshareAmoled216::System::kDeepSleepWakePin < 0) {
-                return;
-            }
-
-            constexpr int wakePin = WaveshareAmoled216::System::kDeepSleepWakePin;
-            pinMode(wakePin, INPUT_PULLUP);
-            gpio_wakeup_enable(WaveshareAmoled216::System::kDeepSleepWakeGpio, GPIO_INTR_LOW_LEVEL);
-            esp_sleep_enable_gpio_wakeup();
-            Serial.flush();
-            esp_light_sleep_start();
-            gpio_wakeup_disable(WaveshareAmoled216::System::kDeepSleepWakeGpio);
-            esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
-        }
-
-        void holdBacklightOffForDeepSleep() {
-            Board::Power::prepareDeepSleepPowerHold();
-            Board::Display::holdBacklightOffForDeepSleep();
-        }
-
-        void deepSleepUntilConfiguredWake() {
-            constexpr int wakePin = WaveshareAmoled216::System::kDeepSleepWakePin;
-            pinMode(wakePin, INPUT_PULLUP);
-            const uint32_t waitStartMs = millis();
-            while (!digitalRead(wakePin) && millis() - waitStartMs < 1000) {
-                delay(10);
-            }
-            esp_sleep_enable_ext0_wakeup(WaveshareAmoled216::System::kDeepSleepWakeGpio, 0);
-            esp_deep_sleep_start();
+        EspLightSleep::WakeReason lightSleep(uint32_t timeoutMs) {
+            return EspLightSleep::wait<WaveshareAmoled216::System::kLightSleepWakeGpio,
+                                       WaveshareAmoled216::System::kTouchIrqPin>(timeoutMs);
         }
 
         const char* wakeLabel(bool externalPowerPresent) {
             return externalPowerPresent ? "Press PWR to wake" : "Press PWR to start";
         }
 
-        namespace {
-
-            const char* resetReasonName(esp_reset_reason_t reason) {
-                switch (reason) {
-                case ESP_RST_POWERON:
-                    return "poweron";
-                case ESP_RST_EXT:
-                    return "external";
-                case ESP_RST_SW:
-                    return "software";
-                case ESP_RST_PANIC:
-                    return "panic";
-                case ESP_RST_INT_WDT:
-                    return "interrupt_watchdog";
-                case ESP_RST_TASK_WDT:
-                    return "task_watchdog";
-                case ESP_RST_WDT:
-                    return "watchdog";
-                case ESP_RST_DEEPSLEEP:
-                    return "deep_sleep";
-                case ESP_RST_BROWNOUT:
-                    return "brownout";
-                case ESP_RST_SDIO:
-                    return "sdio";
-                case ESP_RST_UNKNOWN:
-                default:
-                    return "unknown";
-                }
-            }
-
-            const char* wakeupCauseName(esp_sleep_wakeup_cause_t cause) {
-                switch (cause) {
-                case ESP_SLEEP_WAKEUP_EXT0:
-                    return "ext0";
-                case ESP_SLEEP_WAKEUP_EXT1:
-                    return "ext1";
-                case ESP_SLEEP_WAKEUP_TIMER:
-                    return "timer";
-                case ESP_SLEEP_WAKEUP_TOUCHPAD:
-                    return "touchpad";
-                case ESP_SLEEP_WAKEUP_ULP:
-                    return "ulp";
-                case ESP_SLEEP_WAKEUP_GPIO:
-                    return "gpio";
-                case ESP_SLEEP_WAKEUP_UART:
-                    return "uart";
-                case ESP_SLEEP_WAKEUP_UNDEFINED:
-                default:
-                    return "undefined";
-                }
-            }
-
-        } // namespace
-
         void logStartupDiagnostics() {
-            const esp_reset_reason_t resetReason = esp_reset_reason();
-            const esp_sleep_wakeup_cause_t wakeupCause = esp_sleep_get_wakeup_cause();
-            Logger::debug("diag", "reset=%s(%d) sleep_wake=%s(%d)", resetReasonName(resetReason),
-                          static_cast<int>(resetReason), wakeupCauseName(wakeupCause), static_cast<int>(wakeupCause));
+            Logger::logResetReason();
 
             const Board::Power::DiagnosticSnapshot power = Board::Power::diagnosticSnapshot();
             if (!power.available) {

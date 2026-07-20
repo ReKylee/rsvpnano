@@ -13,6 +13,7 @@ namespace Board::Config {
     constexpr bool READER_SINGLE_TAP_PAUSES_WHILE_LOCKED = true;
     constexpr bool TOUCH_READER_PLAYBACK_ENABLED = true;
     constexpr bool ENABLE_RESTRUCTURED_MENU = true;
+    constexpr bool HAS_LIGHT_SLEEP_TOUCH_IRQ = WaveshareLcd349::System::kTouchIrqPin >= 0;
 
     constexpr int PANEL_NATIVE_WIDTH = WaveshareLcd349::DisplayWiring::kPanelWidth;
     constexpr int PANEL_NATIVE_HEIGHT = WaveshareLcd349::DisplayWiring::kPanelHeight;

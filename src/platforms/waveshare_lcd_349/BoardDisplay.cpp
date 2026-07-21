@@ -89,6 +89,10 @@ namespace Board::Display {
 
         pinMode(WaveshareLcd349::DisplayWiring::kBacklightPin, OUTPUT);
 
+        if constexpr (WaveshareLcd349::DisplayWiring::kResetPin < 0) {
+            BoardDrivers::Tca9554::configureOutputPin(Wire1, WaveshareLcd349::Tca9554Wiring::kAddress, 5, true);
+        }
+
         logDisplayMemory();
 
         const bool ok = gCanvas.begin(kPanelBusHz);

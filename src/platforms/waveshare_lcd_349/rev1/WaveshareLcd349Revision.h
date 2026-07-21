@@ -9,6 +9,7 @@ namespace WaveshareLcd349::Revision {
     constexpr const char* kOtaAssetName = "rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin";
     constexpr int kBacklightPin = 8;
     constexpr gpio_num_t kBacklightGpio = GPIO_NUM_8;
+    constexpr int kDisplayGpioResetPin = 21;
     constexpr int kTouchIrqPin = 42;
 
 } // namespace WaveshareLcd349::Revision

@@ -556,7 +556,7 @@ void App::lightSleepFromStandby() {
         case EspLightSleep::WakeReason::input:
             if constexpr (Board::Config::HAS_LIGHT_SLEEP_TOUCH_IRQ) {
                 ui::TouchContact contact = {};
-                wokeByTouch = Board::Input::readTouch(contact) && contact.touched;
+                wokeByTouch = Board::Input::touchReady() && Board::Input::readTouch(contact) && contact.touched;
                 const ::Input::PressActions controls = Board::Input::currentActions();
                 const bool powerPressed = ::Input::hasAction(controls.longPress, ::Input::ActionPowerOff);
                 if (!wokeByTouch && !powerPressed)

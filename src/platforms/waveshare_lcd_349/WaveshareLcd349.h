@@ -36,7 +36,7 @@ namespace WaveshareLcd349::DisplayWiring {
     constexpr int kData1Pin = 12;
     constexpr int kData2Pin = 13;
     constexpr int kData3Pin = 14;
-    constexpr int kResetPin = 21;
+    constexpr int kResetPin = Revision::kDisplayGpioResetPin;
     constexpr int kBacklightPin = Revision::kBacklightPin;
     constexpr gpio_num_t kBacklightGpio = Revision::kBacklightGpio;
     constexpr uint16_t kPanelWidth = 172;
@@ -98,5 +98,5 @@ namespace WaveshareLcd349::TouchWiring {
 } // namespace WaveshareLcd349::TouchWiring
 
 namespace WaveshareLcd349 {
-    bool clearTouchExpanderInterrupt();
+    bool readTouchExpanderInterrupt(bool& active);
 }

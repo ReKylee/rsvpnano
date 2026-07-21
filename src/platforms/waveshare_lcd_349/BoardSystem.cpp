@@ -49,7 +49,8 @@ namespace Board {
         }
 
         EspLightSleep::WakeReason lightSleep(uint32_t timeoutMs) {
-            if (!WaveshareLcd349::clearTouchExpanderInterrupt())
+            bool touchInterruptActive = false;
+            if (!WaveshareLcd349::readTouchExpanderInterrupt(touchInterruptActive))
                 ESP_LOGW("sleep", "failed to clear touch expander interrupt");
 
             constexpr gpio_num_t wakePins[] = {

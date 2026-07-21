@@ -86,7 +86,8 @@ namespace Board::Input {
 
     bool beginTouch() {
         const bool ready = Axs15231bTouch::probe(touchWire(), WaveshareLcd349::TouchWiring::kAddress);
-        WaveshareLcd349::clearTouchExpanderInterrupt();
+        bool active = false;
+        WaveshareLcd349::readTouchExpanderInterrupt(active);
         return ready;
     }
 
@@ -94,14 +95,19 @@ namespace Board::Input {
         if constexpr (WaveshareLcd349::System::kTouchIrqPin < 0) {
             return true;
         }
-        return !digitalRead(WaveshareLcd349::System::kTouchIrqPin);
+        if (digitalRead(WaveshareLcd349::System::kTouchIrqPin))
+            return false;
+
+        bool active = false;
+        return WaveshareLcd349::readTouchExpanderInterrupt(active) && active;
     }
 
     bool readTouch(ui::TouchContact& contact) {
         std::array<uint8_t, Axs15231bTouch::kPacketLength> data = {};
         const bool read = Axs15231bTouch::readPacket(touchWire(), WaveshareLcd349::TouchWiring::kAddress,
                                                       data.data(), data.size());
-        WaveshareLcd349::clearTouchExpanderInterrupt();
+        bool active = false;
+        WaveshareLcd349::readTouchExpanderInterrupt(active);
         if (!read) {
             return false;
         }

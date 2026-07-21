@@ -340,10 +340,32 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
         exitUsbTransfer();
         return;
     }
-    if (usbTransfer_.active()
-        && (Input::hasAction(event.actions, Input::ActionBack)
-            || Input::hasAction(event.actions, Input::ActionOpenMenu))) {
+    if (usbTransfer_.active() && Input::hasAction(event.actions, Input::ActionOpenMenu)) {
+        exitUsbTransfer();
+        return;
+    }
+    if (usbTransfer_.active() && Input::hasAction(event.actions, Input::ActionBack)) {
         exitUsbTransfer(screens::Screen::Read);
+        return;
+    }
+    if (Input::hasAction(event.actions, Input::ActionOpenMenu)) {
+        if (screen_ == screens::Screen::Reader) {
+            ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
+            ReadingLoop::pause(readerScreen_.session);
+            libraryScreen_.invalidate();
+            screen_ = screens::Screen::Read;
+        } else {
+            if (sync_.active()) {
+                sync_.end();
+                reloadSettings();
+            }
+            if (screen_ == screens::Screen::FocusSession)
+                focusScreen_.close();
+            networkScreen_.closeWifi();
+            ReadingLoop::pause(readerScreen_.session);
+            screen_ = screens::Screen::Reader;
+        }
+        renderScreen(nowMs);
         return;
     }
     if (screen_ == screens::Screen::FocusSession
@@ -362,7 +384,7 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
         enterStandby(nowMs);
         return;
     }
-    if (Input::hasAction(event.actions, Input::ActionOpenMenu) || Input::hasAction(event.actions, Input::ActionBack)) {
+    if (Input::hasAction(event.actions, Input::ActionBack)) {
         if (sync_.active()) {
             sync_.end();
             reloadSettings();

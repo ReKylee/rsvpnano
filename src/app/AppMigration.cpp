@@ -266,7 +266,7 @@ void App::migrateLegacyStorage() {
         candidate.interface.standbyTimerIndex = value;
     });
     readStringKey("wifi_ssid", candidate.network.wifiSsid);
-    readBoolKey("ota_auto", candidate.updates.automatic);
+    readBoolKey("ota_auto", candidate.updates.checkOnStartup);
     readStringKey("ota_owner", candidate.updates.repositoryOwner);
     readStringKey("ota_tag", candidate.updates.releaseTag);
     if (prefs_.isKey("wifi_pass")) {
@@ -361,7 +361,7 @@ void App::migrateLegacyStorage() {
             if (key == "wifi_ssid")
                 return assigned(parseString(value, parsed.network.wifiSsid));
             if (key == "ota_auto")
-                return assigned(parseBool(value, parsed.updates.automatic));
+                return assigned(parseBool(value, parsed.updates.checkOnStartup));
             if (key == "ota_owner")
                 return assigned(parseString(value, parsed.updates.repositoryOwner));
             if (key == "ota_tag")

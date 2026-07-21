@@ -91,7 +91,7 @@ namespace settings {
     };
 
     struct UpdateSettings {
-        bool automatic = false;
+        bool checkOnStartup = false;
         std::string repositoryOwner;
         std::string releaseTag;
 

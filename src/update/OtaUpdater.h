@@ -18,7 +18,6 @@ public:
         String githubRepo = "rsvpnano";
         String githubTag;
         String assetName = Board::Config::OTA_ASSET_NAME;
-        bool autoCheck = false;
     };
 
     enum class ResultCode : uint8_t {

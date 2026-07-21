@@ -119,7 +119,7 @@ enum class UiText : uint8_t {
     ConnectionReleaseSection,
     Network,
     NotSet,
-    AutomaticChecks,
+    StartupCheck,
     OtaOwner,
     Default,
     ReleaseTag,

@@ -94,8 +94,7 @@ namespace screens {
         std::string ssid;
         std::string owner;
         std::string tag;
-        bool automatic = false;
-        bool autoCheckPending = false;
+        bool startupCheckPending = false;
         bool ssidStored = false;
 
         void begin(settings::SettingsStore& store);

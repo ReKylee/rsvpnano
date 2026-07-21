@@ -91,8 +91,8 @@ void App::update(uint32_t nowMs) {
 
     if (screen_ == screens::Screen::Status && nowMs - bootMs_ >= kBootSplashMs) {
         screen_ = screens::Screen::Reader;
-        if (networkScreen_.autoCheckPending) {
-            networkScreen_.autoCheckPending = false;
+        if (networkScreen_.startupCheckPending) {
+            networkScreen_.startupCheckPending = false;
             runOtaCheck(false);
             return;
         }
@@ -475,7 +475,7 @@ void App::reloadSettings(uint32_t nowMs) {
                            &Board::Display::setBrightness);
     readerScreen_.begin(settingsStore_.settings().reading, interfaceScreen_.themes.selected(), nowMs);
     networkScreen_.begin(settingsStore_);
-    networkScreen_.autoCheckPending = false;
+    networkScreen_.startupCheckPending = false;
 }
 
 void App::runOtaCheck(bool install) {

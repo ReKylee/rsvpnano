@@ -16,9 +16,8 @@ namespace screens {
         password_ = store.secrets().wifiPassword;
         owner = persisted.updates.repositoryOwner;
         tag = persisted.updates.releaseTag;
-        automatic = persisted.updates.automatic;
         ssidStored = !ssid.empty();
-        autoCheckPending = automatic && !ssid.empty();
+        startupCheckPending = persisted.updates.checkOnStartup && !ssid.empty();
     }
 
     void NetworkScreen::draw(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
@@ -32,7 +31,7 @@ namespace screens {
         const int16_t sectionY = static_cast<int16_t>(content.y + 30);
         ui.separator({content.x, sectionY, content.w, 10}, ui.text(UiText::ConnectionReleaseSection));
         const int16_t firstRowY = static_cast<int16_t>(sectionY + 14);
-        const int16_t networkWidth = static_cast<int16_t>((content.w - gap) * 2 / 3);
+        const int16_t networkWidth = static_cast<int16_t>((content.w - gap) * 3 / 5);
         if (ui.setting({content.x, firstRowY, networkWidth, 32}, ui.text(UiText::Network),
                        ssid.empty() ? ui.text(UiText::NotSet) : std::string_view{ssid}, ui::SettingLayout::Inline)) {
             openWifiScan();
@@ -40,10 +39,8 @@ namespace screens {
         }
         if (ui.toggle({static_cast<int16_t>(content.x + networkWidth + gap), firstRowY,
                        static_cast<int16_t>(content.w - networkWidth - gap), 32},
-                      ui.text(UiText::AutomaticChecks), automatic)) {
-            store.settings().updates.automatic = automatic;
+                      ui.text(UiText::StartupCheck), store.settings().updates.checkOnStartup)) {
             store.acceptChanges();
-            autoCheckPending = automatic && !ssid.empty();
         }
         const int16_t secondRowY = static_cast<int16_t>(firstRowY + 38);
         const int16_t halfWidth = static_cast<int16_t>((content.w - gap) / 2);
@@ -76,7 +73,7 @@ namespace screens {
             password_.clear();
             saveNetwork(store);
             ssidStored = false;
-            autoCheckPending = false;
+            startupCheckPending = false;
         }
     }
 

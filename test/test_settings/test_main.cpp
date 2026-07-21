@@ -27,6 +27,7 @@ void test_defaults_round_trip_through_toml_and_json() {
     TEST_ASSERT_TRUE_MESSAGE(toml.has_value(), toml ? "" : toml.error().message.c_str());
     TEST_ASSERT_EQUAL(std::string::npos, toml->find("schemaVersion"));
     TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("batteryIconVisible = true"));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("checkOnStartup = false"));
     auto fromToml = settings::codec::decodeToml(*toml, settings::SettingsSource::Sd);
     TEST_ASSERT_TRUE_MESSAGE(fromToml.has_value(), fromToml ? "" : fromToml.error().message.c_str());
     TEST_ASSERT_TRUE(defaults == *fromToml);

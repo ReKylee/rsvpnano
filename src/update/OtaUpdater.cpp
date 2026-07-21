@@ -182,7 +182,6 @@ OtaUpdater::Config OtaUpdater::config(const settings::DeviceSettings& settings,
     if (!settings.updates.repositoryOwner.empty())
         result.githubOwner = settings.updates.repositoryOwner.c_str();
     result.githubTag = settings.updates.releaseTag.c_str();
-    result.autoCheck = settings.updates.automatic;
     return result;
 }
 

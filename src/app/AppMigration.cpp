@@ -1,5 +1,5 @@
-#include "app/App.h"
 #include <esp_log.h>
+#include "app/App.h"
 
 #include <FS.h>
 #include <glaze/toml.hpp>
@@ -528,8 +528,7 @@ void App::migrateLegacyStorage() {
                                     .has_value();
                     if (!converted) {
                         themesComplete = false;
-                        ESP_LOGW("migration", "preserved %s beside invalid %s", legacyPath.c_str(),
-                                        newPath.c_str());
+                        ESP_LOGW("migration", "preserved %s beside invalid %s", legacyPath.c_str(), newPath.c_str());
                         continue;
                     }
                 }
@@ -811,12 +810,11 @@ void App::migrateLegacyStorage() {
             bool converted = false;
             if (StorageFiles::fileExists(newPath.c_str())) {
                 std::string current;
-                ReadingProgress::BookState currentState;
-                converted = readFile(*filesystem, newPath.c_str(), 2048, current)
-                         && !glz::read<glz::opts{.format = glz::TOML, .error_on_unknown_keys = false}>(currentState,
-                                                                                                     current)
-                         && currentState.sourceSize > 0
-                         && currentState.wordCount > 0;
+                ReadingSession::BookState currentState;
+                converted =
+                    readFile(*filesystem, newPath.c_str(), 2048, current)
+                    && !glz::read<glz::opts{.format = glz::TOML, .error_on_unknown_keys = false}>(currentState, current)
+                    && currentState.sourceSize > 0 && currentState.wordCount > 0;
             }
             if (!converted && recoverable)
                 converted = ReadingProgress::writeBookStatePosition(bookPath.c_str(), identity, wordIndex).has_value();

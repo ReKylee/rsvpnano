@@ -26,7 +26,6 @@ namespace screens {
         constexpr uint32_t kDoubleTapWindowMs = 520;
         constexpr uint32_t kWpmFeedbackMs = 900;
         constexpr int kMaxScrubSteps = 96;
-        constexpr uint32_t kBatterySampleMs = 120000;
         constexpr size_t kPhantomBeforeTargets[] = {64, 96, 144};
         constexpr size_t kPhantomAfterTargets[] = {96, 144, 208};
 
@@ -86,29 +85,14 @@ namespace screens {
 
     } // namespace
 
-    ReaderScreen::ReaderScreen(Arduino_GFX& gfx) : gfx_(gfx), text_(gfx) {}
+    ReaderScreen::ReaderScreen(Arduino_GFX& gfx, settings::ReadingSettings& settings) :
+            gfx_(gfx),
+            text_(gfx),
+            settings_(settings) {}
 
-    void BatteryState::update(uint32_t nowMs, bool force) {
-        if (!force && nowMs - lastSampleMs < kBatterySampleMs)
-            return;
-        lastSampleMs = nowMs;
-        Board::Power::BatteryStatus status;
-        if (Board::Power::readBatteryStatus(status)) {
-            percent = status.percent;
-            voltage = status.voltage;
-            charging = Board::Power::externalPowerPresent();
-        }
-    }
-
-    void ReaderScreen::begin(settings::ReadingSettings& config, const ui::themes::Theme& theme, uint32_t nowMs) {
+    void ReaderScreen::begin(const ui::themes::Theme& theme) {
         text_.begin();
-        settings_ = &config;
         applyTheme(theme);
-        reader.setWpm(config.wpm);
-        reader.setPacingConfig({config.pacing.longWordDelayMs, config.pacing.complexWordDelayMs,
-                                config.pacing.punctuationDelayMs});
-        battery.label = config.batteryLabel;
-        battery.update(nowMs, true);
     }
 
     void ReaderScreen::applyTheme(const ui::themes::Theme& theme) {
@@ -117,7 +101,7 @@ namespace screens {
     }
 
     void ReaderScreen::refreshTypography() {
-        typography_ = settings::effectiveTypography(book.state.bookTypographyOverride, themeTypography_);
+        typography_ = settings::effectiveTypography(session.state.bookTypographyOverride, themeTypography_);
         const auto families = fonts.families();
         const auto selected = std::ranges::find_if(families, [this](const FontCatalog::Family& family) {
             return family.id == typography_.fontId;
@@ -132,33 +116,33 @@ namespace screens {
         if (!storage.mounted() || index >= storage.bookCount())
             return false;
         status(ui, ui.text(UiText::OpeningBook), storage.bookDisplayName(index), {}, 5);
-        book.save(preferences, reader, true, nowMs);
-        book.mirror(store, reader);
+        ReadingProgress::save(session, preferences, true, nowMs);
+        ReadingProgress::mirror(session, store);
         store.close();
-        book.metadata.clear();
+        session.metadata.clear();
         StorageManager::IndexedBookLoadOptions options;
         std::string loadedPath;
         size_t loadedIndex = index;
         options.loadedPath = &loadedPath;
         options.loadedIndex = &loadedIndex;
-        if (!storage.loadIndexedBook(index, store, book.metadata, options)) {
+        if (!storage.loadIndexedBook(index, store, session.metadata, options)) {
             status(ui, ui.text(UiText::BookFailed), storage.bookDisplayName(index), ui.text(UiText::CheckSdCard));
             delay(1200);
             return false;
         }
-        book.index = loadedIndex;
-        book.path = loadedPath;
-        book.fromStorage = true;
-        book.state = {};
-        book.lastSavedWordIndex = static_cast<size_t>(-1);
-        reader.setBookStore(&store, nowMs);
+        session.bookIndex = loadedIndex;
+        session.path = loadedPath;
+        session.fromStorage = true;
+        session.state = {};
+        session.lastSavedWordIndex = static_cast<size_t>(-1);
+        ReadingLoop::setBookStore(session, store, nowMs);
 
-        const uint32_t savedWord = book.restore(store, reader);
+        const uint32_t savedWord = ReadingProgress::restore(session, store);
         if (savedWord != ReadingProgress::kNoSavedWordIndex) {
-            reader.seekTo(savedWord);
-            book.cache(preferences, reader, static_cast<uint32_t>(reader.currentIndex()));
+            ReadingLoop::seekTo(session, savedWord);
+            ReadingProgress::cache(session, preferences, static_cast<uint32_t>(session.currentIndex));
         } else {
-            preferences.putString("book", book.path.c_str());
+            preferences.putString("book", session.path.c_str());
         }
         refreshTypography();
         return true;
@@ -176,59 +160,58 @@ namespace screens {
         }
         if (storage.bookCount() > 0 && openBook(ui, storage, preferences, 0, nowMs))
             return;
-        book.metadata.clear();
-        book.path = "";
-        book.fromStorage = false;
-        book.state = {};
+        session.metadata.clear();
+        session.path = "";
+        session.fromStorage = false;
+        session.state = {};
         refreshTypography();
-        reader.begin(nowMs);
+        ReadingLoop::begin(session, nowMs);
     }
 
-    void ReaderScreen::draw(ui::Context& ui, const StorageManager& storage, uint32_t nowMs) {
-        const std::string bookTitle = book.title(storage);
-        const bool reading = reader.playing();
-        const settings::ReadingSettings& settings = *settings_;
-        const std::string before = settings.phantomWords ? phantomBefore(reader, typography_.fontSizeIndex) : "";
-        const std::string after = settings.phantomWords ? phantomAfter(reader, typography_.fontSizeIndex) : "";
-        const ChapterMarker* chapter = book.metadata.chapterAt(reader.currentIndex());
+    void ReaderScreen::draw(ui::Context& ui, const StorageManager& storage, const Board::Power::BatteryState& battery,
+                            uint32_t nowMs) {
+        const std::string bookTitle = ReadingProgress::title(session, storage);
+        const bool reading = session.playing;
+        const settings::ReadingSettings& settings = settings_;
+        const std::string before = settings.phantomWords ? phantomBefore(session, typography_.fontSizeIndex) : "";
+        const std::string after = settings.phantomWords ? phantomAfter(session, typography_.fontSizeIndex) : "";
+        const ChapterMarker* chapter = session.metadata.chapterAt(session.currentIndex);
         const std::string_view chapterLabel = chapter != nullptr && !chapter->title.empty()
                                                 ? std::string_view{chapter->title}
                                                 : std::string_view{bookTitle};
-        const uint8_t progress = ReadingProgress::percent(reader.currentIndex(), reader.wordCount());
+        const uint8_t progress = ReadingProgress::percent(session.currentIndex, ReadingLoop::wordCount(session));
         std::string footer;
         if (reading || settings.footerMetric == settings::FooterMetric::percentage) {
             footer = std::to_string(progress) + "%";
         } else {
-            size_t remainingWords =
-                reader.wordCount() > reader.currentIndex() ? reader.wordCount() - reader.currentIndex() : 0;
+            size_t remainingWords = ReadingLoop::wordCount(session) > session.currentIndex
+                                      ? ReadingLoop::wordCount(session) - session.currentIndex
+                                      : 0;
             if (settings.footerMetric == settings::FooterMetric::chapterTime) {
-                for (const ChapterMarker& marker: book.metadata.chapters) {
-                    if (marker.wordIndex > reader.currentIndex()) {
-                        remainingWords = marker.wordIndex - reader.currentIndex();
+                for (const ChapterMarker& marker: session.metadata.chapters) {
+                    if (marker.wordIndex > session.currentIndex) {
+                        remainingWords = marker.wordIndex - session.currentIndex;
                         break;
                     }
                 }
             }
-            const uint32_t minutes =
-                reader.wpm() == 0 ? 0 : static_cast<uint32_t>((remainingWords + reader.wpm() - 1) / reader.wpm());
+            const uint32_t minutes = static_cast<uint32_t>((remainingWords + settings.wpm - 1) / settings.wpm);
             footer = ui.text(settings.footerMetric == settings::FooterMetric::chapterTime ? UiText::ChapterShort
                                                                                           : UiText::BookShort);
             footer += ' ';
             footer += minutes >= 60 ? std::to_string(minutes / 60) + "h" : std::to_string(minutes) + "m";
         }
-        const std::string overlay = session.wpmFeedbackUntilMs > nowMs ? std::to_string(reader.wpm()) + " WPM" : "";
-        BatteryModel batteryModel = battery.view();
-        batteryModel.label = settings.batteryLabel;
+        const std::string overlay = wpmFeedbackUntilMs_ > nowMs ? std::to_string(settings.wpm) + " WPM" : "";
 
         const ui::Rect readingArea{0, 36, ui.width(), static_cast<int16_t>(std::max<int16_t>(0, ui.height() - 72))};
-        if (ui.redraw(readingArea, frameSignature(before, reader.currentWord(), after, overlay, settings))) {
+        if (ui.redraw(readingArea, frameSignature(before, session.currentWord, after, overlay, settings))) {
             Arduino_GFX& gfx = ui.gfx();
             background_ = ui.color(ui::themes::ColorRole::Background);
             text_.setFont(font_);
             text_.setTextColor(ui.color(ui::themes::ColorRole::Foreground),
                                ui.color(ui::themes::ColorRole::Background));
 
-            const std::string& word = reader.currentWord();
+            const std::string& word = session.currentWord;
             const int focus = focusIndex(word);
             const int16_t wordWidth = textWidth(word);
             int16_t focusCenter = wordWidth / 2;
@@ -306,23 +289,22 @@ namespace screens {
                  ui::themes::ColorRole::Muted, settings.leftHanded ? ui::TextAlign::Left : ui::TextAlign::Right);
 
         char batteryText[12];
-        if (batteryModel.label == settings::BatteryLabel::voltage && batteryModel.voltage > 0)
-            std::snprintf(batteryText, sizeof(batteryText), "%.2fV", batteryModel.voltage);
-        else if (batteryModel.label == settings::BatteryLabel::timeRemaining) {
+        if (settings.batteryLabel == settings::BatteryLabel::voltage && battery.status.voltage > 0)
+            std::snprintf(batteryText, sizeof(batteryText), "%.2fV", battery.status.voltage);
+        else if (settings.batteryLabel == settings::BatteryLabel::timeRemaining) {
             constexpr uint32_t kNominalRuntimeMinutes = 600;
-            const uint32_t minutes = static_cast<uint32_t>(batteryModel.percent) * kNominalRuntimeMinutes / 100;
+            const uint32_t minutes = static_cast<uint32_t>(battery.status.percent) * kNominalRuntimeMinutes / 100;
             if (minutes >= 60)
-                std::snprintf(batteryText, sizeof(batteryText), "%lu.%luh",
-                              static_cast<unsigned long>(minutes / 60),
+                std::snprintf(batteryText, sizeof(batteryText), "%lu.%luh", static_cast<unsigned long>(minutes / 60),
                               static_cast<unsigned long>(minutes % 60 / 6));
             else
                 std::snprintf(batteryText, sizeof(batteryText), "%lum", static_cast<unsigned long>(minutes));
         } else
-            std::snprintf(batteryText, sizeof(batteryText), "%u%%", static_cast<unsigned int>(batteryModel.percent));
+            std::snprintf(batteryText, sizeof(batteryText), "%u%%", static_cast<unsigned int>(battery.status.percent));
         const std::string_view batteryLabel{batteryText};
         const ui::Rect batteryArea = batteryRect(ui.width());
 
-        ui.battery(batteryArea, batteryModel.percent, batteryModel.charging, batteryLabel, showBatteryIcon);
+        ui.battery(batteryArea, battery.status.percent, battery.charging, batteryLabel, showBatteryIcon);
     }
 
     bool ReaderScreen::batteryTouched(const ui::Touch& touch) const {
@@ -340,7 +322,7 @@ namespace screens {
     bool ReaderScreen::previousSentenceTapped(uint16_t x, uint16_t y) const {
         if (ui::contains(batteryRect(gfx_.width()), x, y))
             return false;
-        return settings_->leftHanded
+        return settings_.leftHanded
                  ? x <= kPreviousSentenceTapWidth
                  : x >= static_cast<uint16_t>(std::max<int16_t>(0, gfx_.width() - kPreviousSentenceTapWidth));
     }
@@ -363,7 +345,7 @@ namespace screens {
             touching_ = true;
             touchStartX_ = touch.x;
             touchStartY_ = touch.y;
-            touchStartWord_ = reader.currentIndex();
+            touchStartWord_ = session.currentIndex;
             scrubSteps_ = 0;
             touchIntent_ = TouchIntent::None;
             return;
@@ -378,23 +360,22 @@ namespace screens {
         const bool tapLike = absX <= kTapSlop && absY <= kTapSlop;
 
         if (touchIntent_ == TouchIntent::None && tapLike && batteryLongPressed(touch)) {
-            settings_->batteryIconVisible = !settings_->batteryIconVisible;
+            settings_.batteryIconVisible = !settings_.batteryIconVisible;
             settingsStore.acceptChanges();
             lastTapValid_ = false;
             resetTouch();
             return;
         }
-        if (touchIntent_ == TouchIntent::None && ended && tapLike
-            && batteryTapped({ui::TouchTap, touch.x, touch.y})) {
-            settings_->batteryLabel = settings::cycleEnum(settings_->batteryLabel);
+        if (touchIntent_ == TouchIntent::None && ended && tapLike && batteryTapped({ui::TouchTap, touch.x, touch.y})) {
+            settings_.batteryLabel = settings::cycleEnum(settings_.batteryLabel);
             settingsStore.acceptChanges();
             lastTapValid_ = false;
             resetTouch();
             return;
         }
 
-        if (reader.playing()) {
-            if (held && tapLike && !session.playLocked) {
+        if (session.playing) {
+            if (held && tapLike && !playLocked_) {
                 resetTouch();
                 requestPause(preferences, nowMs);
                 return;
@@ -408,14 +389,14 @@ namespace screens {
             }
             if (previousSentenceTapped(touch.x, touch.y)) {
                 lastTapValid_ = false;
-                reader.rewindSentence();
-                reader.pause();
-                session.pauseAtSentenceEndRequested = false;
-                session.playLocked = false;
-                book.save(preferences, reader, true, nowMs);
+                ReadingLoop::rewindSentence(session);
+                ReadingLoop::pause(session);
+                pauseAtSentenceEndRequested_ = false;
+                playLocked_ = false;
+                ReadingProgress::save(session, preferences, true, nowMs);
                 return;
             }
-            if (session.playLocked || session.pauseAtSentenceEndRequested) {
+            if (playLocked_ || pauseAtSentenceEndRequested_) {
                 lastTapValid_ = false;
                 requestPause(preferences, nowMs);
                 return;
@@ -445,10 +426,10 @@ namespace screens {
             const bool changed = steps != scrubSteps_;
             scrubSteps_ = steps;
             if (changed)
-                reader.seekRelative(touchStartWord_, steps);
+                ReadingLoop::seekRelative(session, touchStartWord_, steps);
             if (ended) {
                 resetTouch();
-                book.save(preferences, reader, true, nowMs);
+                ReadingProgress::save(session, preferences, true, nowMs);
             }
             return;
         }
@@ -456,10 +437,9 @@ namespace screens {
             if (!ended)
                 return;
             resetTouch();
-            reader.adjustWpm(deltaY < 0 ? 1 : -1);
-            settings_->wpm = reader.wpm();
+            ReadingLoop::adjustWpm(settings_, deltaY < 0 ? 1 : -1);
             settingsStore.acceptChanges();
-            session.wpmFeedbackUntilMs = nowMs + kWpmFeedbackMs;
+            wpmFeedbackUntilMs_ = nowMs + kWpmFeedbackMs;
             return;
         }
         if (!ended)
@@ -472,19 +452,19 @@ namespace screens {
         }
         const uint16_t footerTapWidth = std::min<uint16_t>(220, static_cast<uint16_t>(gfx_.width() / 2));
         if (touch.y >= static_cast<uint16_t>(std::max<int16_t>(0, gfx_.height() - 40))
-            && (settings_->leftHanded ? touch.x <= footerTapWidth
-                                      : touch.x >= static_cast<uint16_t>(gfx_.width() - footerTapWidth))) {
-            settings_->footerMetric = settings::cycleEnum(settings_->footerMetric);
+            && (settings_.leftHanded ? touch.x <= footerTapWidth
+                                     : touch.x >= static_cast<uint16_t>(gfx_.width() - footerTapWidth))) {
+            settings_.footerMetric = settings::cycleEnum(settings_.footerMetric);
             settingsStore.acceptChanges();
             lastTapValid_ = false;
             return;
         }
         if (previousSentenceTapped(touch.x, touch.y)) {
             lastTapValid_ = false;
-            reader.rewindSentence();
-            session.pauseAtSentenceEndRequested = false;
-            session.playLocked = false;
-            book.save(preferences, reader, true, nowMs);
+            ReadingLoop::rewindSentence(session);
+            pauseAtSentenceEndRequested_ = false;
+            playLocked_ = false;
+            ReadingProgress::save(session, preferences, true, nowMs);
             return;
         }
         if (doubleTap(touch.x, touch.y, nowMs))
@@ -492,62 +472,63 @@ namespace screens {
     }
 
     void ReaderScreen::toggle(Preferences& preferences, uint32_t nowMs) {
-        if (reader.playing())
+        if (session.playing)
             requestPause(preferences, nowMs);
         else
             start(nowMs, true);
     }
 
     void ReaderScreen::update(Preferences& preferences, uint32_t nowMs) {
-        if (session.wpmFeedbackUntilMs > 0 && nowMs >= session.wpmFeedbackUntilMs) {
-            session.wpmFeedbackUntilMs = 0;
+        if (wpmFeedbackUntilMs_ > 0 && nowMs >= wpmFeedbackUntilMs_) {
+            wpmFeedbackUntilMs_ = 0;
         }
         if (shouldFinishPause(nowMs)) {
             finishPause(preferences, nowMs);
             return;
         }
-        if (!reader.playing())
+        if (!session.playing)
             return;
-        const size_t previousIndex = reader.currentIndex();
-        if (reader.update(nowMs)) {
-            book.saveChapterTransition(preferences, store, reader, previousIndex, reader.currentIndex(), nowMs);
+        const size_t previousIndex = session.currentIndex;
+        if (ReadingLoop::update(session, settings_, nowMs)) {
+            ReadingProgress::saveChapterTransition(session, preferences, store, previousIndex, session.currentIndex,
+                                                   nowMs);
         }
     }
 
     void ReaderScreen::start(uint32_t nowMs, bool locked) {
-        session.playLocked = locked;
-        session.pauseAtSentenceEndRequested = false;
-        session.wpmFeedbackUntilMs = 0;
-        reader.start(nowMs);
+        playLocked_ = locked;
+        pauseAtSentenceEndRequested_ = false;
+        wpmFeedbackUntilMs_ = 0;
+        ReadingLoop::start(session, nowMs);
     }
 
     void ReaderScreen::requestPause(Preferences& preferences, uint32_t nowMs) {
-        if (!reader.playing())
+        if (!session.playing)
             return;
-        session.playLocked = false;
-        if (settings_->pauseMode == settings::PauseMode::instant) {
+        playLocked_ = false;
+        if (settings_.pauseMode == settings::PauseMode::instant) {
             finishPause(preferences, nowMs);
             return;
         }
-        session.pauseAtSentenceEndRequested = true;
+        pauseAtSentenceEndRequested_ = true;
         if (shouldFinishPause(nowMs)) {
             finishPause(preferences, nowMs);
         }
     }
 
     bool ReaderScreen::shouldFinishPause(uint32_t nowMs) const {
-        if (!reader.playing() || !session.pauseAtSentenceEndRequested)
+        if (!session.playing || !pauseAtSentenceEndRequested_)
             return false;
-        const uint32_t durationMs = reader.currentWordDurationMs();
-        return durationMs > 0 && reader.elapsedInCurrentWordMs(nowMs) >= durationMs
-            && (reader.currentWordEndsSentence() || reader.atEnd());
+        const uint32_t durationMs = ReadingLoop::currentWordDurationMs(session, settings_);
+        return durationMs > 0 && ReadingLoop::elapsedInCurrentWordMs(session, nowMs) >= durationMs
+            && (ReadingLoop::currentWordEndsSentence(session) || ReadingLoop::atEnd(session));
     }
 
     void ReaderScreen::finishPause(Preferences& preferences, uint32_t nowMs) {
-        reader.pause();
-        session.pauseAtSentenceEndRequested = false;
-        session.playLocked = false;
-        book.save(preferences, reader, true, nowMs);
+        ReadingLoop::pause(session);
+        pauseAtSentenceEndRequested_ = false;
+        playLocked_ = false;
+        ReadingProgress::save(session, preferences, true, nowMs);
     }
 
     bool ReaderScreen::doubleTap(uint16_t x, uint16_t y, uint32_t nowMs) {
@@ -579,42 +560,42 @@ namespace screens {
         return deltaX > 0 ? steps : -steps;
     }
 
-    std::string ReaderScreen::phantomBefore(const ReadingLoop& reader, uint8_t sizeIndex) const {
-        if (reader.wordCount() == 0)
+    std::string ReaderScreen::phantomBefore(const ReadingSession& reader, uint8_t sizeIndex) const {
+        if (ReadingLoop::wordCount(reader) == 0)
             return "";
         const size_t target = kPhantomBeforeTargets[std::min<size_t>(sizeIndex, 2)];
-        size_t start = reader.currentIndex();
+        size_t start = reader.currentIndex;
         size_t characters = 0;
         while (start > 0 && characters < target) {
             --start;
-            characters += reader.wordAt(start).length() + (start + 1 < reader.currentIndex());
+            characters += ReadingLoop::wordAt(reader, start).length() + (start + 1 < reader.currentIndex);
         }
         std::string result;
         result.reserve(characters);
-        for (size_t index = start; index < reader.currentIndex(); ++index) {
+        for (size_t index = start; index < reader.currentIndex; ++index) {
             if (!result.empty())
                 result += ' ';
-            result += reader.wordAt(index);
+            result += ReadingLoop::wordAt(reader, index);
         }
         return result;
     }
 
-    std::string ReaderScreen::phantomAfter(const ReadingLoop& reader, uint8_t sizeIndex) const {
-        if (reader.currentIndex() + 1 >= reader.wordCount())
+    std::string ReaderScreen::phantomAfter(const ReadingSession& reader, uint8_t sizeIndex) const {
+        if (reader.currentIndex + 1 >= ReadingLoop::wordCount(reader))
             return "";
         const size_t target = kPhantomAfterTargets[std::min<size_t>(sizeIndex, 2)];
-        size_t end = reader.currentIndex() + 1;
+        size_t end = reader.currentIndex + 1;
         size_t characters = 0;
-        while (end < reader.wordCount() && characters < target) {
-            characters += reader.wordAt(end).length() + (end > reader.currentIndex() + 1);
+        while (end < ReadingLoop::wordCount(reader) && characters < target) {
+            characters += ReadingLoop::wordAt(reader, end).length() + (end > reader.currentIndex + 1);
             ++end;
         }
         std::string result;
         result.reserve(characters);
-        for (size_t index = reader.currentIndex() + 1; index < end; ++index) {
+        for (size_t index = reader.currentIndex + 1; index < end; ++index) {
             if (!result.empty())
                 result += ' ';
-            result += reader.wordAt(index);
+            result += ReadingLoop::wordAt(reader, index);
         }
         return result;
     }

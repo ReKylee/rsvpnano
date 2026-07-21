@@ -33,7 +33,7 @@ namespace screens {
         void reset();
         void invalidate();
         const std::vector<LibraryItem>& items(StorageManager& storage, const IndexedBookStore& bookStore,
-                                              const ReadingLoop& reader, const ReadingProgress::Session& book);
+                                              const ReadingSession& session);
         size_t selectedIndex() const {
             return selectedIndex_;
         }

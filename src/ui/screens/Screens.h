@@ -74,7 +74,7 @@ namespace screens {
 
     Action read(ui::Context& ui, const ReadModel& model, Screen& screen);
     Action settings(ui::Context& ui, Screen& screen);
-    bool readingSettings(ui::Context& ui, ReadingLoop& reader, settings::ReadingSettings& settings, Screen& screen);
+    bool readingSettings(ui::Context& ui, settings::ReadingSettings& settings, Screen& screen);
     class InterfaceScreen {
     public:
         ThemeStore themes;
@@ -85,7 +85,7 @@ namespace screens {
         bool draw(ui::Context& ui, settings::InterfaceSettings& settings, std::span<const uint32_t> standbyDurations,
                   void (*setBrightness)(uint8_t), Screen& screen);
     };
-    bool pacingSettings(ui::Context& ui, ReadingLoop& reader, settings::PacingSettings& settings, Screen& screen);
+    bool pacingSettings(ui::Context& ui, settings::PacingSettings& settings, Screen& screen);
     bool typographySettings(ui::Context& ui, std::optional<settings::TypographySettings>& bookOverride,
                             const settings::TypographySettings& inherited, FontCatalog& fonts, Screen& screen);
     bool readerSettings(ui::Context& ui, settings::ReadingSettings& settings, Screen& screen);

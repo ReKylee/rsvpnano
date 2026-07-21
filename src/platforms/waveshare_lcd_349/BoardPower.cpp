@@ -98,7 +98,7 @@ namespace Board::Power {
     }
 
     DiagnosticSnapshot diagnosticSnapshot() {
-        return PowerDiagnosticSnapshot{};
+        return DiagnosticSnapshot{};
     }
 
     bool externalPowerPresent() {

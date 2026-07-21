@@ -1,7 +1,7 @@
 #include "ui/screens/ScreenCommon.h"
 
 namespace screens {
-    bool pacingSettings(ui::Context& ui, ReadingLoop& reader, settings::PacingSettings& config, Screen& screen) {
+    bool pacingSettings(ui::Context& ui, settings::PacingSettings& config, Screen& screen) {
         bool changed = false;
         const ui::Rect content = detail::content(ui);
         if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, ui.text(UiText::Back)))
@@ -25,8 +25,6 @@ namespace screens {
             config = {};
             changed = true;
         }
-        if (changed)
-            reader.setPacingConfig({config.longWordDelayMs, config.complexWordDelayMs, config.punctuationDelayMs});
         return changed;
     }
 

@@ -1,67 +1,31 @@
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
-#include <string_view>
-#include <vector>
 
-class IndexedBookStore;
+#include "reader/ReadingSession.h"
+#include "settings/SettingsModel.h"
 
-class ReadingLoop {
-public:
-    struct PacingConfig {
-        uint16_t longWordDelayMs = 200;
-        uint16_t complexWordDelayMs = 200;
-        uint16_t punctuationDelayMs = 200;
-        uint8_t longWordScalePercent = 100;
-        uint8_t complexWordScalePercent = 100;
-        uint8_t punctuationScalePercent = 100;
-    };
+namespace ReadingLoop {
 
-    void begin(uint32_t nowMs);
-    void start(uint32_t nowMs);
-    void pause();
-    bool update(uint32_t nowMs, bool allowCatchUp = true);
-    void setWords(std::vector<std::string> words, uint32_t nowMs);
-    void setBookStore(IndexedBookStore* store, uint32_t nowMs);
-    void clearLoadedBook(uint32_t nowMs);
-    void scrub(int steps);
-    void seekTo(size_t wordIndex);
-    void seekRelative(size_t baseIndex, int steps);
-    void rewindSentence();
-    void adjustWpm(int delta);
-    void setWpm(uint16_t wpm);
-    void setPacingConfig(const PacingConfig& config);
-    const PacingConfig& pacingConfig() const;
+    void begin(ReadingSession& session, uint32_t nowMs);
+    void start(ReadingSession& session, uint32_t nowMs);
+    void pause(ReadingSession& session);
+    bool update(ReadingSession& session, const settings::ReadingSettings& settings, uint32_t nowMs,
+                bool allowCatchUp = true);
+    void setWords(ReadingSession& session, std::span<const std::string> words, uint32_t nowMs);
+    void setBookStore(ReadingSession& session, const IndexedBookStore& store, uint32_t nowMs);
+    void seekTo(ReadingSession& session, size_t wordIndex);
+    void seekRelative(ReadingSession& session, size_t baseIndex, int steps);
+    void rewindSentence(ReadingSession& session);
+    void adjustWpm(settings::ReadingSettings& settings, int delta);
 
-    const std::string& currentWord() const;
-    std::string wordAt(size_t index) const;
-    size_t currentIndex() const;
-    size_t wordCount() const;
-    uint16_t wpm() const;
-    uint32_t wordIntervalMs() const;
-    uint32_t currentWordDurationMs() const;
-    uint32_t wordPacingBonusMsAt(size_t index) const;
-    uint32_t elapsedInCurrentWordMs(uint32_t nowMs) const;
-    bool currentWordEndsSentence() const;
-    bool atEnd() const;
-    bool playing() const;
+    std::string wordAt(const ReadingSession& session, size_t index);
+    size_t wordCount(const ReadingSession& session);
+    uint32_t currentWordDurationMs(const ReadingSession& session, const settings::ReadingSettings& settings);
+    uint32_t elapsedInCurrentWordMs(const ReadingSession& session, uint32_t nowMs);
+    bool currentWordEndsSentence(const ReadingSession& session);
+    bool atEnd(const ReadingSession& session);
 
-private:
-    bool advance(size_t steps);
-    void setCurrentWordFromIndex();
-    bool usingLoadedBook() const;
-    bool nextWordStartsLowercaseAt(size_t wordIndex) const;
-    bool wordEndsSentenceAt(size_t wordIndex) const;
-    size_t sentenceStartAtOrBefore(size_t wordIndex) const;
-
-    size_t currentIndex_ = 0;
-    uint32_t lastAdvanceMs_ = 0;
-    uint16_t wpm_ = 300;
-    PacingConfig pacingConfig_;
-    std::string currentWord_;
-    std::vector<std::string> loadedWords_;
-    IndexedBookStore* bookStore_ = nullptr;
-    bool playing_ = false;
-};
+} // namespace ReadingLoop

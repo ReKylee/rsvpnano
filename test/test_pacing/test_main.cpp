@@ -1,9 +1,13 @@
 #include <unity.h>
+#include <vector>
 
 #include "reader/ReadingLoop.h"
 #include "text/LatinText.h"
 
-void setUp() {}
+static settings::ReadingSettings testSettings;
+static std::vector<std::string> testWords;
+
+void setUp() { testSettings = {}; }
 
 void tearDown() {}
 
@@ -11,17 +15,18 @@ void tearDown() {}
 // Helpers
 // ---------------------------------------------------------------------------
 
-static ReadingLoop makeReader(uint16_t wpm, std::vector<std::string> words) {
-  ReadingLoop r;
-  r.setWpm(wpm);
-  r.setWords(std::move(words), 0);
+static ReadingSession makeReader(uint16_t wpm, std::vector<std::string> words) {
+  testSettings.wpm = wpm;
+  testWords = std::move(words);
+  ReadingSession r;
+  ReadingLoop::setWords(r, testWords, 0);
   return r;
 }
 
 // Duration of the first word when the second word is the contextual next.
 static uint32_t duration(uint16_t wpm, const char *word, const char *next) {
-  ReadingLoop r = makeReader(wpm, {word, next});
-  return r.currentWordDurationMs();
+  ReadingSession r = makeReader(wpm, {word, next});
+  return ReadingLoop::currentWordDurationMs(r, testSettings);
 }
 
 // ---------------------------------------------------------------------------
@@ -29,70 +34,60 @@ static uint32_t duration(uint16_t wpm, const char *word, const char *next) {
 // ---------------------------------------------------------------------------
 
 void test_wpm_base_interval(void) {
-  ReadingLoop r;
-  r.setWpm(300);
-  TEST_ASSERT_EQUAL(200u, r.wordIntervalMs());  // 60000 / 300
-
-  r.setWpm(600);
-  TEST_ASSERT_EQUAL(100u, r.wordIntervalMs());
+  TEST_ASSERT_EQUAL(200u, duration(300, "a", "b"));
+  TEST_ASSERT_EQUAL(100u, duration(600, "a", "b"));
 }
 
 void test_wpm_clamped_low(void) {
-  ReadingLoop r;
-  r.setWpm(5);
-  TEST_ASSERT_EQUAL(10u, r.wpm());
+  testSettings.wpm = 5;
+  TEST_ASSERT_EQUAL(10u, testSettings.wpm);
 
-  r.setWpm(50);
-  TEST_ASSERT_EQUAL(50u, r.wpm());
+  testSettings.wpm = 50;
+  TEST_ASSERT_EQUAL(50u, testSettings.wpm);
 }
 
 void test_wpm_clamped_high(void) {
-  ReadingLoop r;
-  r.setWpm(9999);
-  TEST_ASSERT_EQUAL(1000u, r.wpm());
+  testSettings.wpm = 9999;
+  TEST_ASSERT_EQUAL(1000u, testSettings.wpm);
 }
 
 void test_adjust_wpm_steps_by_25(void) {
-  ReadingLoop r;
-  r.setWpm(300);
-  r.adjustWpm(1);
-  TEST_ASSERT_EQUAL(325u, r.wpm());
-  r.adjustWpm(-1);
-  TEST_ASSERT_EQUAL(300u, r.wpm());
+  testSettings.wpm = 300;
+  ReadingLoop::adjustWpm(testSettings, 1);
+  TEST_ASSERT_EQUAL(325u, testSettings.wpm);
+  ReadingLoop::adjustWpm(testSettings, -1);
+  TEST_ASSERT_EQUAL(300u, testSettings.wpm);
 }
 
 void test_adjust_wpm_steps_by_10_below_100(void) {
-  ReadingLoop r;
-  r.setWpm(50);
-  r.adjustWpm(1);
-  TEST_ASSERT_EQUAL(60u, r.wpm());
-  r.adjustWpm(-1);
-  TEST_ASSERT_EQUAL(50u, r.wpm());
+  testSettings.wpm = 50;
+  ReadingLoop::adjustWpm(testSettings, 1);
+  TEST_ASSERT_EQUAL(60u, testSettings.wpm);
+  ReadingLoop::adjustWpm(testSettings, -1);
+  TEST_ASSERT_EQUAL(50u, testSettings.wpm);
 }
 
 void test_adjust_wpm_crosses_100_cleanly(void) {
-  ReadingLoop r;
-  r.setWpm(90);
-  r.adjustWpm(1);
-  TEST_ASSERT_EQUAL(100u, r.wpm());
+  testSettings.wpm = 90;
+  ReadingLoop::adjustWpm(testSettings, 1);
+  TEST_ASSERT_EQUAL(100u, testSettings.wpm);
 
-  r.adjustWpm(-1);
-  TEST_ASSERT_EQUAL(90u, r.wpm());
+  ReadingLoop::adjustWpm(testSettings, -1);
+  TEST_ASSERT_EQUAL(90u, testSettings.wpm);
 
-  r.setWpm(125);
-  r.adjustWpm(-1);
-  TEST_ASSERT_EQUAL(100u, r.wpm());
+  testSettings.wpm = 125;
+  ReadingLoop::adjustWpm(testSettings, -1);
+  TEST_ASSERT_EQUAL(100u, testSettings.wpm);
 }
 
 void test_adjust_wpm_clamped_at_bounds(void) {
-  ReadingLoop r;
-  r.setWpm(1000);
-  r.adjustWpm(1);
-  TEST_ASSERT_EQUAL(1000u, r.wpm());
+  testSettings.wpm = 1000;
+  ReadingLoop::adjustWpm(testSettings, 1);
+  TEST_ASSERT_EQUAL(1000u, testSettings.wpm);
 
-  r.setWpm(10);
-  r.adjustWpm(-1);
-  TEST_ASSERT_EQUAL(10u, r.wpm());
+  testSettings.wpm = 10;
+  ReadingLoop::adjustWpm(testSettings, -1);
+  TEST_ASSERT_EQUAL(10u, testSettings.wpm);
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +193,9 @@ void test_baltic_lowercase_next_word_suppresses_sentence_pause(void) {
 
 void test_czech_lowercase_next_word_suppresses_sentence_pause(void) {
   // "done." next "e-caron-ra" (custom slot \x04) should also count as a lowercase start.
-  TEST_ASSERT_EQUAL(200u, duration(300, "done.", "\x04""ra"));
+  TEST_ASSERT_EQUAL(200u, duration(300, "done.",
+                                   "\x04"
+                                   "ra"));
 }
 
 void test_sentence_pause_not_suppressed_for_long_word(void) {
@@ -224,12 +221,13 @@ void test_long_word_length_bonus(void) {
   TEST_ASSERT_EQUAL(224u, duration(300, "strength", "and"));
 }
 
-void test_accented_latin_word_counts_as_readable(void) {
-  TEST_ASSERT_EQUAL(200u, duration(300, "caf\xE9", "et"));
-}
+void test_accented_latin_word_counts_as_readable(void) { TEST_ASSERT_EQUAL(200u, duration(300, "caf\xE9", "et")); }
 
 void test_extended_latin_word_counts_as_readable(void) {
-  TEST_ASSERT_EQUAL(200u, duration(300, "\x83""odz", "ma"));
+  TEST_ASSERT_EQUAL(200u, duration(300,
+                                   "\x83"
+                                   "odz",
+                                   "ma"));
 }
 
 void test_baltic_custom_vowel_affects_syllable_bonus(void) {
@@ -237,9 +235,7 @@ void test_baltic_custom_vowel_affects_syllable_bonus(void) {
   TEST_ASSERT_EQUAL(220u, duration(300, "\xA2kula", "ir"));
 }
 
-void test_czech_extended_word_counts_as_readable(void) {
-  TEST_ASSERT_EQUAL(200u, duration(300, "b\x04h", "a"));
-}
+void test_czech_extended_word_counts_as_readable(void) { TEST_ASSERT_EQUAL(200u, duration(300, "b\x04h", "a")); }
 
 void test_hungarian_double_acute_vowel_affects_syllable_bonus(void) {
   // "o-double-acute-voda" has three vowel groups (o-double-acute, o, a) and should pick up 10%.
@@ -247,7 +243,10 @@ void test_hungarian_double_acute_vowel_affects_syllable_bonus(void) {
 }
 
 void test_sami_custom_letter_counts_as_readable(void) {
-  TEST_ASSERT_EQUAL(200u, duration(300, "\xF7""ahti", "ja"));
+  TEST_ASSERT_EQUAL(200u, duration(300,
+                                   "\xF7"
+                                   "ahti",
+                                   "ja"));
 }
 
 void test_ascii_fallback_maps_accented_latin_to_base_letter(void) {
@@ -314,29 +313,21 @@ void test_all_caps_complexity(void) {
 // Duration: pacing scale affects bonus magnitude
 // ---------------------------------------------------------------------------
 
-void test_punctuation_scale_halved(void) {
-  // "done." next "The", punctuationScale=50
+void test_punctuation_delay_halved(void) {
+  // "done." next "The", punctuation delay halved to 100 ms.
   // sentencePause=135, scaled: (135*50)/100 = 67. total=67% → 200+134=334
-  ReadingLoop r = makeReader(300, {"done.", "The"});
-  ReadingLoop::PacingConfig cfg;
-  cfg.longWordScalePercent = 100;
-  cfg.complexWordScalePercent = 100;
-  cfg.punctuationScalePercent = 50;
-  r.setPacingConfig(cfg);
-  TEST_ASSERT_EQUAL(334u, r.currentWordDurationMs());
+  ReadingSession r = makeReader(300, {"done.", "The"});
+  testSettings.pacing.punctuationDelayMs = 100;
+  TEST_ASSERT_EQUAL(335u, ReadingLoop::currentWordDurationMs(r, testSettings));
 }
 
-void test_length_scale_zero_equivalent(void) {
-  // scale clamped at 25 minimum, so longWordScale=0 → treated as 25
+void test_length_delay_quartered(void) {
+  // Quartering the long-word delay produces the former 25% scale behavior.
   // "strength" length bonus=12%, scaled by 25 → (12*25)/100=3%.
   // total=3% → 200+6=206
-  ReadingLoop r = makeReader(300, {"strength", "and"});
-  ReadingLoop::PacingConfig cfg;
-  cfg.longWordScalePercent = 0;
-  cfg.complexWordScalePercent = 100;
-  cfg.punctuationScalePercent = 100;
-  r.setPacingConfig(cfg);
-  TEST_ASSERT_EQUAL(206u, r.currentWordDurationMs());
+  ReadingSession r = makeReader(300, {"strength", "and"});
+  testSettings.pacing.longWordDelayMs = 50;
+  TEST_ASSERT_EQUAL(206u, ReadingLoop::currentWordDurationMs(r, testSettings));
 }
 
 // ---------------------------------------------------------------------------
@@ -344,85 +335,85 @@ void test_length_scale_zero_equivalent(void) {
 // ---------------------------------------------------------------------------
 
 void test_seek_to_sets_index_and_word(void) {
-  ReadingLoop r = makeReader(300, {"zero", "one", "two", "three", "four"});
-  r.seekTo(2);
-  TEST_ASSERT_EQUAL(2u, r.currentIndex());
-  TEST_ASSERT_EQUAL_STRING("two", r.currentWord().c_str());
+  ReadingSession r = makeReader(300, {"zero", "one", "two", "three", "four"});
+  ReadingLoop::seekTo(r, 2);
+  TEST_ASSERT_EQUAL(2u, r.currentIndex);
+  TEST_ASSERT_EQUAL_STRING("two", r.currentWord.c_str());
 }
 
 void test_seek_to_clamps_at_end(void) {
-  ReadingLoop r = makeReader(300, {"a", "b", "c"});
-  r.seekTo(99);
-  TEST_ASSERT_EQUAL(2u, r.currentIndex());
-  TEST_ASSERT_EQUAL_STRING("c", r.currentWord().c_str());
+  ReadingSession r = makeReader(300, {"a", "b", "c"});
+  ReadingLoop::seekTo(r, 99);
+  TEST_ASSERT_EQUAL(2u, r.currentIndex);
+  TEST_ASSERT_EQUAL_STRING("c", r.currentWord.c_str());
 }
 
 void test_scrub_forward(void) {
-  ReadingLoop r = makeReader(300, {"zero", "one", "two", "three", "four"});
-  r.seekTo(1);
-  r.scrub(3);
-  TEST_ASSERT_EQUAL(4u, r.currentIndex());
+  ReadingSession r = makeReader(300, {"zero", "one", "two", "three", "four"});
+  ReadingLoop::seekTo(r, 1);
+  ReadingLoop::seekRelative(r, r.currentIndex, 3);
+  TEST_ASSERT_EQUAL(4u, r.currentIndex);
 }
 
 void test_scrub_backward(void) {
-  ReadingLoop r = makeReader(300, {"zero", "one", "two", "three", "four"});
-  r.seekTo(3);
-  r.scrub(-2);
-  TEST_ASSERT_EQUAL(1u, r.currentIndex());
+  ReadingSession r = makeReader(300, {"zero", "one", "two", "three", "four"});
+  ReadingLoop::seekTo(r, 3);
+  ReadingLoop::seekRelative(r, r.currentIndex, -2);
+  TEST_ASSERT_EQUAL(1u, r.currentIndex);
 }
 
 void test_scrub_clamped_at_start(void) {
-  ReadingLoop r = makeReader(300, {"a", "b", "c"});
-  r.seekTo(1);
-  r.scrub(-99);
-  TEST_ASSERT_EQUAL(0u, r.currentIndex());
+  ReadingSession r = makeReader(300, {"a", "b", "c"});
+  ReadingLoop::seekTo(r, 1);
+  ReadingLoop::seekRelative(r, r.currentIndex, -99);
+  TEST_ASSERT_EQUAL(0u, r.currentIndex);
 }
 
 void test_scrub_clamped_at_end(void) {
-  ReadingLoop r = makeReader(300, {"a", "b", "c"});
-  r.seekTo(1);
-  r.scrub(99);
-  TEST_ASSERT_EQUAL(2u, r.currentIndex());
+  ReadingSession r = makeReader(300, {"a", "b", "c"});
+  ReadingLoop::seekTo(r, 1);
+  ReadingLoop::seekRelative(r, r.currentIndex, 99);
+  TEST_ASSERT_EQUAL(2u, r.currentIndex);
 }
 
 void test_seek_relative_via_base_index(void) {
-  ReadingLoop r = makeReader(300, {"a", "b", "c", "d", "e"});
+  ReadingSession r = makeReader(300, {"a", "b", "c", "d", "e"});
   // seekRelative from base=0 +3 → index 3
-  r.seekRelative(0, 3);
-  TEST_ASSERT_EQUAL(3u, r.currentIndex());
-  TEST_ASSERT_EQUAL_STRING("d", r.currentWord().c_str());
+  ReadingLoop::seekRelative(r, 0, 3);
+  TEST_ASSERT_EQUAL(3u, r.currentIndex);
+  TEST_ASSERT_EQUAL_STRING("d", r.currentWord.c_str());
 }
 
 void test_rewind_sentence_moves_to_current_sentence_start(void) {
-  ReadingLoop r = makeReader(300, {"One", "two.", "Three", "four", "five.", "Six"});
-  r.seekTo(3);
-  r.rewindSentence();
-  TEST_ASSERT_EQUAL(2u, r.currentIndex());
-  TEST_ASSERT_EQUAL_STRING("Three", r.currentWord().c_str());
+  ReadingSession r = makeReader(300, {"One", "two.", "Three", "four", "five.", "Six"});
+  ReadingLoop::seekTo(r, 3);
+  ReadingLoop::rewindSentence(r);
+  TEST_ASSERT_EQUAL(2u, r.currentIndex);
+  TEST_ASSERT_EQUAL_STRING("Three", r.currentWord.c_str());
 }
 
 void test_rewind_sentence_at_sentence_start_moves_to_previous_sentence(void) {
-  ReadingLoop r = makeReader(300, {"One", "two.", "Three", "four", "five.", "Six"});
-  r.seekTo(2);
-  r.rewindSentence();
-  TEST_ASSERT_EQUAL(0u, r.currentIndex());
-  TEST_ASSERT_EQUAL_STRING("One", r.currentWord().c_str());
+  ReadingSession r = makeReader(300, {"One", "two.", "Three", "four", "five.", "Six"});
+  ReadingLoop::seekTo(r, 2);
+  ReadingLoop::rewindSentence(r);
+  TEST_ASSERT_EQUAL(0u, r.currentIndex);
+  TEST_ASSERT_EQUAL_STRING("One", r.currentWord.c_str());
 }
 
 void test_rewind_sentence_clamps_at_book_start(void) {
-  ReadingLoop r = makeReader(300, {"One", "two.", "Three"});
-  r.seekTo(0);
-  r.rewindSentence();
-  TEST_ASSERT_EQUAL(0u, r.currentIndex());
-  TEST_ASSERT_EQUAL_STRING("One", r.currentWord().c_str());
+  ReadingSession r = makeReader(300, {"One", "two.", "Three"});
+  ReadingLoop::seekTo(r, 0);
+  ReadingLoop::rewindSentence(r);
+  TEST_ASSERT_EQUAL(0u, r.currentIndex);
+  TEST_ASSERT_EQUAL_STRING("One", r.currentWord.c_str());
 }
 
 void test_rewind_sentence_ignores_abbreviation_periods(void) {
-  ReadingLoop r = makeReader(300, {"Mr.", "Smith", "arrived.", "Then", "left."});
-  r.seekTo(4);
-  r.rewindSentence();
-  TEST_ASSERT_EQUAL(3u, r.currentIndex());
-  TEST_ASSERT_EQUAL_STRING("Then", r.currentWord().c_str());
+  ReadingSession r = makeReader(300, {"Mr.", "Smith", "arrived.", "Then", "left."});
+  ReadingLoop::seekTo(r, 4);
+  ReadingLoop::rewindSentence(r);
+  TEST_ASSERT_EQUAL(3u, r.currentIndex);
+  TEST_ASSERT_EQUAL_STRING("Then", r.currentWord.c_str());
 }
 
 // ---------------------------------------------------------------------------
@@ -430,70 +421,10 @@ void test_rewind_sentence_ignores_abbreviation_periods(void) {
 // ---------------------------------------------------------------------------
 
 void test_word_at_returns_correct_word(void) {
-  ReadingLoop r = makeReader(300, {"alpha", "beta", "gamma"});
-  TEST_ASSERT_EQUAL_STRING("alpha", r.wordAt(0).c_str());
-  TEST_ASSERT_EQUAL_STRING("beta", r.wordAt(1).c_str());
-  TEST_ASSERT_EQUAL_STRING("gamma", r.wordAt(2).c_str());
-}
-
-// ---------------------------------------------------------------------------
-// wordPacingBonusMsAt: WPM-independent per-word bonus used by the time-estimate cache
-// ---------------------------------------------------------------------------
-
-void test_word_pacing_bonus_at_sum_matches_expected(void) {
-  // Phrase mixes a comma pause, a sentence pause, and a long word so the bonus sum is non-zero.
-  ReadingLoop r = makeReader(300, {"This", "is,", "honestly,", "information.", "Then"});
-
-  uint32_t bonusSum = 0;
-  for (size_t i = 0; i < 5; ++i) {
-    bonusSum += r.wordPacingBonusMsAt(i);
-  }
-
-  // Per-word bonuses (base interval is 200 ms at 300 WPM):
-  //   "This"          → 0
-  //   "is,"           → comma(45% of 200) = 90
-  //   "honestly,"     → length 12% + complexity 10% + comma 45% = 67% of 200 = 134.
-  //   "information."  → length 39% + complexity 20% + sentence 135% (next "Then" uppercase) = 194%
-  //                     of 200 = 388.
-  //   "Then"          → 0.
-  // Expected = 0 + 90 + 134 + 388 + 0 = 612.
-  TEST_ASSERT_EQUAL_UINT32(612u, bonusSum);
-}
-
-void test_word_pacing_bonus_at_is_invariant_to_wpm(void) {
-  // The pacing bonus is the WPM-independent part of the per-word duration. Changing WPM must not
-  // change the bonus, which lets us cache it once per book.
-  ReadingLoop r = makeReader(300, {"This", "is,", "honestly,", "information.", "Then"});
-  uint32_t baselineBonuses[5];
-  for (size_t i = 0; i < 5; ++i) {
-    baselineBonuses[i] = r.wordPacingBonusMsAt(i);
-  }
-
-  r.setWpm(600);
-  for (size_t i = 0; i < 5; ++i) {
-    TEST_ASSERT_EQUAL_UINT32(baselineBonuses[i], r.wordPacingBonusMsAt(i));
-  }
-
-  r.setWpm(150);
-  for (size_t i = 0; i < 5; ++i) {
-    TEST_ASSERT_EQUAL_UINT32(baselineBonuses[i], r.wordPacingBonusMsAt(i));
-  }
-}
-
-void test_word_pacing_bonus_plus_interval_equals_current_duration(void) {
-  // Sanity check that base + bonus reconstructs the runtime per-word duration.
-  ReadingLoop r = makeReader(300, {"This", "is,", "fine.", "Then"});
-  for (size_t i = 0; i < 4; ++i) {
-    r.seekTo(i);
-    TEST_ASSERT_EQUAL_UINT32(r.wordIntervalMs() + r.wordPacingBonusMsAt(i),
-                             r.currentWordDurationMs());
-  }
-}
-
-void test_word_pacing_bonus_at_out_of_range_returns_zero(void) {
-  ReadingLoop r = makeReader(300, {"a", "b"});
-  TEST_ASSERT_EQUAL_UINT32(0u, r.wordPacingBonusMsAt(2));
-  TEST_ASSERT_EQUAL_UINT32(0u, r.wordPacingBonusMsAt(99));
+  ReadingSession r = makeReader(300, {"alpha", "beta", "gamma"});
+  TEST_ASSERT_EQUAL_STRING("alpha", ReadingLoop::wordAt(r, 0).c_str());
+  TEST_ASSERT_EQUAL_STRING("beta", ReadingLoop::wordAt(r, 1).c_str());
+  TEST_ASSERT_EQUAL_STRING("gamma", ReadingLoop::wordAt(r, 2).c_str());
 }
 
 // ---------------------------------------------------------------------------
@@ -548,8 +479,8 @@ int main(void) {
   RUN_TEST(test_compound_word_bonus);
   RUN_TEST(test_all_caps_complexity);
 
-  RUN_TEST(test_punctuation_scale_halved);
-  RUN_TEST(test_length_scale_zero_equivalent);
+  RUN_TEST(test_punctuation_delay_halved);
+  RUN_TEST(test_length_delay_quartered);
 
   RUN_TEST(test_seek_to_sets_index_and_word);
   RUN_TEST(test_seek_to_clamps_at_end);
@@ -564,11 +495,6 @@ int main(void) {
   RUN_TEST(test_rewind_sentence_ignores_abbreviation_periods);
 
   RUN_TEST(test_word_at_returns_correct_word);
-
-  RUN_TEST(test_word_pacing_bonus_at_sum_matches_expected);
-  RUN_TEST(test_word_pacing_bonus_at_is_invariant_to_wpm);
-  RUN_TEST(test_word_pacing_bonus_plus_interval_equals_current_duration);
-  RUN_TEST(test_word_pacing_bonus_at_out_of_range_returns_zero);
 
   return UNITY_END();
 }

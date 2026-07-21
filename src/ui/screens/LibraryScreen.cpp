@@ -176,14 +176,13 @@ namespace screens {
     }
 
     const std::vector<LibraryItem>& LibraryScreen::items(StorageManager& storage, const IndexedBookStore& bookStore,
-                                                         const ReadingLoop& reader,
-                                                         const ReadingProgress::Session& book) {
+                                                         const ReadingSession& session) {
         const size_t bookCount = storage.bookCount();
         if (itemsValid_ && sourceCount_ == bookCount) {
-            if (book.fromStorage && book.index < items_.size() && bookStore.isOpen()) {
-                LibraryItem& current = items_[book.index];
-                current.progress = ReadingProgress::percent(reader.currentIndex(), reader.wordCount());
-                if (const ChapterMarker* chapter = book.metadata.chapterAt(reader.currentIndex())) {
+            if (session.fromStorage && session.bookIndex < items_.size() && bookStore.isOpen()) {
+                LibraryItem& current = items_[session.bookIndex];
+                current.progress = ReadingProgress::percent(session.currentIndex, ReadingLoop::wordCount(session));
+                if (const ChapterMarker* chapter = session.metadata.chapterAt(session.currentIndex)) {
                     current.chapter = chapter->title;
                 }
                 current.progressLabel = progressLabel(current.progress);
@@ -207,10 +206,10 @@ namespace screens {
             uint32_t wordIndex = 0;
             bool hasPosition = false;
 
-            if (book.fromStorage && index == book.index && bookStore.isOpen()) {
-                wordIndex = static_cast<uint32_t>(reader.currentIndex());
-                item.progress = ReadingProgress::percent(wordIndex, reader.wordCount());
-                if (const ChapterMarker* chapter = book.metadata.chapterAt(wordIndex))
+            if (session.fromStorage && index == session.bookIndex && bookStore.isOpen()) {
+                wordIndex = static_cast<uint32_t>(session.currentIndex);
+                item.progress = ReadingProgress::percent(wordIndex, ReadingLoop::wordCount(session));
+                if (const ChapterMarker* chapter = session.metadata.chapterAt(wordIndex))
                     item.chapter = chapter->title;
             } else if (metadataLoaded && header.wordCount > 0) {
                 const ReadingProgress::BookIdentity identity{header.sourceSize, header.sourceFingerprint,

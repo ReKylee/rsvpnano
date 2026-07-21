@@ -13,7 +13,7 @@ namespace screens {
 
     class ChaptersScreen {
     public:
-        Action draw(ui::Context& ui, std::span<const ChapterMarker> chapters, ReadingLoop& reader,
+        Action draw(ui::Context& ui, std::span<const ChapterMarker> chapters, ReadingSession& reader,
                     const settings::ReadingSettings& settings, uint32_t nowMs, Screen& screen);
 
     private:

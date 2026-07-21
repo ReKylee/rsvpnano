@@ -3,7 +3,6 @@
 #include "logging/Logger.h"
 
 #include <FS.h>
-#include <Preferences.h>
 #include <glaze/toml.hpp>
 
 #include <algorithm>
@@ -11,10 +10,8 @@
 #include "board/BoardStorage.h"
 #include "reader/ReadingLoop.h"
 #include "settings/SettingsGlaze.h"
-#include "storage/StorageManager.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
-#include "storage/index/IndexedBookStore.h"
 
 namespace ReadingProgress {
     namespace {
@@ -26,12 +23,13 @@ namespace ReadingProgress {
             return identity.sourceSize > 0 && identity.wordCount > 0;
         }
 
-        bool matches(const BookState& state, const BookIdentity& identity) {
+        bool matches(const ReadingSession::BookState& state, const BookIdentity& identity) {
             return state.sourceSize == identity.sourceSize && state.sourceFingerprint == identity.sourceFingerprint
                 && state.wordCount == identity.wordCount;
         }
 
-        std::expected<BookState, std::error_code> readBookState(const String& bookPath, const BookIdentity& identity) {
+        std::expected<ReadingSession::BookState, std::error_code> readBookState(const String& bookPath,
+                                                                                const BookIdentity& identity) {
             if (bookPath.isEmpty() || !isValidIdentity(identity))
                 return std::unexpected(std::make_error_code(std::errc::invalid_argument));
 
@@ -54,7 +52,7 @@ namespace ReadingProgress {
             if (read != input.size())
                 return std::unexpected(std::make_error_code(std::errc::io_error));
 
-            BookState candidate;
+            ReadingSession::BookState candidate;
             if (const glz::error_ctx error =
                     glz::read<glz::opts{.format = glz::TOML, .error_on_unknown_keys = false}>(candidate, input)) {
                 return std::unexpected(std::make_error_code(std::errc::invalid_argument));
@@ -65,7 +63,7 @@ namespace ReadingProgress {
             return candidate;
         }
 
-        std::expected<void, std::error_code> writeBookState(const String& bookPath, BookState state) {
+        std::expected<void, std::error_code> writeBookState(const String& bookPath, ReadingSession::BookState state) {
             std::string output;
             if (glz::write_toml(state, output))
                 return std::unexpected(std::make_error_code(std::errc::io_error));
@@ -85,11 +83,12 @@ namespace ReadingProgress {
             return {};
         }
 
-        std::expected<void, std::error_code> writeSessionSidecar(const Session& session, const IndexedBookStore& store,
-                                                                 uint32_t wordIndex, uint32_t wordCount) {
+        std::expected<void, std::error_code> writeSessionSidecar(const ReadingSession& session,
+                                                                 const IndexedBookStore& store, uint32_t wordIndex,
+                                                                 uint32_t wordCount) {
             if (!session.fromStorage || session.path.empty() || !store.isOpen() || wordCount == 0)
                 return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-            BookState state = session.state;
+            ReadingSession::BookState state = session.state;
             state.sourceSize = store.sourceSize();
             state.sourceFingerprint = store.sourceFingerprint();
             state.wordCount = wordCount;
@@ -97,10 +96,10 @@ namespace ReadingProgress {
             return writeBookState(session.path.c_str(), std::move(state));
         }
 
-        std::expected<uint32_t, std::error_code> readSessionSidecar(Session& session, const IndexedBookStore& store,
-                                                                    const ReadingLoop& reader) {
+        std::expected<uint32_t, std::error_code> readSessionSidecar(ReadingSession& session,
+                                                                    const IndexedBookStore& store) {
             const BookIdentity identity{store.sourceSize(), store.sourceFingerprint(),
-                                        static_cast<uint32_t>(reader.wordCount())};
+                                        static_cast<uint32_t>(ReadingLoop::wordCount(session))};
             if (!session.fromStorage || session.path.empty() || !store.isOpen())
                 return std::unexpected(std::make_error_code(std::errc::invalid_argument));
             auto state = readBookState(session.path.c_str(), identity);
@@ -114,7 +113,7 @@ namespace ReadingProgress {
 
     std::expected<uint32_t, std::error_code> readBookStatePosition(const String& bookPath,
                                                                    const BookIdentity& identity) {
-        return readBookState(bookPath, identity).transform([](const BookState& state) {
+        return readBookState(bookPath, identity).transform([](const ReadingSession::BookState& state) {
             return state.wordIndex;
         });
     }
@@ -124,7 +123,8 @@ namespace ReadingProgress {
         if (bookPath.isEmpty() || !isValidIdentity(identity))
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
 
-        BookState state = readBookState(bookPath, identity).value_or(BookState{}); // Preserve per-book preferences.
+        ReadingSession::BookState state =
+            readBookState(bookPath, identity).value_or(ReadingSession::BookState{}); // Preserve per-book preferences.
         state.sourceSize = identity.sourceSize;
         state.sourceFingerprint = identity.sourceFingerprint;
         state.wordCount = identity.wordCount;
@@ -133,8 +133,8 @@ namespace ReadingProgress {
             return written;
 
         ESP_LOGI("storage-progress", "mirrored position word=%u count=%u state=%s",
-                     static_cast<unsigned int>(wordIndex), static_cast<unsigned int>(identity.wordCount),
-                     StoragePaths::bookStatePathFor(bookPath).c_str());
+                 static_cast<unsigned int>(wordIndex), static_cast<unsigned int>(identity.wordCount),
+                 StoragePaths::bookStatePathFor(bookPath).c_str());
         return {};
     }
 
@@ -144,71 +144,71 @@ namespace ReadingProgress {
         return static_cast<uint8_t>(std::min<uint32_t>((wordIndex * 100UL) / (wordCount - 1), 100));
     }
 
-    void Session::save(Preferences& preferences, const ReadingLoop& reader, bool force, uint32_t nowMs) {
-        if (!fromStorage || path.empty() || (!force && nowMs - lastSaveMs < kSaveIntervalMs))
+    void save(ReadingSession& session, Preferences& preferences, bool force, uint32_t nowMs) {
+        if (!session.fromStorage || session.path.empty() || (!force && nowMs - session.lastSaveMs < kSaveIntervalMs))
             return;
-        const size_t wordIndex = reader.currentIndex();
-        if (!force && wordIndex == lastSavedWordIndex)
+        const size_t wordIndex = session.currentIndex;
+        if (!force && wordIndex == session.lastSavedWordIndex)
             return;
-        lastSaveMs = nowMs;
-        cache(preferences, reader, static_cast<uint32_t>(wordIndex));
+        session.lastSaveMs = nowMs;
+        cache(session, preferences, static_cast<uint32_t>(wordIndex));
         ESP_LOGI("storage-progress", "saved position word=%u path=%s", static_cast<unsigned int>(wordIndex),
-                     path.c_str());
+                 session.path.c_str());
     }
 
-    void Session::cache(Preferences& preferences, const ReadingLoop& reader, uint32_t wordIndex) {
-        if (!fromStorage || path.empty())
+    void cache(ReadingSession& session, Preferences& preferences, uint32_t wordIndex) {
+        if (!session.fromStorage || session.path.empty())
             return;
-        const size_t wordCount = reader.wordCount();
+        const size_t wordCount = ReadingLoop::wordCount(session);
         if (wordCount > 0)
             wordIndex = std::min<uint32_t>(wordIndex, static_cast<uint32_t>(wordCount - 1));
-        preferences.putString("book", path.c_str());
-        lastSavedWordIndex = wordIndex;
+        preferences.putString("book", session.path.c_str());
+        session.lastSavedWordIndex = wordIndex;
     }
 
-    void Session::mirror(const IndexedBookStore& store, const ReadingLoop& reader) const {
-        if (!fromStorage || path.empty())
+    void mirror(const ReadingSession& session, const IndexedBookStore& store) {
+        if (!session.fromStorage || session.path.empty())
             return;
-        auto written = writeSessionSidecar(*this, store, static_cast<uint32_t>(reader.currentIndex()),
-                                           static_cast<uint32_t>(reader.wordCount()));
+        auto written = writeSessionSidecar(session, store, static_cast<uint32_t>(session.currentIndex),
+                                           static_cast<uint32_t>(ReadingLoop::wordCount(session)));
         if (!written)
-            Logger::failure("storage-progress", "mirror", StoragePaths::bookStatePathFor(path.c_str()).c_str(),
+            Logger::failure("storage-progress", "mirror", StoragePaths::bookStatePathFor(session.path.c_str()).c_str(),
                             written.error());
     }
 
-    uint32_t Session::restore(const IndexedBookStore& store, const ReadingLoop& reader) {
-        auto wordIndex = readSessionSidecar(*this, store, reader);
+    uint32_t restore(ReadingSession& session, const IndexedBookStore& store) {
+        auto wordIndex = readSessionSidecar(session, store);
         if (wordIndex)
             return *wordIndex;
         if (wordIndex.error() != std::errc::no_such_file_or_directory
             && wordIndex.error() != std::errc::state_not_recoverable)
-            Logger::failure("storage-progress", "restore", StoragePaths::bookStatePathFor(path.c_str()).c_str(),
+            Logger::failure("storage-progress", "restore", StoragePaths::bookStatePathFor(session.path.c_str()).c_str(),
                             wordIndex.error());
         return kNoSavedWordIndex;
     }
 
-    bool Session::saveChapterTransition(Preferences& preferences, const IndexedBookStore& store, ReadingLoop& reader,
-                                        size_t previousWordIndex, size_t currentWordIndex, uint32_t nowMs) {
-        if (!fromStorage || path.empty())
+    bool saveChapterTransition(ReadingSession& session, Preferences& preferences, const IndexedBookStore& store,
+                               size_t previousWordIndex, size_t currentWordIndex, uint32_t nowMs) {
+        if (!session.fromStorage || session.path.empty())
             return false;
-        for (const ChapterMarker& chapter: metadata.chapters) {
+        for (const ChapterMarker& chapter: session.metadata.chapters) {
             if (chapter.wordIndex == 0 || chapter.wordIndex <= previousWordIndex
                 || chapter.wordIndex > currentWordIndex)
                 continue;
-            reader.seekTo(chapter.wordIndex);
-            save(preferences, reader, true, nowMs);
-            mirror(store, reader);
+            ReadingLoop::seekTo(session, chapter.wordIndex);
+            save(session, preferences, true, nowMs);
+            mirror(session, store);
             return true;
         }
         return false;
     }
 
-    std::string Session::title(const StorageManager& storage) const {
-        if (!metadata.title.empty())
-            return metadata.title;
-        if (!fromStorage)
+    std::string title(const ReadingSession& session, const StorageManager& storage) {
+        if (!session.metadata.title.empty())
+            return session.metadata.title;
+        if (!session.fromStorage)
             return "Demo";
-        return storage.bookDisplayName(index);
+        return storage.bookDisplayName(session.bookIndex);
     }
 
 } // namespace ReadingProgress

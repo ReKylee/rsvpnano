@@ -57,7 +57,8 @@ void App::begin() {
     auto& deviceSettings = settingsStore_.settings();
     interfaceScreen_.begin(immediateUi_, deviceSettings.interface, deviceSettings.reading.typography,
                            readerScreen_.fonts, &Board::Display::setBrightness);
-    readerScreen_.begin(deviceSettings.reading, interfaceScreen_.themes.selected(), bootMs_);
+    Board::Power::updateBattery(battery_, bootMs_, true);
+    readerScreen_.begin(interfaceScreen_.themes.selected());
     networkScreen_.begin(settingsStore_);
     focusScreen_.begin(storage_.mounted() ? &Board::Storage::filesystem() : nullptr);
     readerScreen_.loadInitialBook(immediateUi_, storage_, prefs_, bootMs_);
@@ -98,18 +99,18 @@ void App::update(uint32_t nowMs) {
         }
     }
 
-    readerScreen_.battery.update(nowMs);
+    Board::Power::updateBattery(battery_, nowMs);
     readerScreen_.update(prefs_, nowMs);
     if (sync_.active() && sync_.update())
-        reloadSettings(nowMs);
+        reloadSettings();
     if (screen_ == screens::Screen::FocusSession) {
         if (focusScreen_.update(nowMs))
             Board::Audio::beep();
     }
-    readerScreen_.book.save(prefs_, readerScreen_.reader, false, nowMs);
+    ReadingProgress::save(readerScreen_.session, prefs_, false, nowMs);
 
     renderScreen(nowMs);
-    if (!readerScreen_.reader.playing() && !sync_.active() && !usbTransfer_.active()
+    if (!readerScreen_.session.playing && !sync_.active() && !usbTransfer_.active()
         && screen_ != screens::Screen::FocusSession && screen_ != screens::Screen::Status
         && kStandbyMs[settingsStore_.settings().interface.standbyTimerIndex] > 0
         && nowMs - lastActivityMs_ >= kStandbyMs[settingsStore_.settings().interface.standbyTimerIndex]) {
@@ -126,12 +127,11 @@ void App::renderScreen(uint32_t nowMs) {
         return;
     case screens::Screen::Reader:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        readerScreen_.draw(immediateUi_, storage_, nowMs);
+        readerScreen_.draw(immediateUi_, storage_, battery_, nowMs);
         immediateUi_.endFrame();
         return;
     case screens::Screen::Library: {
-        const auto& items =
-            libraryScreen_.items(storage_, readerScreen_.store, readerScreen_.reader, readerScreen_.book);
+        const auto& items = libraryScreen_.items(storage_, readerScreen_.store, readerScreen_.session);
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         const screens::LibraryResult result = libraryScreen_.draw(immediateUi_, items, nowMs, screen_);
         immediateUi_.endFrame();
@@ -139,7 +139,7 @@ void App::renderScreen(uint32_t nowMs) {
             const size_t bookIndex = libraryScreen_.selectedIndex();
             if (bookIndex < storage_.bookCount()
                 && readerScreen_.openBook(immediateUi_, storage_, prefs_, bookIndex, nowMs)) {
-                readerScreen_.reader.pause();
+                ReadingLoop::pause(readerScreen_.session);
                 screen_ = screens::Screen::Reader;
                 renderScreen(nowMs);
             }
@@ -158,15 +158,16 @@ void App::renderScreen(uint32_t nowMs) {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         {
             action = screens::read(immediateUi_,
-                                   {readerScreen_.book.title(storage_), readerScreen_.book.metadata.author,
-                                    ReadingProgress::percent(readerScreen_.reader.currentIndex(),
-                                                             readerScreen_.reader.wordCount())},
+                                   {ReadingProgress::title(readerScreen_.session, storage_),
+                                    readerScreen_.session.metadata.author,
+                                    ReadingProgress::percent(readerScreen_.session.currentIndex,
+                                                             ReadingLoop::wordCount(readerScreen_.session))},
                                    screen_);
         }
         break;
     case screens::Screen::Chapters:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        action = chaptersScreen_.draw(immediateUi_, readerScreen_.book.metadata.chapters, readerScreen_.reader,
+        action = chaptersScreen_.draw(immediateUi_, readerScreen_.session.metadata.chapters, readerScreen_.session,
                                       settingsStore_.settings().reading, nowMs, screen_);
         break;
     case screens::Screen::Settings:
@@ -175,7 +176,7 @@ void App::renderScreen(uint32_t nowMs) {
         break;
     case screens::Screen::ReadingSettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        if (screens::readingSettings(immediateUi_, readerScreen_.reader, settingsStore_.settings().reading, screen_))
+        if (screens::readingSettings(immediateUi_, settingsStore_.settings().reading, screen_))
             settingsStore_.acceptChanges();
         break;
     }
@@ -190,17 +191,16 @@ void App::renderScreen(uint32_t nowMs) {
     }
     case screens::Screen::PacingSettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        if (screens::pacingSettings(immediateUi_, readerScreen_.reader, settingsStore_.settings().reading.pacing,
-                                    screen_))
+        if (screens::pacingSettings(immediateUi_, settingsStore_.settings().reading.pacing, screen_))
             settingsStore_.acceptChanges();
         break;
     }
     case screens::Screen::TypographySettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        if (screens::typographySettings(immediateUi_, readerScreen_.book.state.bookTypographyOverride,
+        if (screens::typographySettings(immediateUi_, readerScreen_.session.state.bookTypographyOverride,
                                         interfaceScreen_.themes.selected().definition.typography, readerScreen_.fonts,
                                         screen_)) {
-            readerScreen_.book.mirror(readerScreen_.store, readerScreen_.reader);
+            ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
             readerScreen_.refreshTypography();
         }
         break;
@@ -281,7 +281,7 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
     case screens::Action::None:
         return;
     case screens::Action::Resume:
-        readerScreen_.reader.pause();
+        ReadingLoop::pause(readerScreen_.session);
         screen_ = screens::Screen::Reader;
         renderScreen(nowMs);
         return;
@@ -312,8 +312,8 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
     case screens::Action::EnableStorageEncryption:
         screens::status(immediateUi_, immediateUi_.text(UiText::StorageEncryption),
                         immediateUi_.text(UiText::EnablingEncryption));
-        readerScreen_.book.save(prefs_, readerScreen_.reader, true, nowMs);
-        readerScreen_.book.mirror(readerScreen_.store, readerScreen_.reader);
+        ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
+        ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
         if (!storage_.mounted() || !settings::enableNvsEncryption(prefs_, settingsStore_)) {
             screens::status(immediateUi_, immediateUi_.text(UiText::StorageEncryption),
                             immediateUi_.text(UiText::Unavailable));
@@ -365,12 +365,12 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
     if (Input::hasAction(event.actions, Input::ActionOpenMenu) || Input::hasAction(event.actions, Input::ActionBack)) {
         if (sync_.active()) {
             sync_.end();
-            reloadSettings(nowMs);
+            reloadSettings();
             screen_ = screens::Screen::Device;
             renderScreen(nowMs);
         } else if (screen_ != screens::Screen::Reader) {
             if (screen_ == screens::Screen::Read) {
-                readerScreen_.reader.pause();
+                ReadingLoop::pause(readerScreen_.session);
                 screen_ = screens::Screen::Reader;
             } else if (screen_ == screens::Screen::StorageEncryption || screen_ == screens::Screen::Sync
                        || screen_ == screens::Screen::Ota) {
@@ -395,8 +395,8 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
             }
             renderScreen(nowMs);
         } else {
-            readerScreen_.book.save(prefs_, readerScreen_.reader, true, nowMs);
-            readerScreen_.reader.pause();
+            ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
+            ReadingLoop::pause(readerScreen_.session);
             libraryScreen_.invalidate();
             screen_ = screens::Screen::Read;
             renderScreen(nowMs);
@@ -429,7 +429,7 @@ void App::handleTouch(uint32_t nowMs) {
 }
 
 void App::runRss() {
-    readerScreen_.reader.pause();
+    ReadingLoop::pause(readerScreen_.session);
     screens::status(immediateUi_, "RSS", immediateUi_.text(UiText::CheckingFeeds));
     const RssFeeds::Result result =
         RssFeeds::check(prefs_, settingsStore_.settings(), settingsStore_.secrets(), &App::renderStorageStatus, this);
@@ -443,8 +443,8 @@ void App::runRss() {
 
 void App::enterUsbTransfer(uint32_t nowMs) {
 #if RSVP_USB_TRANSFER_ENABLED
-    readerScreen_.book.save(prefs_, readerScreen_.reader, true, nowMs);
-    readerScreen_.book.mirror(readerScreen_.store, readerScreen_.reader);
+    ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
+    ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
     settingsStore_.flush();
     if (!usbTransfer_.begin(true)) {
         screens::status(immediateUi_, "USB", immediateUi_.text(UiText::CouldNotStart), usbTransfer_.statusMessage());
@@ -453,7 +453,7 @@ void App::enterUsbTransfer(uint32_t nowMs) {
         renderScreen(nowMs);
         return;
     }
-    readerScreen_.reader.pause();
+    ReadingLoop::pause(readerScreen_.session);
     screen_ = screens::Screen::Usb;
     renderScreen(nowMs);
 #else
@@ -472,22 +472,22 @@ void App::exitUsbTransfer(screens::Screen destination) {
     renderScreen(millis());
 }
 
-void App::reloadSettings(uint32_t nowMs) {
+void App::reloadSettings() {
     readerScreen_.fonts.loadFromSd();
     interfaceScreen_.begin(immediateUi_, settingsStore_.settings().interface,
                            settingsStore_.settings().reading.typography, readerScreen_.fonts,
                            &Board::Display::setBrightness);
-    readerScreen_.begin(settingsStore_.settings().reading, interfaceScreen_.themes.selected(), nowMs);
+    readerScreen_.begin(interfaceScreen_.themes.selected());
     networkScreen_.begin(settingsStore_);
     networkScreen_.startupCheckPending = false;
 }
 
 void App::runOtaCheck(bool install) {
-    readerScreen_.reader.pause();
+    ReadingLoop::pause(readerScreen_.session);
     if (install) {
         const uint32_t nowMs = millis();
-        readerScreen_.book.save(prefs_, readerScreen_.reader, true, nowMs);
-        readerScreen_.book.mirror(readerScreen_.store, readerScreen_.reader);
+        ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
+        ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
         settingsStore_.flush();
     }
     screens::status(immediateUi_, "OTA", immediateUi_.text(UiText::Checking));
@@ -505,8 +505,8 @@ void App::runOtaCheck(bool install) {
 }
 
 void App::enterStandby(uint32_t nowMs) {
-    readerScreen_.book.save(prefs_, readerScreen_.reader, true, nowMs);
-    readerScreen_.reader.pause();
+    ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
+    ReadingLoop::pause(readerScreen_.session);
     if (settingsStore_.settings().interface.screensaver == standby::Kind::screenOff) {
         screen_ = screens::Screen::Standby;
         lightSleepFromStandby();
@@ -514,7 +514,7 @@ void App::enterStandby(uint32_t nowMs) {
     }
     Board::Display::wake();
     immediateUi_.invalidate();
-    standbyScreen_.begin(immediateUi_, nowMs, readerScreen_.book.index, readerScreen_.reader.currentIndex(),
+    standbyScreen_.begin(immediateUi_, nowMs, readerScreen_.session.bookIndex, readerScreen_.session.currentIndex,
                          settingsStore_.settings().interface.screensaver);
     standbyEnteredMs_ = nowMs;
     screen_ = screens::Screen::Standby;
@@ -531,7 +531,7 @@ void App::exitStandby(uint32_t nowMs) {
 
 void App::lightSleepFromStandby() {
     ESP_LOGI("app", "screen-off standby; entering light sleep");
-    readerScreen_.book.mirror(readerScreen_.store, readerScreen_.reader);
+    ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
     standbyScreen_.reset();
     if (sync_.active())
         sync_.end();
@@ -591,9 +591,9 @@ void App::lightSleepFromStandby() {
 void App::powerOff(uint32_t nowMs) {
     if (screen_ == screens::Screen::FocusSession)
         focusScreen_.close();
-    readerScreen_.book.save(prefs_, readerScreen_.reader, true, nowMs);
-    readerScreen_.book.mirror(readerScreen_.store, readerScreen_.reader);
-    readerScreen_.reader.pause();
+    ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
+    ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
+    ReadingLoop::pause(readerScreen_.session);
     screens::status(immediateUi_, immediateUi_.text(UiText::Off), immediateUi_.text(UiText::ReleasePower));
     delay(250);
     settingsStore_.flush();

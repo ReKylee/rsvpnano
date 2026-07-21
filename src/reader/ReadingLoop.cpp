@@ -2,7 +2,7 @@
 #include "storage/index/IndexedBookStore.h"
 
 #include <algorithm>
-#include <utility>
+#include <string_view>
 
 #include "text/LatinText.h"
 
@@ -408,10 +408,8 @@ namespace {
     };
 
     constexpr size_t kDemoWordCount = sizeof(kDemoWords) / sizeof(kDemoWords[0]);
-    constexpr uint16_t kMinWpm = 10;
     constexpr uint16_t kLowWpmMax = 100;
     constexpr uint16_t kLowWpmStep = 10;
-    constexpr uint16_t kMaxWpm = 1000;
     constexpr uint16_t kHighWpmStep = 25;
     constexpr uint8_t kLongWordAfterChars = 6;
     constexpr uint8_t kLongWordPercentPerChar = 6;
@@ -438,7 +436,6 @@ namespace {
     constexpr uint8_t kSentencePausePercent = 135;
     constexpr uint8_t kStrongSentencePausePercent = 150;
     constexpr uint8_t kMaxCatchUpWords = 4;
-    constexpr uint16_t kMaxPacingDelayMs = 600;
 
     bool isWordCharacter(char c) {
         return LatinText::isWordCharacter(static_cast<uint8_t>(c));
@@ -714,28 +711,8 @@ namespace {
         return false;
     }
 
-    uint16_t clampPacingDelayMs(uint16_t delayMs) {
-        if (delayMs > kMaxPacingDelayMs) {
-            return kMaxPacingDelayMs;
-        }
-        return delayMs;
-    }
-
-    uint8_t clampScalePercent(uint8_t percent) {
-        if (percent < 25) {
-            return 25;
-        }
-        return percent;
-    }
-
-    uint16_t scaledPercent(uint16_t basePercent, uint8_t scalePercent) {
-        return static_cast<uint16_t>((static_cast<uint32_t>(basePercent)
-                                      * static_cast<uint32_t>(clampScalePercent(scalePercent)))
-                                     / 100UL);
-    }
-
     uint32_t scaledDelayMs(uint16_t bonusPercent, uint16_t delayMs) {
-        return (static_cast<uint32_t>(bonusPercent) * static_cast<uint32_t>(clampPacingDelayMs(delayMs))) / 100UL;
+        return (static_cast<uint32_t>(bonusPercent) * delayMs) / 100UL;
     }
 
     uint16_t lengthBonusPercentForWord(std::string_view word) {
@@ -836,375 +813,247 @@ namespace {
     }
 
     uint32_t pacingBonusMsForWord(std::string_view word, bool nextWordStartsLowercase,
-                                  const ReadingLoop::PacingConfig& config) {
+                                  const settings::PacingSettings& pacing) {
         if (word.empty()) {
             return 0;
         }
 
         uint32_t totalBonusMs = 0;
-        totalBonusMs += scaledDelayMs(scaledPercent(lengthBonusPercentForWord(word), config.longWordScalePercent),
-                                      config.longWordDelayMs);
+        totalBonusMs += scaledDelayMs(lengthBonusPercentForWord(word), pacing.longWordDelayMs);
+        totalBonusMs += scaledDelayMs(complexityBonusPercentForWord(word), pacing.complexWordDelayMs);
         totalBonusMs +=
-            scaledDelayMs(scaledPercent(complexityBonusPercentForWord(word), config.complexWordScalePercent),
-                          config.complexWordDelayMs);
-        totalBonusMs += scaledDelayMs(scaledPercent(punctuationPausePercentForWord(word, nextWordStartsLowercase),
-                                                    config.punctuationScalePercent),
-                                      config.punctuationDelayMs);
+            scaledDelayMs(punctuationPausePercentForWord(word, nextWordStartsLowercase), pacing.punctuationDelayMs);
         return totalBonusMs;
     }
 
     uint32_t durationForWord(std::string_view word, bool nextWordStartsLowercase, uint32_t baseIntervalMs,
-                             const ReadingLoop::PacingConfig& config) {
+                             const settings::PacingSettings& pacing) {
         if (baseIntervalMs == 0) {
             return 0;
         }
-        return baseIntervalMs + pacingBonusMsForWord(word, nextWordStartsLowercase, config);
+        return baseIntervalMs + pacingBonusMsForWord(word, nextWordStartsLowercase, pacing);
     }
 
 } // namespace
 
-void ReadingLoop::begin(uint32_t nowMs) {
-    playing_ = false;
-    currentIndex_ = 0;
-    lastAdvanceMs_ = nowMs;
-    setCurrentWordFromIndex();
-}
+namespace ReadingLoop {
+    namespace {
 
-void ReadingLoop::setWords(std::vector<std::string> words, uint32_t nowMs) {
-    playing_ = false;
-    bookStore_ = nullptr;
-    loadedWords_ = std::move(words);
-    currentIndex_ = 0;
-    lastAdvanceMs_ = nowMs;
-    setCurrentWordFromIndex();
-}
-
-void ReadingLoop::setBookStore(IndexedBookStore* store, uint32_t nowMs) {
-    playing_ = false;
-    loadedWords_.clear();
-    bookStore_ = store;
-    currentIndex_ = 0;
-    lastAdvanceMs_ = nowMs;
-    setCurrentWordFromIndex();
-}
-
-void ReadingLoop::clearLoadedBook(uint32_t nowMs) {
-    playing_ = false;
-    bookStore_ = nullptr;
-    loadedWords_.clear();
-    currentIndex_ = 0;
-    lastAdvanceMs_ = nowMs;
-    setCurrentWordFromIndex();
-}
-
-void ReadingLoop::start(uint32_t nowMs) {
-    lastAdvanceMs_ = nowMs;
-    playing_ = true;
-}
-
-void ReadingLoop::pause() {
-    playing_ = false;
-}
-
-bool ReadingLoop::update(uint32_t nowMs, bool allowCatchUp) {
-    bool changed = false;
-    const uint8_t maxCatchUpWords = allowCatchUp ? kMaxCatchUpWords : 1;
-
-    for (uint8_t catchUp = 0; catchUp < maxCatchUpWords; ++catchUp) {
-        const uint32_t durationMs = currentWordDurationMs();
-        if (durationMs == 0 || nowMs - lastAdvanceMs_ < durationMs) {
-            break;
+        bool usingLoadedBook(const ReadingSession& session) {
+            return session.bookStore != nullptr || !session.words.empty();
         }
 
-        lastAdvanceMs_ += durationMs;
-        if (!advance(1)) {
-            break;
+        bool nextWordStartsLowercaseAt(const ReadingSession& session, size_t wordIndex) {
+            const size_t nextIndex = wordIndex + 1;
+            return nextIndex < wordCount(session) && startsWithLowercaseLetter(wordAt(session, nextIndex));
         }
-        changed = true;
-    }
 
-    return changed;
-}
+        bool wordEndsSentenceAt(const ReadingSession& session, size_t wordIndex) {
+            if (wordIndex >= wordCount(session))
+                return false;
 
-const std::string& ReadingLoop::currentWord() const {
-    return currentWord_;
-}
+            const std::string word = wordAt(session, wordIndex);
+            if (word.empty())
+                return false;
 
-size_t ReadingLoop::currentIndex() const {
-    return currentIndex_;
-}
-
-uint16_t ReadingLoop::wpm() const {
-    return wpm_;
-}
-
-uint32_t ReadingLoop::wordIntervalMs() const {
-    return 60000UL / wpm_;
-}
-
-uint32_t ReadingLoop::currentWordDurationMs() const {
-    bool nextWordStartsLowercase = false;
-    const size_t nextIndex = currentIndex_ + 1;
-    if (nextIndex < wordCount()) {
-        nextWordStartsLowercase = startsWithLowercaseLetter(wordAt(nextIndex));
-    } else if (!usingLoadedBook() && nextIndex < kDemoWordCount) {
-        nextWordStartsLowercase = startsWithLowercaseLetter(kDemoWords[nextIndex]);
-    }
-
-    return durationForWord(currentWord_, nextWordStartsLowercase, wordIntervalMs(), pacingConfig_);
-}
-
-uint32_t ReadingLoop::wordPacingBonusMsAt(size_t index) const {
-    const size_t count = wordCount();
-    if (count == 0 || index >= count) {
-        return 0;
-    }
-
-    const std::string word = wordAt(index);
-    const bool nextLowercase = nextWordStartsLowercaseAt(index);
-    return pacingBonusMsForWord(word, nextLowercase, pacingConfig_);
-}
-
-uint32_t ReadingLoop::elapsedInCurrentWordMs(uint32_t nowMs) const {
-    if (nowMs <= lastAdvanceMs_) {
-        return 0;
-    }
-    return nowMs - lastAdvanceMs_;
-}
-
-bool ReadingLoop::currentWordEndsSentence() const {
-    return wordEndsSentenceAt(currentIndex_);
-}
-
-bool ReadingLoop::atEnd() const {
-    const size_t count = wordCount();
-    return count == 0 || currentIndex_ + 1 >= count;
-}
-
-bool ReadingLoop::playing() const {
-    return playing_;
-}
-
-void ReadingLoop::scrub(int steps) {
-    seekRelative(currentIndex_, steps);
-}
-
-void ReadingLoop::seekTo(size_t wordIndex) {
-    const size_t count = wordCount();
-    if (count == 0) {
-        currentWord_ = "";
-        return;
-    }
-
-    if (wordIndex >= count) {
-        wordIndex = count - 1;
-    }
-
-    currentIndex_ = wordIndex;
-    setCurrentWordFromIndex();
-}
-
-void ReadingLoop::seekRelative(size_t baseIndex, int steps) {
-    const size_t count = wordCount();
-    if (count == 0) {
-        return;
-    }
-
-    if (baseIndex >= count) {
-        baseIndex = count - 1;
-    }
-
-    int nextIndex = static_cast<int>(baseIndex) + steps;
-    if (usingLoadedBook()) {
-        if (nextIndex < 0) {
-            nextIndex = 0;
+            switch (trailingRhythmChar(word)) {
+            case '!':
+            case '?':
+                return true;
+            case '.':
+                return !looksLikeAbbreviation(word, nextWordStartsLowercaseAt(session, wordIndex));
+            default:
+                return false;
+            }
         }
-        if (nextIndex >= static_cast<int>(count)) {
-            nextIndex = static_cast<int>(count) - 1;
+
+        size_t sentenceStartAtOrBefore(const ReadingSession& session, size_t wordIndex) {
+            const size_t count = wordCount(session);
+            if (count == 0)
+                return 0;
+
+            wordIndex = std::min(wordIndex, count - 1);
+            while (wordIndex > 0 && !wordEndsSentenceAt(session, wordIndex - 1))
+                --wordIndex;
+            return wordIndex;
         }
-    } else {
-        nextIndex %= static_cast<int>(count);
-        if (nextIndex < 0) {
-            nextIndex += static_cast<int>(count);
+
+        void setCurrentWordFromIndex(ReadingSession& session) {
+            if (wordCount(session) == 0) {
+                session.currentWord.clear();
+                return;
+            }
+
+            if (session.bookStore != nullptr)
+                session.bookStore->prefetchAround(session.currentIndex);
+            session.currentWord = wordAt(session, session.currentIndex);
         }
-    }
 
-    currentIndex_ = static_cast<size_t>(nextIndex);
-    setCurrentWordFromIndex();
-}
+        bool advance(ReadingSession& session, size_t steps) {
+            const size_t count = wordCount(session);
+            if (count == 0) {
+                session.currentWord.clear();
+                return false;
+            }
 
-void ReadingLoop::rewindSentence() {
-    const size_t count = wordCount();
-    if (count == 0) {
-        return;
-    }
+            const size_t previousIndex = session.currentIndex;
+            if (usingLoadedBook(session)) {
+                const size_t maxIndex = count - 1;
+                if (session.currentIndex < maxIndex)
+                    session.currentIndex += std::min(steps, maxIndex - session.currentIndex);
+            } else {
+                session.currentIndex = (session.currentIndex + steps) % count;
+            }
 
-    const size_t currentSentenceStart = sentenceStartAtOrBefore(currentIndex_);
-    if (currentSentenceStart == currentIndex_ && currentIndex_ > 0) {
-        seekTo(sentenceStartAtOrBefore(currentIndex_ - 1));
-        return;
-    }
-
-    seekTo(currentSentenceStart);
-}
-
-void ReadingLoop::adjustWpm(int delta) {
-    if (delta == 0) {
-        return;
-    }
-
-    int nextWpm = static_cast<int>(wpm_);
-    if (delta > 0) {
-        nextWpm += nextWpm < static_cast<int>(kLowWpmMax) ? kLowWpmStep : kHighWpmStep;
-        if (nextWpm > static_cast<int>(kLowWpmMax) && wpm_ < static_cast<uint16_t>(kLowWpmMax)) {
-            nextWpm = kLowWpmMax;
+            if (session.currentIndex == previousIndex)
+                return false;
+            setCurrentWordFromIndex(session);
+            return true;
         }
-    } else {
-        nextWpm -= nextWpm <= static_cast<int>(kLowWpmMax) ? kLowWpmStep : kHighWpmStep;
-        if (nextWpm < static_cast<int>(kLowWpmMax) && wpm_ > static_cast<uint16_t>(kLowWpmMax)) {
-            nextWpm = kLowWpmMax;
+
+    } // namespace
+
+    void begin(ReadingSession& session, uint32_t nowMs) {
+        session.playing = false;
+        session.currentIndex = 0;
+        session.lastAdvanceMs = nowMs;
+        setCurrentWordFromIndex(session);
+    }
+
+    void setWords(ReadingSession& session, std::span<const std::string> words, uint32_t nowMs) {
+        session.currentIndex = 0;
+        session.lastAdvanceMs = nowMs;
+        session.words = words;
+        session.bookStore = nullptr;
+        session.playing = false;
+        setCurrentWordFromIndex(session);
+    }
+
+    void setBookStore(ReadingSession& session, const IndexedBookStore& store, uint32_t nowMs) {
+        session.currentIndex = 0;
+        session.lastAdvanceMs = nowMs;
+        session.words = {};
+        session.bookStore = &store;
+        session.playing = false;
+        setCurrentWordFromIndex(session);
+    }
+
+    void start(ReadingSession& session, uint32_t nowMs) {
+        session.lastAdvanceMs = nowMs;
+        session.playing = true;
+    }
+
+    void pause(ReadingSession& session) {
+        session.playing = false;
+    }
+
+    bool update(ReadingSession& session, const settings::ReadingSettings& settings, uint32_t nowMs, bool allowCatchUp) {
+        bool changed = false;
+        const uint8_t maxCatchUpWords = allowCatchUp ? kMaxCatchUpWords : 1;
+        for (uint8_t catchUp = 0; catchUp < maxCatchUpWords; ++catchUp) {
+            const uint32_t durationMs = currentWordDurationMs(session, settings);
+            if (durationMs == 0 || nowMs - session.lastAdvanceMs < durationMs)
+                break;
+            session.lastAdvanceMs += durationMs;
+            if (!advance(session, 1))
+                break;
+            changed = true;
         }
-    }
-    if (nextWpm < static_cast<int>(kMinWpm)) {
-        nextWpm = kMinWpm;
-    }
-    if (nextWpm > static_cast<int>(kMaxWpm)) {
-        nextWpm = kMaxWpm;
-    }
-    wpm_ = static_cast<uint16_t>(nextWpm);
-}
-
-void ReadingLoop::setWpm(uint16_t wpm) {
-    if (wpm < kMinWpm) {
-        wpm = kMinWpm;
-    }
-    if (wpm > kMaxWpm) {
-        wpm = kMaxWpm;
-    }
-    wpm_ = wpm;
-}
-
-void ReadingLoop::setPacingConfig(const PacingConfig& config) {
-    pacingConfig_.longWordDelayMs = clampPacingDelayMs(config.longWordDelayMs);
-    pacingConfig_.complexWordDelayMs = clampPacingDelayMs(config.complexWordDelayMs);
-    pacingConfig_.punctuationDelayMs = clampPacingDelayMs(config.punctuationDelayMs);
-    pacingConfig_.longWordScalePercent = clampScalePercent(config.longWordScalePercent);
-    pacingConfig_.complexWordScalePercent = clampScalePercent(config.complexWordScalePercent);
-    pacingConfig_.punctuationScalePercent = clampScalePercent(config.punctuationScalePercent);
-}
-
-const ReadingLoop::PacingConfig& ReadingLoop::pacingConfig() const {
-    return pacingConfig_;
-}
-
-bool ReadingLoop::advance(size_t steps) {
-    const size_t count = wordCount();
-    if (count == 0) {
-        currentWord_ = "";
-        return false;
+        return changed;
     }
 
-    const size_t previousIndex = currentIndex_;
-    if (usingLoadedBook()) {
-        const size_t maxIndex = count - 1;
-        if (currentIndex_ < maxIndex) {
-            const size_t remaining = maxIndex - currentIndex_;
-            currentIndex_ += (steps < remaining) ? steps : remaining;
+    uint32_t currentWordDurationMs(const ReadingSession& session, const settings::ReadingSettings& settings) {
+        const size_t nextIndex = session.currentIndex + 1;
+        const bool nextWordStartsLowercase =
+            nextIndex < wordCount(session) && startsWithLowercaseLetter(wordAt(session, nextIndex));
+
+        return durationForWord(session.currentWord, nextWordStartsLowercase, 60000UL / settings.wpm, settings.pacing);
+    }
+
+    uint32_t elapsedInCurrentWordMs(const ReadingSession& session, uint32_t nowMs) {
+        return nowMs <= session.lastAdvanceMs ? 0 : nowMs - session.lastAdvanceMs;
+    }
+
+    bool currentWordEndsSentence(const ReadingSession& session) {
+        return wordEndsSentenceAt(session, session.currentIndex);
+    }
+
+    bool atEnd(const ReadingSession& session) {
+        const size_t count = wordCount(session);
+        return count == 0 || session.currentIndex + 1 >= count;
+    }
+
+    void seekTo(ReadingSession& session, size_t wordIndex) {
+        const size_t count = wordCount(session);
+        if (count == 0) {
+            session.currentWord.clear();
+            return;
         }
-    } else {
-        currentIndex_ = (currentIndex_ + steps) % count;
+        session.currentIndex = std::min(wordIndex, count - 1);
+        setCurrentWordFromIndex(session);
     }
 
-    if (currentIndex_ == previousIndex) {
-        return false;
-    }
+    void seekRelative(ReadingSession& session, size_t baseIndex, int steps) {
+        const size_t count = wordCount(session);
+        if (count == 0)
+            return;
 
-    setCurrentWordFromIndex();
-    return true;
-}
-
-void ReadingLoop::setCurrentWordFromIndex() {
-    if (wordCount() == 0) {
-        currentWord_ = "";
-        return;
-    }
-
-    if (bookStore_ != nullptr) {
-        bookStore_->prefetchAround(currentIndex_);
-    }
-    currentWord_ = wordAt(currentIndex_);
-}
-
-size_t ReadingLoop::wordCount() const {
-    if (bookStore_ != nullptr) {
-        return bookStore_->wordCount();
-    }
-    if (!loadedWords_.empty()) {
-        return loadedWords_.size();
-    }
-    return kDemoWordCount;
-}
-
-std::string ReadingLoop::wordAt(size_t index) const {
-    if (bookStore_ != nullptr) {
-        return bookStore_->wordAt(index);
-    }
-    if (!loadedWords_.empty()) {
-        return loadedWords_[index];
-    }
-    return kDemoWords[index];
-}
-
-bool ReadingLoop::usingLoadedBook() const {
-    return bookStore_ != nullptr || !loadedWords_.empty();
-}
-
-bool ReadingLoop::nextWordStartsLowercaseAt(size_t wordIndex) const {
-    const size_t nextIndex = wordIndex + 1;
-    if (nextIndex >= wordCount()) {
-        return false;
-    }
-
-    return startsWithLowercaseLetter(wordAt(nextIndex));
-}
-
-bool ReadingLoop::wordEndsSentenceAt(size_t wordIndex) const {
-    if (wordIndex >= wordCount()) {
-        return false;
-    }
-
-    const std::string word = wordAt(wordIndex);
-    if (word.empty()) {
-        return false;
-    }
-
-    switch (trailingRhythmChar(word)) {
-    case '!':
-    case '?':
-        return true;
-    case '.':
-        return !looksLikeAbbreviation(word, nextWordStartsLowercaseAt(wordIndex));
-    default:
-        return false;
-    }
-}
-
-size_t ReadingLoop::sentenceStartAtOrBefore(size_t wordIndex) const {
-    const size_t count = wordCount();
-    if (count == 0) {
-        return 0;
-    }
-
-    if (wordIndex >= count) {
-        wordIndex = count - 1;
-    }
-
-    while (wordIndex > 0) {
-        if (wordEndsSentenceAt(wordIndex - 1)) {
-            break;
+        baseIndex = std::min(baseIndex, count - 1);
+        int nextIndex = static_cast<int>(baseIndex) + steps;
+        if (usingLoadedBook(session)) {
+            nextIndex = std::clamp(nextIndex, 0, static_cast<int>(count) - 1);
+        } else {
+            nextIndex %= static_cast<int>(count);
+            if (nextIndex < 0)
+                nextIndex += static_cast<int>(count);
         }
-        --wordIndex;
+        session.currentIndex = static_cast<size_t>(nextIndex);
+        setCurrentWordFromIndex(session);
     }
 
-    return wordIndex;
-}
+    void rewindSentence(ReadingSession& session) {
+        if (wordCount(session) == 0)
+            return;
+
+        const size_t currentSentenceStart = sentenceStartAtOrBefore(session, session.currentIndex);
+        if (currentSentenceStart == session.currentIndex && session.currentIndex > 0) {
+            seekTo(session, sentenceStartAtOrBefore(session, session.currentIndex - 1));
+            return;
+        }
+        seekTo(session, currentSentenceStart);
+    }
+
+    void adjustWpm(settings::ReadingSettings& settings, int delta) {
+        if (delta == 0)
+            return;
+
+        int nextWpm = settings.wpm;
+        if (delta > 0) {
+            nextWpm += nextWpm < kLowWpmMax ? kLowWpmStep : kHighWpmStep;
+            if (nextWpm > kLowWpmMax && settings.wpm < kLowWpmMax)
+                nextWpm = kLowWpmMax;
+        } else {
+            nextWpm -= nextWpm <= kLowWpmMax ? kLowWpmStep : kHighWpmStep;
+            if (nextWpm < kLowWpmMax && settings.wpm > kLowWpmMax)
+                nextWpm = kLowWpmMax;
+        }
+        settings.wpm = nextWpm;
+    }
+
+    size_t wordCount(const ReadingSession& session) {
+        if (session.bookStore != nullptr)
+            return session.bookStore->wordCount();
+        if (!session.words.empty())
+            return session.words.size();
+        return kDemoWordCount;
+    }
+
+    std::string wordAt(const ReadingSession& session, size_t index) {
+        if (session.bookStore != nullptr)
+            return session.bookStore->wordAt(index);
+        if (!session.words.empty())
+            return session.words[index];
+        return kDemoWords[index];
+    }
+
+} // namespace ReadingLoop

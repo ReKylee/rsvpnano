@@ -5,7 +5,7 @@
 #include "settings/SettingsRules.h"
 
 namespace screens {
-    bool readingSettings(ui::Context& ui, ReadingLoop& reader, settings::ReadingSettings& config, Screen& screen) {
+    bool readingSettings(ui::Context& ui, settings::ReadingSettings& config, Screen& screen) {
         bool changed = false;
         const ui::Rect content = detail::content(ui);
         if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, ui.text(UiText::Back)))
@@ -16,10 +16,8 @@ namespace screens {
         const int16_t controlsY = static_cast<int16_t>(content.y + 30);
         const int16_t sliderWidth = std::min<int16_t>(content.w, 480);
         const int16_t sliderX = static_cast<int16_t>(content.x + (content.w - sliderWidth) / 2);
-        if (ui.slider({sliderX, controlsY, sliderWidth, 36}, ui.text(UiText::WordsPerMinute), config.wpm, " WPM")) {
-            reader.setWpm(config.wpm);
-            changed = true;
-        }
+        changed |=
+            ui.slider({sliderX, controlsY, sliderWidth, 36}, ui.text(UiText::WordsPerMinute), config.wpm, " WPM");
 
         ui.separator({content.x, static_cast<int16_t>(controlsY + 42), content.w, 10},
                      ui.text(UiText::BehaviorSection));

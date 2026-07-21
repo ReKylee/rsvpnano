@@ -19,7 +19,7 @@ namespace screens {
 
     } // namespace
 
-    Action ChaptersScreen::draw(ui::Context& ui, std::span<const ChapterMarker> chapters, ReadingLoop& reader,
+    Action ChaptersScreen::draw(ui::Context& ui, std::span<const ChapterMarker> chapters, ReadingSession& reader,
                                 const settings::ReadingSettings& settings, uint32_t nowMs, Screen& screen) {
         if (const Action action = detail::navigation(ui, Screen::Chapters, screen); action != Action::None)
             return action;
@@ -32,7 +32,7 @@ namespace screens {
         }
 
         size_t readingIndex = 0;
-        while (readingIndex + 1 < chapters.size() && chapters[readingIndex + 1].wordIndex <= reader.currentIndex()) {
+        while (readingIndex + 1 < chapters.size() && chapters[readingIndex + 1].wordIndex <= reader.currentIndex) {
             ++readingIndex;
         }
 
@@ -59,7 +59,7 @@ namespace screens {
                                 static_cast<int16_t>(content.h - kHeaderHeight - 4)};
         if (chapters.empty()) {
             if (ui.button(viewport, ui.text(UiText::StartReading))) {
-                reader.seekTo(0);
+                ReadingLoop::seekTo(reader, 0);
                 return Action::Resume;
             }
             return Action::None;
@@ -96,7 +96,7 @@ namespace screens {
                 if (centeredIndex_ + 1 < chapters.size())
                     ++centeredIndex_;
             } else {
-                reader.seekTo(chapters[centeredIndex_].wordIndex);
+                ReadingLoop::seekTo(reader, chapters[centeredIndex_].wordIndex);
                 return Action::Resume;
             }
         }

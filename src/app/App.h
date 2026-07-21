@@ -4,6 +4,7 @@
 #include <Preferences.h>
 
 #include "board/BoardDisplay.h"
+#include "board/BoardPower.h"
 #include "input/Input.h"
 #include "settings/SettingsStore.h"
 #include "storage/StorageManager.h"
@@ -28,7 +29,7 @@ private:
     void handleInput(const Input::Event& event, uint32_t nowMs);
     void handleTouch(uint32_t nowMs);
     void runRss();
-    void reloadSettings(uint32_t nowMs);
+    void reloadSettings();
     void enterUsbTransfer(uint32_t nowMs);
     void exitUsbTransfer(screens::Screen destination = screens::Screen::Reader);
     void runOtaCheck(bool install);
@@ -40,14 +41,15 @@ private:
                                     int progressPercent);
 
     ui::Context immediateUi_{Board::Display::gfx()};
-    screens::ReaderScreen readerScreen_{Board::Display::gfx()};
+    settings::SettingsStore settingsStore_;
+    Board::Power::BatteryState battery_;
+    screens::ReaderScreen readerScreen_{Board::Display::gfx(), settingsStore_.settings().reading};
     screens::LibraryScreen libraryScreen_;
     screens::ChaptersScreen chaptersScreen_;
     screens::InterfaceScreen interfaceScreen_;
     screens::NetworkScreen networkScreen_;
     StorageManager storage_;
     Preferences prefs_;
-    settings::SettingsStore settingsStore_;
     CompanionSyncManager sync_{settingsStore_};
     UsbMassStorageManager usbTransfer_;
     screens::FocusScreen focusScreen_;

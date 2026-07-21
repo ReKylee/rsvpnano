@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Preferences.h>
+#include "board/BoardPower.h"
 #include "fonts/AlphaFont.h"
 #include "fonts/FontCatalog.h"
 #include "reader/ReadingLoop.h"
@@ -12,49 +13,20 @@
 
 namespace screens {
 
-    struct ReaderSession {
-        uint32_t wpmFeedbackUntilMs = 0;
-        bool playLocked = false;
-        bool pauseAtSentenceEndRequested = false;
-    };
-
-    struct BatteryModel {
-        uint8_t percent = 0;
-        float voltage = 0;
-        bool charging = false;
-        settings::BatteryLabel label = settings::BatteryLabel::percentage;
-    };
-
-    struct BatteryState {
-        uint32_t lastSampleMs = 0;
-        settings::BatteryLabel label = settings::BatteryLabel::percentage;
-        uint8_t percent = 0;
-        float voltage = 0;
-        bool charging = false;
-
-        BatteryModel view() const {
-            return {percent, voltage, charging, label};
-        }
-        void update(uint32_t nowMs, bool force = false);
-    };
-
     class ReaderScreen {
     public:
-        explicit ReaderScreen(Arduino_GFX& gfx);
+        ReaderScreen(Arduino_GFX& gfx, settings::ReadingSettings& settings);
 
-        ReadingLoop reader;
-        ReaderSession session;
-        ReadingProgress::Session book;
+        ReadingSession session;
         IndexedBookStore store;
         FontCatalog fonts;
-        BatteryState battery;
-
-        void begin(settings::ReadingSettings& settings, const ui::themes::Theme& theme, uint32_t nowMs);
+        void begin(const ui::themes::Theme& theme);
         void applyTheme(const ui::themes::Theme& theme);
         void refreshTypography();
         bool openBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, size_t index, uint32_t nowMs);
         void loadInitialBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, uint32_t nowMs);
-        void draw(ui::Context& ui, const StorageManager& storage, uint32_t nowMs);
+        void draw(ui::Context& ui, const StorageManager& storage, const Board::Power::BatteryState& battery,
+                  uint32_t nowMs);
         bool batteryTapped(const ui::Touch& touch) const;
         bool batteryLongPressed(const ui::Touch& touch) const;
         bool batteryTouched(const ui::Touch& touch) const;
@@ -69,8 +41,8 @@ namespace screens {
         int16_t textWidth(std::string_view text) const;
         void drawText(std::string_view text, int16_t x, int16_t baseline, uint16_t color);
         void drawWord(std::string_view word, int16_t x, int16_t baseline, int focus, ui::Context& ui);
-        std::string phantomBefore(const ReadingLoop& reader, uint8_t sizeIndex) const;
-        std::string phantomAfter(const ReadingLoop& reader, uint8_t sizeIndex) const;
+        std::string phantomBefore(const ReadingSession& reader, uint8_t sizeIndex) const;
+        std::string phantomAfter(const ReadingSession& reader, uint8_t sizeIndex) const;
         uint32_t frameSignature(std::string_view before, std::string_view word, std::string_view after,
                                 std::string_view overlay, const settings::ReadingSettings& settings) const;
 
@@ -90,9 +62,9 @@ namespace screens {
 
         Arduino_GFX& gfx_;
         mutable ui::fonts::AlphaTextRenderer<640> text_;
+        settings::ReadingSettings& settings_;
         const ui::fonts::AlphaFont* font_ = nullptr;
         uint32_t fontRevision_ = 0;
-        settings::ReadingSettings* settings_ = nullptr;
         settings::TypographySettings themeTypography_;
         settings::TypographySettings typography_;
         uint16_t background_ = 0;
@@ -106,6 +78,9 @@ namespace screens {
         uint16_t lastTapX_ = 0;
         uint16_t lastTapY_ = 0;
         bool lastTapValid_ = false;
+        uint32_t wpmFeedbackUntilMs_ = 0;
+        bool playLocked_ = false;
+        bool pauseAtSentenceEndRequested_ = false;
     };
 
 } // namespace screens

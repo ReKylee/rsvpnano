@@ -36,11 +36,10 @@ namespace screens {
         return session_.consumeCompletionCue();
     }
 
-    void FocusScreen::draw(ui::Context& ui, uint32_t nowMs, Screen& screen) {
+    Action FocusScreen::draw(ui::Context& ui, uint32_t nowMs, Screen& screen) {
         switch (screen) {
         case Screen::FocusTimers:
-            drawTimers(ui, screen);
-            break;
+            return drawTimers(ui, screen);
         case Screen::FocusEditor:
             drawEditor(ui, screen);
             break;
@@ -54,14 +53,16 @@ namespace screens {
         default:
             break;
         }
+        return Action::None;
     }
 
     void FocusScreen::close() {
         session_.stop();
     }
 
-    void FocusScreen::drawTimers(ui::Context& ui, Screen& screen) {
-        detail::navigation(ui, Screen::FocusTimers, screen);
+    Action FocusScreen::drawTimers(ui::Context& ui, Screen& screen) {
+        if (const Action action = detail::navigation(ui, Screen::FocusTimers, screen); action != Action::None)
+            return action;
         const ui::Rect content = detail::tabContent(ui);
         constexpr int16_t columns = 3;
         constexpr int16_t rows = 2;
@@ -182,6 +183,7 @@ namespace screens {
 
         if (redraw)
             ui.markDrawn();
+        return Action::None;
     }
 
     void FocusScreen::drawEditor(ui::Context& ui, Screen& screen) {

@@ -144,11 +144,11 @@ namespace screens {
     public:
         void begin(fs::FS* filesystem);
         bool update(uint32_t nowMs);
-        void draw(ui::Context& ui, uint32_t nowMs, Screen& screen);
+        Action draw(ui::Context& ui, uint32_t nowMs, Screen& screen);
         void close();
 
     private:
-        void drawTimers(ui::Context& ui, Screen& screen);
+        Action drawTimers(ui::Context& ui, Screen& screen);
         void drawEditor(ui::Context& ui, Screen& screen);
         void drawNameEditor(ui::Context& ui, Screen& screen);
         bool drawSession(ui::Context& ui, uint32_t nowMs);

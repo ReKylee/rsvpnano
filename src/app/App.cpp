@@ -255,8 +255,12 @@ void App::renderScreen(uint32_t nowMs) {
     case screens::Screen::FocusNameEdit:
     case screens::Screen::FocusSession: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        focusScreen_.draw(immediateUi_, nowMs, screen_);
+        action = focusScreen_.draw(immediateUi_, nowMs, screen_);
         immediateUi_.endFrame();
+        if (action != screens::Action::None) {
+            handleScreenAction(action, nowMs);
+            return;
+        }
         if (renderedScreen == screens::Screen::FocusSession && screen_ != screens::Screen::FocusSession)
             focusScreen_.close();
         if (screen_ != renderedScreen)

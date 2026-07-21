@@ -1,6 +1,6 @@
 #include "board/BoardSystem.h"
-#include "board/BoardPower.h"
 #include <esp_log.h>
+#include "board/BoardPower.h"
 #include "logging/Logger.h"
 
 #include <Wire.h>
@@ -57,7 +57,7 @@ namespace Board {
             }
 
             ESP_LOGD("diag", "power_snapshot=vbus:%u axp_status1:0x%02X axp_status2:0x%02X axp_pwr_irq:0x%02X",
-                          power.externalPowerPresent ? 1 : 0, power.status1, power.status2, power.powerKeyIrqStatus);
+                     power.externalPowerPresent ? 1 : 0, power.status1, power.status2, power.powerKeyIrqStatus);
         }
 
     } // namespace System

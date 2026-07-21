@@ -94,8 +94,7 @@ namespace settings {
             ESP_LOGI("settings", "encrypted NVS initialized");
             return true;
         }
-        ESP_LOGE("settings", "encrypted NVS initialization failed: %s",
-                      esp_err_to_name(earlyInitializationResult));
+        ESP_LOGE("settings", "encrypted NVS initialization failed: %s", esp_err_to_name(earlyInitializationResult));
         return false;
     }
 

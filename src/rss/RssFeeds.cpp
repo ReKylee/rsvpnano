@@ -289,9 +289,8 @@ namespace {
                 if (nowMs - startedMs > kFeedTotalTimeoutMs) {
                     if (completeItemsRead > 0) {
                         acceptedPartialFeed = true;
-                        ESP_LOGW("rss", "total timeout after usable items url=%s bytes=%u items=%u",
-                                        currentUrl.c_str(), static_cast<unsigned int>(totalRead),
-                                        static_cast<unsigned int>(completeItemsRead));
+                        ESP_LOGW("rss", "total timeout after usable items url=%s bytes=%u items=%u", currentUrl.c_str(),
+                                 static_cast<unsigned int>(totalRead), static_cast<unsigned int>(completeItemsRead));
                         break;
                     }
                     http.end();
@@ -301,13 +300,12 @@ namespace {
                     if (completeItemsRead > 0) {
                         acceptedPartialFeed = true;
                         ESP_LOGD("rss", "idle after usable items url=%s bytes=%u items=%u", currentUrl.c_str(),
-                                      static_cast<unsigned int>(totalRead),
-                                      static_cast<unsigned int>(completeItemsRead));
+                                 static_cast<unsigned int>(totalRead), static_cast<unsigned int>(completeItemsRead));
                         break;
                     }
                     if (totalRead > 0 && feedparser::hasCompleteFeed(body)) {
                         ESP_LOGD("rss", "idle after complete feed url=%s bytes=%u", currentUrl.c_str(),
-                                      static_cast<unsigned int>(totalRead));
+                                 static_cast<unsigned int>(totalRead));
                         break;
                     }
                     http.end();
@@ -349,7 +347,7 @@ namespace {
                 if (completeItemsRead >= kMaxItemsPerFeed) {
                     stoppedAfterItems = true;
                     ESP_LOGI("rss", "downloaded item limit url=%s bytes=%u items=%u", currentUrl.c_str(),
-                                 static_cast<unsigned int>(totalRead), static_cast<unsigned int>(completeItemsRead));
+                             static_cast<unsigned int>(totalRead), static_cast<unsigned int>(completeItemsRead));
                     break;
                 }
                 const size_t closeSearchStart = previousRead > 16 ? previousRead - 16 : 0;
@@ -363,7 +361,7 @@ namespace {
                 return std::unexpected(std::string{"Feed was empty"});
             if (totalRead >= kMaxFeedBytes) {
                 ESP_LOGW("rss", "feed capped url=%s bytes=%u", currentUrl.c_str(),
-                                static_cast<unsigned int>(totalRead));
+                         static_cast<unsigned int>(totalRead));
                 report(callback, context, feedProgressLabel(feedIndex, feedCount),
                        "Reached " + String(static_cast<unsigned int>(kMaxFeedBytes / 1024)) + " KB cap",
                        20 + feedIndex * 7);
@@ -457,7 +455,7 @@ namespace {
             report(callback, context, "Saving article " + String(itemCount), item.title, 24 + feedIndex * 7);
             if (auto saved = saveItem(item, preferences, result); !saved)
                 ESP_LOGE("rss", "save failed title=%s error=%s code=%d", item.title.c_str(),
-                              saved.error().message().c_str(), saved.error().value());
+                         saved.error().message().c_str(), saved.error().value());
         }
         const uint8_t savedHere = result.articlesSaved - savedBefore;
         const uint8_t skippedHere = result.articlesSkipped - skippedBefore;
@@ -468,8 +466,8 @@ namespace {
                    String(savedHere) + " saved, " + String(skippedHere) + " skipped", 24 + feedIndex * 7);
         }
         ESP_LOGW("rss", "feed url=%s items=%u saved=%u skipped=%u", feedUrl.c_str(),
-                        static_cast<unsigned int>(itemCount), static_cast<unsigned int>(savedHere),
-                        static_cast<unsigned int>(skippedHere));
+                 static_cast<unsigned int>(itemCount), static_cast<unsigned int>(savedHere),
+                 static_cast<unsigned int>(skippedHere));
         delay(600);
         return itemCount > 0;
     }

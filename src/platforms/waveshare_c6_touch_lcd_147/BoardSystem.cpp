@@ -1,6 +1,6 @@
 #include "board/BoardSystem.h"
-#include "board/BoardPower.h"
 #include <esp_log.h>
+#include "board/BoardPower.h"
 #include "logging/Logger.h"
 
 #include <Wire.h>

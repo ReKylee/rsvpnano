@@ -357,11 +357,10 @@ namespace IndexedBook {
                 source.close();
                 if (sourceBytes > UINT32_MAX || header.sourceSize != static_cast<uint32_t>(sourceBytes)
                     || header.sourceFingerprint != actualFingerprint) {
-                    ESP_LOGW("storage-index", "stale index: %s size=%lu/%lu fingerprint=%08lx/%08lx",
-                                    path.c_str(), static_cast<unsigned long>(header.sourceSize),
-                                    static_cast<unsigned long>(sourceBytes),
-                                    static_cast<unsigned long>(header.sourceFingerprint),
-                                    static_cast<unsigned long>(actualFingerprint));
+                    ESP_LOGW("storage-index", "stale index: %s size=%lu/%lu fingerprint=%08lx/%08lx", path.c_str(),
+                             static_cast<unsigned long>(header.sourceSize), static_cast<unsigned long>(sourceBytes),
+                             static_cast<unsigned long>(header.sourceFingerprint),
+                             static_cast<unsigned long>(actualFingerprint));
                     return false;
                 }
             }
@@ -375,8 +374,8 @@ namespace IndexedBook {
                         data.close();
                     }
                     ESP_LOGW("storage-index", "data sidecar invalid: %s size=%lu expected=%lu",
-                                    indexedDataPathFor(path).c_str(), static_cast<unsigned long>(dataBytes),
-                                    static_cast<unsigned long>(header.dataSize));
+                             indexedDataPathFor(path).c_str(), static_cast<unsigned long>(dataBytes),
+                             static_cast<unsigned long>(header.dataSize));
                     return false;
                 }
                 data.close();
@@ -420,8 +419,7 @@ namespace IndexedBook {
                     indexFile.close();
                     metadata.clear();
                     ESP_LOGE("storage-index", "paragraph section seek failed: %s offset=%lu",
-                                  indexedIndexPathFor(path).c_str(),
-                                  static_cast<unsigned long>(header.paragraphsOffset));
+                             indexedIndexPathFor(path).c_str(), static_cast<unsigned long>(header.paragraphsOffset));
                     return false;
                 }
                 for (uint32_t i = 0; i < header.paragraphCount; ++i) {
@@ -430,7 +428,7 @@ namespace IndexedBook {
                         indexFile.close();
                         metadata.clear();
                         ESP_LOGE("storage-index", "paragraph section read failed: %s item=%lu",
-                                      indexedIndexPathFor(path).c_str(), static_cast<unsigned long>(i));
+                                 indexedIndexPathFor(path).c_str(), static_cast<unsigned long>(i));
                         return false;
                     }
                     metadata.paragraphStarts.push_back(wordIndex);
@@ -443,7 +441,7 @@ namespace IndexedBook {
                     indexFile.close();
                     metadata.clear();
                     ESP_LOGE("storage-index", "chapter section seek failed: %s offset=%lu",
-                                  indexedIndexPathFor(path).c_str(), static_cast<unsigned long>(header.chaptersOffset));
+                             indexedIndexPathFor(path).c_str(), static_cast<unsigned long>(header.chaptersOffset));
                     return false;
                 }
                 for (uint32_t i = 0; i < header.chapterCount; ++i) {
@@ -452,7 +450,7 @@ namespace IndexedBook {
                         indexFile.close();
                         metadata.clear();
                         ESP_LOGE("storage-index", "chapter section read failed: %s item=%lu",
-                                      indexedIndexPathFor(path).c_str(), static_cast<unsigned long>(i));
+                                 indexedIndexPathFor(path).c_str(), static_cast<unsigned long>(i));
                         return false;
                     }
                     ChapterMarker marker;
@@ -506,7 +504,7 @@ namespace IndexedBook {
             if (sourceBytes == 0 || sourceBytes > UINT32_MAX) {
                 source.close();
                 ESP_LOGW("storage-index", "unsupported source size: %s (%lu bytes)", path.c_str(),
-                                static_cast<unsigned long>(sourceBytes));
+                         static_cast<unsigned long>(sourceBytes));
                 report("Index failed", displayNameForPath(path).c_str(),
                        sourceBytes == 0 ? "No readable words" : "Book too large", 100);
                 return false;
@@ -586,7 +584,7 @@ namespace IndexedBook {
                             keepReading = processLine(line);
                             if (!keepReading && RsvpText::kMaxBookWords > 0) {
                                 ESP_LOGD("storage-index", "Reached %lu word limit, truncating book",
-                                              static_cast<unsigned long>(RsvpText::kMaxBookWords));
+                                         static_cast<unsigned long>(RsvpText::kMaxBookWords));
                             } else if (!keepReading && (stats.memoryLow || buildContext.failed)) {
                                 parseFailed = true;
                             }
@@ -645,9 +643,9 @@ namespace IndexedBook {
 
                 if (stats.longLineSplits > 0 || stats.malformedUtf8 > 0 || stats.nonAsciiCodepoints > 0) {
                     ESP_LOGD("storage-index", "Parse cleanup: long_lines=%u malformed_utf8=%u non_ascii=%u",
-                                  static_cast<unsigned int>(stats.longLineSplits),
-                                  static_cast<unsigned int>(stats.malformedUtf8),
-                                  static_cast<unsigned int>(stats.nonAsciiCodepoints));
+                             static_cast<unsigned int>(stats.longLineSplits),
+                             static_cast<unsigned int>(stats.malformedUtf8),
+                             static_cast<unsigned int>(stats.nonAsciiCodepoints));
                 }
 
                 if (parseFailed || dataContext.wordCount == 0) {
@@ -741,16 +739,16 @@ namespace IndexedBook {
                 parseFailed = !parseIndexedSource(source, indexContext, indexStats, false);
                 if (parseFailed) {
                     ESP_LOGE("storage-index", "second pass parse/write failed: %s detail=%s", path.c_str(),
-                                  indexContext.failure);
+                             indexContext.failure);
                 }
 
                 if (!parseFailed
                     && (indexContext.wordCount != header.wordCount || indexContext.dataSize != header.dataSize)) {
                     ESP_LOGE("storage-index", "second pass mismatch words=%u/%u data=%u/%u",
-                                  static_cast<unsigned int>(indexContext.wordCount),
-                                  static_cast<unsigned int>(header.wordCount),
-                                  static_cast<unsigned int>(indexContext.dataSize),
-                                  static_cast<unsigned int>(header.dataSize));
+                             static_cast<unsigned int>(indexContext.wordCount),
+                             static_cast<unsigned int>(header.wordCount),
+                             static_cast<unsigned int>(indexContext.dataSize),
+                             static_cast<unsigned int>(header.dataSize));
                     parseFailed = true;
                 }
 
@@ -760,7 +758,7 @@ namespace IndexedBook {
                     const uint32_t wordIndex = static_cast<uint32_t>(metadata.paragraphStarts[i]);
                     if (!indexWriter.write(&wordIndex, sizeof(wordIndex))) {
                         ESP_LOGE("storage-index", "paragraph table write failed: %s item=%u", tmpIndexPath.c_str(),
-                                      static_cast<unsigned int>(i));
+                                 static_cast<unsigned int>(i));
                         parseFailed = true;
                     }
                 }
@@ -776,7 +774,7 @@ namespace IndexedBook {
                     }
                     if (!indexWriter.write(&record, sizeof(record))) {
                         ESP_LOGE("storage-index", "chapter table write failed: %s item=%u", tmpIndexPath.c_str(),
-                                      static_cast<unsigned int>(i));
+                                 static_cast<unsigned int>(i));
                         parseFailed = true;
                     }
                 }
@@ -840,9 +838,8 @@ namespace IndexedBook {
             }
 
             ESP_LOGI("storage-index", "Built %u words, %u chapters from %s in %lu ms",
-                         static_cast<unsigned int>(metadata.wordCount),
-                         static_cast<unsigned int>(metadata.chapters.size()), path.c_str(),
-                         static_cast<unsigned long>(millis() - startedMs));
+                     static_cast<unsigned int>(metadata.wordCount), static_cast<unsigned int>(metadata.chapters.size()),
+                     path.c_str(), static_cast<unsigned long>(millis() - startedMs));
             report("Index ready", label.c_str(), "Book ready", 100);
             return true;
         }
@@ -974,8 +971,7 @@ namespace IndexedBook {
         }
 
         ESP_LOGI("storage", "Opened indexed book %s: %u words, %u chapters", path.c_str(),
-                     static_cast<unsigned int>(metadata.wordCount),
-                     static_cast<unsigned int>(metadata.chapters.size()));
+                 static_cast<unsigned int>(metadata.wordCount), static_cast<unsigned int>(metadata.chapters.size()));
         return true;
     }
 

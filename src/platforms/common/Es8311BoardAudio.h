@@ -2,9 +2,9 @@
 
 #include <Arduino.h>
 
+#include <esp_log.h>
 #include "board/BoardPower.h"
 #include "drivers/audio/es8311/Es8311.h"
-#include <esp_log.h>
 
 namespace {
 

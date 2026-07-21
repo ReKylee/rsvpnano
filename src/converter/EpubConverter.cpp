@@ -136,9 +136,8 @@ namespace {
         const std::vector<ManifestItem> manifest = parseManifestItems(opfXml, opfBaseDir);
         const std::vector<String> spineIds = parseSpineIds(opfXml);
 
-        ESP_LOGD("epub", "Package parsed: manifest=%u spine=%u base=%s",
-                      static_cast<unsigned int>(manifest.size()), static_cast<unsigned int>(spineIds.size()),
-                      opfBaseDir.c_str());
+        ESP_LOGD("epub", "Package parsed: manifest=%u spine=%u base=%s", static_cast<unsigned int>(manifest.size()),
+                 static_cast<unsigned int>(spineIds.size()), opfBaseDir.c_str());
 
         reportProgress(options, "Opening EPUB", "Building reading order", 20);
         return [&]() {
@@ -248,8 +247,7 @@ namespace {
     }
 
     void reportReadingOrderReady(const EpubConverter::Options& options, const std::vector<String>& readingOrder) {
-        ESP_LOGD("epub", "Reading order contains %u content files",
-                      static_cast<unsigned int>(readingOrder.size()));
+        ESP_LOGD("epub", "Reading order contains %u content files", static_cast<unsigned int>(readingOrder.size()));
         const String foundDetail = String(readingOrder.size()) + " content files";
         reportProgress(options, "Opening EPUB", foundDetail.c_str(), 25);
     }
@@ -381,7 +379,7 @@ namespace {
         }
 
         ESP_LOGI("epub", "Converted %s -> %s (%u words)", epubPath.c_str(), rsvpPath.c_str(),
-                     static_cast<unsigned int>(wordCount));
+                 static_cast<unsigned int>(wordCount));
         const String convertedDetail = wordCountDetail(wordCount);
         reportProgress(options, "EPUB converted", convertedDetail.c_str(), 100);
         return true;

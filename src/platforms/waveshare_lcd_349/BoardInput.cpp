@@ -104,8 +104,8 @@ namespace Board::Input {
 
     bool readTouch(ui::TouchContact& contact) {
         std::array<uint8_t, Axs15231bTouch::kPacketLength> data = {};
-        const bool read = Axs15231bTouch::readPacket(touchWire(), WaveshareLcd349::TouchWiring::kAddress,
-                                                      data.data(), data.size());
+        const bool read =
+            Axs15231bTouch::readPacket(touchWire(), WaveshareLcd349::TouchWiring::kAddress, data.data(), data.size());
         bool active = false;
         WaveshareLcd349::readTouchExpanderInterrupt(active);
         if (!read) {

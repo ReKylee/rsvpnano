@@ -21,11 +21,11 @@ namespace EpubCache {
 
         void logHeapSnapshot(const char* label) {
             ESP_LOGD("heap", "%s free8=%lu free_spiram=%lu largest8=%lu largest_spiram=%lu",
-                          label == nullptr ? "" : label,
-                          static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
-                          static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)),
-                          static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)),
-                          static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM)));
+                     label == nullptr ? "" : label,
+                     static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+                     static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)),
+                     static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)),
+                     static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM)));
         }
 
         void logConversionProgress(const EpubConverter::Options& options, const char* line1, const char* line2,
@@ -34,7 +34,7 @@ namespace EpubCache {
             const String detail = String(line1 == nullptr ? "" : line1) + " - " + String(line2 == nullptr ? "" : line2);
             const char* title = options.progressTitle.isEmpty() ? "EPUB" : options.progressTitle.c_str();
             ESP_LOGD("epub-progress", "%d%% %s | %s | %s", overallPercent, title, options.progressLabel.c_str(),
-                          detail.c_str());
+                     detail.c_str());
 
             // Keep the display on the static conversion screen while ZIP work owns the SD
             // archive.
@@ -108,7 +108,7 @@ namespace EpubCache {
         }();
 
         ESP_LOGD("storage", "Preparing EPUB conversion: source=%s output=%s size=%lu bytes", epubPath.c_str(),
-                      rsvpPath.c_str(), static_cast<unsigned long>(epubBytes));
+                 rsvpPath.c_str(), static_cast<unsigned long>(epubBytes));
         logHeapSnapshot("before EPUB conversion");
         report("Preparing book", displayNameForPath(epubPath).c_str(), "Converting EPUB", 0);
 
@@ -125,8 +125,8 @@ namespace EpubCache {
             const auto converted = EpubConverter::convertIfNeeded(epubPath, rsvpPath, options);
             elapsedMs = millis() - startedMs;
             if (!converted) {
-                ESP_LOGE("storage", "EPUB conversion failed after %lu ms: %s",
-                              static_cast<unsigned long>(elapsedMs), epubPath.c_str());
+                ESP_LOGE("storage", "EPUB conversion failed after %lu ms: %s", static_cast<unsigned long>(elapsedMs),
+                         epubPath.c_str());
                 report("Preparing book", "EPUB conversion failed", "Check serial monitor", 100);
                 logHeapSnapshot("after EPUB conversion");
                 return std::unexpected(converted.error());
@@ -136,13 +136,13 @@ namespace EpubCache {
 
         if (!StorageFiles::fileExistsWithBytes(rsvpPath.c_str())) {
             ESP_LOGE("storage", "EPUB conversion failed after %lu ms: %s", static_cast<unsigned long>(elapsedMs),
-                          epubPath.c_str());
+                     epubPath.c_str());
             report("Preparing book", "EPUB conversion failed", "Check serial monitor", 100);
             return std::unexpected(std::make_error_code(std::errc::io_error));
         }
 
         ESP_LOGI("storage", "EPUB conversion ready after %lu ms: %s", static_cast<unsigned long>(elapsedMs),
-                     rsvpPath.c_str());
+                 rsvpPath.c_str());
         report("Preparing book", displayNameForPath(rsvpPath).c_str(), "Conversion complete", 100);
         return rsvpPath;
     }

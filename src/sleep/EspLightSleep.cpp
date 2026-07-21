@@ -15,12 +15,12 @@ namespace EspLightSleep {
 
     WakeReason wait(std::span<const gpio_num_t> wakePins, uint32_t timeoutMs) {
         {
-            for (const gpio_num_t pin : wakePins)
+            for (const gpio_num_t pin: wakePins)
                 pinMode(static_cast<int>(pin), INPUT_PULLUP);
 
             while (true) {
                 bool allReleased = true;
-                for (const gpio_num_t pin : wakePins)
+                for (const gpio_num_t pin: wakePins)
                     allReleased = allReleased && digitalRead(static_cast<int>(pin));
                 if (allReleased)
                     break;
@@ -29,7 +29,7 @@ namespace EspLightSleep {
         }
 
         const auto disableWakeSources = [&] {
-            for (const gpio_num_t pin : wakePins)
+            for (const gpio_num_t pin: wakePins)
                 gpio_wakeup_disable(pin);
             esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
             if (timeoutMs > 0)
@@ -37,22 +37,21 @@ namespace EspLightSleep {
         };
 
         {
-            for (const gpio_num_t pin : wakePins) {
+            for (const gpio_num_t pin: wakePins) {
                 if (const esp_err_t error = gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL); error != ESP_OK) {
                     ESP_LOGE("sleep", "failed to arm GPIO %d for light sleep: %d", static_cast<int>(pin),
-                                  static_cast<int>(error));
+                             static_cast<int>(error));
                     disableWakeSources();
                     return WakeReason::error;
                 }
             }
 
             const esp_err_t gpioError = esp_sleep_enable_gpio_wakeup();
-            const esp_err_t timerError = timeoutMs == 0
-                ? ESP_OK
-                : esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(timeoutMs) * 1000ULL);
+            const esp_err_t timerError =
+                timeoutMs == 0 ? ESP_OK : esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(timeoutMs) * 1000ULL);
             if (gpioError != ESP_OK || timerError != ESP_OK) {
                 ESP_LOGE("sleep", "failed to arm light sleep: gpio=%d timer=%d", static_cast<int>(gpioError),
-                              static_cast<int>(timerError));
+                         static_cast<int>(timerError));
                 disableWakeSources();
                 return WakeReason::error;
             }

@@ -61,23 +61,23 @@ namespace {
 
     void logDisplayMemory() {
         ESP_LOGD("display", "host=%d mode=%d", static_cast<int>(ESP32QSPI_SPI_HOST),
-                      static_cast<int>(ESP32QSPI_SPI_MODE));
+                 static_cast<int>(ESP32QSPI_SPI_MODE));
 
         ESP_LOGD("display", "psramFound=%s size=%u free=%u", psramFound() ? "yes" : "no", ESP.getPsramSize(),
-                      ESP.getFreePsram());
+                 ESP.getFreePsram());
 
         ESP_LOGD("display", "heap internal=%u spiram=%u", heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
-                      heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+                 heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     }
 
     void logCanvasMemory() {
         uint16_t* framebuffer = gCanvas.getFramebuffer();
 
         ESP_LOGD("display", "canvas framebuffer=%p external=%s", framebuffer,
-                      esp_ptr_external_ram(framebuffer) ? "yes" : "no");
+                 esp_ptr_external_ram(framebuffer) ? "yes" : "no");
 
-        ESP_LOGD("display", "after canvas: heap internal=%u spiram=%u",
-                      heap_caps_get_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+        ESP_LOGD("display", "after canvas: heap internal=%u spiram=%u", heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     }
 
 } // namespace

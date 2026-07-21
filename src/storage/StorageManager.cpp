@@ -162,15 +162,14 @@ StorageManager::DiagnosticResult StorageManager::diagnoseSdCard() {
         } else {
             result.detail = "Upload to /books/books";
         }
-        ESP_LOGW("sd-check", "no supported books; unsupported=%u",
-                        static_cast<unsigned int>(result.unsupportedCount));
+        ESP_LOGW("sd-check", "no supported books; unsupported=%u", static_cast<unsigned int>(result.unsupportedCount));
         return result;
     }
 
     result.summary = String(result.bookCount) + " books OK";
     result.detail = result.cardType + " " + String(static_cast<unsigned int>(result.sizeMb)) + " MB";
     ESP_LOGW("sd-check", "OK books=%u unsupported=%u writable=%u", static_cast<unsigned int>(result.bookCount),
-                    static_cast<unsigned int>(result.unsupportedCount), result.writable ? 1 : 0);
+             static_cast<unsigned int>(result.unsupportedCount), result.writable ? 1 : 0);
     return result;
 }
 

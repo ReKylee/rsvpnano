@@ -16,7 +16,7 @@ namespace EspLightSleep {
 
     WakeReason wait(std::span<const gpio_num_t> wakePins, uint32_t timeoutMs);
 
-    template <gpio_num_t InputPin, int TouchPin>
+    template<gpio_num_t InputPin, int TouchPin>
     WakeReason wait(uint32_t timeoutMs) {
         if constexpr (TouchPin >= 0) {
             constexpr std::array wakePins = {InputPin, static_cast<gpio_num_t>(TouchPin)};

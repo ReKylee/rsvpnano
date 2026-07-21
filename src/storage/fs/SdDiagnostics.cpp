@@ -200,8 +200,8 @@ namespace SdDiagnostics {
                     const size_t written = file.write(writeBuffer, chunk);
                     if (written != chunk) {
                         ESP_LOGE(tag, "probe short write path=%s offset=%u wanted=%u got=%u", path.c_str(),
-                                      static_cast<unsigned int>(writtenTotal), static_cast<unsigned int>(chunk),
-                                      static_cast<unsigned int>(written));
+                                 static_cast<unsigned int>(writtenTotal), static_cast<unsigned int>(chunk),
+                                 static_cast<unsigned int>(written));
                         file.close();
                         removeProbeFile(path, tag);
                         return false;
@@ -227,7 +227,7 @@ namespace SdDiagnostics {
 
                 if (file.size() != bytes) {
                     ESP_LOGE(tag, "probe size mismatch path=%s size=%u expected=%u", path.c_str(),
-                                  static_cast<unsigned int>(file.size()), static_cast<unsigned int>(bytes));
+                             static_cast<unsigned int>(file.size()), static_cast<unsigned int>(bytes));
                     file.close();
                     removeProbeFile(path, tag);
                     return false;
@@ -240,8 +240,8 @@ namespace SdDiagnostics {
                     const size_t read = file.read(readBuffer, chunk);
                     if (read != chunk || std::memcmp(readBuffer, writeBuffer, chunk) != 0) {
                         ESP_LOGE(tag, "probe verify failed path=%s offset=%u wanted=%u got=%u", path.c_str(),
-                                      static_cast<unsigned int>(readTotal), static_cast<unsigned int>(chunk),
-                                      static_cast<unsigned int>(read));
+                                 static_cast<unsigned int>(readTotal), static_cast<unsigned int>(chunk),
+                                 static_cast<unsigned int>(read));
                         file.close();
                         removeProbeFile(path, tag);
                         return false;
@@ -413,7 +413,7 @@ namespace SdDiagnostics {
         result.cardType = cardTypeLabel(Board::Storage::cardType(), result.sizeMb);
         result.frequencyKhz = sMountedFrequencyKhz;
         ESP_LOGI("sd-check", "mounted type=%s size=%llu MB freq=%d kHz", result.cardType.c_str(), result.sizeMb,
-                     result.frequencyKhz);
+                 result.frequencyKhz);
 
         report("Checking folders", "", 30);
         result.booksDirectory = StorageFiles::directoryExists(StoragePaths::kBooksPath);
@@ -427,11 +427,11 @@ namespace SdDiagnostics {
             result.summary = "Folders missing";
             result.detail = "Can create layout";
             ESP_LOGW("sd-check",
-                            "v0.0.4 folders missing /books=%u /books/books=%u /books/articles=%u /config=%u /themes=%u "
-                            "/fonts=%u",
-                            result.booksDirectory ? 1 : 0, result.bookFilesDirectory ? 1 : 0,
-                            result.articleFilesDirectory ? 1 : 0, result.configDirectory ? 1 : 0,
-                            result.themesDirectory ? 1 : 0, result.fontsDirectory ? 1 : 0);
+                     "v0.0.4 folders missing /books=%u /books/books=%u /books/articles=%u /config=%u /themes=%u "
+                     "/fonts=%u",
+                     result.booksDirectory ? 1 : 0, result.bookFilesDirectory ? 1 : 0,
+                     result.articleFilesDirectory ? 1 : 0, result.configDirectory ? 1 : 0,
+                     result.themesDirectory ? 1 : 0, result.fontsDirectory ? 1 : 0);
             report("Folders missing", "Confirm repair", 38);
             return result;
         }
@@ -464,8 +464,8 @@ namespace SdDiagnostics {
             result.summary = "Folder write failed";
             result.detail = "Format FAT32 MBR";
             ESP_LOGE("sd-check", "folder write failed books=%u articles=%u config=%u themes=%u fonts=%u",
-                          result.booksWritable ? 1 : 0, result.articlesWritable ? 1 : 0, result.configWritable ? 1 : 0,
-                          result.themesWritable ? 1 : 0, result.fontsWritable ? 1 : 0);
+                     result.booksWritable ? 1 : 0, result.articlesWritable ? 1 : 0, result.configWritable ? 1 : 0,
+                     result.themesWritable ? 1 : 0, result.fontsWritable ? 1 : 0);
             return;
         }
 

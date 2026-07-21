@@ -56,8 +56,8 @@ namespace EpubZip {
                 const int bytesRead = file.read(buffer + offset, chunk);
                 if (bytesRead != static_cast<int>(chunk)) {
                     ESP_LOGD("epub-zip", "Short read at pos=%lu wanted=%u got=%d totalWanted=%u offset=%u",
-                                  static_cast<unsigned long>(beforePosition), static_cast<unsigned int>(chunk),
-                                  bytesRead, static_cast<unsigned int>(length), static_cast<unsigned int>(offset));
+                             static_cast<unsigned long>(beforePosition), static_cast<unsigned int>(chunk), bytesRead,
+                             static_cast<unsigned int>(length), static_cast<unsigned int>(offset));
                     return false;
                 }
                 offset += chunk;
@@ -121,8 +121,8 @@ namespace EpubZip {
         bool seekToEntryPayload(File& file, const ZipEntry& entry, const char* context, uint32_t& dataOffset) {
             std::array<uint8_t, 30> localHeader;
             if (!file.seek(entry.localHeaderOffset)) {
-                ESP_LOGE("epub-zip", "Could not seek to %s local header: %s offset=%lu", context,
-                              entry.name.c_str(), static_cast<unsigned long>(entry.localHeaderOffset));
+                ESP_LOGE("epub-zip", "Could not seek to %s local header: %s offset=%lu", context, entry.name.c_str(),
+                         static_cast<unsigned long>(entry.localHeaderOffset));
                 return false;
             }
             if (!readExact(file, localHeader.data(), localHeader.size())) {
@@ -132,8 +132,8 @@ namespace EpubZip {
 
             const uint32_t localSignature = readLe32(localHeader.data());
             if (localSignature != kZipLocalFileSignature) {
-                ESP_LOGD("epub-zip", "Bad %s local signature for %s signature=0x%08lx", context,
-                              entry.name.c_str(), static_cast<unsigned long>(localSignature));
+                ESP_LOGD("epub-zip", "Bad %s local signature for %s signature=0x%08lx", context, entry.name.c_str(),
+                         static_cast<unsigned long>(localSignature));
                 return false;
             }
 
@@ -141,10 +141,10 @@ namespace EpubZip {
             const uint16_t extraLength = readLe16(localHeader.data() + 28);
             dataOffset = entry.localHeaderOffset + localHeader.size() + fileNameLength + extraLength;
             ESP_LOGD("epub-zip", "%s data: %s nameLen=%u extraLen=%u dataOffset=%lu", context, entry.name.c_str(),
-                          fileNameLength, extraLength, static_cast<unsigned long>(dataOffset));
+                     fileNameLength, extraLength, static_cast<unsigned long>(dataOffset));
             if (!file.seek(dataOffset)) {
                 ESP_LOGE("epub-zip", "Could not seek to %s data: %s offset=%lu", context, entry.name.c_str(),
-                              static_cast<unsigned long>(dataOffset));
+                         static_cast<unsigned long>(dataOffset));
                 return false;
             }
 
@@ -166,7 +166,7 @@ namespace EpubZip {
                 const size_t chunk = std::min(kReadChunkBytes, static_cast<size_t>(remaining));
                 if (!readExact(file, buffer, chunk)) {
                     ESP_LOGE("epub-zip", "Stored %s read failed: %s remaining=%lu", context, entry.name.c_str(),
-                                  static_cast<unsigned long>(remaining));
+                             static_cast<unsigned long>(remaining));
                     ok = false;
                     break;
                 }
@@ -192,9 +192,9 @@ namespace EpubZip {
             tinfl_decompressor* inflator =
                 static_cast<tinfl_decompressor*>(allocateInternalBuffer(sizeof(tinfl_decompressor)));
             if (inputBuffer == nullptr || dictionary == nullptr || inflator == nullptr) {
-                ESP_LOGD("epub-zip", "No internal inflate buffers for %s: %s input=%s dict=%s inflator=%s",
-                              context, entry.name.c_str(), inputBuffer == nullptr ? "no" : "yes",
-                              dictionary == nullptr ? "no" : "yes", inflator == nullptr ? "no" : "yes");
+                ESP_LOGD("epub-zip", "No internal inflate buffers for %s: %s input=%s dict=%s inflator=%s", context,
+                         entry.name.c_str(), inputBuffer == nullptr ? "no" : "yes",
+                         dictionary == nullptr ? "no" : "yes", inflator == nullptr ? "no" : "yes");
                 freeBuffer(inputBuffer);
                 freeBuffer(dictionary);
                 freeBuffer(inflator);
@@ -213,8 +213,8 @@ namespace EpubZip {
                 if (inputAvailable == 0 && compressedRemaining > 0) {
                     const size_t chunk = std::min(kInflateInputChunkBytes, static_cast<size_t>(compressedRemaining));
                     if (!readExact(file, inputBuffer, chunk)) {
-                        ESP_LOGE("epub-zip", "Deflated %s read failed: %s remaining=%lu", context,
-                                      entry.name.c_str(), static_cast<unsigned long>(compressedRemaining));
+                        ESP_LOGE("epub-zip", "Deflated %s read failed: %s remaining=%lu", context, entry.name.c_str(),
+                                 static_cast<unsigned long>(compressedRemaining));
                         ok = false;
                         break;
                     }
@@ -247,7 +247,7 @@ namespace EpubZip {
 
                 if (status < TINFL_STATUS_DONE) {
                     ESP_LOGE("epub-zip", "Inflate failed for %s status=%d context=%s", entry.name.c_str(),
-                                  static_cast<int>(status), context);
+                             static_cast<int>(status), context);
                     ok = false;
                     break;
                 }
@@ -255,7 +255,7 @@ namespace EpubZip {
                 if (inSize == 0 && outSize == 0 && status != TINFL_STATUS_DONE && inputAvailable == 0
                     && compressedRemaining == 0) {
                     ESP_LOGE("epub-zip", "Inflate stalled for %s status=%d context=%s", entry.name.c_str(),
-                                  static_cast<int>(status), context);
+                             static_cast<int>(status), context);
                     ok = false;
                     break;
                 }
@@ -322,7 +322,7 @@ namespace EpubZip {
         });
         if (insensitive != entries_.end()) {
             ESP_LOGD("epub-zip", "Case-insensitive ZIP match: requested=%s actual=%s", normalized.c_str(),
-                          insensitive->name.c_str());
+                     insensitive->name.c_str());
             return &(*insensitive);
         }
 
@@ -357,14 +357,14 @@ namespace EpubZip {
 
     void Archive::logArchiveHints(const char* reason) const {
         ESP_LOGD("epub-zip", "Archive hints (%s): entries=%u", reason == nullptr ? "" : reason,
-                      static_cast<unsigned int>(entries_.size()));
+                 static_cast<unsigned int>(entries_.size()));
 
         auto logEntry = [](const char* label, size_t displayIndex, const ZipEntry& entry) {
             ESP_LOGD("epub-zip", "  %s[%u] %s method=%u flags=0x%04x c=%lu u=%lu local=%lu", label,
-                          static_cast<unsigned int>(displayIndex), entry.name.c_str(), entry.method, entry.flags,
-                          static_cast<unsigned long>(entry.compressedSize),
-                          static_cast<unsigned long>(entry.uncompressedSize),
-                          static_cast<unsigned long>(entry.localHeaderOffset));
+                     static_cast<unsigned int>(displayIndex), entry.name.c_str(), entry.method, entry.flags,
+                     static_cast<unsigned long>(entry.compressedSize),
+                     static_cast<unsigned long>(entry.uncompressedSize),
+                     static_cast<unsigned long>(entry.localHeaderOffset));
         };
 
         size_t printed = 0;
@@ -399,15 +399,14 @@ namespace EpubZip {
             const size_t tailSize = fileSize < kZipEocdMaxSearch ? static_cast<size_t>(fileSize) : kZipEocdMaxSearch;
             uint8_t* tail = static_cast<uint8_t*>(allocateBuffer(tailSize));
             if (tail == nullptr) {
-                ESP_LOGE("epub-zip", "No memory for EOCD tail buffer: %u bytes",
-                              static_cast<unsigned int>(tailSize));
+                ESP_LOGE("epub-zip", "No memory for EOCD tail buffer: %u bytes", static_cast<unsigned int>(tailSize));
                 return false;
             }
 
             const uint32_t tailOffset = fileSize - static_cast<uint32_t>(tailSize);
             ESP_LOGD("epub-zip", "Searching EOCD: fileSize=%lu tailOffset=%lu tailSize=%u",
-                          static_cast<unsigned long>(fileSize), static_cast<unsigned long>(tailOffset),
-                          static_cast<unsigned int>(tailSize));
+                     static_cast<unsigned long>(fileSize), static_cast<unsigned long>(tailOffset),
+                     static_cast<unsigned int>(tailSize));
             const bool ok = file_.seek(tailOffset) && readExact(file_, tail, tailSize);
             const int eocdIndex = [&]() {
                 if (!ok) {
@@ -434,11 +433,10 @@ namespace EpubZip {
             const uint32_t centralDirectorySize = readLe32(tail + eocdIndex + 12);
             freeBuffer(tail);
 
-            ESP_LOGD("epub-zip",
-                          "EOCD found: eocdOffset=%lu entries=%u cdOffset=%lu cdSize=%lu disk=%u dirDisk=%u",
-                          static_cast<unsigned long>(tailOffset + static_cast<uint32_t>(eocdIndex)), entryCount,
-                          static_cast<unsigned long>(centralDirectoryOffset),
-                          static_cast<unsigned long>(centralDirectorySize), diskNumber, directoryDisk);
+            ESP_LOGD("epub-zip", "EOCD found: eocdOffset=%lu entries=%u cdOffset=%lu cdSize=%lu disk=%u dirDisk=%u",
+                     static_cast<unsigned long>(tailOffset + static_cast<uint32_t>(eocdIndex)), entryCount,
+                     static_cast<unsigned long>(centralDirectoryOffset),
+                     static_cast<unsigned long>(centralDirectorySize), diskNumber, directoryDisk);
 
             if (diskNumber != 0 || directoryDisk != 0 || entryCount == 0 || entryCount > kMaxZipEntries) {
                 ESP_LOGW("epub", "Unsupported ZIP directory entry count: %u", entryCount);
@@ -450,7 +448,7 @@ namespace EpubZip {
         entries_.reserve(entryCount);
         if (!file_.seek(centralDirectoryOffset)) {
             ESP_LOGE("epub-zip", "Could not seek to central directory offset=%lu",
-                          static_cast<unsigned long>(centralDirectoryOffset));
+                     static_cast<unsigned long>(centralDirectoryOffset));
             return false;
         }
 
@@ -469,7 +467,7 @@ namespace EpubZip {
                 if (!readExact(file_, header.data(), header.size())
                     || readLe32(header.data()) != kZipCentralFileSignature) {
                     ESP_LOGD("epub-zip", "Bad central header at index=%u pos=%lu", i,
-                                  static_cast<unsigned long>(file_.position()));
+                             static_cast<unsigned long>(file_.position()));
                     return false;
                 }
 
@@ -506,7 +504,7 @@ namespace EpubZip {
             const uint32_t nextPosition = static_cast<uint32_t>(file_.position()) + extraLength + commentLength;
             if (!file_.seek(nextPosition)) {
                 ESP_LOGE("epub-zip", "Could not seek past central extras for %s next=%lu", entry.name.c_str(),
-                              static_cast<unsigned long>(nextPosition));
+                         static_cast<unsigned long>(nextPosition));
                 return false;
             }
 
@@ -516,7 +514,7 @@ namespace EpubZip {
         }
 
         ESP_LOGD("epub-zip", "Central directory parsed: kept=%u rawEntries=%u",
-                      static_cast<unsigned int>(entries_.size()), entryCount);
+                 static_cast<unsigned int>(entries_.size()), entryCount);
         return true;
     }
 
@@ -524,14 +522,14 @@ namespace EpubZip {
         output = "";
 
         ESP_LOGD("epub-zip", "Extract string: %s method=%u flags=0x%04x c=%lu u=%lu max=%u", entry.name.c_str(),
-                      entry.method, entry.flags, static_cast<unsigned long>(entry.compressedSize),
-                      static_cast<unsigned long>(entry.uncompressedSize), static_cast<unsigned int>(maxBytes));
+                 entry.method, entry.flags, static_cast<unsigned long>(entry.compressedSize),
+                 static_cast<unsigned long>(entry.uncompressedSize), static_cast<unsigned int>(maxBytes));
 
         if (entry.uncompressedSize == 0 || entry.uncompressedSize > maxBytes || entry.compressedSize == 0
             || entry.compressedSize > maxBytes) {
             ESP_LOGW("epub", "Skipping %s (%lu compressed, %lu uncompressed bytes)", entry.name.c_str(),
-                            static_cast<unsigned long>(entry.compressedSize),
-                            static_cast<unsigned long>(entry.uncompressedSize));
+                     static_cast<unsigned long>(entry.compressedSize),
+                     static_cast<unsigned long>(entry.uncompressedSize));
             return false;
         }
 
@@ -542,7 +540,7 @@ namespace EpubZip {
 
         if (!output.reserve(static_cast<unsigned int>(entry.uncompressedSize + 1))) {
             ESP_LOGE("epub-zip", "No memory to reserve string for %s (%lu bytes)", entry.name.c_str(),
-                          static_cast<unsigned long>(entry.uncompressedSize));
+                     static_cast<unsigned long>(entry.uncompressedSize));
             return false;
         }
 
@@ -557,7 +555,7 @@ namespace EpubZip {
             }
             if (!output.concat(reinterpret_cast<const char*>(data), static_cast<unsigned int>(length))) {
                 ESP_LOGE("epub-zip", "String append failed for %s length=%u", entry.name.c_str(),
-                              static_cast<unsigned int>(length));
+                         static_cast<unsigned int>(length));
                 return false;
             }
             return true;
@@ -578,14 +576,13 @@ namespace EpubZip {
 
         if (ok && totalOutputBytes != entry.uncompressedSize) {
             ESP_LOGE("epub-zip", "String inflate size mismatch for %s (%lu of %lu bytes)", entry.name.c_str(),
-                          static_cast<unsigned long>(totalOutputBytes),
-                          static_cast<unsigned long>(entry.uncompressedSize));
+                     static_cast<unsigned long>(totalOutputBytes), static_cast<unsigned long>(entry.uncompressedSize));
             ok = false;
         }
 
         if (ok) {
             ESP_LOGD("epub-zip", "Extracted string OK: %s textLen=%u", entry.name.c_str(),
-                          static_cast<unsigned int>(output.length()));
+                     static_cast<unsigned int>(output.length()));
         }
 
         return ok;
@@ -597,15 +594,15 @@ namespace EpubZip {
                                                        const String& fallbackChapterTitle, const String& bookTitle,
                                                        const EpubConverter::Options& options, size_t itemIndex,
                                                        size_t itemCount) {
-        ESP_LOGD("epub-zip", "Extract content: %s method=%u flags=0x%04x c=%lu u=%lu", entry.name.c_str(),
-                      entry.method, entry.flags, static_cast<unsigned long>(entry.compressedSize),
-                      static_cast<unsigned long>(entry.uncompressedSize));
+        ESP_LOGD("epub-zip", "Extract content: %s method=%u flags=0x%04x c=%lu u=%lu", entry.name.c_str(), entry.method,
+                 entry.flags, static_cast<unsigned long>(entry.compressedSize),
+                 static_cast<unsigned long>(entry.uncompressedSize));
 
         if (entry.uncompressedSize == 0 || entry.compressedSize == 0 || entry.uncompressedSize > options.maxContentBytes
             || entry.compressedSize > options.maxContentBytes) {
             ESP_LOGW("epub", "Skipping oversized content %s (%lu compressed, %lu uncompressed bytes)",
-                            entry.name.c_str(), static_cast<unsigned long>(entry.compressedSize),
-                            static_cast<unsigned long>(entry.uncompressedSize));
+                     entry.name.c_str(), static_cast<unsigned long>(entry.compressedSize),
+                     static_cast<unsigned long>(entry.uncompressedSize));
             return ContentExtractStatus::Unsupported;
         }
 
@@ -666,8 +663,7 @@ namespace EpubZip {
 
         if (totalOutputBytes != entry.uncompressedSize) {
             ESP_LOGE("epub", "Inflate size mismatch for %s (%lu of %lu bytes)", entry.name.c_str(),
-                          static_cast<unsigned long>(totalOutputBytes),
-                          static_cast<unsigned long>(entry.uncompressedSize));
+                     static_cast<unsigned long>(totalOutputBytes), static_cast<unsigned long>(entry.uncompressedSize));
             return ContentExtractStatus::Failed;
         }
 

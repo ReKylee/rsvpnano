@@ -79,8 +79,8 @@ bool UsbMassStorageManager::begin(bool writeEnabled) {
     statusMessage_ = writeEnabled_ ? "Mounted read/write" : "Mounted read-only";
     msc_.mediaPresent(true);
     pulseUsbReconnect();
-    ESP_LOGD("usb-msc", "active blocks=%lu blockSize=%u write=%u", static_cast<unsigned long>(blockCount_),
-                  blockSize_, writeEnabled_ ? 1 : 0);
+    ESP_LOGD("usb-msc", "active blocks=%lu blockSize=%u write=%u", static_cast<unsigned long>(blockCount_), blockSize_,
+             writeEnabled_ ? 1 : 0);
     return true;
 #else
     (void) writeEnabled;
@@ -189,7 +189,7 @@ bool UsbMassStorageManager::beginSdCard() {
 
         if (card_.csd.sector_size != kUsbBlockSize || card_.csd.capacity == 0) {
             ESP_LOGW("usb-msc", "unsupported SD geometry: sectors=%d sectorSize=%d", card_.csd.capacity,
-                            card_.csd.sector_size);
+                     card_.csd.sector_size);
             deinitHostIfNeeded();
             continue;
         }
@@ -198,7 +198,7 @@ bool UsbMassStorageManager::beginSdCard() {
         blockSize_ = static_cast<uint16_t>(card_.csd.sector_size);
         cardReady_ = true;
         ESP_LOGI("usb-msc", "SD ready for USB at %d kHz (%lu MB)", frequencyKhz,
-                     static_cast<unsigned long>(cardSizeBytes() / (1024ULL * 1024ULL)));
+                 static_cast<unsigned long>(cardSizeBytes() / (1024ULL * 1024ULL)));
         return true;
     }
 
@@ -299,8 +299,8 @@ int32_t UsbMassStorageManager::writeSectors(uint32_t lba, uint32_t offset, uint8
         if (currentOffset != 0 || bytesThisSector != blockSize_) {
             const esp_err_t readErr = sdmmc_read_sectors(&card_, sectorBuffer_, currentLba, 1);
             if (readErr != ESP_OK) {
-                ESP_LOGE("usb-msc", "write pre-read failed lba=%lu err=0x%x",
-                              static_cast<unsigned long>(currentLba), readErr);
+                ESP_LOGE("usb-msc", "write pre-read failed lba=%lu err=0x%x", static_cast<unsigned long>(currentLba),
+                         readErr);
                 return written > 0 ? static_cast<int32_t>(written) : -1;
             }
         }

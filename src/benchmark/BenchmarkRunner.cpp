@@ -46,8 +46,8 @@ namespace {
                                                                     / (static_cast<uint64_t>(elapsedMs) * 1024ULL))
                                             : 0;
         ESP_LOGD("bench", "metric=%s ok=%u ms=%lu bytes=%lu rate_kib_s=%lu", name, ok ? 1 : 0,
-                      static_cast<unsigned long>(elapsedMs), static_cast<unsigned long>(bytes),
-                      static_cast<unsigned long>(rateKiBPerSecond));
+                 static_cast<unsigned long>(elapsedMs), static_cast<unsigned long>(bytes),
+                 static_cast<unsigned long>(rateKiBPerSecond));
     }
 
     void fillBytes(uint8_t* buffer, size_t bytes, uint32_t offset) {

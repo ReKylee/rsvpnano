@@ -95,8 +95,7 @@ void ThemeStore::loadFromSd(const FontCatalog& fonts, const settings::Typography
         }
 
         if (entry.size() > kMaxThemeBytes) {
-            ESP_LOGW("theme", "skipped %s: file exceeds %u bytes", path.c_str(),
-                            static_cast<unsigned>(kMaxThemeBytes));
+            ESP_LOGW("theme", "skipped %s: file exceeds %u bytes", path.c_str(), static_cast<unsigned>(kMaxThemeBytes));
             entry.close();
             continue;
         }
@@ -116,7 +115,7 @@ void ThemeStore::loadFromSd(const FontCatalog& fonts, const settings::Typography
         auto& fontId = parsed->definition.typography.fontId;
         if (fonts.find(fontId) == nullptr && !fonts.families().empty()) {
             ESP_LOGW("theme", "%s references missing font '%s'; using '%s'", path.c_str(), fontId.c_str(),
-                            fonts.families().front().id.c_str());
+                     fonts.families().front().id.c_str());
             fontId = fonts.families().front().id;
             repairs.push_back({path, loaded.size()});
         }

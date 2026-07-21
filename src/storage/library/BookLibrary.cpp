@@ -135,8 +135,8 @@ namespace BookLibrary {
             });
 
             ESP_LOGD("storage", "Directory inventory: %u files, %u books, %u cache probes in %lu ms",
-                          static_cast<unsigned int>(entries.size()), static_cast<unsigned int>(bookPaths.size()),
-                          static_cast<unsigned int>(cacheProbeCount), static_cast<unsigned long>(millis() - startedMs));
+                     static_cast<unsigned int>(entries.size()), static_cast<unsigned int>(bookPaths.size()),
+                     static_cast<unsigned int>(cacheProbeCount), static_cast<unsigned long>(millis() - startedMs));
 
             return bookPaths;
         }
@@ -197,8 +197,8 @@ namespace BookLibrary {
             }
 
             ESP_LOGD("storage", "Metadata cache: %u entries (%u rsvp) in %lu ms",
-                          static_cast<unsigned int>(listing.paths.size()), static_cast<unsigned int>(rsvpMetadataCount),
-                          static_cast<unsigned long>(millis() - startedMs));
+                     static_cast<unsigned int>(listing.paths.size()), static_cast<unsigned int>(rsvpMetadataCount),
+                     static_cast<unsigned long>(millis() - startedMs));
         };
 
         // Metadata is optional for fast startup scans, but counts are always logged.
@@ -208,17 +208,16 @@ namespace BookLibrary {
             listing.titles.clear();
             listing.authors.clear();
             ESP_LOGW("storage", "Metadata cache skipped for %u entries",
-                            static_cast<unsigned int>(listing.paths.size()));
+                     static_cast<unsigned int>(listing.paths.size()));
         }
 
         ESP_LOGD("storage", "Library scan: %u books (%u rsvp, %u txt, %u pending epub)",
-                      static_cast<unsigned int>(listing.paths.size()), static_cast<unsigned int>(counts.rsvp),
-                      static_cast<unsigned int>(counts.text), static_cast<unsigned int>(counts.pendingEpub));
+                 static_cast<unsigned int>(listing.paths.size()), static_cast<unsigned int>(counts.rsvp),
+                 static_cast<unsigned int>(counts.text), static_cast<unsigned int>(counts.pendingEpub));
     }
 
     void printListing(const Listing& listing) {
-        ESP_LOGD("storage",
-                      "Listing /books, /books/books, /books/articles (.rsvp/.txt/.epub pending conversion):");
+        ESP_LOGD("storage", "Listing /books, /books/books, /books/articles (.rsvp/.txt/.epub pending conversion):");
         for (const std::string& path: listing.paths) {
             File entry = Board::Storage::filesystem().open(path.c_str());
             if (!entry || entry.isDirectory()) {

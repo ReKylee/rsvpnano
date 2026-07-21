@@ -601,7 +601,7 @@ bool CompanionSyncManager::startStation() {
     auto connected = net::connectStation(ssid.c_str(), settingsStore_.secrets().wifiPassword.c_str());
     if (!connected) {
         ESP_LOGE("sync", "station failed ssid=%s error=%s code=%d; starting access point", ssid.c_str(),
-                      connected.error().message().c_str(), connected.error().value());
+                 connected.error().message().c_str(), connected.error().value());
         net::disconnect();
         return false;
     }

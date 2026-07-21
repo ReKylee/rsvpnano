@@ -62,10 +62,9 @@ namespace settings::codec {
     } // namespace
 
     SettingsResult<DeviceSettings> decodeToml(std::string_view input, SettingsSource source) {
-        return decode<DeviceSettings>(input, source, kMaxSettingsBytes,
-                                      [](auto& value, std::string_view text) {
-                                          return glz::read<kSettingsTomlReadOptions>(value, text);
-                                      });
+        return decode<DeviceSettings>(input, source, kMaxSettingsBytes, [](auto& value, std::string_view text) {
+            return glz::read<kSettingsTomlReadOptions>(value, text);
+        });
     }
 
     SettingsResult<std::string> encodeToml(const DeviceSettings& value, SettingsSource source) {
@@ -75,10 +74,9 @@ namespace settings::codec {
     }
 
     SettingsResult<DeviceSettings> decodeJson(std::string_view input, SettingsSource source) {
-        return decode<DeviceSettings>(input, source, kMaxSettingsBytes,
-                                      [](auto& value, std::string_view text) {
-                                          return glz::read<kSettingsJsonReadOptions>(value, text);
-                                      });
+        return decode<DeviceSettings>(input, source, kMaxSettingsBytes, [](auto& value, std::string_view text) {
+            return glz::read<kSettingsJsonReadOptions>(value, text);
+        });
     }
 
     SettingsResult<std::string> encodeJson(const DeviceSettings& value, SettingsSource source) {

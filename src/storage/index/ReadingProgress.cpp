@@ -167,6 +167,8 @@ namespace ReadingProgress {
     }
 
     void Session::mirror(const IndexedBookStore& store, const ReadingLoop& reader) const {
+        if (!fromStorage || path.empty())
+            return;
         auto written = writeSessionSidecar(*this, store, static_cast<uint32_t>(reader.currentIndex()),
                                            static_cast<uint32_t>(reader.wordCount()));
         if (!written)

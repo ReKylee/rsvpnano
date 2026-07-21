@@ -5,7 +5,6 @@
 
 #include <Arduino.h>
 #include <Wire.h>
-#include <driver/gpio.h>
 #include <esp_heap_caps.h>
 #include <esp_memory_utils.h>
 
@@ -41,21 +40,22 @@ namespace {
             return;
         }
 
-        analogWriteResolution(WaveshareLcd349::DisplayWiring::kBacklightPin, 8);
-        analogWriteFrequency(WaveshareLcd349::DisplayWiring::kBacklightPin, 25000);
-
         if (!gBacklight) {
-            analogWrite(WaveshareLcd349::DisplayWiring::kBacklightPin, 255);
+            pinMode(WaveshareLcd349::DisplayWiring::kBacklightPin, OUTPUT);
+            digitalWrite(WaveshareLcd349::DisplayWiring::kBacklightPin, HIGH);
             return;
         }
+
+        analogWriteResolution(WaveshareLcd349::DisplayWiring::kBacklightPin, 8);
+        analogWriteFrequency(WaveshareLcd349::DisplayWiring::kBacklightPin, 25000);
 
         // Rev1 backlight is inverted: 0 = full on, 255 = off.
         analogWrite(WaveshareLcd349::DisplayWiring::kBacklightPin, 255 - gBacklightDuty);
     }
 
-    void enableBacklightPower() {
+    void setBacklightPower(bool enabled) {
         BoardDrivers::Tca9554::configureOutputPin(Wire1, WaveshareLcd349::Tca9554Wiring::kAddress,
-                                                  WaveshareLcd349::Tca9554Wiring::kBacklightEnablePin, true,
+                                                  WaveshareLcd349::Tca9554Wiring::kBacklightEnablePin, enabled,
                                                   WaveshareLcd349::Tca9554Wiring::kReleaseBusBeforeRead);
     }
 
@@ -85,7 +85,7 @@ namespace {
 namespace Board::Display {
 
     bool begin() {
-        enableBacklightPower();
+        setBacklightPower(true);
 
         pinMode(WaveshareLcd349::DisplayWiring::kBacklightPin, OUTPUT);
 
@@ -103,6 +103,9 @@ namespace Board::Display {
             setBacklight(false);
             return false;
         }
+
+        // Rev1 routes the unused panel TE output through the touch IRQ's shared TCA9554 interrupt.
+        gBus.sendCommand(0x34); // TEOFF
 
         logCanvasMemory();
 
@@ -149,13 +152,13 @@ namespace Board::Display {
 
     void sleep() {
         setBacklight(false);
-        gPanel.displayOff();
+        setBacklightPower(false);
     }
 
     void wake() {
-        gPanel.displayOn();
         // Redraw whatever is currently in the canvas framebuffer.
         gCanvas.flush(true);
+        setBacklightPower(true);
         setBacklight(true);
     }
 

@@ -49,11 +49,14 @@ namespace Board {
         }
 
         EspLightSleep::WakeReason lightSleep(uint32_t timeoutMs) {
-            if (!WaveshareLcd349::clearTouchExpanderInterrupt()) {
+            if (!WaveshareLcd349::clearTouchExpanderInterrupt())
                 ESP_LOGW("sleep", "failed to clear touch expander interrupt");
-            }
-            return EspLightSleep::wait<WaveshareLcd349::System::kLightSleepWakeGpio,
-                                       WaveshareLcd349::System::kTouchIrqPin>(timeoutMs);
+
+            constexpr gpio_num_t wakePins[] = {
+                WaveshareLcd349::System::kLightSleepWakeGpio,
+                static_cast<gpio_num_t>(WaveshareLcd349::System::kTouchIrqPin),
+            };
+            return EspLightSleep::wait(wakePins, timeoutMs);
         }
 
         const char* wakeLabel(bool) {

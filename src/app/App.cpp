@@ -1,7 +1,6 @@
 #include "app/App.h"
 #include <esp_log.h>
 
-#include <algorithm>
 #include <array>
 #include <esp_system.h>
 #include <string>
@@ -24,15 +23,6 @@ namespace {
         0, 1UL * 60UL * 1000UL, 5UL * 60UL * 1000UL, 15UL * 60UL * 1000UL, 30UL * 60UL * 1000UL,
     };
     constexpr uint32_t kStandbyPowerOffMs = 15UL * 60UL * 1000UL;
-    // Boards without an exposed touch interrupt briefly wake at this cadence to sample the controller.
-    constexpr uint32_t kLightSleepTouchPollMs = 100;
-
-    constexpr uint32_t standbySleepSliceMs(uint32_t remainingMs) {
-        if constexpr (Board::Config::HAS_LIGHT_SLEEP_TOUCH_IRQ)
-            return remainingMs;
-        return std::min(remainingMs, kLightSleepTouchPollMs);
-    }
-
     void powerOffBoard() {
         if (!Board::Power::powerOff())
             ESP_LOGI("app", "hardware power off unavailable; entering light sleep");
@@ -79,10 +69,12 @@ void App::update(uint32_t nowMs) {
     while (Input::poll(event, nowMs)) {
         lastActivityMs_ = nowMs;
         handleInput(event, nowMs);
+        nowMs = millis();
     }
     if (immediateUi_.pollTouch(nowMs)) {
         lastActivityMs_ = nowMs;
         handleTouch(nowMs);
+        nowMs = millis();
     }
 
     if (!usbTransfer_.active())
@@ -546,36 +538,35 @@ void App::lightSleepFromStandby() {
     Board::Display::sleep();
     Input::cancel();
 
-    uint32_t remainingMs = kStandbyPowerOffMs;
     bool wokeByTouch = false;
-    while (remainingMs > 0) {
-        const uint32_t sleepMs = standbySleepSliceMs(remainingMs);
-        const EspLightSleep::WakeReason wakeReason = Board::System::lightSleep(sleepMs);
-
-        if (wakeReason == EspLightSleep::WakeReason::input) {
-            ui::TouchContact contact = {};
-            wokeByTouch = Board::Input::readTouch(contact) && contact.touched;
-            break;
-        }
-        if (wakeReason != EspLightSleep::WakeReason::timer) {
-            ESP_LOGW("app", "light sleep ended unexpectedly; resuming");
-            break;
-        }
-
-        remainingMs -= sleepMs;
-        if (remainingMs == 0) {
+    const uint32_t sleepStartedAtMs = millis();
+    while (true) {
+        const uint32_t elapsedMs = millis() - sleepStartedAtMs;
+        if (elapsedMs >= kStandbyPowerOffMs) {
             ESP_LOGI("app", "screen-off standby expired; powering off");
             powerOff(millis());
             return;
         }
 
-        if constexpr (!Board::Config::HAS_LIGHT_SLEEP_TOUCH_IRQ) {
-            ui::TouchContact contact = {};
-            if (Board::Input::readTouch(contact) && contact.touched) {
-                wokeByTouch = true;
-                break;
+        switch (Board::System::lightSleep(kStandbyPowerOffMs - elapsedMs)) {
+        case EspLightSleep::WakeReason::timer:
+            ESP_LOGI("app", "screen-off standby expired; powering off");
+            powerOff(millis());
+            return;
+        case EspLightSleep::WakeReason::input:
+            if constexpr (Board::Config::HAS_LIGHT_SLEEP_TOUCH_IRQ) {
+                ui::TouchContact contact = {};
+                wokeByTouch = Board::Input::readTouch(contact) && contact.touched;
+                const ::Input::PressActions controls = Board::Input::currentActions();
+                const bool powerPressed = ::Input::hasAction(controls.longPress, ::Input::ActionPowerOff);
+                if (!wokeByTouch && !powerPressed)
+                    continue;
             }
+            break;
+        case EspLightSleep::WakeReason::error:
+            break;
         }
+        break;
     }
 
     const uint32_t wokeAtMs = millis();

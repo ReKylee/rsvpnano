@@ -33,6 +33,8 @@ namespace net {
     }
 
     void disconnect() {
+        if (WiFi.getMode() == WIFI_MODE_NULL)
+            return;
         WiFi.disconnect(true, false);
         WiFi.mode(WIFI_OFF);
     }

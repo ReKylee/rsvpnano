@@ -11,7 +11,6 @@ namespace EspLightSleep {
     enum class WakeReason : uint8_t {
         input,
         timer,
-        other,
         error,
     };
 

@@ -22,7 +22,7 @@ namespace {
     constexpr std::array<uint32_t, 5> kStandbyMs = {
         0, 1UL * 60UL * 1000UL, 5UL * 60UL * 1000UL, 15UL * 60UL * 1000UL, 30UL * 60UL * 1000UL,
     };
-    constexpr uint32_t kStandbyPowerOffMs = 30UL * 1000UL;
+    constexpr uint32_t kStandbyPowerOffMs = 5UL * 60UL * 1000UL;
     void powerOffBoard() {
         if (!Board::Power::powerOff())
             ESP_LOGI("app", "hardware power off unavailable; entering light sleep");

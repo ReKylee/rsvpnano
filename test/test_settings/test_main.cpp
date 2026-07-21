@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 
+#include "drivers/power/BatteryCurve.h"
 #include "settings/SettingsCodec.h"
 #include "settings/SettingsGlaze.h"
 #include "sync/CompanionSyncJson.h"
@@ -37,6 +38,10 @@ void test_defaults_round_trip_through_toml_and_json() {
     auto fromJson = settings::codec::decodeJson(*json, settings::SettingsSource::Companion);
     TEST_ASSERT_TRUE_MESSAGE(fromJson.has_value(), fromJson ? "" : fromJson.error().message.c_str());
     TEST_ASSERT_TRUE(defaults == *fromJson);
+}
+
+void test_battery_curve_reaches_full() {
+    TEST_ASSERT_EQUAL_UINT8(100, BoardDrivers::BatteryCurve::percentForVoltage(4.15f));
 }
 
 void test_enum_names_are_human_readable() {
@@ -168,6 +173,7 @@ void test_optional_book_typography_round_trips_through_toml() {
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_defaults_round_trip_through_toml_and_json);
+    RUN_TEST(test_battery_curve_reaches_full);
     RUN_TEST(test_enum_names_are_human_readable);
     RUN_TEST(test_missing_fields_retain_defaults);
     RUN_TEST(test_bounded_values_clamp_during_deserialization);

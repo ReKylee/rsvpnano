@@ -1,7 +1,8 @@
 #pragma once
 
-#include <Arduino.h>
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 
 namespace BoardDrivers::BatteryCurve {
 
@@ -13,7 +14,7 @@ namespace BoardDrivers::BatteryCurve {
 
         constexpr Point kCurve[] = {
             {3.30f, 0},  {3.50f, 5},  {3.60f, 10}, {3.65f, 20}, {3.70f, 30}, {3.75f, 40},
-            {3.79f, 50}, {3.85f, 60}, {3.92f, 70}, {4.00f, 80}, {4.10f, 90}, {4.20f, 100},
+            {3.79f, 50}, {3.85f, 60}, {3.92f, 70}, {4.00f, 80}, {4.10f, 90}, {4.15f, 100},
         };
 
         if (voltage <= kCurve[0].voltage) {

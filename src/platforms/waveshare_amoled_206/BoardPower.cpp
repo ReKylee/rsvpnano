@@ -24,6 +24,9 @@ namespace {
             return false;
         }
 
+        gPmu.enableBattDetection();
+        gPmu.enableBattVoltageMeasure();
+
         if constexpr (WaveshareAmoled206::Axp2101Wiring::kRequiresPowerKeyConfig) {
             gPmu.setPowerKeyPressOnTime(WaveshareAmoled206::Axp2101Wiring::kPowerKeyOnTimeValue);
             gPmu.setPowerKeyPressOffTime(WaveshareAmoled206::Axp2101Wiring::kPowerKeyOffTimeValue);

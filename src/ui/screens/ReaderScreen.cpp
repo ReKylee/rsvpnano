@@ -312,7 +312,9 @@ namespace screens {
             constexpr uint32_t kNominalRuntimeMinutes = 600;
             const uint32_t minutes = static_cast<uint32_t>(batteryModel.percent) * kNominalRuntimeMinutes / 100;
             if (minutes >= 60)
-                std::snprintf(batteryText, sizeof(batteryText), "%luh", static_cast<unsigned long>(minutes / 60));
+                std::snprintf(batteryText, sizeof(batteryText), "%lu.%luh",
+                              static_cast<unsigned long>(minutes / 60),
+                              static_cast<unsigned long>(minutes % 60 / 6));
             else
                 std::snprintf(batteryText, sizeof(batteryText), "%lum", static_cast<unsigned long>(minutes));
         } else
@@ -335,7 +337,9 @@ namespace screens {
         return ui::hasTouch(touch, ui::TouchHold) && batteryTouched(touch);
     }
 
-    bool ReaderScreen::previousSentenceTapped(uint16_t x) const {
+    bool ReaderScreen::previousSentenceTapped(uint16_t x, uint16_t y) const {
+        if (ui::contains(batteryRect(gfx_.width()), x, y))
+            return false;
         return settings_->leftHanded
                  ? x <= kPreviousSentenceTapWidth
                  : x >= static_cast<uint16_t>(std::max<int16_t>(0, gfx_.width() - kPreviousSentenceTapWidth));
@@ -373,6 +377,22 @@ namespace screens {
         const int absY = std::abs(deltaY);
         const bool tapLike = absX <= kTapSlop && absY <= kTapSlop;
 
+        if (touchIntent_ == TouchIntent::None && tapLike && batteryLongPressed(touch)) {
+            settings_->batteryIconVisible = !settings_->batteryIconVisible;
+            settingsStore.acceptChanges();
+            lastTapValid_ = false;
+            resetTouch();
+            return;
+        }
+        if (touchIntent_ == TouchIntent::None && ended && tapLike
+            && batteryTapped({ui::TouchTap, touch.x, touch.y})) {
+            settings_->batteryLabel = settings::cycleEnum(settings_->batteryLabel);
+            settingsStore.acceptChanges();
+            lastTapValid_ = false;
+            resetTouch();
+            return;
+        }
+
         if (reader.playing()) {
             if (held && tapLike && !session.playLocked) {
                 resetTouch();
@@ -386,7 +406,7 @@ namespace screens {
                 lastTapValid_ = false;
                 return;
             }
-            if (previousSentenceTapped(touch.x)) {
+            if (previousSentenceTapped(touch.x, touch.y)) {
                 lastTapValid_ = false;
                 reader.rewindSentence();
                 reader.pause();
@@ -405,13 +425,6 @@ namespace screens {
             return;
         }
 
-        if (touchIntent_ == TouchIntent::None && tapLike && batteryLongPressed(touch)) {
-            settings_->batteryIconVisible = !settings_->batteryIconVisible;
-            settingsStore.acceptChanges();
-            lastTapValid_ = false;
-            resetTouch();
-            return;
-        }
         if (touchIntent_ == TouchIntent::None && !ended && held && tapLike) {
             lastTapValid_ = false;
             touchIntent_ = TouchIntent::PlayHold;
@@ -457,12 +470,6 @@ namespace screens {
             lastTapValid_ = false;
             return;
         }
-        if (batteryTapped({ui::TouchTap, touch.x, touch.y})) {
-            settings_->batteryLabel = settings::cycleEnum(settings_->batteryLabel);
-            settingsStore.acceptChanges();
-            lastTapValid_ = false;
-            return;
-        }
         const uint16_t footerTapWidth = std::min<uint16_t>(220, static_cast<uint16_t>(gfx_.width() / 2));
         if (touch.y >= static_cast<uint16_t>(std::max<int16_t>(0, gfx_.height() - 40))
             && (settings_->leftHanded ? touch.x <= footerTapWidth
@@ -472,7 +479,7 @@ namespace screens {
             lastTapValid_ = false;
             return;
         }
-        if (previousSentenceTapped(touch.x)) {
+        if (previousSentenceTapped(touch.x, touch.y)) {
             lastTapValid_ = false;
             reader.rewindSentence();
             session.pauseAtSentenceEndRequested = false;

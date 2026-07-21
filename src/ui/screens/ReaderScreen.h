@@ -58,7 +58,7 @@ namespace screens {
         bool batteryTapped(const ui::Touch& touch) const;
         bool batteryLongPressed(const ui::Touch& touch) const;
         bool batteryTouched(const ui::Touch& touch) const;
-        bool previousSentenceTapped(uint16_t x) const;
+        bool previousSentenceTapped(uint16_t x, uint16_t y) const;
         void handleTouch(ui::Context& ui, uint32_t nowMs, Preferences& preferences,
                          settings::SettingsStore& settingsStore);
         void toggle(Preferences& preferences, uint32_t nowMs);

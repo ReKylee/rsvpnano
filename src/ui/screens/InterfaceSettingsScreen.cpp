@@ -22,7 +22,7 @@ namespace screens {
                                Screen& screen) {
         bool changed = false;
         const ui::Rect content = detail::content(ui);
-        if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, ui.text(UiText::Back)))
+        if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, "<<"))
             screen = Screen::Settings;
         ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
                  ui.text(UiText::Interface), 2);

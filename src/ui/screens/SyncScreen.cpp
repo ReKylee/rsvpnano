@@ -6,7 +6,7 @@ namespace screens {
         if (const Action action = detail::navigation(ui, Screen::Sync, screen); action != Action::None)
             return action;
         ui::Column column{detail::tabContent(ui), 6};
-        if (ui.button(column.next(detail::kBackButtonHeight), ui.text(UiText::Back)))
+        if (ui.button(column.next(detail::kBackButtonHeight), "<<"))
             screen = Screen::Device;
         if (ui.button(column.next(32), ui.text(UiText::CompanionSync)))
             return Action::CompanionSync;

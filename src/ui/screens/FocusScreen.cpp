@@ -257,7 +257,7 @@ namespace screens {
             }
         }
 
-        if (ui.button(backAction, ui.text(UiText::Back))) {
+        if (ui.button(backAction, "<<")) {
             if (deleteConfirm_)
                 deleteConfirm_ = false;
             else

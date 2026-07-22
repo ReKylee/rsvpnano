@@ -25,7 +25,7 @@ namespace screens {
             return action;
 
         const ui::Rect content = detail::tabContent(ui);
-        if (ui.button({content.x, content.y, 64, kHeaderHeight}, ui.text(UiText::Back))) {
+        if (ui.button({content.x, content.y, 64, kHeaderHeight}, "<<")) {
             screen = Screen::Read;
             dragging_ = false;
             return Action::None;

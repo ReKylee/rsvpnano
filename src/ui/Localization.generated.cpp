@@ -11,7 +11,7 @@ namespace {
     constexpr size_t kTextCount = static_cast<size_t>(UiText::Count);
     constexpr size_t kDefaultLanguageIndex = 0;
     static_assert(kLanguageCount == 7, "UiLanguage count mismatch");
-    static_assert(kTextCount == 173, "UiText count mismatch");
+    static_assert(kTextCount == 172, "UiText count mismatch");
 
     constexpr std::array<std::string_view, kLanguageCount> kLanguageNames = {{
         /* English  */ "English",
@@ -35,7 +35,6 @@ namespace {
             /* Settings                 */ "Settings",
             /* UsbTransfer              */ "USB transfer",
             /* PowerOff                 */ "Power off",
-            /* Back                     */ "Back",
             /* Display                  */ "Display",
             /* TypographyTune           */ "Typography tune",
             /* WordPacing               */ "Word pacing",
@@ -213,7 +212,6 @@ namespace {
             /* Settings                 */ "Ajustes",
             /* UsbTransfer              */ "USB",
             /* PowerOff                 */ "Apagar",
-            /* Back                     */ "Atras",
             /* Display                  */ "Pantalla",
             /* TypographyTune           */ "Tipografia",
             /* WordPacing               */ "Ritmo lectura",
@@ -392,7 +390,6 @@ namespace {
             /* Settings                 */ "Reglages",
             /* UsbTransfer              */ "USB",
             /* PowerOff                 */ "Eteindre",
-            /* Back                     */ "Retour",
             /* Display                  */ "Affichage",
             /* TypographyTune           */ "Typographie",
             /* WordPacing               */ "Rythme mots",
@@ -571,7 +568,6 @@ namespace {
             /* Settings                 */ "Optionen",
             /* UsbTransfer              */ "USB",
             /* PowerOff                 */ "Ausschalten",
-            /* Back                     */ "Zuruck",
             /* Display                  */ "Anzeige",
             /* TypographyTune           */ "Typografie",
             /* WordPacing               */ "Lesetempo",
@@ -750,7 +746,6 @@ namespace {
             /* Settings                 */ "Setari",
             /* UsbTransfer              */ "USB",
             /* PowerOff                 */ "Oprire",
-            /* Back                     */ "Inapoi",
             /* Display                  */ "Afisaj",
             /* TypographyTune           */ "Tipografie",
             /* WordPacing               */ "Ritm cuvinte",
@@ -929,7 +924,6 @@ namespace {
             /* Settings                 */ "Ustawienia",
             /* UsbTransfer              */ "USB",
             /* PowerOff                 */ "Wylacz",
-            /* Back                     */ "Wroc",
             /* Display                  */ "Ekran",
             /* TypographyTune           */ "Typografia",
             /* WordPacing               */ "Tempo slow",
@@ -1107,7 +1101,6 @@ namespace {
             /* Settings                 */ "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438",
             /* UsbTransfer              */ "USB-\u043F\u0435\u0440\u0435\u0434\u0430\u0447\u0430",
             /* PowerOff                 */ "\u0412\u044B\u043A\u043B\u044E\u0447\u0438\u0442\u044C",
-            /* Back                     */ "\u041D\u0430\u0437\u0430\u0434",
             /* Display                  */ "\u042D\u043A\u0440\u0430\u043D",
             /* TypographyTune           */
             "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430 \u0448\u0440\u0438\u0444\u0442\u0430",

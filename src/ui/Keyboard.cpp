@@ -152,7 +152,7 @@ namespace ui {
         }
         if (button(controls.next(spaceWidth), text(UiText::Space)))
             append(" ");
-        const bool cancel = button(controls.next(backWidth), text(UiText::Back));
+        const bool cancel = button(controls.next(backWidth), "<<");
         const bool submit = button(controls.next(okWidth), "OK");
         return submit ? KeyboardAction::Submit : cancel ? KeyboardAction::Cancel : KeyboardAction::None;
     }

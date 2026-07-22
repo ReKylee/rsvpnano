@@ -22,7 +22,7 @@ namespace screens {
 
     void NetworkScreen::draw(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
         const ui::Rect content = detail::content(ui);
-        if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, ui.text(UiText::Back)))
+        if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, "<<"))
             screen = Screen::Settings;
         ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
                  ui.text(UiText::NetworkUpdates), 2);
@@ -90,7 +90,7 @@ namespace screens {
 
     void NetworkScreen::drawWifiScan(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
         const ui::Rect content = detail::content(ui);
-        if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, ui.text(UiText::Back))) {
+        if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, "<<")) {
             closeWifi();
             screen = Screen::NetworkSettings;
             return;

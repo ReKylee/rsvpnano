@@ -23,7 +23,6 @@ enum class UiText : uint8_t {
     Settings,
     UsbTransfer,
     PowerOff,
-    Back,
     Display,
     TypographyTune,
     WordPacing,

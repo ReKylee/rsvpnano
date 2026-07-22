@@ -111,17 +111,6 @@ Russian = "Выключить"
 
 # Shared navigation and settings categories
 [[strings]]
-key = "Back"
-context = "Navigation action returning to the previous screen."
-English = "Back"
-Spanish = "Atras"
-French = "Retour"
-German = "Zuruck"
-Romanian = "Inapoi"
-Polish = "Wroc"
-Russian = "Назад"
-
-[[strings]]
 key = "Display"
 context = "Settings category for screen, theme, and backlight options."
 English = "Display"

@@ -1,7 +1,8 @@
 #pragma once
 
-#include <Arduino.h>
 #include <expected>
+#include <string>
+#include <string_view>
 #include <system_error>
 
 namespace EpubCache {
@@ -9,10 +10,10 @@ namespace EpubCache {
     using StatusCallback = void (*)(void* context, const char* title, const char* line1, const char* line2,
                                     int progressPercent);
 
-    bool rsvpIsCurrent(const String& rsvpPath);
-    bool hasCurrentCache(const String& epubPath);
-    String libraryLabel(const String& epubPath);
-    std::expected<String, std::error_code> ensureConverted(const String& epubPath, StatusCallback statusCallback,
-                                                           void* statusContext);
+    bool rsvpIsCurrent(std::string_view rsvpPath);
+    bool hasCurrentCache(std::string_view epubPath);
+    std::string libraryLabel(std::string_view epubPath);
+    std::expected<std::string, std::error_code> ensureConverted(std::string_view epubPath,
+                                                                StatusCallback statusCallback, void* statusContext);
 
 } // namespace EpubCache

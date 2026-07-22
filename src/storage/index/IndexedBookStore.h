@@ -4,6 +4,7 @@
 #include <FS.h>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 class IndexedBookStore {
@@ -36,7 +37,7 @@ public:
     };
 
     static constexpr uint32_t kMagic = 0x58444952UL; // RIDX
-    static constexpr uint32_t kVersion = 5;
+    static constexpr uint32_t kVersion = 6;
     static constexpr size_t kWordCacheSize = 256;
 
     IndexedBookStore() = default;
@@ -48,7 +49,7 @@ public:
     bool isOpen() const;
 
     size_t wordCount() const;
-    std::string wordAt(size_t index) const;
+    std::string_view wordAt(size_t index) const;
     void prefetchAround(size_t index) const;
 
     const std::string& indexPath() const {
@@ -66,6 +67,7 @@ public:
 
 private:
     bool loadWordWindow(size_t index) const;
+    bool hasCachedWord(size_t index) const;
     bool readRecords(size_t startIndex, size_t count, std::vector<WordRecord>& records) const;
 
     std::string indexPath_;
@@ -73,7 +75,8 @@ private:
     Header header_;
     mutable File indexFile_;
     mutable File dataFile_;
-    mutable std::vector<std::string> cachedWords_;
+    mutable std::vector<WordRecord> cachedRecords_;
+    mutable std::vector<char> cachedData_;
     mutable size_t cachedStart_ = static_cast<size_t>(-1);
-    mutable size_t cachedCount_ = 0;
+    mutable uint32_t cachedDataStart_ = 0;
 };

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstddef>
-#include <string>
+#include <string_view>
 
 class IndexedBookStore {
 public:
@@ -9,7 +9,7 @@ public:
         return 0;
     }
 
-    std::string wordAt(size_t) const {
+    std::string_view wordAt(size_t) const {
         return {};
     }
 

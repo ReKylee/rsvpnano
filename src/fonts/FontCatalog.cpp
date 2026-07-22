@@ -228,8 +228,9 @@ std::string FontCatalog::normalizeId(std::string_view value) {
     return out;
 }
 
-std::expected<void, std::string> FontCatalog::validateFontFile(const String& path) {
-    File file = Board::Storage::filesystem().open(path, FILE_READ);
+std::expected<void, std::string> FontCatalog::validateFontFile(std::string_view path) {
+    const std::string ownedPath{path};
+    File file = Board::Storage::filesystem().open(ownedPath.c_str(), FILE_READ);
     if (!file || file.isDirectory()) {
         if (file)
             file.close();

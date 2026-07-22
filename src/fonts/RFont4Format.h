@@ -1,12 +1,11 @@
 #pragma once
 
-#include <Arduino.h>
-
 #include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 namespace RFont4 {
@@ -88,10 +87,9 @@ namespace RFont4 {
     };
 
     inline bool equalIgnoreCase(std::string_view left, std::string_view right) {
-        return left.size() == right.size()
-            && std::equal(left.begin(), left.end(), right.begin(), [](unsigned char a, unsigned char b) {
-                   return std::tolower(a) == std::tolower(b);
-               });
+        return std::ranges::equal(left, right, [](unsigned char a, unsigned char b) {
+            return std::tolower(a) == std::tolower(b);
+        });
     }
 
     inline bool whitespace(unsigned char character) {
@@ -109,11 +107,10 @@ namespace RFont4 {
             id.remove_prefix(1);
         while (!id.empty() && whitespace(id.back()))
             id.remove_suffix(1);
-        for (size_t i = 0; i < kSizeIds.size(); ++i) {
-            if (equalIgnoreCase(id, kSizeIds[i]))
-                return i;
-        }
-        return kSizeCount;
+        const auto size = std::ranges::find_if(kSizeIds, [id](const char* candidate) {
+            return equalIgnoreCase(id, candidate);
+        });
+        return static_cast<size_t>(std::distance(kSizeIds.begin(), size));
     }
 
     inline const char* sizeId(size_t index) {
@@ -124,8 +121,8 @@ namespace RFont4 {
         return index < kSizeLabels.size() ? kSizeLabels[index] : kSizeLabels[0];
     }
 
-    inline String sizeFilename(size_t index) {
-        return String(sizeId(index)) + kExtension;
+    inline std::string sizeFilename(size_t index) {
+        return std::string(sizeId(index)) + kExtension;
     }
 
 } // namespace RFont4

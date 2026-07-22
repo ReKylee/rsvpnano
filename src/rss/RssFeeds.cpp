@@ -5,7 +5,11 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <algorithm>
+#include <array>
 #include <expected>
+#include <iterator>
+#include <numeric>
+#include <ranges>
 #include <string>
 #include <vector>
 #include "board/BoardStorage.h"
@@ -31,36 +35,25 @@ namespace {
     constexpr uint8_t kMaxArticlesPerCheck = 12;
     constexpr uint8_t kMaxFeedRedirects = 3;
 
-    String trimCopy(String value) {
-        value.trim();
-        return value;
-    }
-
-    bool startsWithHttp(const String& url) {
-        String lowered = trimCopy(url);
-        lowered.toLowerCase();
-        return lowered.startsWith("http://") || lowered.startsWith("https://");
-    }
-
     bool isSafeFilenameChar(char c) {
         return AsciiText::isAlphaNumeric(c) || c == '-' || c == '_' || c == ' ' || c == '.';
     }
 
-    String userAgent() {
-        return String("RSVP-Nano-RSS/1.0");
-    }
+    constexpr const char* kUserAgent = "RSVP-Nano-RSS/1.0";
 
-    String feedProgressLabel(uint8_t feedIndex, uint8_t feedCount) {
-        return "Feed " + String(feedIndex) + "/" + String(feedCount);
+    std::string feedProgressLabel(uint8_t feedIndex, uint8_t feedCount) {
+        return "Feed " + std::to_string(feedIndex) + "/" + std::to_string(feedCount);
     }
 
     bool isRedirectStatus(int statusCode) {
-        return statusCode == HTTP_CODE_MOVED_PERMANENTLY || statusCode == HTTP_CODE_FOUND
-            || statusCode == HTTP_CODE_SEE_OTHER || statusCode == HTTP_CODE_TEMPORARY_REDIRECT
-            || statusCode == HTTP_CODE_PERMANENT_REDIRECT;
+        static constexpr std::array kRedirectStatuses = {
+            HTTP_CODE_MOVED_PERMANENTLY,  HTTP_CODE_FOUND, HTTP_CODE_SEE_OTHER, HTTP_CODE_TEMPORARY_REDIRECT,
+            HTTP_CODE_PERMANENT_REDIRECT,
+        };
+        return std::ranges::find(kRedirectStatuses, statusCode) != kRedirectStatuses.end();
     }
 
-    String friendlyHttpError(int statusCode) {
+    const char* friendlyHttpError(int statusCode) {
         switch (statusCode) {
         case HTTPC_ERROR_CONNECTION_REFUSED:
             return "Could not reach feed";
@@ -109,61 +102,55 @@ namespace {
         return "Could not download feed";
     }
 
-    String urlScheme(const String& url) {
-        const int marker = url.indexOf("://");
-        if (marker < 0) {
+    std::string_view urlScheme(std::string_view url) {
+        const size_t marker = url.find("://");
+        if (marker == std::string_view::npos) {
             return "http";
         }
-        return url.substring(0, marker);
+        return url.substr(0, marker);
     }
 
-    String urlOrigin(const String& url) {
-        const int marker = url.indexOf("://");
-        const int hostStart = marker < 0 ? 0 : marker + 3;
-        int hostEnd = url.indexOf('/', hostStart);
-        if (hostEnd < 0) {
-            hostEnd = url.length();
-        }
-        return url.substring(0, hostEnd);
+    std::string_view urlOrigin(std::string_view url) {
+        const size_t marker = url.find("://");
+        const size_t hostStart = marker == std::string_view::npos ? 0 : marker + 3;
+        const size_t hostEnd = url.find('/', hostStart);
+        return url.substr(0, hostEnd);
     }
 
-    String resolveRedirectUrl(const String& baseUrl, String location) {
-        location.trim();
-        if (location.startsWith("http://") || location.startsWith("https://")) {
-            return location;
+    std::string resolveRedirectUrl(std::string_view baseUrl, std::string_view location) {
+        location = AsciiText::trim(location);
+        if (location.starts_with("http://") || location.starts_with("https://")) {
+            return std::string{location};
         }
-        if (location.startsWith("//")) {
-            return urlScheme(baseUrl) + ":" + location;
+        if (location.starts_with("//")) {
+            return std::string{urlScheme(baseUrl)} + ":" + std::string{location};
         }
-        if (location.startsWith("/")) {
-            return urlOrigin(baseUrl) + location;
+        if (location.starts_with('/')) {
+            return std::string{urlOrigin(baseUrl)} + std::string{location};
         }
 
-        int slash = baseUrl.lastIndexOf('/');
-        const int marker = baseUrl.indexOf("://");
-        if (slash <= marker + 2) {
-            return urlOrigin(baseUrl) + "/" + location;
+        const size_t slash = baseUrl.rfind('/');
+        const size_t marker = baseUrl.find("://");
+        if (slash == std::string_view::npos || slash <= (marker == std::string_view::npos ? 0 : marker + 2)) {
+            return std::string{urlOrigin(baseUrl)} + "/" + std::string{location};
         }
-        return baseUrl.substring(0, slash + 1) + location;
+        return std::string{baseUrl.substr(0, slash + 1)} + std::string{location};
     }
 
-    uint32_t fnv1a(const String& value) {
-        uint32_t hash = 2166136261UL;
-        for (size_t i = 0; i < value.length(); ++i) {
-            hash ^= static_cast<uint8_t>(value[i]);
-            hash *= 16777619UL;
-        }
-        return hash;
+    uint32_t fnv1a(std::string_view value) {
+        return std::accumulate(value.begin(), value.end(), uint32_t{2166136261UL}, [](uint32_t hash, char c) {
+            return (hash ^ static_cast<uint8_t>(c)) * 16777619UL;
+        });
     }
 
-    String itemIdentity(const feedparser::FeedItem& item) {
-        return item.link.isEmpty() ? item.title : item.link;
+    std::string_view itemIdentity(const feedparser::FeedItem& item) {
+        return item.link.empty() ? item.title : item.link;
     }
 
-    String seenKeyForItem(const feedparser::FeedItem& item) {
+    std::string seenKeyForItem(const feedparser::FeedItem& item) {
         char key[16];
         std::snprintf(key, sizeof(key), "rss%08lx", static_cast<unsigned long>(fnv1a(itemIdentity(item))));
-        return String(key);
+        return key;
     }
 
     bool itemAlreadySeen(const feedparser::FeedItem& item, Preferences& preferences) {
@@ -174,19 +161,18 @@ namespace {
         preferences.putBool(seenKeyForItem(item).c_str(), true);
     }
 
-    String filenameForItem(const feedparser::FeedItem& item) {
-        String name = item.title; // already HTML-stripped and entity-decoded by FeedParser
-        String cleaned;
+    std::string filenameForItem(const feedparser::FeedItem& item) {
+        std::string cleaned;
         cleaned.reserve(80);
-        for (size_t i = 0; i < name.length() && cleaned.length() < 72; ++i) {
-            const char c = name[i];
-            cleaned += isSafeFilenameChar(c) ? c : '-';
+        std::ranges::transform(item.title | std::views::take(72), std::back_inserter(cleaned), [](char c) {
+            return isSafeFilenameChar(c) ? c : '-';
+        });
+        cleaned = AsciiText::trim(cleaned);
+        while (cleaned.contains("--")) {
+            const size_t position = cleaned.find("--");
+            cleaned.erase(position, 1);
         }
-        cleaned.trim();
-        while (cleaned.indexOf("--") >= 0) {
-            cleaned.replace("--", "-");
-        }
-        if (cleaned.isEmpty()) {
+        if (cleaned.empty()) {
             cleaned = "rss-article";
         }
         char suffix[16];
@@ -194,26 +180,25 @@ namespace {
         return cleaned + suffix + ".rsvp";
     }
 
-    String metadataSafe(String value) {
-        value.replace("\r", " ");
-        value.replace("\n", " ");
-        value.trim();
-        return value;
+    std::string metadataSafe(std::string value) {
+        std::ranges::replace(value, '\r', ' ');
+        std::ranges::replace(value, '\n', ' ');
+        return std::string{AsciiText::trim(value)};
     }
 
-    void report(RssFeeds::StatusCallback callback, void* context, const String& line1, const String& line2,
+    void report(RssFeeds::StatusCallback callback, void* context, const char* line1, const char* line2,
                 int progressPercent) {
         if (callback == nullptr) {
             return;
         }
-        callback(context, kStatusTitle, line1.c_str(), line2.c_str(), progressPercent);
+        callback(context, kStatusTitle, line1, line2, progressPercent);
     }
 
-    bool connectWiFi(const String& wifiSsid, const String& wifiPassword, RssFeeds::StatusCallback callback,
+    bool connectWiFi(const std::string& wifiSsid, const std::string& wifiPassword, RssFeeds::StatusCallback callback,
                      void* context) {
         return net::connectStation(wifiSsid.c_str(), wifiPassword.c_str(),
                                    [&](int percent) {
-                                       report(callback, context, "Connecting Wi-Fi", wifiSsid, percent);
+                                       report(callback, context, "Connecting Wi-Fi", wifiSsid.c_str(), percent);
                                    })
             .has_value();
     }
@@ -222,9 +207,9 @@ namespace {
         net::disconnect();
     }
 
-    std::expected<String, std::string> fetchUrl(const String& url, uint8_t feedIndex, uint8_t feedCount,
-                                                RssFeeds::StatusCallback callback, void* context) {
-        String currentUrl = url;
+    std::expected<std::string, std::string> fetchUrl(std::string_view url, uint8_t feedIndex, uint8_t feedCount,
+                                                     RssFeeds::StatusCallback callback, void* context) {
+        std::string currentUrl{url};
         for (uint8_t redirectCount = 0; redirectCount <= kMaxFeedRedirects; ++redirectCount) {
             WiFiClientSecure secureClient;
             WiFiClient plainClient;
@@ -232,36 +217,37 @@ namespace {
             secureClient.setHandshakeTimeout(15);
 
             HTTPClient http;
-            http.setUserAgent(userAgent());
+            http.setUserAgent(kUserAgent);
             http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
             http.setTimeout(kFeedRequestTimeoutMs);
             const char* headers[] = {"Location"};
             http.collectHeaders(headers, 1);
 
-            const bool ok = currentUrl.startsWith("https://") ? http.begin(secureClient, currentUrl)
-                                                              : http.begin(plainClient, currentUrl);
+            const bool ok = currentUrl.starts_with("https://") ? http.begin(secureClient, currentUrl.c_str())
+                                                               : http.begin(plainClient, currentUrl.c_str());
             if (!ok)
                 return std::unexpected(std::string{"Feed link did not open"});
 
-            report(callback, context, feedProgressLabel(feedIndex, feedCount),
-                   "Requesting " + feedparser::hostLabelForUrl(currentUrl), 18 + feedIndex * 7);
+            const std::string progressLabel = feedProgressLabel(feedIndex, feedCount);
+            const std::string requestLabel = "Requesting " + feedparser::hostLabelForUrl(currentUrl);
+            report(callback, context, progressLabel.c_str(), requestLabel.c_str(), 18 + feedIndex * 7);
             const int statusCode = http.GET();
             if (isRedirectStatus(statusCode)) {
-                String location = http.header("Location");
+                const String locationHeader = http.header("Location");
                 http.end();
-                if (location.isEmpty())
+                if (locationHeader.isEmpty())
                     return std::unexpected(std::string{"Feed moved but gave no link"});
-                currentUrl = resolveRedirectUrl(currentUrl, location);
+                currentUrl = resolveRedirectUrl(currentUrl, {locationHeader.c_str(), locationHeader.length()});
                 ESP_LOGD("rss", "redirect %u url=%s", static_cast<unsigned int>(statusCode), currentUrl.c_str());
-                report(callback, context, feedProgressLabel(feedIndex, feedCount),
-                       "Redirecting to " + feedparser::hostLabelForUrl(currentUrl), 18 + feedIndex * 7);
+                const std::string redirectLabel = "Redirecting to " + feedparser::hostLabelForUrl(currentUrl);
+                report(callback, context, progressLabel.c_str(), redirectLabel.c_str(), 18 + feedIndex * 7);
                 delay(250);
                 continue;
             }
             if (statusCode != HTTP_CODE_OK) {
-                const String error = friendlyHttpError(statusCode);
+                const char* error = friendlyHttpError(statusCode);
                 http.end();
-                return std::unexpected(std::string{error.c_str(), error.length()});
+                return std::unexpected(std::string{error});
             }
 
             WiFiClient* stream = http.getStreamPtr();
@@ -279,7 +265,7 @@ namespace {
             const int reportedSize = http.getSize();
             const size_t reserveBytes =
                 reportedSize > 0 ? std::min(static_cast<size_t>(reportedSize), kMaxFeedBytes) : 8192;
-            String body;
+            std::string body;
             body.reserve(reserveBytes);
             const uint32_t startedMs = millis();
             uint32_t lastByteMs = startedMs;
@@ -313,9 +299,8 @@ namespace {
                 }
                 if (nowMs - lastReportMs >= kFeedProgressIntervalMs) {
                     lastReportMs = nowMs;
-                    report(callback, context, feedProgressLabel(feedIndex, feedCount),
-                           "Downloaded " + String(static_cast<unsigned int>(totalRead / 1024)) + " KB",
-                           20 + feedIndex * 7);
+                    const std::string downloaded = "Downloaded " + std::to_string(totalRead / 1024) + " KB";
+                    report(callback, context, progressLabel.c_str(), downloaded.c_str(), 20 + feedIndex * 7);
                 }
                 if (reportedSize > 0 && totalRead >= static_cast<size_t>(reportedSize)) {
                     break;
@@ -337,9 +322,7 @@ namespace {
                 lastByteMs = millis();
                 const size_t previousRead = totalRead;
                 totalRead += static_cast<size_t>(bytesRead);
-                for (int i = 0; i < bytesRead; ++i) {
-                    body += static_cast<char>(buffer[i]);
-                }
+                body.append(reinterpret_cast<const char*>(buffer), static_cast<size_t>(bytesRead));
                 while (completeItemsRead < kMaxItemsPerFeed
                        && feedparser::advancePastItem(body, completeItemSearchStart)) {
                     ++completeItemsRead;
@@ -357,25 +340,22 @@ namespace {
             }
             http.end();
 
-            if (body.isEmpty())
+            if (body.empty())
                 return std::unexpected(std::string{"Feed was empty"});
             if (totalRead >= kMaxFeedBytes) {
                 ESP_LOGW("rss", "feed capped url=%s bytes=%u", currentUrl.c_str(),
                          static_cast<unsigned int>(totalRead));
-                report(callback, context, feedProgressLabel(feedIndex, feedCount),
-                       "Reached " + String(static_cast<unsigned int>(kMaxFeedBytes / 1024)) + " KB cap",
-                       20 + feedIndex * 7);
+                const std::string capped = "Reached " + std::to_string(kMaxFeedBytes / 1024) + " KB cap";
+                report(callback, context, progressLabel.c_str(), capped.c_str(), 20 + feedIndex * 7);
                 delay(500);
             } else if (stoppedAfterItems) {
-                report(callback, context, feedProgressLabel(feedIndex, feedCount),
-                       "Downloaded " + String(static_cast<unsigned int>(completeItemsRead)) + " items",
-                       20 + feedIndex * 7);
+                const std::string downloaded = "Downloaded " + std::to_string(completeItemsRead) + " items";
+                report(callback, context, progressLabel.c_str(), downloaded.c_str(), 20 + feedIndex * 7);
             } else if (acceptedPartialFeed) {
-                report(callback, context, feedProgressLabel(feedIndex, feedCount), "Downloaded partial feed",
-                       20 + feedIndex * 7);
+                report(callback, context, progressLabel.c_str(), "Downloaded partial feed", 20 + feedIndex * 7);
             } else {
-                report(callback, context, feedProgressLabel(feedIndex, feedCount),
-                       "Downloaded " + String(static_cast<unsigned int>(totalRead / 1024)) + " KB", 20 + feedIndex * 7);
+                const std::string downloaded = "Downloaded " + std::to_string(totalRead / 1024) + " KB";
+                report(callback, context, progressLabel.c_str(), downloaded.c_str(), 20 + feedIndex * 7);
             }
             return body;
         }
@@ -389,41 +369,41 @@ namespace {
             return directory;
         if (auto directory = StorageFiles::ensureDirectory(StoragePaths::kArticleFilesPath); !directory)
             return directory;
-        const String finalPath = String(StoragePaths::kArticleFilesPath) + "/" + filenameForItem(item);
-        const String tmpPath = finalPath + ".tmp";
-        Board::Storage::filesystem().remove(tmpPath);
+        const std::string finalPath = std::string(StoragePaths::kArticleFilesPath) + "/" + filenameForItem(item);
+        const std::string tmpPath = finalPath + ".tmp";
+        Board::Storage::filesystem().remove(tmpPath.c_str());
 
-        File file = Board::Storage::filesystem().open(tmpPath, FILE_WRITE);
+        File file = Board::Storage::filesystem().open(tmpPath.c_str(), FILE_WRITE);
         if (!file)
             return std::unexpected(std::make_error_code(std::errc::io_error));
 
         file.println("@rsvp 1");
         file.print("@title ");
-        file.println(metadataSafe(item.title));
+        file.println(metadataSafe(item.title).c_str());
         file.print("@author ");
-        file.println(metadataSafe(item.author.isEmpty() ? feedparser::sourceLabelForItem(item) : item.author));
-        if (!item.link.isEmpty()) {
+        file.println(metadataSafe(item.author.empty() ? feedparser::sourceLabelForItem(item) : item.author).c_str());
+        if (!item.link.empty()) {
             file.print("@source ");
-            file.println(metadataSafe(item.link));
+            file.println(metadataSafe(item.link).c_str());
         }
         file.println();
 
-        String body = item.body;
+        std::string body = item.body;
         if (body.length() > feedparser::kMaxArticleChars) {
-            body = body.substring(0, feedparser::kMaxArticleChars);
+            body.resize(feedparser::kMaxArticleChars);
             body += "\n\n[Article truncated on device.]";
         }
-        file.println(body);
+        file.println(body.c_str());
         const bool writeFailed = file.getWriteError() != 0;
         file.close();
         if (writeFailed) {
-            Board::Storage::filesystem().remove(tmpPath);
+            Board::Storage::filesystem().remove(tmpPath.c_str());
             return std::unexpected(std::make_error_code(std::errc::io_error));
         }
 
-        Board::Storage::filesystem().remove(finalPath);
-        if (!Board::Storage::filesystem().rename(tmpPath, finalPath)) {
-            Board::Storage::filesystem().remove(tmpPath);
+        Board::Storage::filesystem().remove(finalPath.c_str());
+        if (!Board::Storage::filesystem().rename(tmpPath.c_str(), finalPath.c_str())) {
+            Board::Storage::filesystem().remove(tmpPath.c_str());
             return std::unexpected(std::make_error_code(std::errc::io_error));
         }
 
@@ -433,13 +413,15 @@ namespace {
         return {};
     }
 
-    bool processFeed(const String& feedUrl, const String& feedBody, Preferences& preferences, RssFeeds::Result& result,
-                     uint8_t feedIndex, uint8_t feedCount, RssFeeds::StatusCallback callback, void* context) {
+    bool processFeed(std::string_view feedUrl, std::string_view feedBody, Preferences& preferences,
+                     RssFeeds::Result& result, uint8_t feedIndex, uint8_t feedCount, RssFeeds::StatusCallback callback,
+                     void* context) {
         size_t searchStart = 0;
         uint8_t itemCount = 0;
         uint8_t savedBefore = result.articlesSaved;
         uint8_t skippedBefore = result.articlesSkipped;
-        report(callback, context, feedProgressLabel(feedIndex, feedCount), "Parsing items", 24 + feedIndex * 7);
+        const std::string progressLabel = feedProgressLabel(feedIndex, feedCount);
+        report(callback, context, progressLabel.c_str(), "Parsing items", 24 + feedIndex * 7);
         while (itemCount < kMaxItemsPerFeed && result.articlesSaved < kMaxArticlesPerCheck) {
             feedparser::FeedItem item;
             if (!feedparser::parseNextItem(feedBody, searchStart, item)) {
@@ -448,11 +430,13 @@ namespace {
             ++itemCount;
             if (itemAlreadySeen(item, preferences)) {
                 ++result.articlesSkipped;
-                report(callback, context, feedProgressLabel(feedIndex, feedCount),
-                       "Already synced " + String(itemCount) + "/" + String(kMaxItemsPerFeed), 24 + feedIndex * 7);
+                const std::string synced =
+                    "Already synced " + std::to_string(itemCount) + "/" + std::to_string(kMaxItemsPerFeed);
+                report(callback, context, progressLabel.c_str(), synced.c_str(), 24 + feedIndex * 7);
                 continue;
             }
-            report(callback, context, "Saving article " + String(itemCount), item.title, 24 + feedIndex * 7);
+            const std::string saving = "Saving article " + std::to_string(itemCount);
+            report(callback, context, saving.c_str(), item.title.c_str(), 24 + feedIndex * 7);
             if (auto saved = saveItem(item, preferences, result); !saved)
                 ESP_LOGE("rss", "save failed title=%s error=%s code=%d", item.title.c_str(),
                          saved.error().message().c_str(), saved.error().value());
@@ -460,12 +444,12 @@ namespace {
         const uint8_t savedHere = result.articlesSaved - savedBefore;
         const uint8_t skippedHere = result.articlesSkipped - skippedBefore;
         if (itemCount == 0) {
-            report(callback, context, feedProgressLabel(feedIndex, feedCount), "No usable items", 24 + feedIndex * 7);
+            report(callback, context, progressLabel.c_str(), "No usable items", 24 + feedIndex * 7);
         } else {
-            report(callback, context, feedProgressLabel(feedIndex, feedCount),
-                   String(savedHere) + " saved, " + String(skippedHere) + " skipped", 24 + feedIndex * 7);
+            const std::string saved = std::to_string(savedHere) + " saved, " + std::to_string(skippedHere) + " skipped";
+            report(callback, context, progressLabel.c_str(), saved.c_str(), 24 + feedIndex * 7);
         }
-        ESP_LOGW("rss", "feed url=%s items=%u saved=%u skipped=%u", feedUrl.c_str(),
+        ESP_LOGW("rss", "feed url=%.*s items=%u saved=%u skipped=%u", static_cast<int>(feedUrl.size()), feedUrl.data(),
                  static_cast<unsigned int>(itemCount), static_cast<unsigned int>(savedHere),
                  static_cast<unsigned int>(skippedHere));
         delay(600);
@@ -475,11 +459,11 @@ namespace {
 
 RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::DeviceSettings& settings,
                                  const settings::DeviceSecrets& secrets, StatusCallback callback, void* context) {
-    const String wifiSsid = settings.network.wifiSsid.c_str();
-    const String wifiPassword = secrets.wifiPassword.c_str();
+    const std::string& wifiSsid = settings.network.wifiSsid;
+    const std::string& wifiPassword = secrets.wifiPassword;
 
     Result result;
-    if (trimCopy(wifiSsid).isEmpty()) {
+    if (AsciiText::trim(wifiSsid).empty()) {
         result.summary = "Wi-Fi not set";
         result.detail = "Settings -> Wi-Fi";
         return result;
@@ -500,13 +484,8 @@ RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::Devic
         return result;
     }
 
-    std::vector<String> feeds;
     const size_t feedCount = std::min(config->feeds.size(), static_cast<size_t>(kMaxFeedsPerCheck));
-    feeds.reserve(feedCount);
-    for (size_t index = 0; index < feedCount; ++index)
-        feeds.emplace_back(config->feeds[index].c_str());
-
-    if (feeds.empty()) {
+    if (feedCount == 0) {
         disconnectWiFi();
         result.summary = "No feed URLs";
         result.detail = StoragePaths::kRssConfigPath;
@@ -514,52 +493,54 @@ RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::Devic
     }
 
     uint8_t feedFailures = 0;
-    String firstFeedError;
+    std::string firstFeedError;
     bool mixedFeedErrors = false;
 
-    for (uint8_t feedIndex = 0; feedIndex < feeds.size() && result.articlesSaved < kMaxArticlesPerCheck; ++feedIndex) {
-        const String& line = feeds[feedIndex];
+    for (uint8_t feedIndex = 0; feedIndex < feedCount && result.articlesSaved < kMaxArticlesPerCheck; ++feedIndex) {
+        const std::string& line = config->feeds[feedIndex];
         const uint8_t displayIndex = feedIndex + 1;
-        const uint8_t feedCount = feeds.size();
-        report(callback, context, feedProgressLabel(displayIndex, feedCount),
-               "Downloading " + feedparser::hostLabelForUrl(line), 15 + displayIndex * 8);
+        const uint8_t displayFeedCount = static_cast<uint8_t>(feedCount);
+        const std::string progressLabel = feedProgressLabel(displayIndex, displayFeedCount);
+        const std::string downloading = "Downloading " + feedparser::hostLabelForUrl(line);
+        report(callback, context, progressLabel.c_str(), downloading.c_str(), 15 + displayIndex * 8);
 
-        auto feedBody = fetchUrl(line, displayIndex, feedCount, callback, context);
+        auto feedBody = fetchUrl(line, displayIndex, displayFeedCount, callback, context);
         if (!feedBody) {
-            const String error = feedBody.error().c_str();
+            const std::string& error = feedBody.error();
             ESP_LOGE("rss", "feed failed url=%s error=%s", line.c_str(), error.c_str());
             ++feedFailures;
-            if (firstFeedError.isEmpty()) {
+            if (firstFeedError.empty()) {
                 firstFeedError = error;
             } else if (error != firstFeedError) {
                 mixedFeedErrors = true;
             }
-            report(callback, context, feedProgressLabel(displayIndex, feedCount), "Skipped: " + error,
-                   15 + displayIndex * 8);
+            const std::string skipped = "Skipped: " + error;
+            report(callback, context, progressLabel.c_str(), skipped.c_str(), 15 + displayIndex * 8);
             delay(600);
             continue;
         }
 
         ++result.feedsChecked;
-        processFeed(line, *feedBody, preferences, result, displayIndex, feedCount, callback, context);
+        processFeed(line, *feedBody, preferences, result, displayIndex, displayFeedCount, callback, context);
     }
 
     disconnectWiFi();
 
     if (result.feedsChecked == 0) {
         result.summary = "Feeds unavailable";
-        result.detail = mixedFeedErrors || firstFeedError.isEmpty() ? "Check feed URLs" : firstFeedError;
+        result.detail = mixedFeedErrors || firstFeedError.empty() ? "Check feed URLs" : firstFeedError;
     } else if (result.articlesSaved == 0) {
         result.summary = "No new articles";
-        result.detail = String(result.feedsChecked) + " checked";
+        result.detail = std::to_string(result.feedsChecked) + " checked";
         if (feedFailures > 0) {
-            result.detail += ", " + String(feedFailures) + " failed";
+            result.detail += ", " + std::to_string(feedFailures) + " failed";
         }
     } else {
-        result.summary = String(result.articlesSaved) + " article" + (result.articlesSaved == 1 ? "" : "s") + " saved";
-        result.detail = String(result.feedsChecked) + " checked";
+        result.summary =
+            std::to_string(result.articlesSaved) + " article" + (result.articlesSaved == 1 ? "" : "s") + " saved";
+        result.detail = std::to_string(result.feedsChecked) + " checked";
         if (feedFailures > 0) {
-            result.detail += ", " + String(feedFailures) + " failed";
+            result.detail += ", " + std::to_string(feedFailures) + " failed";
         }
     }
     return result;

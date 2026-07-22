@@ -1,6 +1,8 @@
 #pragma once
 
-#include <Arduino.h>
+#include <cstddef>
+#include <cstdint>
+#include <string>
 
 namespace SdDiagnostics {
 
@@ -26,9 +28,9 @@ namespace SdDiagnostics {
         size_t unsupportedCount = 0;
         uint64_t sizeMb = 0;
         int frequencyKhz = 0;
-        String cardType;
-        String summary;
-        String detail;
+        std::string cardType;
+        std::string summary;
+        std::string detail;
     };
 
     DiagnosticResult diagnoseCard(bool& mounted, StatusCallback statusCallback, void* statusContext);

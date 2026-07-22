@@ -8,6 +8,8 @@
 #include <cerrno>
 #include <cstring>
 #include <driver/sdmmc_types.h>
+#include <string>
+#include <string_view>
 #include <system_error>
 
 #include "board/BoardStorage.h"
@@ -84,8 +86,7 @@ namespace SdDiagnostics {
         }
 
         bool isSupportedFrequency(int frequencyKhz) {
-            return std::find(kSdFrequenciesKhz.begin(), kSdFrequenciesKhz.end(), frequencyKhz)
-                != kSdFrequenciesKhz.end();
+            return std::ranges::find(kSdFrequenciesKhz, frequencyKhz) != kSdFrequenciesKhz.end();
         }
 
         uint32_t currentCardSizeMb() {
@@ -147,8 +148,9 @@ namespace SdDiagnostics {
             size_t count = 0;
 
             for (int candidate: kSdFrequenciesKhz) {
-                const bool alreadyQueued = std::find(frequencies.begin(), frequencies.begin() + count, candidate)
-                                        != frequencies.begin() + count;
+                const bool alreadyQueued =
+                    std::ranges::find(frequencies.begin(), frequencies.begin() + count, candidate)
+                    != frequencies.begin() + count;
                 if (!alreadyQueued && count < frequencies.size()) {
                     frequencies[count++] = candidate;
                 }
@@ -163,21 +165,23 @@ namespace SdDiagnostics {
             }
         }
 
-        bool removeProbeFile(const String& path, const char* tag) {
+        bool removeProbeFile(std::string_view path, const char* tag) {
+            const std::string ownedPath{path};
             errno = 0;
-            const bool removed = Board::Storage::filesystem().remove(path);
+            const bool removed = Board::Storage::filesystem().remove(ownedPath.c_str());
             const int removeErrno = errno;
-            if (!removed && StorageFiles::fileExists(path.c_str())) {
-                Logger::failure(tag, "remove probe", path.c_str(),
+            if (!removed && StorageFiles::fileExists(ownedPath.c_str())) {
+                Logger::failure(tag, "remove probe", ownedPath.c_str(),
                                 std::error_code{removeErrno, std::generic_category()});
                 return false;
             }
             return true;
         }
 
-        bool writeReadProbeFile(const String& path, size_t bytes, const char* tag) {
-            ESP_LOGD(tag, "write/read probe path=%s bytes=%u", path.c_str(), static_cast<unsigned int>(bytes));
-            Board::Storage::filesystem().remove(path);
+        bool writeReadProbeFile(std::string_view path, size_t bytes, const char* tag) {
+            const std::string ownedPath{path};
+            ESP_LOGD(tag, "write/read probe path=%s bytes=%u", ownedPath.c_str(), static_cast<unsigned int>(bytes));
+            Board::Storage::filesystem().remove(ownedPath.c_str());
 
             static uint8_t writeBuffer[kProbeChunkBytes];
             static uint8_t readBuffer[kProbeChunkBytes];
@@ -185,10 +189,10 @@ namespace SdDiagnostics {
             {
                 // Write the deterministic probe payload.
                 errno = 0;
-                File file = Board::Storage::filesystem().open(path, FILE_WRITE);
+                File file = Board::Storage::filesystem().open(ownedPath.c_str(), FILE_WRITE);
                 const int openErrno = errno;
                 if (!file) {
-                    Logger::failure(tag, "open FILE_WRITE", path.c_str(),
+                    Logger::failure(tag, "open FILE_WRITE", ownedPath.c_str(),
                                     std::error_code{openErrno, std::generic_category()});
                     return false;
                 }
@@ -199,7 +203,7 @@ namespace SdDiagnostics {
                     fillProbeBuffer(writeBuffer, chunk, static_cast<uint32_t>(writtenTotal));
                     const size_t written = file.write(writeBuffer, chunk);
                     if (written != chunk) {
-                        ESP_LOGE(tag, "probe short write path=%s offset=%u wanted=%u got=%u", path.c_str(),
+                        ESP_LOGE(tag, "probe short write path=%s offset=%u wanted=%u got=%u", ownedPath.c_str(),
                                  static_cast<unsigned int>(writtenTotal), static_cast<unsigned int>(chunk),
                                  static_cast<unsigned int>(written));
                         file.close();
@@ -215,18 +219,18 @@ namespace SdDiagnostics {
 
             {
                 // Reopen and verify the exact bytes to catch flaky card timings.
-                File file = Board::Storage::filesystem().open(path, FILE_READ);
+                File file = Board::Storage::filesystem().open(ownedPath.c_str(), FILE_READ);
                 if (!file || file.isDirectory()) {
                     if (file) {
                         file.close();
                     }
-                    ESP_LOGE(tag, "probe reopen failed path=%s", path.c_str());
+                    ESP_LOGE(tag, "probe reopen failed path=%s", ownedPath.c_str());
                     removeProbeFile(path, tag);
                     return false;
                 }
 
                 if (file.size() != bytes) {
-                    ESP_LOGE(tag, "probe size mismatch path=%s size=%u expected=%u", path.c_str(),
+                    ESP_LOGE(tag, "probe size mismatch path=%s size=%u expected=%u", ownedPath.c_str(),
                              static_cast<unsigned int>(file.size()), static_cast<unsigned int>(bytes));
                     file.close();
                     removeProbeFile(path, tag);
@@ -239,7 +243,7 @@ namespace SdDiagnostics {
                     fillProbeBuffer(writeBuffer, chunk, static_cast<uint32_t>(readTotal));
                     const size_t read = file.read(readBuffer, chunk);
                     if (read != chunk || std::memcmp(readBuffer, writeBuffer, chunk) != 0) {
-                        ESP_LOGE(tag, "probe verify failed path=%s offset=%u wanted=%u got=%u", path.c_str(),
+                        ESP_LOGE(tag, "probe verify failed path=%s offset=%u wanted=%u got=%u", ownedPath.c_str(),
                                  static_cast<unsigned int>(readTotal), static_cast<unsigned int>(chunk),
                                  static_cast<unsigned int>(read));
                         file.close();
@@ -257,9 +261,9 @@ namespace SdDiagnostics {
             return removeProbeFile(path, tag);
         }
 
-        String probePathForDirectory(const char* directoryPath, const char* name) {
-            String path = String(directoryPath);
-            if (!path.endsWith("/")) {
+        std::string probePathForDirectory(std::string_view directoryPath, std::string_view name) {
+            std::string path{directoryPath};
+            if (!path.ends_with('/')) {
                 path += "/";
             }
             path += name;
@@ -437,8 +441,8 @@ namespace SdDiagnostics {
         }
 
         result.summary = "Storage OK";
-        result.detail = result.cardType + " " + String(static_cast<unsigned int>(result.sizeMb)) + " MB "
-                      + String(result.frequencyKhz / 1000) + " MHz";
+        result.detail = result.cardType + " " + std::to_string(result.sizeMb) + " MB "
+                      + std::to_string(result.frequencyKhz / 1000) + " MHz";
         return result;
     }
 
@@ -470,8 +474,8 @@ namespace SdDiagnostics {
         }
 
         result.summary = "Storage OK";
-        result.detail = result.cardType + " " + String(static_cast<unsigned int>(result.sizeMb)) + " MB "
-                      + String(result.frequencyKhz / 1000) + " MHz";
+        result.detail = result.cardType + " " + std::to_string(result.sizeMb) + " MB "
+                      + std::to_string(result.frequencyKhz / 1000) + " MHz";
     }
 
     bool repairFolderLayout(bool mounted) {

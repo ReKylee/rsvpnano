@@ -202,7 +202,7 @@ namespace screens {
             const std::string path = storage.bookPath(index);
             BookMetadata metadata;
             IndexedBookStore::Header header;
-            const bool metadataLoaded = IndexedBook::readMetadata(path.c_str(), metadata, &header);
+            const bool metadataLoaded = IndexedBook::readMetadata(path, metadata, &header);
             uint32_t wordIndex = 0;
             bool hasPosition = false;
 
@@ -214,7 +214,7 @@ namespace screens {
             } else if (metadataLoaded && header.wordCount > 0) {
                 const ReadingProgress::BookIdentity identity{header.sourceSize, header.sourceFingerprint,
                                                              header.wordCount};
-                const auto savedWordIndex = ReadingProgress::readBookStatePosition(path.c_str(), identity);
+                const auto savedWordIndex = ReadingProgress::readBookStatePosition(path, identity);
                 hasPosition = savedWordIndex.has_value();
                 wordIndex = savedWordIndex.value_or(0);
                 item.progress = hasPosition ? ReadingProgress::percent(wordIndex, header.wordCount) : 0;
@@ -241,16 +241,9 @@ namespace screens {
                && (title.back() == ' ' || title.back() == '\t' || title.back() == '\r' || title.back() == '\n'))
             title.remove_suffix(1);
         const auto startsWith = [title](std::string_view prefix) {
-            if (title.size() < prefix.size())
-                return false;
-            for (size_t index = 0; index < prefix.size(); ++index) {
-                const char character = title[index] >= 'A' && title[index] <= 'Z'
-                                         ? static_cast<char>(title[index] - 'A' + 'a')
-                                         : title[index];
-                if (character != prefix[index])
-                    return false;
-            }
-            return true;
+            return title.size() >= prefix.size()
+                && std::ranges::equal(title.substr(0, prefix.size()), prefix, {}, AsciiText::toLower,
+                                      AsciiText::toLower);
         };
         if (startsWith("the "))
             title.remove_prefix(4);

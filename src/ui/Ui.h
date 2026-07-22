@@ -217,6 +217,8 @@ namespace ui {
 
         static uint32_t signature(std::string_view text, uint32_t seed = 2166136261U);
         static uint32_t combine(uint32_t seed, uint32_t value);
+        static int16_t textWidth(std::string_view text, uint8_t size);
+        static int16_t textHeight(uint8_t size);
 
     private:
         enum class Kind : uint8_t {

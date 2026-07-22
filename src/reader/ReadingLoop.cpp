@@ -4,7 +4,8 @@
 #include <algorithm>
 #include <string_view>
 
-#include "text/LatinText.h"
+#include "text/UnicodeText.h"
+#include "text/Utf8Text.h"
 
 namespace {
 
@@ -437,32 +438,19 @@ namespace {
     constexpr uint8_t kStrongSentencePausePercent = 150;
     constexpr uint8_t kMaxCatchUpWords = 4;
 
-    bool isWordCharacter(char c) {
-        return LatinText::isWordCharacter(static_cast<uint8_t>(c));
+    template<typename Predicate>
+    int codepointCount(std::string_view text, Predicate predicate) {
+        int count = 0;
+        uint32_t codepoint = 0;
+        while (Utf8Text::next(text, codepoint)) {
+            if (predicate(codepoint))
+                ++count;
+        }
+        return count;
     }
 
-    bool isLetterCharacter(char c) {
-        return LatinText::isLetter(static_cast<uint8_t>(c));
-    }
-
-    bool isDigitCharacter(char c) {
-        return LatinText::isDigit(static_cast<uint8_t>(c));
-    }
-
-    bool isLowercaseLetter(char c) {
-        return LatinText::isLowercaseLetter(static_cast<uint8_t>(c));
-    }
-
-    bool isUppercaseLetter(char c) {
-        return LatinText::isUppercaseLetter(static_cast<uint8_t>(c));
-    }
-
-    bool isVowelCharacter(char c) {
-        return LatinText::isVowel(static_cast<uint8_t>(c));
-    }
-
-    bool isSegmentSeparator(char c) {
-        switch (c) {
+    bool isSegmentSeparator(uint32_t codepoint) {
+        switch (codepoint) {
         case '-':
         case '/':
         case '_':
@@ -472,8 +460,8 @@ namespace {
         }
     }
 
-    bool isTechnicalConnector(char c) {
-        switch (c) {
+    bool isTechnicalConnector(uint32_t codepoint) {
+        switch (codepoint) {
         case '-':
         case '/':
         case '_':
@@ -499,73 +487,33 @@ namespace {
         }
     }
 
-    int letterCharacterCount(std::string_view word) {
-        int count = 0;
-        for (size_t i = 0; i < word.length(); ++i) {
-            if (isLetterCharacter(word[i])) {
-                ++count;
-            }
-        }
-        return count;
-    }
-
-    int digitCharacterCount(std::string_view word) {
-        int count = 0;
-        for (size_t i = 0; i < word.length(); ++i) {
-            if (isDigitCharacter(word[i])) {
-                ++count;
-            }
-        }
-        return count;
-    }
-
-    int uppercaseLetterCount(std::string_view word) {
-        int count = 0;
-        for (size_t i = 0; i < word.length(); ++i) {
-            if (isUppercaseLetter(word[i])) {
-                ++count;
-            }
-        }
-        return count;
-    }
-
-    int readableCharacterCount(std::string_view word) {
-        int count = 0;
-        for (size_t i = 0; i < word.length(); ++i) {
-            if (isWordCharacter(word[i])) {
-                ++count;
-            }
-        }
-        return count;
-    }
-
     int approximateSyllableGroupCount(std::string_view word) {
         int groups = 0;
         int letterCount = 0;
         bool previousWasVowel = false;
-        std::string lettersOnly;
-        lettersOnly.reserve(word.length());
+        uint32_t previousLetter = 0;
+        uint32_t lastLetter = 0;
 
-        for (size_t i = 0; i < word.length(); ++i) {
-            const char c = word[i];
-            if (!isLetterCharacter(c)) {
+        uint32_t codepoint = 0;
+        while (Utf8Text::next(word, codepoint)) {
+            if (!UnicodeText::isLetter(codepoint)) {
                 previousWasVowel = false;
                 continue;
             }
 
             ++letterCount;
-            const char lowered = static_cast<char>(LatinText::toLowercaseByte(static_cast<uint8_t>(c)));
-            lettersOnly += lowered;
+            const uint32_t lowered = UnicodeText::toLowercase(codepoint);
+            previousLetter = lastLetter;
+            lastLetter = lowered;
 
-            const bool vowel = LatinText::isVowel(static_cast<uint8_t>(lowered));
+            const bool vowel = UnicodeText::isVowel(lowered);
             if (vowel && !previousWasVowel) {
                 ++groups;
             }
             previousWasVowel = vowel;
         }
 
-        if (groups > 1 && letterCount > 3 && lettersOnly.ends_with("e") && !lettersOnly.ends_with("le")
-            && !lettersOnly.ends_with("ye")) {
+        if (groups > 1 && letterCount > 3 && lastLetter == 'e' && previousLetter != 'l' && previousLetter != 'y') {
             --groups;
         }
 
@@ -576,30 +524,21 @@ namespace {
         return groups;
     }
 
-    int compoundJoinerCount(std::string_view word) {
+    template<typename Predicate>
+    int connectorCount(std::string_view word, Predicate predicate) {
         int count = 0;
-        for (size_t i = 1; i + 1 < word.length(); ++i) {
-            if (!isSegmentSeparator(word[i])) {
-                continue;
-            }
-            if (!isWordCharacter(word[i - 1]) || !isWordCharacter(word[i + 1])) {
-                continue;
-            }
-            ++count;
-        }
-        return count;
-    }
+        uint32_t previous = 0;
+        uint32_t current = 0;
+        if (!Utf8Text::next(word, previous) || !Utf8Text::next(word, current))
+            return 0;
 
-    int technicalConnectorCount(std::string_view word) {
-        int count = 0;
-        for (size_t i = 1; i + 1 < word.length(); ++i) {
-            if (!isTechnicalConnector(word[i])) {
-                continue;
+        uint32_t next = 0;
+        while (Utf8Text::next(word, next)) {
+            if (predicate(current) && UnicodeText::isWordCharacter(previous) && UnicodeText::isWordCharacter(next)) {
+                ++count;
             }
-            if (!isWordCharacter(word[i - 1]) || !isWordCharacter(word[i + 1])) {
-                continue;
-            }
-            ++count;
+            previous = current;
+            current = next;
         }
         return count;
     }
@@ -638,11 +577,12 @@ namespace {
     }
 
     bool startsWithLowercaseLetter(std::string_view word) {
-        for (size_t i = 0; i < word.length(); ++i) {
-            if (isLowercaseLetter(word[i])) {
+        uint32_t codepoint = 0;
+        while (Utf8Text::next(word, codepoint)) {
+            if (UnicodeText::isLowercaseLetter(codepoint)) {
                 return true;
             }
-            if (isLetterCharacter(word[i])) {
+            if (UnicodeText::isLetter(codepoint)) {
                 return false;
             }
         }
@@ -657,15 +597,16 @@ namespace {
 
         int letterCount = 0;
         bool expectLetter = true;
-        for (int i = 0; i <= end; ++i) {
-            const char c = word[static_cast<size_t>(i)];
+        std::string_view text = word.substr(0, static_cast<size_t>(end + 1));
+        uint32_t codepoint = 0;
+        while (Utf8Text::next(text, codepoint)) {
             if (expectLetter) {
-                if (!isLetterCharacter(c)) {
+                if (!UnicodeText::isLetter(codepoint)) {
                     return false;
                 }
                 ++letterCount;
                 expectLetter = false;
-            } else if (c == '.') {
+            } else if (codepoint == '.') {
                 expectLetter = true;
             } else {
                 return false;
@@ -676,21 +617,21 @@ namespace {
     }
 
     bool looksLikeAbbreviation(std::string_view word, bool nextWordStartsLowercase) {
-        std::string lowered{word};
-        std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](char value) {
-            return static_cast<char>(LatinText::toLowercaseByte(value));
-        });
+        std::string lowered;
+        lowered.reserve(word.size());
+        uint32_t codepoint = 0;
+        while (Utf8Text::next(word, codepoint))
+            Utf8Text::append(lowered, UnicodeText::toLowercase(codepoint));
 
         constexpr const char* kKnownAbbreviations[] = {
             "mr.",  "mrs.", "ms.", "dr.",  "prof.", "sr.",  "jr.",  "st.", "vs.",   "etc.", "e.g.",
             "i.e.", "cf.",  "no.", "fig.", "eq.",   "inc.", "ltd.", "co.", "dept.", "mt.",  "ft.",
         };
 
-        for (const char* abbreviation: kKnownAbbreviations) {
-            if (lowered == abbreviation) {
-                return true;
-            }
-        }
+        if (std::ranges::any_of(kKnownAbbreviations, [&lowered](const char* abbreviation) {
+                return lowered == abbreviation;
+            }))
+            return true;
 
         if (!lowered.ends_with(".")) {
             return false;
@@ -700,11 +641,11 @@ namespace {
             return true;
         }
 
-        if (readableCharacterCount(lowered) <= 2) {
+        if (codepointCount(lowered, UnicodeText::isWordCharacter) <= 2) {
             return true;
         }
 
-        if (nextWordStartsLowercase && readableCharacterCount(lowered) <= 4) {
+        if (nextWordStartsLowercase && codepointCount(lowered, UnicodeText::isWordCharacter) <= 4) {
             return true;
         }
 
@@ -716,7 +657,7 @@ namespace {
     }
 
     uint16_t lengthBonusPercentForWord(std::string_view word) {
-        const int readableLength = readableCharacterCount(word);
+        const int readableLength = codepointCount(word, UnicodeText::isWordCharacter);
         if (readableLength == 0) {
             return 0;
         }
@@ -737,7 +678,7 @@ namespace {
             bonusPercent += static_cast<uint16_t>(extraChars * static_cast<int>(kUltraLongWordPercentPerChar));
         }
 
-        const int joinerCount = compoundJoinerCount(word);
+        const int joinerCount = connectorCount(word, isSegmentSeparator);
         if (joinerCount > 0) {
             bonusPercent += static_cast<uint16_t>(joinerCount * static_cast<int>(kCompoundJoinerPercent));
             if (readableLength >= kVeryLongWordAfterChars) {
@@ -745,7 +686,7 @@ namespace {
             }
         }
 
-        const int techConnectorCount = technicalConnectorCount(word);
+        const int techConnectorCount = connectorCount(word, isTechnicalConnector);
         if (techConnectorCount > joinerCount) {
             bonusPercent += static_cast<uint16_t>((techConnectorCount - joinerCount)
                                                   * static_cast<int>(kTechnicalConnectorPercent));
@@ -764,9 +705,9 @@ namespace {
                                                extraGroups * static_cast<int>(kSyllableBonusPercentPerGroup)));
         }
 
-        const int letterCount = letterCharacterCount(word);
-        const int digitCount = digitCharacterCount(word);
-        const int uppercaseCount = uppercaseLetterCount(word);
+        const int letterCount = codepointCount(word, UnicodeText::isLetter);
+        const int digitCount = codepointCount(word, UnicodeText::isDigit);
+        const int uppercaseCount = codepointCount(word, UnicodeText::isUppercaseLetter);
         if (letterCount > 0 && digitCount > 0) {
             bonusPercent += kMixedTokenComplexityPercent;
         } else if (digitCount >= 3) {
@@ -777,7 +718,7 @@ namespace {
             bonusPercent += kAllCapsComplexityPercent;
         }
 
-        const int techConnectorCount = technicalConnectorCount(word);
+        const int techConnectorCount = connectorCount(word, isTechnicalConnector);
         if (techConnectorCount >= 2) {
             bonusPercent +=
                 static_cast<uint16_t>((techConnectorCount - 1) * static_cast<int>(kDenseConnectorComplexityPercent));
@@ -852,7 +793,7 @@ namespace ReadingLoop {
             if (wordIndex >= wordCount(session))
                 return false;
 
-            const std::string word = wordAt(session, wordIndex);
+            const std::string word{wordAt(session, wordIndex)};
             if (word.empty())
                 return false;
 
@@ -1011,6 +952,22 @@ namespace ReadingLoop {
         setCurrentWordFromIndex(session);
     }
 
+    bool seekParagraph(ReadingSession& session, int steps) {
+        const auto& paragraphStarts = session.metadata.paragraphStarts;
+        if (paragraphStarts.empty() || steps == 0)
+            return false;
+        const auto next = std::ranges::upper_bound(paragraphStarts, session.currentIndex);
+        const size_t current =
+            next == paragraphStarts.begin() ? 0 : static_cast<size_t>(next - paragraphStarts.begin() - 1);
+        const int64_t target = std::clamp<int64_t>(static_cast<int64_t>(current) + steps, 0,
+                                                   static_cast<int64_t>(paragraphStarts.size() - 1));
+        if (target == static_cast<int64_t>(current))
+            return false;
+        const size_t wordIndex = paragraphStarts[static_cast<size_t>(target)];
+        seekTo(session, wordIndex);
+        return true;
+    }
+
     void rewindSentence(ReadingSession& session) {
         if (wordCount(session) == 0)
             return;
@@ -1048,7 +1005,7 @@ namespace ReadingLoop {
         return kDemoWordCount;
     }
 
-    std::string wordAt(const ReadingSession& session, size_t index) {
+    std::string_view wordAt(const ReadingSession& session, size_t index) {
         if (session.bookStore != nullptr)
             return session.bookStore->wordAt(index);
         if (!session.words.empty())

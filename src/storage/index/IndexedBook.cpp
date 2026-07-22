@@ -124,8 +124,9 @@ namespace IndexedBook {
             return hash;
         }
 
-        bool readIndexHeader(const String& path, IndexHeader& header) {
-            File file = Board::Storage::filesystem().open(indexedIndexPathFor(path), FILE_READ);
+        bool readIndexHeader(std::string_view path, IndexHeader& header) {
+            const std::string indexPath = indexedIndexPathFor(path);
+            File file = Board::Storage::filesystem().open(indexPath.c_str(), FILE_READ);
             if (!file) {
                 return false;
             }
@@ -148,18 +149,13 @@ namespace IndexedBook {
                 || heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < kParseMinLargestHeapBlockBytes;
         }
 
-        bool tokenHasReadableCharacter(const String& token) {
-            const char* text = token.c_str();
-            return std::any_of(text, text + token.length(), RsvpText::isReadableTokenChar);
-        }
-
-        void addChapterMarker(IndexedBuildContext& buildContext, const String& title) {
-            if (title.isEmpty() || buildContext.metadata == nullptr) {
+        void addChapterMarker(IndexedBuildContext& buildContext, std::string_view title) {
+            if (title.empty() || buildContext.metadata == nullptr) {
                 return;
             }
 
             ChapterMarker marker;
-            marker.title.assign(title.c_str(), title.length());
+            marker.title = title;
             marker.wordIndex = buildContext.wordCount;
 
             if (!buildContext.metadata->chapters.empty()
@@ -185,17 +181,8 @@ namespace IndexedBook {
             buildContext.metadata->paragraphStarts.push_back(wordIndex);
         }
 
-        bool pushWord(String token, IndexedBuildContext& buildContext, RsvpText::ParseStats* stats) {
-            RsvpText::trimAsciiWhitespace(token);
-
-            if (token.length() >= 3 && static_cast<uint8_t>(token[0]) == 0xEF && static_cast<uint8_t>(token[1]) == 0xBB
-                && static_cast<uint8_t>(token[2]) == 0xBF) {
-                token.remove(0, 3);
-            }
-
-            RsvpText::trimAsciiWhitespace(token);
-
-            if (token.isEmpty() || (!tokenHasReadableCharacter(token) && !RsvpText::isRhythmToken(token))) {
+        bool pushWord(std::string token, IndexedBuildContext& buildContext, RsvpText::ParseStats* stats) {
+            if (token.empty() || (!RsvpText::hasReadableText(token) && token != "-")) {
                 return true;
             }
 
@@ -226,7 +213,7 @@ namespace IndexedBook {
                 return false;
             }
 
-            if (buildContext.dataWriter != nullptr && !buildContext.dataWriter->write(token.c_str(), token.length())) {
+            if (buildContext.dataWriter != nullptr && !buildContext.dataWriter->write(token.data(), token.length())) {
                 buildContext.failed = true;
                 buildContext.failure = "SD write failed";
                 return false;
@@ -246,24 +233,24 @@ namespace IndexedBook {
             return true;
         }
 
-        bool appendLineWords(const String& line, IndexedBuildContext& buildContext, RsvpText::ParseStats* stats) {
+        bool appendLineWords(std::string_view line, IndexedBuildContext& buildContext, RsvpText::ParseStats* stats) {
             return RsvpText::appendLineWords(
                 line,
-                [&](const String& token) {
+                [&](const std::string& token) {
                     return pushWord(token, buildContext, stats);
                 },
                 buildContext.wordCount, stats);
         }
 
-        bool processBookLine(const String& line, IndexedBuildContext& buildContext, bool& paragraphPending,
+        bool processBookLine(std::string_view line, IndexedBuildContext& buildContext, bool& paragraphPending,
                              RsvpText::ParseStats* stats) {
-            const String trimmed = RsvpText::stripBom(line);
-            if (trimmed.isEmpty()) {
+            const std::string_view trimmed = RsvpText::stripBom(line);
+            if (trimmed.empty()) {
                 paragraphPending = true;
                 return true;
             }
 
-            String chapterTitle;
+            std::string chapterTitle;
             if (RsvpText::chapterTitleFromLine(line, chapterTitle)) {
                 addChapterMarker(buildContext, chapterTitle);
                 paragraphPending = true;
@@ -276,16 +263,16 @@ namespace IndexedBook {
             return appendLineWords(line, buildContext, stats);
         }
 
-        bool processRsvpLine(const String& line, IndexedBuildContext& buildContext, bool& paragraphPending,
+        bool processRsvpLine(std::string_view line, IndexedBuildContext& buildContext, bool& paragraphPending,
                              RsvpText::ParseStats* stats) {
-            String trimmed = RsvpText::stripBom(line);
-            if (trimmed.isEmpty()) {
+            std::string trimmed{RsvpText::stripBom(line)};
+            if (trimmed.empty()) {
                 paragraphPending = true;
                 return true;
             }
 
-            if (trimmed.startsWith("@@")) {
-                trimmed.remove(0, 1);
+            if (trimmed.starts_with("@@")) {
+                trimmed.erase(0, 1);
                 if (paragraphPending) {
                     addParagraphMarker(buildContext);
                     paragraphPending = false;
@@ -293,30 +280,26 @@ namespace IndexedBook {
                 return appendLineWords(trimmed, buildContext, stats);
             }
 
-            if (trimmed.startsWith("@")) {
-                String lowered = trimmed;
-                lowered.toLowerCase();
-                if (RsvpText::prefixHasBoundary(lowered, "@para")) {
+            if (trimmed.starts_with('@')) {
+                if (RsvpText::prefixHasBoundary(trimmed, "@para")) {
                     paragraphPending = true;
                     return true;
                 }
-                if (RsvpText::prefixHasBoundary(lowered, "@chapter")) {
-                    String title = RsvpText::directiveValue(trimmed, "@chapter");
-                    if (title.isEmpty()) {
+                if (RsvpText::prefixHasBoundary(trimmed, "@chapter")) {
+                    std::string title = RsvpText::directiveValue(trimmed, "@chapter");
+                    if (title.empty()) {
                         title = "Chapter";
                     }
                     addChapterMarker(buildContext, title);
                     paragraphPending = true;
                     return true;
                 }
-                if (buildContext.metadata != nullptr && RsvpText::prefixHasBoundary(lowered, "@title")) {
-                    const String value = RsvpText::directiveValue(trimmed, "@title");
-                    buildContext.metadata->title.assign(value.c_str(), value.length());
+                if (buildContext.metadata != nullptr && RsvpText::prefixHasBoundary(trimmed, "@title")) {
+                    buildContext.metadata->title = RsvpText::directiveValue(trimmed, "@title");
                     return true;
                 }
-                if (buildContext.metadata != nullptr && RsvpText::prefixHasBoundary(lowered, "@author")) {
-                    const String value = RsvpText::directiveValue(trimmed, "@author");
-                    buildContext.metadata->author.assign(value.c_str(), value.length());
+                if (buildContext.metadata != nullptr && RsvpText::prefixHasBoundary(trimmed, "@author")) {
+                    buildContext.metadata->author = RsvpText::directiveValue(trimmed, "@author");
                     return true;
                 }
                 return true;
@@ -329,25 +312,28 @@ namespace IndexedBook {
             return appendLineWords(line, buildContext, stats);
         }
 
-        bool readIndexedMetadata(const String& path, BookMetadata& metadata, IndexHeader* headerOut = nullptr) {
+        bool readIndexedMetadata(std::string_view path, BookMetadata& metadata, IndexHeader* headerOut = nullptr) {
             metadata.clear();
+            const std::string sourcePath{path};
+            const std::string indexPath = indexedIndexPathFor(path);
+            const std::string dataPath = indexedDataPathFor(path);
 
             IndexHeader header;
             if (!readIndexHeader(path, header)) {
-                if (StorageFiles::fileExistsWithBytes(indexedIndexPathFor(path).c_str())) {
-                    ESP_LOGW("storage-index", "invalid index header: %s", indexedIndexPathFor(path).c_str());
+                if (StorageFiles::fileExistsWithBytes(indexPath.c_str())) {
+                    ESP_LOGW("storage-index", "invalid index header: %s", indexPath.c_str());
                 }
                 return false;
             }
 
             {
                 // Validate that the sidecar still matches the source file.
-                File source = Board::Storage::filesystem().open(path, FILE_READ);
+                File source = Board::Storage::filesystem().open(sourcePath.c_str(), FILE_READ);
                 if (!source || source.isDirectory()) {
                     if (source) {
                         source.close();
                     }
-                    ESP_LOGW("storage-index", "source missing while validating index: %s", path.c_str());
+                    ESP_LOGW("storage-index", "source missing while validating index: %s", sourcePath.c_str());
                     return false;
                 }
 
@@ -357,8 +343,9 @@ namespace IndexedBook {
                 source.close();
                 if (sourceBytes > UINT32_MAX || header.sourceSize != static_cast<uint32_t>(sourceBytes)
                     || header.sourceFingerprint != actualFingerprint) {
-                    ESP_LOGW("storage-index", "stale index: %s size=%lu/%lu fingerprint=%08lx/%08lx", path.c_str(),
-                             static_cast<unsigned long>(header.sourceSize), static_cast<unsigned long>(sourceBytes),
+                    ESP_LOGW("storage-index", "stale index: %s size=%lu/%lu fingerprint=%08lx/%08lx",
+                             sourcePath.c_str(), static_cast<unsigned long>(header.sourceSize),
+                             static_cast<unsigned long>(sourceBytes),
                              static_cast<unsigned long>(header.sourceFingerprint),
                              static_cast<unsigned long>(actualFingerprint));
                     return false;
@@ -367,31 +354,30 @@ namespace IndexedBook {
 
             {
                 // Ensure the word data sidecar is present and large enough.
-                File data = Board::Storage::filesystem().open(indexedDataPathFor(path), FILE_READ);
+                File data = Board::Storage::filesystem().open(dataPath.c_str(), FILE_READ);
                 if (!data || data.isDirectory() || data.size() < header.dataSize) {
                     const size_t dataBytes = data ? data.size() : 0;
                     if (data) {
                         data.close();
                     }
-                    ESP_LOGW("storage-index", "data sidecar invalid: %s size=%lu expected=%lu",
-                             indexedDataPathFor(path).c_str(), static_cast<unsigned long>(dataBytes),
-                             static_cast<unsigned long>(header.dataSize));
+                    ESP_LOGW("storage-index", "data sidecar invalid: %s size=%lu expected=%lu", dataPath.c_str(),
+                             static_cast<unsigned long>(dataBytes), static_cast<unsigned long>(header.dataSize));
                     return false;
                 }
                 data.close();
             }
 
-            File indexFile = Board::Storage::filesystem().open(indexedIndexPathFor(path), FILE_READ);
+            File indexFile = Board::Storage::filesystem().open(indexPath.c_str(), FILE_READ);
             if (!indexFile || indexFile.isDirectory()) {
                 if (indexFile) {
                     indexFile.close();
                 }
-                ESP_LOGE("storage-index", "index sidecar cannot reopen: %s", indexedIndexPathFor(path).c_str());
+                ESP_LOGE("storage-index", "index sidecar cannot reopen: %s", indexPath.c_str());
                 return false;
             }
 
             // Validate index table offsets before loading paragraph/chapter metadata.
-            File dataFile = Board::Storage::filesystem().open(indexedDataPathFor(path), FILE_READ);
+            File dataFile = Board::Storage::filesystem().open(dataPath.c_str(), FILE_READ);
             const size_t dataBytes = dataFile ? dataFile.size() : 0;
             if (dataFile) {
                 dataFile.close();
@@ -399,18 +385,16 @@ namespace IndexedBook {
             if (!indexHeaderLayoutValid(header, indexFile.size(), dataBytes)) {
                 indexFile.close();
                 metadata.clear();
-                ESP_LOGW("storage-index", "index layout invalid: %s", indexedIndexPathFor(path).c_str());
+                ESP_LOGW("storage-index", "index layout invalid: %s", indexPath.c_str());
                 return false;
             }
 
             metadata.wordCount = header.wordCount;
-            const String title = RsvpText::readRsvpDirectiveValue(path, "@title");
-            const String author = RsvpText::readRsvpDirectiveValue(path, "@author");
-            metadata.title.assign(title.c_str(), title.length());
-            metadata.author.assign(author.c_str(), author.length());
+            const RsvpText::RsvpDirectiveValues directives = RsvpText::readRsvpDirectiveValues(sourcePath);
+            metadata.title = directives.title;
+            metadata.author = directives.author;
             if (metadata.title.empty()) {
-                const String fallback = RsvpText::normalizeDisplayText(displayNameWithoutExtension(path));
-                metadata.title.assign(fallback.c_str(), fallback.length());
+                metadata.title = RsvpText::normalizeDisplayText(displayNameWithoutExtension(path));
             }
 
             if (header.paragraphCount > 0) {
@@ -418,8 +402,8 @@ namespace IndexedBook {
                 if (!indexFile.seek(header.paragraphsOffset)) {
                     indexFile.close();
                     metadata.clear();
-                    ESP_LOGE("storage-index", "paragraph section seek failed: %s offset=%lu",
-                             indexedIndexPathFor(path).c_str(), static_cast<unsigned long>(header.paragraphsOffset));
+                    ESP_LOGE("storage-index", "paragraph section seek failed: %s offset=%lu", indexPath.c_str(),
+                             static_cast<unsigned long>(header.paragraphsOffset));
                     return false;
                 }
                 for (uint32_t i = 0; i < header.paragraphCount; ++i) {
@@ -427,8 +411,8 @@ namespace IndexedBook {
                     if (!readExact(indexFile, &wordIndex, sizeof(wordIndex))) {
                         indexFile.close();
                         metadata.clear();
-                        ESP_LOGE("storage-index", "paragraph section read failed: %s item=%lu",
-                                 indexedIndexPathFor(path).c_str(), static_cast<unsigned long>(i));
+                        ESP_LOGE("storage-index", "paragraph section read failed: %s item=%lu", indexPath.c_str(),
+                                 static_cast<unsigned long>(i));
                         return false;
                     }
                     metadata.paragraphStarts.push_back(wordIndex);
@@ -440,8 +424,8 @@ namespace IndexedBook {
                 if (!indexFile.seek(header.chaptersOffset)) {
                     indexFile.close();
                     metadata.clear();
-                    ESP_LOGE("storage-index", "chapter section seek failed: %s offset=%lu",
-                             indexedIndexPathFor(path).c_str(), static_cast<unsigned long>(header.chaptersOffset));
+                    ESP_LOGE("storage-index", "chapter section seek failed: %s offset=%lu", indexPath.c_str(),
+                             static_cast<unsigned long>(header.chaptersOffset));
                     return false;
                 }
                 for (uint32_t i = 0; i < header.chapterCount; ++i) {
@@ -449,19 +433,14 @@ namespace IndexedBook {
                     if (!readExact(indexFile, &record, sizeof(record))) {
                         indexFile.close();
                         metadata.clear();
-                        ESP_LOGE("storage-index", "chapter section read failed: %s item=%lu",
-                                 indexedIndexPathFor(path).c_str(), static_cast<unsigned long>(i));
+                        ESP_LOGE("storage-index", "chapter section read failed: %s item=%lu", indexPath.c_str(),
+                                 static_cast<unsigned long>(i));
                         return false;
                     }
                     ChapterMarker marker;
                     marker.wordIndex = record.wordIndex;
                     const uint32_t titleLength = std::min<uint32_t>(record.titleLength, sizeof(record.title));
-                    String title;
-                    title.reserve(titleLength);
-                    for (uint32_t j = 0; j < titleLength; ++j) {
-                        title += record.title[j];
-                    }
-                    marker.title.assign(title.c_str(), title.length());
+                    marker.title.assign(record.title, titleLength);
                     metadata.chapters.push_back(marker);
                 }
             }
@@ -474,15 +453,22 @@ namespace IndexedBook {
                 *headerOut = header;
             }
             if (metadata.wordCount == 0) {
-                ESP_LOGW("storage-index", "index has no words: %s", indexedIndexPathFor(path).c_str());
+                ESP_LOGW("storage-index", "index has no words: %s", indexPath.c_str());
                 return false;
             }
             return true;
         }
 
-        bool build(const String& path, BookMetadata& metadata, bool rsvpFormat, StatusCallback statusCallback,
+        bool build(std::string_view path, BookMetadata& metadata, bool rsvpFormat, StatusCallback statusCallback,
                    void* statusContext) {
             metadata.clear();
+            const std::string sourcePath{path};
+            const std::string label = displayNameForPath(path);
+            const std::string indexPath = indexedIndexPathFor(path);
+            const std::string dataPath = indexedDataPathFor(path);
+            const std::string tmpIndexPath = indexedTempPathFor(indexPath);
+            const std::string tmpDataPath = indexedTempPathFor(dataPath);
+            const std::string sidecarDirectory = parentDirectoryForPath(path);
             auto report = [&](const char* title, const char* line1 = "", const char* line2 = "",
                               int progressPercent = -1) {
                 if (statusCallback != nullptr) {
@@ -490,12 +476,12 @@ namespace IndexedBook {
                 }
             };
 
-            File source = Board::Storage::filesystem().open(path, FILE_READ);
+            File source = Board::Storage::filesystem().open(sourcePath.c_str(), FILE_READ);
             if (!source || source.isDirectory()) {
                 if (source) {
                     source.close();
                 }
-                ESP_LOGE("storage-index", "cannot open source: %s", path.c_str());
+                ESP_LOGE("storage-index", "cannot open source: %s", sourcePath.c_str());
                 report("Index failed", displayNameForPath(path).c_str(), "File unreadable", 100);
                 return false;
             }
@@ -503,7 +489,7 @@ namespace IndexedBook {
             const size_t sourceBytes = source.size();
             if (sourceBytes == 0 || sourceBytes > UINT32_MAX) {
                 source.close();
-                ESP_LOGW("storage-index", "unsupported source size: %s (%lu bytes)", path.c_str(),
+                ESP_LOGW("storage-index", "unsupported source size: %s (%lu bytes)", sourcePath.c_str(),
                          static_cast<unsigned long>(sourceBytes));
                 report("Index failed", displayNameForPath(path).c_str(),
                        sourceBytes == 0 ? "No readable words" : "Book too large", 100);
@@ -512,19 +498,13 @@ namespace IndexedBook {
             const uint32_t fingerprint = sourceFingerprint(source, static_cast<uint32_t>(sourceBytes));
             if (!source.seek(0)) {
                 source.close();
-                ESP_LOGE("storage-index", "source rewind failed: %s", path.c_str());
+                ESP_LOGE("storage-index", "source rewind failed: %s", sourcePath.c_str());
                 report("Index failed", displayNameForPath(path).c_str(), "Source read failed", 100);
                 return false;
             }
 
-            const String label = displayNameForPath(path);
             report("Indexing book", label.c_str(), "Building word index", 0);
 
-            const String indexPath = indexedIndexPathFor(path);
-            const String dataPath = indexedDataPathFor(path);
-            const String tmpIndexPath = indexedTempPathFor(indexPath);
-            const String tmpDataPath = indexedTempPathFor(dataPath);
-            const String sidecarDirectory = parentDirectoryForPath(path);
             if (!StorageFiles::directoryExists(sidecarDirectory.c_str())) {
                 source.close();
                 ESP_LOGW("storage-index", "sidecar parent missing/not directory: %s", sidecarDirectory.c_str());
@@ -532,18 +512,18 @@ namespace IndexedBook {
                 return false;
             }
 
-            Board::Storage::filesystem().remove(tmpIndexPath);
-            Board::Storage::filesystem().remove(tmpDataPath);
+            Board::Storage::filesystem().remove(tmpIndexPath.c_str());
+            Board::Storage::filesystem().remove(tmpDataPath.c_str());
             auto removeTempSidecars = [&]() {
-                Board::Storage::filesystem().remove(tmpIndexPath);
-                Board::Storage::filesystem().remove(tmpDataPath);
+                Board::Storage::filesystem().remove(tmpIndexPath.c_str());
+                Board::Storage::filesystem().remove(tmpDataPath.c_str());
             };
 
             // One streaming parser feeds either data sidecar writes or index record
             // writes.
             auto parseIndexedSource = [&](File& parseSource, IndexedBuildContext& buildContext,
                                           RsvpText::ParseStats& stats, bool reportProgress) -> bool {
-                String line;
+                std::string line;
                 line.reserve(256);
                 bool paragraphPending = true;
                 bool keepReading = true;
@@ -553,7 +533,7 @@ namespace IndexedBook {
                 size_t totalBytesRead = 0;
                 size_t nextProgressBytes = 0;
 
-                auto processLine = [&](String& lineToProcess) {
+                auto processLine = [&](std::string_view lineToProcess) {
                     return rsvpFormat ? processRsvpLine(lineToProcess, buildContext, paragraphPending, &stats)
                                       : processBookLine(lineToProcess, buildContext, paragraphPending, &stats);
                 };
@@ -588,7 +568,7 @@ namespace IndexedBook {
                             } else if (!keepReading && (stats.memoryLow || buildContext.failed)) {
                                 parseFailed = true;
                             }
-                            line = "";
+                            line.clear();
                             continue;
                         }
 
@@ -599,12 +579,12 @@ namespace IndexedBook {
                             if (!keepReading && (stats.memoryLow || buildContext.failed)) {
                                 parseFailed = true;
                             }
-                            line = "";
+                            line.clear();
                         }
                     }
                 }
 
-                if (!line.isEmpty() && keepReading
+                if (!line.empty() && keepReading
                     && (RsvpText::kMaxBookWords == 0 || buildContext.wordCount < RsvpText::kMaxBookWords)) {
                     keepReading = processLine(line);
                     if (!keepReading && (stats.memoryLow || buildContext.failed)) {
@@ -624,7 +604,7 @@ namespace IndexedBook {
             {
                 // First pass writes word data and records metadata.
                 errno = 0;
-                File dataFile = Board::Storage::filesystem().open(tmpDataPath, FILE_WRITE);
+                File dataFile = Board::Storage::filesystem().open(tmpDataPath.c_str(), FILE_WRITE);
                 const int dataOpenErrno = errno;
                 if (!dataFile) {
                     Logger::failure("storage-index", "open data FILE_WRITE", tmpDataPath.c_str(),
@@ -641,11 +621,12 @@ namespace IndexedBook {
 
                 parseFailed = !parseIndexedSource(source, dataContext, stats, true);
 
-                if (stats.longLineSplits > 0 || stats.malformedUtf8 > 0 || stats.nonAsciiCodepoints > 0) {
+                if (stats.longLineSplits > 0 || stats.normalization.malformedUtf8 > 0
+                    || stats.normalization.nonAsciiCodepoints > 0) {
                     ESP_LOGD("storage-index", "Parse cleanup: long_lines=%u malformed_utf8=%u non_ascii=%u",
                              static_cast<unsigned int>(stats.longLineSplits),
-                             static_cast<unsigned int>(stats.malformedUtf8),
-                             static_cast<unsigned int>(stats.nonAsciiCodepoints));
+                             static_cast<unsigned int>(stats.normalization.malformedUtf8),
+                             static_cast<unsigned int>(stats.normalization.nonAsciiCodepoints));
                 }
 
                 if (parseFailed || dataContext.wordCount == 0) {
@@ -663,8 +644,7 @@ namespace IndexedBook {
                     metadata.paragraphStarts.push_back(0);
                 }
                 if (metadata.title.empty()) {
-                    const String fallback = RsvpText::normalizeDisplayText(displayNameWithoutExtension(path));
-                    metadata.title.assign(fallback.c_str(), fallback.length());
+                    metadata.title = RsvpText::normalizeDisplayText(displayNameWithoutExtension(path));
                 }
 
                 header.magic = IndexedBookStore::kMagic;
@@ -699,20 +679,20 @@ namespace IndexedBook {
 
             {
                 // Second pass writes index records and metadata tables.
-                source = Board::Storage::filesystem().open(path, FILE_READ);
+                source = Board::Storage::filesystem().open(sourcePath.c_str(), FILE_READ);
                 if (!source || source.isDirectory()) {
                     if (source) {
                         source.close();
                     }
                     removeTempSidecars();
                     metadata.clear();
-                    ESP_LOGE("storage-index", "cannot reopen source for index: %s", path.c_str());
+                    ESP_LOGE("storage-index", "cannot reopen source for index: %s", sourcePath.c_str());
                     report("Index failed", label.c_str(), "Source read failed", 100);
                     return false;
                 }
 
                 errno = 0;
-                File indexFile = Board::Storage::filesystem().open(tmpIndexPath, FILE_WRITE);
+                File indexFile = Board::Storage::filesystem().open(tmpIndexPath.c_str(), FILE_WRITE);
                 const int indexOpenErrno = errno;
                 if (!indexFile) {
                     Logger::failure("storage-index", "open index FILE_WRITE", tmpIndexPath.c_str(),
@@ -738,7 +718,7 @@ namespace IndexedBook {
                 RsvpText::ParseStats indexStats;
                 parseFailed = !parseIndexedSource(source, indexContext, indexStats, false);
                 if (parseFailed) {
-                    ESP_LOGE("storage-index", "second pass parse/write failed: %s detail=%s", path.c_str(),
+                    ESP_LOGE("storage-index", "second pass parse/write failed: %s detail=%s", sourcePath.c_str(),
                              indexContext.failure);
                 }
 
@@ -806,16 +786,16 @@ namespace IndexedBook {
             }
 
             // Commit both sidecars only after the full two-pass build succeeds.
-            Board::Storage::filesystem().remove(indexPath);
-            Board::Storage::filesystem().remove(dataPath);
+            Board::Storage::filesystem().remove(indexPath.c_str());
+            Board::Storage::filesystem().remove(dataPath.c_str());
             errno = 0;
-            const bool dataRenamed = Board::Storage::filesystem().rename(tmpDataPath, dataPath);
+            const bool dataRenamed = Board::Storage::filesystem().rename(tmpDataPath.c_str(), dataPath.c_str());
             const int dataRenameErrno = errno;
             bool indexRenamed = false;
             int indexRenameErrno = 0;
             if (dataRenamed) {
                 errno = 0;
-                indexRenamed = Board::Storage::filesystem().rename(tmpIndexPath, indexPath);
+                indexRenamed = Board::Storage::filesystem().rename(tmpIndexPath.c_str(), indexPath.c_str());
                 indexRenameErrno = errno;
             }
             const bool renamed = indexRenamed && dataRenamed;
@@ -828,10 +808,10 @@ namespace IndexedBook {
                     Logger::failure("storage-index", "rename index", tmpIndexPath.c_str(), indexPath.c_str(),
                                     std::error_code{indexRenameErrno, std::generic_category()});
                 }
-                Board::Storage::filesystem().remove(tmpIndexPath);
-                Board::Storage::filesystem().remove(tmpDataPath);
-                Board::Storage::filesystem().remove(indexPath);
-                Board::Storage::filesystem().remove(dataPath);
+                Board::Storage::filesystem().remove(tmpIndexPath.c_str());
+                Board::Storage::filesystem().remove(tmpDataPath.c_str());
+                Board::Storage::filesystem().remove(indexPath.c_str());
+                Board::Storage::filesystem().remove(dataPath.c_str());
                 metadata.clear();
                 report("Index failed", label.c_str(), "Rename failed", 100);
                 return false;
@@ -839,7 +819,7 @@ namespace IndexedBook {
 
             ESP_LOGI("storage-index", "Built %u words, %u chapters from %s in %lu ms",
                      static_cast<unsigned int>(metadata.wordCount), static_cast<unsigned int>(metadata.chapters.size()),
-                     path.c_str(), static_cast<unsigned long>(millis() - startedMs));
+                     sourcePath.c_str(), static_cast<unsigned long>(millis() - startedMs));
             report("Index ready", label.c_str(), "Book ready", 100);
             return true;
         }
@@ -855,7 +835,7 @@ namespace IndexedBook {
             }
         };
 
-        String path;
+        std::string path;
         size_t parsedIndex = index;
 
         {
@@ -881,7 +861,7 @@ namespace IndexedBook {
                 return false;
             }
 
-            path = BookLibrary::pathAt(library, index).c_str();
+            path = BookLibrary::pathAt(library, index);
             if (hasEpubExtension(path)) {
                 if (!request.allowEpubConversion) {
                     report("Index needed", displayNameForPath(path).c_str(), "Open from library", 100);
@@ -894,7 +874,7 @@ namespace IndexedBook {
                 }
 
                 BookLibrary::refresh(library, true, RSVP_ON_DEVICE_EPUB_CONVERSION);
-                const int convertedIndex = BookLibrary::indexOfPath(library, rsvpPath->c_str());
+                const int convertedIndex = BookLibrary::indexOfPath(library, *rsvpPath);
                 if (convertedIndex < 0) {
                     ESP_LOGE("storage", "Converted RSVP not found in refreshed library: %s", rsvpPath->c_str());
                     report("Book open failed", displayNameForPath(path).c_str(), "Conversion cache missing", 100);
@@ -908,7 +888,7 @@ namespace IndexedBook {
 
         {
             // Source readability check.
-            File entry = Board::Storage::filesystem().open(path, FILE_READ);
+            File entry = Board::Storage::filesystem().open(path.c_str(), FILE_READ);
             if (!entry || entry.isDirectory()) {
                 if (entry) {
                     entry.close();
@@ -954,8 +934,8 @@ namespace IndexedBook {
             }
 
             report("Opening book", displayNameForPath(path).c_str(), "Opening word cache", 80);
-            const String indexPath = indexedIndexPathFor(path);
-            const String dataPath = indexedDataPathFor(path);
+            const std::string indexPath = indexedIndexPathFor(path);
+            const std::string dataPath = indexedDataPathFor(path);
             if (!store.open(indexPath.c_str(), dataPath.c_str(), header)) {
                 metadata.clear();
                 report("Book open failed", displayNameForPath(path).c_str(), "Index unreadable", 100);
@@ -964,7 +944,7 @@ namespace IndexedBook {
         }
 
         if (request.loadedPath != nullptr) {
-            request.loadedPath->assign(path.c_str(), path.length());
+            *request.loadedPath = path;
         }
         if (request.loadedIndex != nullptr) {
             *request.loadedIndex = parsedIndex;
@@ -975,7 +955,7 @@ namespace IndexedBook {
         return true;
     }
 
-    bool readMetadata(const String& path, BookMetadata& metadata, IndexedBookStore::Header* headerOut) {
+    bool readMetadata(std::string_view path, BookMetadata& metadata, IndexedBookStore::Header* headerOut) {
         return readIndexedMetadata(path, metadata, headerOut);
     }
 

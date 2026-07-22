@@ -1,7 +1,6 @@
 #include "converter/EpubContentWriter.h"
 
 #include <algorithm>
-#include <array>
 #include <utility>
 
 #include "text/AsciiText.h"
@@ -17,8 +16,8 @@ namespace EpubContent {
         constexpr size_t kBufferedTextFlushThreshold = 220;
 
         struct TagInfo {
-            String name;
-            String anchor;
+            std::string name;
+            std::string anchor;
             bool closing = false;
             bool selfClosing = false;
         };
@@ -32,14 +31,14 @@ namespace EpubContent {
             delay(0);
         }
 
-        String decodedEntityText(const String& entity) {
-            String decoded;
+        std::string decodedEntityText(std::string_view entity) {
+            std::string decoded;
             return RsvpText::decodeMarkupEntity(entity, decoded) ? decoded : " ";
         }
 
-        void appendNormalizedChar(String& target, char c) {
+        void appendNormalizedChar(std::string& target, char c) {
             if (AsciiText::isWhitespace(c)) {
-                if (!target.isEmpty() && target[target.length() - 1] != ' ') {
+                if (!target.empty() && target.back() != ' ') {
                     target += ' ';
                 }
                 return;
@@ -48,56 +47,48 @@ namespace EpubContent {
             target += c;
         }
 
-        bool hasReadableText(const String& token) {
-            const char* text = token.c_str();
-            return std::any_of(text, text + token.length(), [](char c) {
-                return RsvpText::isReadableTokenChar(c);
-            });
-        }
-
-        String tagAttributeValue(const String& tag, const char* name) {
-            const String key(name);
-            int position = 0;
-            while ((position = tag.indexOf(key, position)) >= 0) {
+        std::string tagAttributeValue(std::string_view tag, std::string_view name) {
+            size_t position = 0;
+            while ((position = tag.find(name, position)) != std::string_view::npos) {
                 const bool boundaryBefore = position == 0 || AsciiText::isWhitespace(tag[position - 1])
                                          || tag[position - 1] == '<' || tag[position - 1] == '/';
-                int afterName = position + key.length();
-                const bool boundaryAfter = static_cast<size_t>(afterName) >= tag.length()
-                                        || AsciiText::isWhitespace(tag[afterName]) || tag[afterName] == '=';
+                size_t afterName = position + name.length();
+                const bool boundaryAfter =
+                    afterName >= tag.length() || AsciiText::isWhitespace(tag[afterName]) || tag[afterName] == '=';
                 if (!boundaryBefore || !boundaryAfter) {
                     position = afterName;
                     continue;
                 }
-                while (static_cast<size_t>(afterName) < tag.length() && AsciiText::isWhitespace(tag[afterName])) {
+                while (afterName < tag.length() && AsciiText::isWhitespace(tag[afterName])) {
                     ++afterName;
                 }
-                if (static_cast<size_t>(afterName) >= tag.length() || tag[afterName] != '=') {
+                if (afterName >= tag.length() || tag[afterName] != '=') {
                     position = afterName;
                     continue;
                 }
                 do {
                     ++afterName;
-                } while (static_cast<size_t>(afterName) < tag.length() && AsciiText::isWhitespace(tag[afterName]));
-                if (static_cast<size_t>(afterName) >= tag.length()) {
-                    return "";
+                } while (afterName < tag.length() && AsciiText::isWhitespace(tag[afterName]));
+                if (afterName >= tag.length()) {
+                    return {};
                 }
 
                 const char quote = tag[afterName];
                 if (quote == '"' || quote == '\'') {
-                    const int end = tag.indexOf(quote, afterName + 1);
-                    return end < 0 ? String("") : tag.substring(afterName + 1, end);
+                    const size_t end = tag.find(quote, afterName + 1);
+                    return end == std::string_view::npos ? std::string{}
+                                                         : std::string{tag.substr(afterName + 1, end - afterName - 1)};
                 }
-                int end = afterName;
-                while (static_cast<size_t>(end) < tag.length() && !AsciiText::isWhitespace(tag[end])
-                       && tag[end] != '>') {
+                size_t end = afterName;
+                while (end < tag.length() && !AsciiText::isWhitespace(tag[end]) && tag[end] != '>') {
                     ++end;
                 }
-                return tag.substring(afterName, end);
+                return std::string{tag.substr(afterName, end - afterName)};
             }
-            return "";
+            return {};
         }
 
-        TagInfo parseTagInfo(const String& tag) {
+        TagInfo parseTagInfo(std::string_view tag) {
             TagInfo info;
 
             size_t position = 1;
@@ -117,13 +108,13 @@ namespace EpubContent {
                 ++position;
             }
 
-            info.name = tag.substring(start, position);
-            info.name.toLowerCase();
+            info.name = tag.substr(start, position - start);
+            std::ranges::transform(info.name, info.name.begin(), AsciiText::toLower);
             info.anchor = tagAttributeValue(tag, "id");
-            if (info.anchor.isEmpty()) {
+            if (info.anchor.empty()) {
                 info.anchor = tagAttributeValue(tag, "name");
             }
-            info.anchor.trim();
+            info.anchor = std::string{AsciiText::trim(info.anchor)};
 
             for (int i = static_cast<int>(tag.length()) - 1; i >= 0; --i) {
                 if (AsciiText::isWhitespace(tag[i]) || tag[i] == '>') {
@@ -136,59 +127,41 @@ namespace EpubContent {
             return info;
         }
 
-        bool isSkipTag(const String& name) {
-            static constexpr std::array<const char*, 6> kSkippedTags = {{
-                "head",
-                "script",
-                "style",
-                "svg",
-                "math",
-                "nav",
-            }};
-            return std::any_of(kSkippedTags.begin(), kSkippedTags.end(), [&](const char* tag) {
-                return name == tag;
-            });
+        bool isSkipTag(std::string_view name) {
+            static constexpr std::string_view kSkippedTags[] = {
+                "head", "script", "style", "svg", "math", "nav",
+            };
+            return std::ranges::find(kSkippedTags, name) != std::ranges::end(kSkippedTags);
         }
 
-        bool isHeadingTag(const String& name) {
+        bool isHeadingTag(std::string_view name) {
             return name.length() == 2 && name[0] == 'h' && name[1] >= '1' && name[1] <= '6';
         }
 
-        bool isBlockTag(const String& name) {
-            static constexpr std::array<const char*, 31> kBlockTags = {{
+        bool isBlockTag(std::string_view name) {
+            static constexpr std::string_view kBlockTags[] = {
                 "address",    "article", "aside",  "blockquote", "body",  "br", "dd",    "div", "dl", "dt",
                 "figcaption", "figure",  "footer", "header",     "hr",    "li", "main",  "ol",  "p",  "pre",
                 "section",    "table",   "tbody",  "td",         "tfoot", "th", "thead", "tr",  "ul",
-            }};
-            return std::any_of(kBlockTags.begin(), kBlockTags.end(), [&](const char* tag) {
-                return name == tag;
-            });
+            };
+            return std::ranges::find(kBlockTags, name) != std::ranges::end(kBlockTags);
         }
 
-        String normalizedLabel(String value) {
-            value = RsvpText::normalizeDisplayText(value);
-            String normalized;
-            normalized.reserve(value.length());
-            for (size_t i = 0; i < value.length(); ++i) {
-                if (RsvpText::isReadableTokenChar(value[i])) {
-                    normalized += value[i];
-                }
-            }
-            normalized.toLowerCase();
-            return normalized;
+        std::string normalizedLabel(std::string_view value) {
+            return RsvpText::readableKey(value);
         }
 
     } // namespace
 
-    String plainTextFromXmlFragment(const String& fragment) {
-        String text;
+    std::string plainTextFromXmlFragment(std::string_view fragment) {
+        std::string text;
         text.reserve(std::min<size_t>(fragment.length(), 160));
 
         for (size_t i = 0; i < fragment.length(); ++i) {
             const char c = fragment[i];
             if (c == '<') {
-                const int tagEnd = fragment.indexOf('>', i + 1);
-                if (tagEnd < 0) {
+                const size_t tagEnd = fragment.find('>', i + 1);
+                if (tagEnd == std::string_view::npos) {
                     break;
                 }
                 i = tagEnd;
@@ -197,11 +170,10 @@ namespace EpubContent {
             }
 
             if (c == '&') {
-                const int entityEnd = fragment.indexOf(';', i + 1);
-                const int entityLength = entityEnd - static_cast<int>(i) - 1;
-                if (entityEnd > 0 && entityLength >= 0 && entityLength <= static_cast<int>(kMaxEntityChars)) {
-                    const String decoded = decodedEntityText(fragment.substring(i + 1, entityEnd));
-                    std::for_each(decoded.c_str(), decoded.c_str() + decoded.length(), [&](char decodedChar) {
+                const size_t entityEnd = fragment.find(';', i + 1);
+                if (entityEnd != std::string_view::npos && entityEnd - i - 1 <= kMaxEntityChars) {
+                    const std::string decoded = decodedEntityText(fragment.substr(i + 1, entityEnd - i - 1));
+                    std::ranges::for_each(decoded, [&](char decodedChar) {
                         appendNormalizedChar(text, decodedChar);
                     });
                     i = entityEnd;
@@ -212,27 +184,26 @@ namespace EpubContent {
             appendNormalizedChar(text, c);
         }
 
-        text.trim();
         return RsvpText::normalizeDisplayText(text);
     }
 
-    bool writeBodyLine(File& output, const String& line, size_t& wordCount, size_t maxWords) {
-        const String normalizedLine = RsvpText::normalizeDisplayText(line);
-        String outputLine;
+    bool writeBodyLine(File& output, std::string_view line, size_t& wordCount, size_t maxWords) {
+        const std::string normalizedLine = RsvpText::normalizeDisplayText(line);
+        std::string outputLine;
 
         auto flushOutputLine = [&]() {
-            if (outputLine.isEmpty()) {
+            if (outputLine.empty()) {
                 return;
             }
-            if (outputLine.startsWith("@")) {
+            if (outputLine.starts_with('@')) {
                 output.print('@');
             }
-            output.println(outputLine);
-            outputLine = "";
+            output.println(outputLine.c_str());
+            outputLine.clear();
         };
 
-        auto consumeRsvpToken = [&](const String& value) {
-            if (value.isEmpty()) {
+        auto consumeRsvpToken = [&](const std::string& value) {
+            if (value.empty()) {
                 return true;
             }
 
@@ -240,11 +211,11 @@ namespace EpubContent {
                 flushOutputLine();
             }
 
-            if (!outputLine.isEmpty()) {
+            if (!outputLine.empty()) {
                 outputLine += ' ';
             }
             outputLine += value;
-            if (hasReadableText(value)) {
+            if (RsvpText::hasReadableText(value)) {
                 ++wordCount;
             }
             return true;
@@ -257,9 +228,10 @@ namespace EpubContent {
         return keepGoing;
     }
 
-    RsvpContentWriter::RsvpContentWriter(File& output, size_t& wordCount, size_t maxWords, String& lastChapterTitle,
-                                         size_t& chapterCount, std::span<const EpubPackage::TocEntry> tocEntries,
-                                         bool hasToc, String fallbackChapterTitle, String bookTitle) :
+    RsvpContentWriter::RsvpContentWriter(File& output, size_t& wordCount, size_t maxWords,
+                                         std::string& lastChapterTitle, size_t& chapterCount,
+                                         std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
+                                         std::string_view fallbackChapterTitle, std::string_view bookTitle) :
             output_(output),
             wordCount_(wordCount),
             maxWords_(maxWords),
@@ -267,8 +239,8 @@ namespace EpubContent {
             chapterCount_(chapterCount),
             tocEntries_(tocEntries),
             hasToc_(hasToc),
-            fallbackChapterTitle_(std::move(fallbackChapterTitle)),
-            bookTitle_(std::move(bookTitle)) {
+            fallbackChapterTitle_(fallbackChapterTitle),
+            bookTitle_(bookTitle) {
         line_.reserve(160);
         heading_.reserve(80);
         tag_.reserve(96);
@@ -309,7 +281,7 @@ namespace EpubContent {
         if (paragraphOpen_) {
             return;
         }
-        if (!documentChapterWritten_ && !hasToc_ && !fallbackChapterTitle_.isEmpty()) {
+        if (!documentChapterWritten_ && !hasToc_ && !fallbackChapterTitle_.empty()) {
             writeChapter(fallbackChapterTitle_);
         }
         if (wordCount_ > 0) {
@@ -320,8 +292,8 @@ namespace EpubContent {
     }
 
     bool RsvpContentWriter::flushLine(bool endParagraph) {
-        line_.trim();
-        if (line_.isEmpty()) {
+        line_ = std::string{AsciiText::trim(line_)};
+        if (line_.empty()) {
             if (endParagraph) {
                 paragraphOpen_ = false;
             }
@@ -330,7 +302,7 @@ namespace EpubContent {
 
         beginParagraph();
         const bool keepGoing = writeBodyLine(output_, line_, wordCount_, maxWords_);
-        line_ = "";
+        line_.clear();
         if (endParagraph) {
             paragraphOpen_ = false;
         }
@@ -341,7 +313,7 @@ namespace EpubContent {
     }
 
     bool RsvpContentWriter::flushWordAlignedPrefix() {
-        line_.trim();
+        line_ = std::string{AsciiText::trim(line_)};
         int split = static_cast<int>(line_.length()) - 1;
         while (split >= 0 && !AsciiText::isWhitespace(line_[split])) {
             --split;
@@ -350,11 +322,9 @@ namespace EpubContent {
             return true;
         }
 
-        String prefix = line_.substring(0, split);
-        String remainder = line_.substring(split + 1);
-        prefix.trim();
-        remainder.trim();
-        if (prefix.isEmpty()) {
+        std::string prefix{AsciiText::trim(std::string_view{line_}.substr(0, split))};
+        std::string remainder{AsciiText::trim(std::string_view{line_}.substr(split + 1))};
+        if (prefix.empty()) {
             line_ = remainder;
             return true;
         }
@@ -365,17 +335,16 @@ namespace EpubContent {
         return keepGoing;
     }
 
-    bool RsvpContentWriter::writeChapter(const String& title) {
-        String cleaned = RsvpText::normalizeDisplayText(title);
-        cleaned.trim();
-        if (cleaned.isEmpty() || cleaned == lastChapterTitle_) {
+    bool RsvpContentWriter::writeChapter(std::string_view title) {
+        const std::string cleaned{AsciiText::trim(RsvpText::normalizeDisplayText(title))};
+        if (cleaned.empty() || cleaned == lastChapterTitle_) {
             return true;
         }
-        if (wordCount_ > 0 || !lastChapterTitle_.isEmpty()) {
+        if (wordCount_ > 0 || !lastChapterTitle_.empty()) {
             output_.println();
         }
         output_.print("@chapter ");
-        output_.println(cleaned);
+        output_.println(cleaned.c_str());
         lastChapterTitle_ = cleaned;
         ++chapterCount_;
         documentChapterWritten_ = true;
@@ -399,25 +368,25 @@ namespace EpubContent {
         return true;
     }
 
-    int RsvpContentWriter::matchingTocEntry(const String& anchor) const {
-        if (anchor.isEmpty()) {
+    int RsvpContentWriter::matchingTocEntry(std::string_view anchor) const {
+        if (anchor.empty()) {
             return -1;
         }
         for (size_t i = nextTocEntry_; i < tocEntries_.size(); ++i) {
-            if (!tocEntries_[i].fragment.isEmpty() && tocEntries_[i].fragment == anchor) {
+            if (!tocEntries_[i].fragment.empty() && tocEntries_[i].fragment == anchor) {
                 return static_cast<int>(i);
             }
         }
         return -1;
     }
 
-    bool RsvpContentWriter::suppressHeading(const String& heading) const {
+    bool RsvpContentWriter::suppressHeading(std::string_view heading) const {
         if (!hasToc_) {
             return false;
         }
-        const String normalized = normalizedLabel(heading);
+        const std::string normalized = normalizedLabel(heading);
         return normalized == "contents" || normalized == "tableofcontents"
-            || (!bookTitle_.isEmpty() && normalized == normalizedLabel(bookTitle_));
+            || (!bookTitle_.empty() && normalized == normalizedLabel(bookTitle_));
     }
 
     void RsvpContentWriter::appendToActiveText(char c) {
@@ -453,7 +422,7 @@ namespace EpubContent {
             if (skipDepth_ > 0) {
                 return true;
             }
-            entity_ = "";
+            entity_.clear();
             mode_ = Mode::Entity;
             return true;
         }
@@ -461,10 +430,10 @@ namespace EpubContent {
         return processDecodedText(c);
     }
 
-    bool RsvpContentWriter::processTag(const String& tag) {
+    bool RsvpContentWriter::processTag(std::string_view tag) {
         const TagInfo tagInfo = parseTagInfo(tag);
 
-        if (tagInfo.name.isEmpty() || tag.startsWith("<!") || tag.startsWith("<?")) {
+        if (tagInfo.name.empty() || tag.starts_with("<!") || tag.starts_with("<?")) {
             return true;
         }
 
@@ -501,11 +470,11 @@ namespace EpubContent {
             if (isHeadingTag(tagInfo.name)) {
                 if (tagInfo.closing) {
                     inHeading_ = false;
-                    const String cleanedHeading = plainTextFromXmlFragment(heading_);
+                    const std::string cleanedHeading = plainTextFromXmlFragment(heading_);
                     if (tocEntries_.empty() && !suppressHeading(cleanedHeading) && !writeChapter(cleanedHeading)) {
                         return false;
                     }
-                    heading_ = "";
+                    heading_.clear();
                 } else if (!tagInfo.selfClosing) {
                     if (!flushLine()) {
                         return false;
@@ -515,7 +484,7 @@ namespace EpubContent {
                         return false;
                     }
                     inHeading_ = true;
-                    heading_ = "";
+                    heading_.clear();
                 }
                 return true;
             }
@@ -538,11 +507,10 @@ namespace EpubContent {
     bool RsvpContentWriter::processEntityChar(char c) {
         if (c == ';') {
             mode_ = Mode::Text;
-            const String decoded = decodedEntityText(entity_);
-            const bool processed =
-                std::all_of(decoded.c_str(), decoded.c_str() + decoded.length(), [&](char decodedChar) {
-                    return processDecodedText(decodedChar);
-                });
+            const std::string decoded = decodedEntityText(entity_);
+            const bool processed = std::ranges::all_of(decoded, [&](char decodedChar) {
+                return processDecodedText(decodedChar);
+            });
             if (!processed) {
                 return false;
             }
@@ -569,11 +537,11 @@ namespace EpubContent {
     bool RsvpContentWriter::processCommentChar(char c) {
         commentTail_ += c;
         if (commentTail_.length() > 3) {
-            commentTail_.remove(0, commentTail_.length() - 3);
+            commentTail_.erase(0, commentTail_.length() - 3);
         }
 
         if (commentTail_ == "-->") {
-            commentTail_ = "";
+            commentTail_.clear();
             mode_ = Mode::Text;
         }
 
@@ -591,19 +559,19 @@ namespace EpubContent {
         case Mode::Tag:
             tag_ += c;
             if (tag_ == "<!--") {
-                tag_ = "";
-                commentTail_ = "";
+                tag_.clear();
+                commentTail_.clear();
                 mode_ = Mode::Comment;
                 return true;
             }
             if (tag_.length() > kMaxTagChars) {
-                tag_ = "";
+                tag_.clear();
                 mode_ = Mode::Text;
                 return processDecodedText(' ');
             }
             if (c == '>') {
-                const String completedTag = tag_;
-                tag_ = "";
+                const std::string completedTag = std::move(tag_);
+                tag_.clear();
                 mode_ = Mode::Text;
                 return processTag(completedTag);
             }

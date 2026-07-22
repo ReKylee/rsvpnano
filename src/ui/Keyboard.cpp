@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <array>
 
+#include "text/Utf8Text.h"
+
 namespace ui {
     namespace {
 
@@ -29,19 +31,14 @@ namespace ui {
 
         std::array<char, 64> hidden{};
         const size_t hiddenLength = std::min(value.size(), hidden.size());
-        std::fill_n(hidden.begin(), hiddenLength, '*');
+        std::ranges::fill_n(hidden.begin(), hiddenLength, '*');
         std::string_view shownValue =
             masked && !state.passwordVisible ? std::string_view{hidden.data(), hiddenLength} : std::string_view{value};
         const int16_t clearWidth = inputHeight;
         const int16_t revealWidth = masked ? std::clamp<int16_t>(rect.w / 7, 72, 96) : 0;
         const int16_t valueWidth = static_cast<int16_t>(rect.w - clearWidth - gap - (masked ? revealWidth + gap : 0));
         const size_t visibleCharacters = static_cast<size_t>(std::max<int16_t>(1, (valueWidth - 12) / 12));
-        if (shownValue.size() > visibleCharacters) {
-            size_t start = shownValue.size() - visibleCharacters;
-            while (start < shownValue.size() && (static_cast<uint8_t>(shownValue[start]) & 0xC0U) == 0x80U)
-                ++start;
-            shownValue.remove_prefix(start);
-        }
+        shownValue = Utf8Text::suffix(shownValue, visibleCharacters);
         const Rect input{rect.x, rect.y, valueWidth, inputHeight};
         if (redraw(input, signature(shownValue, signature(label)))) {
             const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
@@ -85,10 +82,7 @@ namespace ui {
         const auto eraseLast = [&] {
             if (value.empty())
                 return;
-            size_t start = value.size() - 1;
-            while (start > 0 && (static_cast<uint8_t>(value[start]) & 0xC0U) == 0x80U)
-                --start;
-            value.erase(start);
+            value.erase(Utf8Text::lastCodepointStart(value));
         };
 
         const auto drawCharacters = [&]<size_t N>(const std::array<std::string_view, N>& keys, int16_t y,

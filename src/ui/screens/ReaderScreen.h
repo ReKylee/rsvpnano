@@ -10,6 +10,7 @@
 #include "storage/index/IndexedBookStore.h"
 #include "storage/index/ReadingProgress.h"
 #include "ui/Ui.h"
+#include "ui/screens/PageReaderScreen.h"
 
 namespace screens {
 
@@ -38,8 +39,6 @@ namespace screens {
 
     private:
         int focusIndex(std::string_view word) const;
-        int16_t textWidth(std::string_view text) const;
-        void drawText(std::string_view text, int16_t x, int16_t baseline, uint16_t color);
         void drawWord(std::string_view word, int16_t x, int16_t baseline, int focus, ui::Context& ui);
         std::string phantomBefore(const ReadingSession& reader, uint8_t sizeIndex) const;
         std::string phantomAfter(const ReadingSession& reader, uint8_t sizeIndex) const;
@@ -50,8 +49,10 @@ namespace screens {
             None,
             PlayHold,
             Scrub,
-            Wpm
+            Wpm,
+            Paragraph
         };
+        void browseParagraphs(uint16_t y, uint32_t nowMs);
         bool doubleTap(uint16_t x, uint16_t y, uint32_t nowMs);
         void resetTouch();
         int scrubSteps(int deltaX) const;
@@ -81,6 +82,10 @@ namespace screens {
         uint32_t wpmFeedbackUntilMs_ = 0;
         bool playLocked_ = false;
         bool pauseAtSentenceEndRequested_ = false;
+        PageReader::State pageState_;
+        bool pagePreview_ = false;
+        uint32_t paragraphTickMs_ = 0;
+        int32_t paragraphRemainder_ = 0;
     };
 
 } // namespace screens

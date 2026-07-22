@@ -10,6 +10,12 @@
 
 namespace settings {
 
+    enum class ReadingMode : uint8_t {
+        rsvp,
+        page,
+        Count,
+    };
+
     // Persisted enum spellings are their TOML/JSON names.
     enum class PauseMode : uint8_t {
         sentenceEnd,
@@ -58,6 +64,7 @@ namespace settings {
 
     struct ReadingSettings {
         BoundedValue<uint16_t, 10, 1000, 10> wpm{300};
+        ReadingMode mode = ReadingMode::rsvp;
         PauseMode pauseMode = PauseMode::sentenceEnd;
         bool phantomWords = true;
         bool chapterScrollReversed = false;

@@ -33,7 +33,7 @@ public:
     const Family* find(std::string_view id) const;
     const ui::fonts::AlphaFont* load(size_t familyIndex, size_t sizeIndex);
 
-    static std::expected<void, std::string> validateFontFile(const String& path);
+    static std::expected<void, std::string> validateFontFile(std::string_view path);
 
 private:
     void reset();

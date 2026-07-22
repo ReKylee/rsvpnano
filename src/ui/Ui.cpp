@@ -4,34 +4,39 @@
 #include <cmath>
 #include <cstdio>
 
+#include "fonts/PxPlusTandyNewTv8.h"
+#include "text/Utf8Text.h"
+
 namespace ui {
     namespace {
 
         constexpr uint16_t kFallbackBlack = 0x0000;
         constexpr uint16_t kFallbackWhite = 0xFFFF;
 
-        int16_t textWidth(std::string_view text, uint8_t size) {
-            return static_cast<int16_t>(text.size() * 6U * std::max<uint8_t>(1, size));
-        }
-
-        int16_t textHeight(uint8_t size) {
-            return static_cast<int16_t>(8U * std::max<uint8_t>(1, size));
-        }
+        constexpr uint8_t kUiFontCellWidth = 8;
+        constexpr uint8_t kUiFontHeight = 8;
 
         size_t fittedLength(std::string_view text, size_t capacity) {
-            if (text.size() <= capacity)
+            if (Utf8Text::count(text) <= capacity)
                 return text.size();
             if (capacity <= 3)
                 return 0;
-            size_t length = capacity - 3;
-            while (length > 0 && (static_cast<uint8_t>(text[length]) & 0xC0U) == 0x80U)
-                --length;
-            return length;
+            return Utf8Text::prefixBytes(text, capacity - 3);
         }
 
     } // namespace
 
     Context::Context(Arduino_GFX& gfx) : gfx_(gfx) {}
+
+    int16_t Context::textWidth(std::string_view text, uint8_t size) {
+        const int32_t width =
+            static_cast<int32_t>(Utf8Text::count(text)) * kUiFontCellWidth * std::max<uint8_t>(1, size);
+        return static_cast<int16_t>(std::min<int32_t>(width, INT16_MAX));
+    }
+
+    int16_t Context::textHeight(uint8_t size) {
+        return static_cast<int16_t>(kUiFontHeight * std::max<uint8_t>(1, size));
+    }
 
     void Context::setTheme(const ui::themes::Theme& theme) {
         if (theme_ != &theme) {
@@ -162,9 +167,9 @@ namespace ui {
             return;
 
         gfx_.fillRect(rect.x, rect.y, rect.w, rect.h, color(ui::themes::ColorRole::Background));
-        const int16_t textWidth = std::min<int16_t>(rect.w, static_cast<int16_t>(text.size() * 6));
-        drawText({rect.x, rect.y, textWidth, rect.h}, text, 1, color(ui::themes::ColorRole::Muted));
-        const int16_t lineX = static_cast<int16_t>(rect.x + textWidth + 6);
+        const int16_t labelWidth = std::min<int16_t>(rect.w, Context::textWidth(text, 1));
+        drawText({rect.x, rect.y, labelWidth, rect.h}, text, 1, color(ui::themes::ColorRole::Muted));
+        const int16_t lineX = static_cast<int16_t>(rect.x + labelWidth + 6);
         if (lineX < rect.x + rect.w)
             gfx_.drawFastHLine(lineX, static_cast<int16_t>(rect.y + rect.h / 2),
                                static_cast<int16_t>(rect.x + rect.w - lineX), blend(ui::themes::ColorRole::Muted, 96));
@@ -181,12 +186,12 @@ namespace ui {
             gfx_.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
             const int16_t textWidth = std::max<int16_t>(0, static_cast<int16_t>(rect.w - 14));
             if (layout == SettingLayout::Inline) {
-                const int16_t labelRequired = static_cast<int16_t>(label.size() * 12U);
+                const int16_t labelRequired = Context::textWidth(label, 2);
                 uint8_t valueSize = 2;
-                int16_t valueRequired = static_cast<int16_t>(value.size() * 12U);
+                int16_t valueRequired = Context::textWidth(value, 2);
                 if (labelRequired + valueRequired + 8 > textWidth) {
                     valueSize = 1;
-                    valueRequired = static_cast<int16_t>(value.size() * 6U);
+                    valueRequired = Context::textWidth(value, 1);
                 }
                 const int16_t labelWidth = labelRequired + valueRequired + 8 <= textWidth
                                              ? labelRequired
@@ -197,7 +202,7 @@ namespace ui {
                 drawText({static_cast<int16_t>(rect.x + rect.w - valueWidth - 7), rect.y, valueWidth, rect.h}, value,
                          valueSize, color(ui::themes::ColorRole::Accent), TextAlign::Right);
             } else {
-                const bool largeValue = value.size() * 12U <= static_cast<size_t>(textWidth);
+                const bool largeValue = Context::textWidth(value, 2) <= textWidth;
                 drawText({static_cast<int16_t>(rect.x + 7), static_cast<int16_t>(rect.y + 3), textWidth, 8}, label, 1,
                          color(ui::themes::ColorRole::Muted));
                 drawText({static_cast<int16_t>(rect.x + 7), static_cast<int16_t>(rect.y + 11), textWidth,
@@ -461,12 +466,12 @@ namespace ui {
                 } else {
                     uint8_t labelSize = visual.h >= 30 ? 2 : 1;
                     uint8_t valueSize = labelSize;
-                    int16_t valueWidth = static_cast<int16_t>(valueView.size() * 6U * valueSize);
-                    if (static_cast<size_t>(headerWidth) < label.size() * 6U * labelSize + valueWidth + 8U) {
+                    int16_t valueWidth = Context::textWidth(valueView, valueSize);
+                    if (headerWidth < Context::textWidth(label, labelSize) + valueWidth + 8) {
                         valueSize = 1;
-                        valueWidth = static_cast<int16_t>(valueView.size() * 6U);
+                        valueWidth = Context::textWidth(valueView, 1);
                     }
-                    if (static_cast<size_t>(headerWidth) < label.size() * 6U * labelSize + valueWidth + 8U)
+                    if (headerWidth < Context::textWidth(label, labelSize) + valueWidth + 8)
                         labelSize = 1;
                     const int16_t labelWidth = std::max<int16_t>(0, static_cast<int16_t>(headerWidth - valueWidth - 8));
                     const int16_t textY = static_cast<int16_t>(visual.y + 2);
@@ -889,22 +894,21 @@ namespace ui {
         if (rect.w <= 0 || rect.h <= 0)
             return;
         const uint8_t size = std::max<uint8_t>(1, textSize);
-        const size_t capacity = static_cast<size_t>(std::max<int16_t>(0, rect.w) / (6 * size));
+        const size_t capacity = static_cast<size_t>(std::max<int16_t>(0, rect.w) / (kUiFontCellWidth * size));
         if (capacity == 0)
             return;
-        gfx_.setFont(static_cast<const GFXfont*>(nullptr));
+        gfx_.setFont(u8g2_font_pxplustandynewtv_8_all);
+        gfx_.setUTF8Print(true);
         gfx_.setTextSize(size);
         gfx_.setTextWrap(false);
         gfx_.setTextColor(textColor);
 
         std::string_view first = text;
         std::string_view second;
-        if (maxLines > 1 && text.size() > capacity) {
-            size_t split = capacity;
-            while (split > 0 && (static_cast<uint8_t>(text[split]) & 0xC0U) == 0x80U)
-                --split;
+        if (maxLines > 1 && Utf8Text::count(text) > capacity) {
+            size_t split = Utf8Text::prefixBytes(text, capacity);
             const size_t space = text.rfind(' ', split);
-            if (space != std::string_view::npos && space >= capacity / 2)
+            if (space != std::string_view::npos && Utf8Text::count(text.substr(0, space)) >= capacity / 2)
                 split = space;
             first = text.substr(0, split);
             second = text.substr(split);
@@ -917,16 +921,17 @@ namespace ui {
         const int16_t firstY =
             static_cast<int16_t>(rect.y + std::max<int16_t>(0, (rect.h - lineHeight * lineCount) / 2));
         const auto drawLine = [&](std::string_view line, int16_t y) {
-            const bool truncated = line.size() > capacity;
+            const bool truncated = Utf8Text::count(line) > capacity;
             const size_t length = fittedLength(line, capacity);
             const size_t dots = truncated ? std::min<size_t>(3, capacity) : 0;
-            const int16_t renderedWidth = static_cast<int16_t>((length + dots) * 6U * size);
+            const int16_t renderedWidth = static_cast<int16_t>(textWidth(line.substr(0, length), size)
+                                                               + textWidth(std::string_view{"...", dots}, size));
             const int16_t x = align == TextAlign::Center
                                 ? std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + (rect.w - renderedWidth) / 2))
                             : align == TextAlign::Right
                                 ? std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + rect.w - renderedWidth))
                                 : rect.x;
-            gfx_.setCursor(x, y);
+            gfx_.setCursor(x, static_cast<int16_t>(y + lineHeight - size));
             for (size_t index = 0; index < length; ++index)
                 gfx_.write(static_cast<uint8_t>(line[index]));
             for (size_t index = 0; index < dots; ++index)

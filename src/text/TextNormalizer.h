@@ -1,19 +1,19 @@
 #pragma once
 
-#include <Arduino.h>
+#include <cstddef>
+#include <string>
+#include <string_view>
 
 namespace RsvpText {
 
-    struct ParseStats {
+    struct NormalizationStats {
         size_t malformedUtf8 = 0;
         size_t nonAsciiCodepoints = 0;
-        size_t longLineSplits = 0;
-        bool memoryLow = false;
     };
 
-    String normalizeDisplayText(const String& text, ParseStats* stats = nullptr);
-    bool decodeMarkupEntity(const String& entity, String& decoded);
-    String decodeMarkupEntities(const String& text);
-    void trimAsciiWhitespace(String& text);
+    std::string normalizeDisplayText(std::string_view text, NormalizationStats* stats = nullptr);
+    bool decodeMarkupEntity(std::string_view entity, std::string& decoded);
+    std::string decodeMarkupEntities(std::string_view text);
+    std::string readableKey(std::string_view text);
 
 } // namespace RsvpText

@@ -33,8 +33,16 @@ namespace screens {
             changed = true;
         }
 
-        changed |= ui.toggle({static_cast<int16_t>(content.x + halfWidth + gap), rowY, halfWidth, 42},
-                             ui.text(UiText::PhantomWords), config.phantomWords);
+        if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), rowY, halfWidth, 42},
+                       ui.text(UiText::ReadingMode),
+                       ui.text(config.mode == settings::ReadingMode::page ? UiText::ScrollMode : UiText::RsvpMode),
+                       ui::SettingLayout::Inline)) {
+            config.mode = settings::cycleEnum(config.mode);
+            changed = true;
+        }
+
+        changed |= ui.toggle({content.x, static_cast<int16_t>(rowY + 48), content.w, 34}, ui.text(UiText::PhantomWords),
+                             config.phantomWords);
         return changed;
     }
 

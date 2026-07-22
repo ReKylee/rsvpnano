@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -17,13 +18,8 @@ struct BookMetadata {
     std::vector<size_t> paragraphStarts;
 
     const ChapterMarker* chapterAt(size_t wordIndex) const {
-        const ChapterMarker* result = nullptr;
-        for (const ChapterMarker& chapter: chapters) {
-            if (chapter.wordIndex > wordIndex)
-                break;
-            result = &chapter;
-        }
-        return result;
+        const auto next = std::ranges::upper_bound(chapters, wordIndex, {}, &ChapterMarker::wordIndex);
+        return next == chapters.begin() ? nullptr : &*std::prev(next);
     }
 
     void clear() {

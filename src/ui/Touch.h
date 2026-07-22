@@ -1,6 +1,8 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 
 namespace ui {
 
@@ -32,6 +34,19 @@ namespace ui {
 
     constexpr bool hasTouch(const Touch& touch, TouchAction action) {
         return (touch.actions & action) != 0;
+    }
+
+    constexpr int32_t centeredDragRate(int16_t position, int16_t origin, int16_t length, int16_t deadzone,
+                                       int32_t maximum) {
+        const int32_t half = std::max<int16_t>(1, length / 2);
+        const int32_t distance = std::clamp<int32_t>(position - (origin + half), -half, half);
+        const int32_t inactive = std::min<int32_t>(deadzone, half - 1);
+        if (std::abs(distance) <= inactive)
+            return 0;
+        const int32_t active = std::abs(distance) - inactive;
+        const int32_t range = half - inactive;
+        const int32_t rate = static_cast<int32_t>(static_cast<int64_t>(maximum) * active * active / (range * range));
+        return distance < 0 ? -rate : rate;
     }
 
     struct TouchContact {

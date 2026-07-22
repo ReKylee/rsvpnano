@@ -1,7 +1,10 @@
 #pragma once
 
 #include <Arduino.h>
-#include <type_traits>
+#include <concepts>
+#include <string>
+#include <string_view>
+#include <utility>
 
 #ifndef RSVP_MAX_BOOK_WORDS
 #define RSVP_MAX_BOOK_WORDS 0
@@ -14,28 +17,27 @@ namespace RsvpText {
     constexpr size_t kMaxBookWords = static_cast<size_t>(RSVP_MAX_BOOK_WORDS);
     constexpr size_t kMaxBookLineChars = 4096;
 
-    bool isReadableTokenChar(char c);
-    bool isRhythmToken(const String& token);
+    struct ParseStats {
+        NormalizationStats normalization;
+        size_t longLineSplits = 0;
+        bool memoryLow = false;
+    };
+
+    bool hasReadableText(std::string_view text);
 
     namespace Detail {
 
         bool isWordBoundary(char c);
-        bool isInlineWordHyphen(const String& text, size_t index);
-        bool isHyphenToken(const String& token);
-        bool isEllipsisToken(const String& token);
+        bool isInlineWordHyphen(std::string_view text, size_t index);
 
     } // namespace Detail
 
-    template<typename TokenConsumer, typename WordCount>
-    bool appendNormalizedLineWords(const String& normalizedLine, TokenConsumer consumeToken, const WordCount& wordCount,
+    template<typename TokenConsumer>
+        requires std::predicate<TokenConsumer&, const std::string&>
+    bool appendNormalizedLineWords(std::string_view normalizedLine, TokenConsumer consumeToken, const size_t& wordCount,
                                    size_t maxWords) {
-        using TokenResult = typename std::result_of<TokenConsumer(const String&)>::type;
-        static_assert(std::is_convertible<TokenResult, bool>::value,
-                      "TokenConsumer must be callable as bool(const String&)");
-        static_assert(std::is_integral<WordCount>::value, "WordCount must be an integral counter type");
-
-        String currentWord;
-        String pendingToken;
+        std::string currentWord;
+        std::string pendingToken;
         currentWord.reserve(32);
         pendingToken.reserve(32);
 
@@ -44,7 +46,7 @@ namespace RsvpText {
         };
 
         auto flushPending = [&]() -> bool {
-            if (pendingToken.isEmpty()) {
+            if (pendingToken.empty()) {
                 return true;
             }
             if (!withinWordLimit()) {
@@ -53,24 +55,23 @@ namespace RsvpText {
             if (!consumeToken(pendingToken)) {
                 return false;
             }
-            pendingToken = "";
+            pendingToken.clear();
             return withinWordLimit();
         };
 
-        auto finishToken = [&](String token) -> bool {
-            trimAsciiWhitespace(token);
-            if (token.isEmpty()) {
+        auto finishToken = [&](std::string token) -> bool {
+            if (token.empty()) {
                 return true;
             }
 
-            if (Detail::isEllipsisToken(token)) {
-                if (!pendingToken.isEmpty()) {
+            if (token == "...") {
+                if (!pendingToken.empty()) {
                     pendingToken += "...";
                 }
                 return true;
             }
 
-            if (Detail::isHyphenToken(token)) {
+            if (token == "-") {
                 if (!flushPending()) {
                     return false;
                 }
@@ -83,23 +84,22 @@ namespace RsvpText {
             if (!flushPending()) {
                 return false;
             }
-            pendingToken = token;
+            pendingToken = std::move(token);
             return true;
         };
 
         auto flushCurrent = [&]() -> bool {
-            if (currentWord.isEmpty()) {
+            if (currentWord.empty()) {
                 return true;
             }
-            const bool ok = finishToken(currentWord);
-            currentWord = "";
+            const bool ok = finishToken(std::move(currentWord));
+            currentWord.clear();
             return ok;
         };
 
         for (size_t i = 0; i < normalizedLine.length(); ++i) {
             if ((i & 0x7F) == 0) {
                 yield();
-                delay(0);
             }
 
             const char c = normalizedLine[i];
@@ -147,10 +147,12 @@ namespace RsvpText {
         return flushPending();
     }
 
-    template<typename TokenConsumer, typename WordCount>
-    bool appendLineWords(const String& line, TokenConsumer consumeToken, const WordCount& wordCount,
+    template<typename TokenConsumer>
+        requires std::predicate<TokenConsumer&, const std::string&>
+    bool appendLineWords(std::string_view line, TokenConsumer consumeToken, const size_t& wordCount,
                          ParseStats* stats) {
-        const String normalizedLine = normalizeDisplayText(line, stats);
+        const std::string normalizedLine =
+            normalizeDisplayText(line, stats == nullptr ? nullptr : &stats->normalization);
         return appendNormalizedLineWords(normalizedLine, consumeToken, wordCount, kMaxBookWords);
     }
 

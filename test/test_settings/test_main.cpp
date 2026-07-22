@@ -46,10 +46,12 @@ void test_battery_curve_reaches_full() {
 
 void test_enum_names_are_human_readable() {
     settings::DeviceSettings value;
+    value.reading.mode = settings::ReadingMode::page;
     value.reading.pauseMode = settings::PauseMode::instant;
     value.interface.screensaver = standby::Kind::reaction;
     auto toml = settings::codec::encodeToml(value, settings::SettingsSource::Programmatic);
     TEST_ASSERT_TRUE(toml.has_value());
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("mode = \"page\""));
     TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("pauseMode = \"instant\""));
     TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("screensaver = \"reaction\""));
 }
@@ -93,13 +95,12 @@ void test_invalid_input_cannot_mutate_a_live_value() {
 }
 
 void test_unknown_keys_are_ignored_and_invalid_enums_still_fail() {
-    auto unknown =
-        settings::codec::decodeJson(R"({"surprise":true})", settings::SettingsSource::Companion);
+    auto unknown = settings::codec::decodeJson(R"({"surprise":true})", settings::SettingsSource::Companion);
     TEST_ASSERT_TRUE(unknown.has_value());
     TEST_ASSERT_TRUE(unknown->reading.batteryIconVisible);
 
-    auto invalidEnum = settings::codec::decodeJson(R"({"reading":{"pauseMode":"later"}})",
-                                                   settings::SettingsSource::Companion);
+    auto invalidEnum =
+        settings::codec::decodeJson(R"({"reading":{"pauseMode":"later"}})", settings::SettingsSource::Companion);
     TEST_ASSERT_FALSE(invalidEnum.has_value());
     TEST_ASSERT_EQUAL(settings::SettingsErrorCategory::InvalidEnum, invalidEnum.error().category);
 }
@@ -115,9 +116,8 @@ void test_companion_theme_list_uses_ids_and_names() {
     const companion::api::ThemesResponse response{{{"default", "Default"}, {"night", "Night"}}};
     std::string json;
     TEST_ASSERT_TRUE(companion::api::encodeData(response, json).has_value());
-    TEST_ASSERT_EQUAL_STRING(
-        R"({"data":{"themes":[{"id":"default","name":"Default"},{"id":"night","name":"Night"}]}})",
-        json.c_str());
+    TEST_ASSERT_EQUAL_STRING(R"({"data":{"themes":[{"id":"default","name":"Default"},{"id":"night","name":"Night"}]}})",
+                             json.c_str());
 }
 
 void test_companion_font_list_uses_ids_and_names() {

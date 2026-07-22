@@ -166,8 +166,8 @@ StorageManager::DiagnosticResult StorageManager::diagnoseSdCard() {
         return result;
     }
 
-    result.summary = String(result.bookCount) + " books OK";
-    result.detail = result.cardType + " " + String(static_cast<unsigned int>(result.sizeMb)) + " MB";
+    result.summary = std::to_string(result.bookCount) + " books OK";
+    result.detail = result.cardType + " " + std::to_string(result.sizeMb) + " MB";
     ESP_LOGW("sd-check", "OK books=%u unsupported=%u writable=%u", static_cast<unsigned int>(result.bookCount),
              static_cast<unsigned int>(result.unsupportedCount), result.writable ? 1 : 0);
     return result;

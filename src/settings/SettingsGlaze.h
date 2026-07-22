@@ -18,6 +18,12 @@ struct glz::meta<settings::BoundedValue<T, Minimum, Maximum, Step>> {
 };
 
 template<>
+struct glz::meta<settings::ReadingMode> {
+    using enum settings::ReadingMode;
+    static constexpr auto value = glz::enumerate(rsvp, page);
+};
+
+template<>
 struct glz::meta<settings::PauseMode> {
     using enum settings::PauseMode;
     static constexpr auto value = glz::enumerate(sentenceEnd, instant);

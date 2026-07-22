@@ -7,7 +7,8 @@
 #include "board/BoardPower.h"
 #include "settings/SettingsRules.h"
 #include "storage/StorageManager.h"
-#include "text/LatinText.h"
+#include "text/UnicodeText.h"
+#include "text/Utf8Text.h"
 #include "ui/screens/Screens.h"
 
 namespace screens {
@@ -26,50 +27,10 @@ namespace screens {
         constexpr uint32_t kDoubleTapWindowMs = 520;
         constexpr uint32_t kWpmFeedbackMs = 900;
         constexpr int kMaxScrubSteps = 96;
+        constexpr int32_t kParagraphScrollScale = 1'000'000;
+        constexpr int32_t kMaximumParagraphRate = 5'000;
         constexpr size_t kPhantomBeforeTargets[] = {64, 96, 144};
         constexpr size_t kPhantomAfterTargets[] = {96, 144, 208};
-
-        bool continuation(uint8_t value) {
-            return (value & 0xC0U) == 0x80U;
-        }
-
-        bool nextCodepoint(std::string_view text, size_t& index, uint16_t& codepoint) {
-            if (index >= text.length())
-                return false;
-            const uint8_t first = static_cast<uint8_t>(text[index++]);
-            if (first < 0x80U) {
-                codepoint = first;
-                return true;
-            }
-            auto next = [&](uint8_t& value) {
-                if (index >= text.length() || !continuation(static_cast<uint8_t>(text[index])))
-                    return false;
-                value = static_cast<uint8_t>(text[index++]);
-                return true;
-            };
-            if ((first & 0xE0U) == 0xC0U) {
-                uint8_t b1 = 0;
-                codepoint = next(b1) ? static_cast<uint16_t>(((first & 0x1FU) << 6U) | (b1 & 0x3FU)) : '?';
-                return true;
-            }
-            if ((first & 0xF0U) == 0xE0U) {
-                uint8_t b1 = 0, b2 = 0;
-                codepoint = next(b1) && next(b2)
-                              ? static_cast<uint16_t>(((first & 0x0FU) << 12U) | ((b1 & 0x3FU) << 6U) | (b2 & 0x3FU))
-                              : '?';
-                return true;
-            }
-            while (index < text.length() && continuation(static_cast<uint8_t>(text[index])))
-                ++index;
-            codepoint = '?';
-            return true;
-        }
-
-        bool wordCodepoint(uint16_t codepoint) {
-            return codepoint < 0x80U
-                     ? LatinText::isWordCharacter(static_cast<uint8_t>(codepoint))
-                     : (codepoint >= 0x00C0U && codepoint <= 0x024FU) || (codepoint >= 0x0400U && codepoint <= 0x052FU);
-        }
 
         int focusOrdinal(int length) {
             if (length <= 1)
@@ -101,6 +62,8 @@ namespace screens {
     }
 
     void ReaderScreen::refreshTypography() {
+        if (settings_.mode == settings::ReadingMode::page)
+            pagePreview_ = false;
         typography_ = settings::effectiveTypography(session.state.bookTypographyOverride, themeTypography_);
         const auto families = fonts.families();
         const auto selected = std::ranges::find_if(families, [this](const FontCatalog::Family& family) {
@@ -134,6 +97,7 @@ namespace screens {
         session.path = loadedPath;
         session.fromStorage = true;
         session.state = {};
+        pagePreview_ = false;
         session.lastSavedWordIndex = static_cast<size_t>(-1);
         ReadingLoop::setBookStore(session, store, nowMs);
 
@@ -164,6 +128,7 @@ namespace screens {
         session.path = "";
         session.fromStorage = false;
         session.state = {};
+        pagePreview_ = false;
         refreshTypography();
         ReadingLoop::begin(session, nowMs);
     }
@@ -173,8 +138,11 @@ namespace screens {
         const std::string bookTitle = ReadingProgress::title(session, storage);
         const bool reading = session.playing;
         const settings::ReadingSettings& settings = settings_;
-        const std::string before = settings.phantomWords ? phantomBefore(session, typography_.fontSizeIndex) : "";
-        const std::string after = settings.phantomWords ? phantomAfter(session, typography_.fontSizeIndex) : "";
+        const bool pageView = settings.mode == settings::ReadingMode::page || pagePreview_;
+        const std::string before =
+            !pageView && settings.phantomWords ? phantomBefore(session, typography_.fontSizeIndex) : "";
+        const std::string after =
+            !pageView && settings.phantomWords ? phantomAfter(session, typography_.fontSizeIndex) : "";
         const ChapterMarker* chapter = session.metadata.chapterAt(session.currentIndex);
         const std::string_view chapterLabel = chapter != nullptr && !chapter->title.empty()
                                                 ? std::string_view{chapter->title}
@@ -188,12 +156,10 @@ namespace screens {
                                       ? ReadingLoop::wordCount(session) - session.currentIndex
                                       : 0;
             if (settings.footerMetric == settings::FooterMetric::chapterTime) {
-                for (const ChapterMarker& marker: session.metadata.chapters) {
-                    if (marker.wordIndex > session.currentIndex) {
-                        remainingWords = marker.wordIndex - session.currentIndex;
-                        break;
-                    }
-                }
+                const auto next = std::ranges::upper_bound(session.metadata.chapters, session.currentIndex, {},
+                                                           &ChapterMarker::wordIndex);
+                if (next != session.metadata.chapters.end())
+                    remainingWords = next->wordIndex - session.currentIndex;
             }
             const uint32_t minutes = static_cast<uint32_t>((remainingWords + settings.wpm - 1) / settings.wpm);
             footer = ui.text(settings.footerMetric == settings::FooterMetric::chapterTime ? UiText::ChapterShort
@@ -204,7 +170,9 @@ namespace screens {
         const std::string overlay = wpmFeedbackUntilMs_ > nowMs ? std::to_string(settings.wpm) + " WPM" : "";
 
         const ui::Rect readingArea{0, 36, ui.width(), static_cast<int16_t>(std::max<int16_t>(0, ui.height() - 72))};
-        if (ui.redraw(readingArea, frameSignature(before, session.currentWord, after, overlay, settings))) {
+        if (pageView) {
+            PageReader::draw(pageState_, ui, session, readingArea, overlay);
+        } else if (ui.redraw(readingArea, frameSignature(before, session.currentWord, after, overlay, settings))) {
             Arduino_GFX& gfx = ui.gfx();
             background_ = ui.color(ui::themes::ColorRole::Background);
             text_.setFont(font_);
@@ -213,14 +181,15 @@ namespace screens {
 
             const std::string& word = session.currentWord;
             const int focus = focusIndex(word);
-            const int16_t wordWidth = textWidth(word);
+            const int16_t wordWidth = text_.textAdvance(word, typography_.tracking);
             int16_t focusCenter = wordWidth / 2;
             if (focus >= 0) {
                 int glyph = 0;
                 int16_t cursor = 0;
-                for (size_t index = 0; index < word.length();) {
+                std::string_view remaining = word;
+                while (!remaining.empty()) {
                     uint16_t codepoint = 0;
-                    nextCodepoint(word, index, codepoint);
+                    Utf8Text::next(remaining, codepoint);
                     const int16_t advance = text_.glyphAdvance(codepoint);
                     if (glyph++ == focus) {
                         focusCenter = static_cast<int16_t>(cursor + advance / 2);
@@ -249,13 +218,16 @@ namespace screens {
             gfx.drawFastVLine(anchor, guideTop, 5, marker);
             gfx.drawFastVLine(anchor, static_cast<int16_t>(guideBottom - 4), 5, marker);
 
-            if (!before.empty())
-                drawText(before, static_cast<int16_t>(x - 24 - textWidth(before)), baseline,
-                         ui.blend(ui::themes::ColorRole::Foreground, 62));
+            if (!before.empty()) {
+                text_.setTextColor(ui.blend(ui::themes::ColorRole::Foreground, 62), background_);
+                text_.drawString(before, static_cast<int16_t>(x - 24 - text_.textAdvance(before, typography_.tracking)),
+                                 baseline, typography_.tracking);
+            }
             drawWord(word, x, baseline, focus, ui);
-            if (!after.empty())
-                drawText(after, static_cast<int16_t>(x + wordWidth + 24), baseline,
-                         ui.blend(ui::themes::ColorRole::Foreground, 62));
+            if (!after.empty()) {
+                text_.setTextColor(ui.blend(ui::themes::ColorRole::Foreground, 62), background_);
+                text_.drawString(after, static_cast<int16_t>(x + wordWidth + 24), baseline, typography_.tracking);
+            }
 
             gfx.setFont(static_cast<const GFXfont*>(nullptr));
             gfx.setTextWrap(false);
@@ -406,7 +378,7 @@ namespace screens {
             return;
         }
 
-        if (touchIntent_ == TouchIntent::None && !ended && held && tapLike) {
+        if (touchIntent_ == TouchIntent::None && !ended && held && tapLike && !pagePreview_) {
             lastTapValid_ = false;
             touchIntent_ = TouchIntent::PlayHold;
             start(nowMs, false);
@@ -416,9 +388,14 @@ namespace screens {
             if (absX >= kSwipeThreshold && absX > absY + kAxisBias) {
                 lastTapValid_ = false;
                 touchIntent_ = TouchIntent::Scrub;
-            } else if (absY >= kSwipeThreshold && absY > absX + kAxisBias) {
+                pagePreview_ = settings_.mode != settings::ReadingMode::page;
+            } else if (absY > absX + kAxisBias && (pagePreview_ || absY >= kSwipeThreshold)) {
                 lastTapValid_ = false;
-                touchIntent_ = TouchIntent::Wpm;
+                touchIntent_ = pagePreview_ ? TouchIntent::Paragraph : TouchIntent::Wpm;
+                if (touchIntent_ == TouchIntent::Paragraph) {
+                    paragraphTickMs_ = nowMs;
+                    paragraphRemainder_ = 0;
+                }
             }
         }
         if (touchIntent_ == TouchIntent::Scrub) {
@@ -442,12 +419,26 @@ namespace screens {
             wpmFeedbackUntilMs_ = nowMs + kWpmFeedbackMs;
             return;
         }
+        if (touchIntent_ == TouchIntent::Paragraph) {
+            if (!ended)
+                browseParagraphs(touch.y, nowMs);
+            else {
+                resetTouch();
+                ReadingProgress::save(session, preferences, true, nowMs);
+            }
+            return;
+        }
         if (!ended)
             return;
 
         resetTouch();
         if (!tapLike) {
             lastTapValid_ = false;
+            return;
+        }
+        if (pagePreview_) {
+            lastTapValid_ = false;
+            pagePreview_ = false;
             return;
         }
         const uint16_t footerTapWidth = std::min<uint16_t>(220, static_cast<uint16_t>(gfx_.width() / 2));
@@ -496,6 +487,7 @@ namespace screens {
     }
 
     void ReaderScreen::start(uint32_t nowMs, bool locked) {
+        pagePreview_ = false;
         playLocked_ = locked;
         pauseAtSentenceEndRequested_ = false;
         wpmFeedbackUntilMs_ = 0;
@@ -550,6 +542,23 @@ namespace screens {
         touching_ = false;
         touchIntent_ = TouchIntent::None;
         scrubSteps_ = 0;
+        paragraphTickMs_ = 0;
+        paragraphRemainder_ = 0;
+    }
+
+    void ReaderScreen::browseParagraphs(uint16_t y, uint32_t nowMs) {
+        const uint32_t elapsed = std::min<uint32_t>(nowMs - paragraphTickMs_, 100);
+        paragraphTickMs_ = nowMs;
+        const int32_t rate = ui::centeredDragRate(y, 0, gfx_.height(), 28, kMaximumParagraphRate);
+        if (rate == 0) {
+            paragraphRemainder_ = 0;
+            return;
+        }
+        paragraphRemainder_ += rate * static_cast<int32_t>(elapsed);
+        const int steps = paragraphRemainder_ / kParagraphScrollScale;
+        paragraphRemainder_ %= kParagraphScrollScale;
+        if (steps != 0)
+            ReadingLoop::seekParagraph(session, steps);
     }
 
     int ReaderScreen::scrubSteps(int deltaX) const {
@@ -602,66 +611,40 @@ namespace screens {
 
     int ReaderScreen::focusIndex(std::string_view word) const {
         int characters = 0;
-        for (size_t index = 0; index < word.length();) {
+        std::string_view remaining = word;
+        while (!remaining.empty()) {
             uint16_t codepoint = 0;
-            nextCodepoint(word, index, codepoint);
-            if (wordCodepoint(codepoint))
+            Utf8Text::next(remaining, codepoint);
+            if (UnicodeText::isWordCharacter(codepoint))
                 ++characters;
         }
         if (characters == 0)
             return word.empty() ? -1 : 0;
         const int target = std::min(focusOrdinal(characters), characters - 1);
         int ordinal = 0, glyph = 0;
-        for (size_t index = 0; index < word.length(); ++glyph) {
+        remaining = word;
+        while (!remaining.empty()) {
             uint16_t codepoint = 0;
-            nextCodepoint(word, index, codepoint);
-            if (wordCodepoint(codepoint) && ordinal++ == target)
+            Utf8Text::next(remaining, codepoint);
+            if (UnicodeText::isWordCharacter(codepoint) && ordinal++ == target)
                 return glyph;
+            ++glyph;
         }
         return 0;
     }
 
-    int16_t ReaderScreen::textWidth(std::string_view value) const {
-        text_.setFont(font_);
-        if (typography_.tracking == 0)
-            return text_.textAdvance(value);
-        int16_t width = 0;
-        for (size_t index = 0; index < value.length();) {
-            uint16_t codepoint = 0;
-            nextCodepoint(value, index, codepoint);
-            width = static_cast<int16_t>(width + text_.glyphAdvance(codepoint));
-            if (index < value.length())
-                width = static_cast<int16_t>(width + typography_.tracking);
-        }
-        return width;
-    }
-
-    void ReaderScreen::drawText(std::string_view value, int16_t x, int16_t baseline, uint16_t color) {
-        text_.setFont(font_);
-        text_.setTextColor(color, background_);
-        if (typography_.tracking == 0) {
-            text_.drawString(value, x, baseline);
-            return;
-        }
-        for (size_t index = 0; index < value.length();) {
-            uint16_t codepoint = 0;
-            nextCodepoint(value, index, codepoint);
-            text_.drawCodepoint(codepoint, x, baseline);
-            x = static_cast<int16_t>(x + text_.glyphAdvance(codepoint) + typography_.tracking);
-        }
-    }
-
     void ReaderScreen::drawWord(std::string_view word, int16_t x, int16_t baseline, int focus, ui::Context& ui) {
         int glyph = 0;
-        for (size_t index = 0; index < word.length(); ++glyph) {
+        while (!word.empty()) {
             uint16_t codepoint = 0;
-            nextCodepoint(word, index, codepoint);
+            Utf8Text::next(word, codepoint);
             text_.setTextColor(typography_.focusHighlight && glyph == focus
                                    ? ui.color(ui::themes::ColorRole::Accent)
                                    : ui.color(ui::themes::ColorRole::Foreground),
                                ui.color(ui::themes::ColorRole::Background));
             text_.drawCodepoint(codepoint, x, baseline);
             x = static_cast<int16_t>(x + text_.glyphAdvance(codepoint) + typography_.tracking);
+            ++glyph;
         }
     }
 

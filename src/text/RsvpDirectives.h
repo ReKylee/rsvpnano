@@ -1,21 +1,19 @@
 #pragma once
 
-#include <Arduino.h>
-
-#include "text/TextNormalizer.h"
+#include <string>
+#include <string_view>
 
 namespace RsvpText {
 
     struct RsvpDirectiveValues {
-        String title;
-        String author;
+        std::string title;
+        std::string author;
     };
 
-    String stripBom(String text);
-    bool prefixHasBoundary(const String& lowered, const char* prefix);
-    bool chapterTitleFromLine(const String& line, String& title);
-    String directiveValue(const String& line, const char* directive);
-    RsvpDirectiveValues readRsvpDirectiveValues(const String& path);
-    String readRsvpDirectiveValue(const String& path, const char* directive);
+    std::string_view stripBom(std::string_view text);
+    bool prefixHasBoundary(std::string_view text, std::string_view prefix);
+    bool chapterTitleFromLine(std::string_view line, std::string& title);
+    std::string directiveValue(std::string_view line, std::string_view directive);
+    RsvpDirectiveValues readRsvpDirectiveValues(std::string_view path);
 
 } // namespace RsvpText

@@ -18,20 +18,20 @@ namespace EpubPackage {
             return AsciiText::isWhitespace(c) || c == '/' || c == '>';
         }
 
-        int skipAsciiWhitespace(const String& text, int position) {
-            while (static_cast<size_t>(position) < text.length() && AsciiText::isWhitespace(text[position])) {
+        size_t skipAsciiWhitespace(std::string_view text, size_t position) {
+            while (position < text.length() && AsciiText::isWhitespace(text[position])) {
                 ++position;
             }
             return position;
         }
 
-        String percentDecodePath(const String& path) {
-            String decoded;
+        std::string percentDecodePath(std::string_view path) {
+            std::string decoded;
             decoded.reserve(path.length());
 
             for (size_t i = 0; i < path.length(); ++i) {
                 if (path[i] == '%' && i + 2 < path.length()) {
-                    if (auto byte = AsciiText::parseUnsigned<uint8_t>(std::string_view{path.c_str() + i + 1, 2}, 16)) {
+                    if (auto byte = AsciiText::parseUnsigned<uint8_t>(path.substr(i + 1, 2), 16)) {
                         decoded += static_cast<char>(*byte);
                         i += 2;
                         continue;
@@ -43,46 +43,37 @@ namespace EpubPackage {
             return decoded;
         }
 
-        String normalizedTocLabel(const String& value) {
-            const String cleaned = EpubContent::plainTextFromXmlFragment(value);
-            String normalized;
-            normalized.reserve(cleaned.length());
-            for (size_t i = 0; i < cleaned.length(); ++i) {
-                if (RsvpText::isReadableTokenChar(cleaned[i])) {
-                    normalized += cleaned[i];
-                }
-            }
-            normalized.toLowerCase();
-            return normalized;
+        std::string normalizedTocLabel(std::string_view value) {
+            return RsvpText::readableKey(EpubContent::plainTextFromXmlFragment(value));
         }
 
-        bool isContentTocTitle(const String& value, const String& bookTitle) {
-            const String cleaned = EpubContent::plainTextFromXmlFragment(value);
-            const String lowered = toLowerCopy(cleaned);
-            const String normalized = normalizedTocLabel(cleaned);
-            const String normalizedBookTitle = normalizedTocLabel(bookTitle);
-            return !cleaned.isEmpty() && lowered != "contents" && lowered != "cover" && lowered != "title page"
-                && normalized != "tableofcontents" && !normalized.isEmpty()
-                && (normalizedBookTitle.isEmpty() || normalized != normalizedBookTitle)
-                && (normalizedBookTitle.isEmpty() || !normalizedBookTitle.startsWith(normalized));
+        bool isContentTocTitle(std::string_view value, std::string_view bookTitle) {
+            const std::string cleaned = EpubContent::plainTextFromXmlFragment(value);
+            const std::string lowered = toLowerCopy(cleaned);
+            const std::string normalized = normalizedTocLabel(cleaned);
+            const std::string normalizedBookTitle = normalizedTocLabel(bookTitle);
+            return !cleaned.empty() && lowered != "contents" && lowered != "cover" && lowered != "title page"
+                && normalized != "tableofcontents" && !normalized.empty()
+                && (normalizedBookTitle.empty() || normalized != normalizedBookTitle)
+                && (normalizedBookTitle.empty() || !normalizedBookTitle.starts_with(normalized));
         }
 
-        String collapseZipPath(const String& path) {
-            std::vector<String> parts;
+        std::string collapseZipPath(std::string_view path) {
+            std::vector<std::string_view> parts;
             size_t start = 0;
 
             while (start <= path.length()) {
-                int separator = path.indexOf('/', start);
-                if (separator < 0) {
+                size_t separator = path.find('/', start);
+                if (separator == std::string_view::npos) {
                     separator = path.length();
                 }
 
-                String part = path.substring(start, separator);
+                const std::string_view part = path.substr(start, separator - start);
                 if (part == "..") {
                     if (!parts.empty()) {
                         parts.pop_back();
                     }
-                } else if (!part.isEmpty() && part != ".") {
+                } else if (!part.empty() && part != ".") {
                     parts.push_back(part);
                 }
 
@@ -92,7 +83,7 @@ namespace EpubPackage {
                 start = static_cast<size_t>(separator) + 1;
             }
 
-            String collapsed;
+            std::string collapsed;
             collapsed.reserve(path.length());
             for (size_t i = 0; i < parts.size(); ++i) {
                 if (i > 0) {
@@ -103,36 +94,37 @@ namespace EpubPackage {
             return collapsed;
         }
 
-        String resolveZipPath(const String& baseDirectory, const String& href) {
-            String path = href;
+        std::string resolveZipPath(std::string_view baseDirectory, std::string_view href) {
+            std::string path{href};
 
-            int fragment = path.indexOf('#');
-            if (fragment >= 0) {
-                path = path.substring(0, fragment);
+            size_t fragment = path.find('#');
+            if (fragment != std::string::npos) {
+                path.resize(fragment);
             }
-            int query = path.indexOf('?');
-            if (query >= 0) {
-                path = path.substring(0, query);
+            size_t query = path.find('?');
+            if (query != std::string::npos) {
+                path.resize(query);
             }
 
             path = percentDecodePath(path);
             path = normalizeZipName(path);
-            if (!href.startsWith("/")) {
-                path = baseDirectory + path;
+            if (!href.starts_with('/')) {
+                path = std::string{baseDirectory} + path;
             }
 
             return collapseZipPath(path);
         }
 
-        TocEntry tocEntry(const String& tocPath, const String& href, const String& title) {
-            const int fragmentStart = href.indexOf('#');
-            String fragment = fragmentStart < 0 ? String("") : href.substring(fragmentStart + 1);
-            const int queryStart = fragment.indexOf('?');
-            if (queryStart >= 0) {
-                fragment = fragment.substring(0, queryStart);
+        TocEntry tocEntry(std::string_view tocPath, std::string_view href, std::string_view title) {
+            const size_t fragmentStart = href.find('#');
+            std::string fragment =
+                fragmentStart == std::string_view::npos ? std::string{} : std::string{href.substr(fragmentStart + 1)};
+            const size_t queryStart = fragment.find('?');
+            if (queryStart != std::string::npos) {
+                fragment.resize(queryStart);
             }
             fragment = percentDecodePath(fragment);
-            fragment.trim();
+            fragment = std::string{AsciiText::trim(fragment)};
 
             return {
                 resolveZipPath(directoryForPath(tocPath), href),
@@ -141,68 +133,68 @@ namespace EpubPackage {
             };
         }
 
-        String attributeValue(const String& tag, const char* name) {
-            const String key(name);
-            int position = 0;
+        std::string attributeValue(std::string_view tag, std::string_view name) {
+            size_t position = 0;
 
-            const auto readAttributeValue = [&](int valueStart) {
+            const auto readAttributeValue = [&](size_t valueStart) {
                 const char quote = tag[valueStart];
                 if (quote == '"' || quote == '\'') {
-                    const int end = tag.indexOf(quote, valueStart + 1);
-                    return end < 0 ? String("") : tag.substring(valueStart + 1, end);
+                    const size_t end = tag.find(quote, valueStart + 1);
+                    return end == std::string_view::npos
+                             ? std::string{}
+                             : std::string{tag.substr(valueStart + 1, end - valueStart - 1)};
                 }
 
-                int end = valueStart;
-                while (static_cast<size_t>(end) < tag.length() && !AsciiText::isWhitespace(tag[end])
-                       && tag[end] != '>') {
+                size_t end = valueStart;
+                while (end < tag.length() && !AsciiText::isWhitespace(tag[end]) && tag[end] != '>') {
                     ++end;
                 }
-                return tag.substring(valueStart, end);
+                return std::string{tag.substr(valueStart, end - valueStart)};
             };
 
-            while (position >= 0 && static_cast<size_t>(position) < tag.length()) {
-                position = tag.indexOf(key, position);
-                if (position < 0) {
-                    return "";
+            while (position < tag.length()) {
+                position = tag.find(name, position);
+                if (position == std::string_view::npos) {
+                    return {};
                 }
 
                 const bool boundaryBefore = position == 0 || isAttributeNameBoundary(tag[position - 1]);
-                int afterName = position + key.length();
-                const bool boundaryAfter = static_cast<size_t>(afterName) >= tag.length()
-                                        || AsciiText::isWhitespace(tag[afterName]) || tag[afterName] == '=';
+                size_t afterName = position + name.length();
+                const bool boundaryAfter =
+                    afterName >= tag.length() || AsciiText::isWhitespace(tag[afterName]) || tag[afterName] == '=';
                 if (!boundaryBefore || !boundaryAfter) {
                     position = afterName;
                     continue;
                 }
 
                 afterName = skipAsciiWhitespace(tag, afterName);
-                if (static_cast<size_t>(afterName) >= tag.length() || tag[afterName] != '=') {
+                if (afterName >= tag.length() || tag[afterName] != '=') {
                     position = afterName;
                     continue;
                 }
                 afterName = skipAsciiWhitespace(tag, afterName + 1);
-                if (static_cast<size_t>(afterName) >= tag.length()) {
-                    return "";
+                if (afterName >= tag.length()) {
+                    return {};
                 }
 
                 return readAttributeValue(afterName);
             }
 
-            return "";
+            return {};
         }
 
-        bool attributeContainsToken(const String& tag, const char* attribute, const char* wanted) {
-            const String value = attributeValue(tag, attribute);
-            int position = 0;
-            while (static_cast<size_t>(position) < value.length()) {
-                while (static_cast<size_t>(position) < value.length() && AsciiText::isWhitespace(value[position])) {
+        bool attributeContainsToken(std::string_view tag, std::string_view attribute, std::string_view wanted) {
+            const std::string value = attributeValue(tag, attribute);
+            size_t position = 0;
+            while (position < value.length()) {
+                while (position < value.length() && AsciiText::isWhitespace(value[position])) {
                     ++position;
                 }
-                int end = position;
-                while (static_cast<size_t>(end) < value.length() && !AsciiText::isWhitespace(value[end])) {
+                size_t end = position;
+                while (end < value.length() && !AsciiText::isWhitespace(value[end])) {
                     ++end;
                 }
-                if (value.substring(position, end) == wanted) {
+                if (std::string_view{value}.substr(position, end - position) == wanted) {
                     return true;
                 }
                 position = end;
@@ -212,31 +204,33 @@ namespace EpubPackage {
 
     } // namespace
 
-    String toLowerCopy(String value) {
-        value.toLowerCase();
-        return value;
+    std::string toLowerCopy(std::string_view value) {
+        std::string lowered{value};
+        std::ranges::transform(lowered, lowered.begin(), AsciiText::toLower);
+        return lowered;
     }
 
-    String basenameWithoutExtension(const String& path) {
-        const int separator = path.lastIndexOf('/');
-        String name = separator >= 0 ? path.substring(separator + 1) : path;
-        const int dot = name.lastIndexOf('.');
-        if (dot > 0) {
-            name = name.substring(0, dot);
+    std::string basenameWithoutExtension(std::string_view path) {
+        const size_t separator = path.find_last_of('/');
+        std::string_view name = separator == std::string_view::npos ? path : path.substr(separator + 1);
+        const size_t dot = name.find_last_of('.');
+        if (dot != std::string_view::npos && dot > 0) {
+            name = name.substr(0, dot);
         }
-        name.trim();
-        return name.isEmpty() ? String("Untitled") : name;
+        name = AsciiText::trim(name);
+        return name.empty() ? "Untitled" : std::string{name};
     }
 
-    String normalizeZipName(String path) {
-        path.replace('\\', '/');
-        while (path.startsWith("/")) {
-            path.remove(0, 1);
+    std::string normalizeZipName(std::string_view path) {
+        while (path.starts_with('/')) {
+            path.remove_prefix(1);
         }
-        return path;
+        std::string normalized{path};
+        std::ranges::replace(normalized, '\\', '/');
+        return normalized;
     }
 
-    bool isArchiveHintEntry(const String& name) {
+    bool isArchiveHintEntry(std::string_view name) {
         static constexpr std::array<const char*, 5> kArchiveHintExtensions = {{
             ".opf",
             ".ncx",
@@ -245,19 +239,18 @@ namespace EpubPackage {
             ".htm",
         }};
 
-        const String lowered = toLowerCopy(name);
-        return lowered.indexOf("container") >= 0
-            || std::any_of(kArchiveHintExtensions.begin(), kArchiveHintExtensions.end(), [&](const char* extension) {
-                   return lowered.endsWith(extension);
+        const std::string lowered = toLowerCopy(name);
+        return lowered.contains("container") || std::ranges::any_of(kArchiveHintExtensions, [&](const char* extension) {
+                   return lowered.ends_with(extension);
                });
     }
 
-    String directoryForPath(const String& path) {
-        const int separator = path.lastIndexOf('/');
-        if (separator < 0) {
-            return "";
+    std::string directoryForPath(std::string_view path) {
+        const size_t separator = path.find_last_of('/');
+        if (separator == std::string_view::npos) {
+            return {};
         }
-        return path.substring(0, separator + 1);
+        return std::string{path.substr(0, separator + 1)};
     }
 
     bool isContentDocument(const ManifestItem& item) {
@@ -267,108 +260,110 @@ namespace EpubPackage {
             ".htm",
         }};
 
-        const String mediaType = toLowerCopy(item.mediaType);
-        const String path = toLowerCopy(item.path);
+        const std::string mediaType = toLowerCopy(item.mediaType);
+        const std::string path = toLowerCopy(item.path);
         return mediaType == "application/xhtml+xml" || mediaType == "text/html"
-            || std::any_of(kContentExtensions.begin(), kContentExtensions.end(), [&](const char* extension) {
-                   return path.endsWith(extension);
+            || std::ranges::any_of(kContentExtensions, [&](const char* extension) {
+                   return path.ends_with(extension);
                });
     }
 
-    String parseRootfilePath(const String& containerXml) {
-        int position = 0;
-        while (position >= 0) {
-            position = containerXml.indexOf("<rootfile", position);
-            if (position < 0) {
+    std::string parseRootfilePath(std::string_view containerXml) {
+        size_t position = 0;
+        while (position < containerXml.size()) {
+            position = containerXml.find("<rootfile", position);
+            if (position == std::string_view::npos) {
                 break;
             }
 
-            const int end = containerXml.indexOf('>', position);
-            if (end < 0) {
+            const size_t end = containerXml.find('>', position);
+            if (end == std::string_view::npos) {
                 break;
             }
 
-            const String tag = containerXml.substring(position, end + 1);
-            const String path = attributeValue(tag, "full-path");
-            if (!path.isEmpty()) {
+            const std::string_view tag = containerXml.substr(position, end - position + 1);
+            const std::string path = attributeValue(tag, "full-path");
+            if (!path.empty()) {
                 return normalizeZipName(path);
             }
 
             position = end + 1;
         }
 
-        return "";
+        return {};
     }
 
-    String parseDcMetadata(const String& opfXml, const char* tagName) {
-        const String openTag = String("<dc:") + tagName;
-        const String closeTag = String("</dc:") + tagName;
-        int position = 0;
-        while (position >= 0) {
-            position = opfXml.indexOf(openTag, position);
-            if (position < 0) {
+    std::string parseDcMetadata(std::string_view opfXml, std::string_view tagName) {
+        const std::string openTag = std::string("<dc:") + std::string{tagName};
+        const std::string closeTag = std::string("</dc:") + std::string{tagName};
+        size_t position = 0;
+        while (position < opfXml.size()) {
+            position = opfXml.find(openTag, position);
+            if (position == std::string_view::npos) {
                 break;
             }
 
-            const int openEnd = opfXml.indexOf('>', position);
-            if (openEnd < 0) {
+            const size_t openEnd = opfXml.find('>', position);
+            if (openEnd == std::string_view::npos) {
                 break;
             }
-            const int closeStart = opfXml.indexOf(closeTag, openEnd + 1);
-            if (closeStart < 0) {
+            const size_t closeStart = opfXml.find(closeTag, openEnd + 1);
+            if (closeStart == std::string_view::npos) {
                 break;
             }
 
-            const String value = EpubContent::plainTextFromXmlFragment(opfXml.substring(openEnd + 1, closeStart));
-            if (!value.isEmpty()) {
+            const std::string value =
+                EpubContent::plainTextFromXmlFragment(opfXml.substr(openEnd + 1, closeStart - openEnd - 1));
+            if (!value.empty()) {
                 return value;
             }
 
             position = closeStart + 1;
         }
 
-        return "";
+        return {};
     }
 
-    String parsePackageVersion(const String& opfXml) {
-        const int position = opfXml.indexOf("<package");
-        if (position < 0) {
-            return "";
+    std::string parsePackageVersion(std::string_view opfXml) {
+        const size_t position = opfXml.find("<package");
+        if (position == std::string_view::npos) {
+            return {};
         }
 
-        const int end = opfXml.indexOf('>', position);
-        return end < 0 ? String("") : attributeValue(opfXml.substring(position, end + 1), "version");
+        const size_t end = opfXml.find('>', position);
+        return end == std::string_view::npos ? std::string{}
+                                             : attributeValue(opfXml.substr(position, end - position + 1), "version");
     }
 
-    std::vector<ManifestItem> parseManifestItems(const String& opfXml, const String& opfBaseDir) {
+    std::vector<ManifestItem> parseManifestItems(std::string_view opfXml, std::string_view opfBaseDir) {
         std::vector<ManifestItem> items;
-        int position = 0;
+        size_t position = 0;
 
-        while (position >= 0) {
-            position = opfXml.indexOf("<item", position);
-            if (position < 0) {
+        while (position < opfXml.size()) {
+            position = opfXml.find("<item", position);
+            if (position == std::string_view::npos) {
                 break;
             }
 
-            const int afterName = position + 5;
-            if (static_cast<size_t>(afterName) < opfXml.length() && !isTagNameBoundary(opfXml[afterName])) {
+            const size_t afterName = position + 5;
+            if (afterName < opfXml.length() && !isTagNameBoundary(opfXml[afterName])) {
                 position = afterName;
                 continue;
             }
 
-            const int end = opfXml.indexOf('>', position);
-            if (end < 0) {
+            const size_t end = opfXml.find('>', position);
+            if (end == std::string_view::npos) {
                 break;
             }
 
-            const String tag = opfXml.substring(position, end + 1);
+            const std::string_view tag = opfXml.substr(position, end - position + 1);
             ManifestItem item;
             item.id = attributeValue(tag, "id");
             item.path = resolveZipPath(opfBaseDir, attributeValue(tag, "href"));
             item.mediaType = attributeValue(tag, "media-type");
             item.properties = attributeValue(tag, "properties");
 
-            if (!item.id.isEmpty() && !item.path.isEmpty()) {
+            if (!item.id.empty() && !item.path.empty()) {
                 items.push_back(item);
             }
 
@@ -378,24 +373,24 @@ namespace EpubPackage {
         return items;
     }
 
-    std::vector<String> parseSpineIds(const String& opfXml) {
-        std::vector<String> ids;
-        int position = 0;
+    std::vector<std::string> parseSpineIds(std::string_view opfXml) {
+        std::vector<std::string> ids;
+        size_t position = 0;
 
-        while (position >= 0) {
-            position = opfXml.indexOf("<itemref", position);
-            if (position < 0) {
+        while (position < opfXml.size()) {
+            position = opfXml.find("<itemref", position);
+            if (position == std::string_view::npos) {
                 break;
             }
 
-            const int end = opfXml.indexOf('>', position);
-            if (end < 0) {
+            const size_t end = opfXml.find('>', position);
+            if (end == std::string_view::npos) {
                 break;
             }
 
-            const String tag = opfXml.substring(position, end + 1);
-            const String idref = attributeValue(tag, "idref");
-            if (!idref.isEmpty()) {
+            const std::string_view tag = opfXml.substr(position, end - position + 1);
+            const std::string idref = attributeValue(tag, "idref");
+            if (!idref.empty()) {
                 ids.push_back(idref);
             }
 
@@ -405,29 +400,34 @@ namespace EpubPackage {
         return ids;
     }
 
-    std::vector<TocEntry> parseNcxTocEntries(const String& xml, const String& tocPath, const String& bookTitle) {
+    std::vector<TocEntry> parseNcxTocEntries(std::string_view xml, std::string_view tocPath,
+                                             std::string_view bookTitle) {
         std::vector<TocEntry> entries;
-        const String lowered = toLowerCopy(xml);
-        int position = 0;
+        const std::string lowered = toLowerCopy(xml);
+        size_t position = 0;
 
-        while ((position = lowered.indexOf("<navpoint", position)) >= 0) {
-            const int next = lowered.indexOf("<navpoint", position + 9);
-            const int close = lowered.indexOf("</navpoint", position + 9);
-            const int sectionEnd = next >= 0 && (close < 0 || next < close) ? next : close;
-            if (sectionEnd < 0) {
+        while ((position = lowered.find("<navpoint", position)) != std::string::npos) {
+            const size_t next = lowered.find("<navpoint", position + 9);
+            const size_t close = lowered.find("</navpoint", position + 9);
+            const size_t sectionEnd =
+                next != std::string::npos && (close == std::string::npos || next < close) ? next : close;
+            if (sectionEnd == std::string::npos) {
                 break;
             }
 
-            const int textStart = lowered.indexOf("<text", position);
-            const int contentStart = lowered.indexOf("<content", position);
-            if (textStart >= 0 && textStart < sectionEnd && contentStart >= 0 && contentStart < sectionEnd) {
-                const int textOpenEnd = lowered.indexOf('>', textStart);
-                const int textClose = lowered.indexOf("</text", textOpenEnd + 1);
-                const int contentEnd = lowered.indexOf('>', contentStart);
-                if (textOpenEnd >= 0 && textClose >= 0 && textClose < sectionEnd && contentEnd >= 0) {
-                    const String title = xml.substring(textOpenEnd + 1, textClose);
-                    const String href = attributeValue(xml.substring(contentStart, contentEnd + 1), "src");
-                    if (!href.isEmpty() && isContentTocTitle(title, bookTitle)) {
+            const size_t textStart = lowered.find("<text", position);
+            const size_t contentStart = lowered.find("<content", position);
+            if (textStart != std::string::npos && textStart < sectionEnd && contentStart != std::string::npos
+                && contentStart < sectionEnd) {
+                const size_t textOpenEnd = lowered.find('>', textStart);
+                const size_t textClose = lowered.find("</text", textOpenEnd + 1);
+                const size_t contentEnd = lowered.find('>', contentStart);
+                if (textOpenEnd != std::string::npos && textClose != std::string::npos && textClose < sectionEnd
+                    && contentEnd != std::string::npos) {
+                    const std::string_view title = xml.substr(textOpenEnd + 1, textClose - textOpenEnd - 1);
+                    const std::string href =
+                        attributeValue(xml.substr(contentStart, contentEnd - contentStart + 1), "src");
+                    if (!href.empty() && isContentTocTitle(title, bookTitle)) {
                         entries.push_back(tocEntry(tocPath, href, title));
                     }
                 }
@@ -439,46 +439,47 @@ namespace EpubPackage {
         return entries;
     }
 
-    std::vector<TocEntry> parseNavTocEntries(const String& markup, const String& tocPath, const String& bookTitle) {
+    std::vector<TocEntry> parseNavTocEntries(std::string_view markup, std::string_view tocPath,
+                                             std::string_view bookTitle) {
         std::vector<TocEntry> entries;
-        const String lowered = toLowerCopy(markup);
-        int scanStart = 0;
-        int scanEnd = markup.length();
-        int navPosition = 0;
+        const std::string lowered = toLowerCopy(markup);
+        size_t scanStart = 0;
+        size_t scanEnd = markup.length();
+        size_t navPosition = 0;
 
-        while ((navPosition = lowered.indexOf("<nav", navPosition)) >= 0) {
-            const int openEnd = lowered.indexOf('>', navPosition);
-            if (openEnd < 0) {
+        while ((navPosition = lowered.find("<nav", navPosition)) != std::string::npos) {
+            const size_t openEnd = lowered.find('>', navPosition);
+            if (openEnd == std::string::npos) {
                 break;
             }
-            const String navTag = lowered.substring(navPosition, openEnd + 1);
+            const std::string_view navTag{lowered.data() + navPosition, openEnd - navPosition + 1};
             if (attributeContainsToken(navTag, "epub:type", "toc") || attributeContainsToken(navTag, "type", "toc")) {
                 scanStart = openEnd + 1;
-                const int close = lowered.indexOf("</nav", scanStart);
-                scanEnd = close < 0 ? markup.length() : close;
+                const size_t close = lowered.find("</nav", scanStart);
+                scanEnd = close == std::string::npos ? markup.length() : close;
                 break;
             }
             navPosition = openEnd + 1;
         }
 
-        int position = scanStart;
+        size_t position = scanStart;
 
-        while ((position = lowered.indexOf("<a", position)) >= 0 && position < scanEnd) {
-            const int afterName = position + 2;
-            if (static_cast<size_t>(afterName) < markup.length() && !isTagNameBoundary(markup[afterName])) {
+        while ((position = lowered.find("<a", position)) != std::string::npos && position < scanEnd) {
+            const size_t afterName = position + 2;
+            if (afterName < markup.length() && !isTagNameBoundary(markup[afterName])) {
                 position = afterName;
                 continue;
             }
 
-            const int openEnd = lowered.indexOf('>', position);
-            const int close = lowered.indexOf("</a", openEnd + 1);
-            if (openEnd < 0 || close < 0 || close > scanEnd) {
+            const size_t openEnd = lowered.find('>', position);
+            const size_t close = openEnd == std::string::npos ? std::string::npos : lowered.find("</a", openEnd + 1);
+            if (openEnd == std::string::npos || close == std::string::npos || close > scanEnd) {
                 break;
             }
 
-            const String href = attributeValue(markup.substring(position, openEnd + 1), "href");
-            const String title = markup.substring(openEnd + 1, close);
-            if (!href.isEmpty() && isContentTocTitle(title, bookTitle)) {
+            const std::string href = attributeValue(markup.substr(position, openEnd - position + 1), "href");
+            const std::string_view title = markup.substr(openEnd + 1, close - openEnd - 1);
+            if (!href.empty() && isContentTocTitle(title, bookTitle)) {
                 entries.push_back(tocEntry(tocPath, href, title));
             }
             position = close + 3;
@@ -487,10 +488,8 @@ namespace EpubPackage {
         return entries;
     }
 
-    const ManifestItem* findManifestItem(const std::vector<ManifestItem>& items, const String& id) {
-        const auto item = std::find_if(items.begin(), items.end(), [&](const ManifestItem& candidate) {
-            return candidate.id == id;
-        });
+    const ManifestItem* findManifestItem(const std::vector<ManifestItem>& items, std::string_view id) {
+        const auto item = std::ranges::find(items, id, &ManifestItem::id);
         return item == items.end() ? nullptr : &(*item);
     }
 

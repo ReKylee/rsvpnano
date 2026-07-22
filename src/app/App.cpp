@@ -176,8 +176,12 @@ void App::renderScreen(uint32_t nowMs) {
         break;
     case screens::Screen::ReadingSettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        if (screens::readingSettings(immediateUi_, settingsStore_.settings().reading, screen_))
+        const settings::ReadingMode mode = settingsStore_.settings().reading.mode;
+        if (screens::readingSettings(immediateUi_, settingsStore_.settings().reading, screen_)) {
             settingsStore_.acceptChanges();
+            if (mode != settingsStore_.settings().reading.mode)
+                readerScreen_.refreshTypography();
+        }
         break;
     }
     case screens::Screen::InterfaceSettings: {
@@ -246,8 +250,7 @@ void App::renderScreen(uint32_t nowMs) {
         break;
     case screens::Screen::Ota: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        const String firmwareVersion = OtaUpdater{}.currentVersion();
-        action = screens::ota(immediateUi_, firmwareVersion.c_str(), screen_);
+        action = screens::ota(immediateUi_, OtaUpdater{}.currentVersion().data(), screen_);
         break;
     }
     case screens::Screen::FocusTimers:

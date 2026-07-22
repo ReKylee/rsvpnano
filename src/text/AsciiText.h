@@ -39,4 +39,12 @@ namespace AsciiText {
         return (c >= 'A' && c <= 'Z') ? static_cast<char>(c + ('a' - 'A')) : c;
     }
 
+    constexpr std::string_view trim(std::string_view text) {
+        while (!text.empty() && isWhitespace(text.front()))
+            text.remove_prefix(1);
+        while (!text.empty() && isWhitespace(text.back()))
+            text.remove_suffix(1);
+        return text;
+    }
+
 } // namespace AsciiText

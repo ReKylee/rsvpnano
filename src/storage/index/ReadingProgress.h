@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <expected>
 #include <string>
+#include <string_view>
 #include <system_error>
 
 #include "reader/ReadingSession.h"
@@ -21,9 +22,9 @@ namespace ReadingProgress {
         uint32_t wordCount = 0;
     };
 
-    std::expected<uint32_t, std::error_code> readBookStatePosition(const String& bookPath,
+    std::expected<uint32_t, std::error_code> readBookStatePosition(std::string_view bookPath,
                                                                    const BookIdentity& identity);
-    std::expected<void, std::error_code> writeBookStatePosition(const String& bookPath, const BookIdentity& identity,
+    std::expected<void, std::error_code> writeBookStatePosition(std::string_view bookPath, const BookIdentity& identity,
                                                                 uint32_t wordIndex);
     void save(ReadingSession& session, Preferences& preferences, bool force, uint32_t nowMs);
     void cache(ReadingSession& session, Preferences& preferences, uint32_t wordIndex);

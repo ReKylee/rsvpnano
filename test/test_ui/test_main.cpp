@@ -1,7 +1,8 @@
 #include <unity.h>
 
-#include "ui/Ui.h"
 #include "settings/SettingsRules.h"
+#include "text/Utf8Text.h"
+#include "ui/Ui.h"
 
 namespace {
 
@@ -231,6 +232,45 @@ void test_layout_cursors_are_deterministic() {
     TEST_ASSERT_EQUAL_INT16(24, grid.next().y);
 }
 
+void test_ui_font_measures_utf8_codepoints() {
+    TEST_ASSERT_EQUAL(24, ui::Context::textWidth("A\xC4\x80\xD0\x91", 1));
+    TEST_ASSERT_EQUAL(48, ui::Context::textWidth("A\xC4\x80\xD0\x91", 2));
+    TEST_ASSERT_EQUAL(8, ui::Context::textHeight(1));
+    TEST_ASSERT_EQUAL(16, ui::Context::textHeight(2));
+    TEST_ASSERT_EQUAL(24, ui::Context::textHeight(3));
+}
+
+void test_utf8_text_decodes_and_keeps_codepoint_boundaries() {
+    constexpr std::string_view text = "A\xC4\x80\xD0\x91";
+    TEST_ASSERT_EQUAL(3, Utf8Text::count(text));
+    TEST_ASSERT_EQUAL(3, Utf8Text::prefixBytes(text, 2));
+    TEST_ASSERT_EQUAL_STRING("\xC4\x80\xD0\x91", std::string{Utf8Text::suffix(text, 4)}.c_str());
+    TEST_ASSERT_EQUAL(3, Utf8Text::lastCodepointStart(text));
+
+    std::string_view malformed = "\xC0\xAF";
+    uint32_t codepoint = 0;
+    TEST_ASSERT_FALSE(Utf8Text::decode(malformed, codepoint));
+    TEST_ASSERT_EQUAL(1, malformed.size());
+}
+
+void test_ui_font_preserves_widget_background() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx);
+    context.beginFrame(1);
+    context.label({0, 0, 100, 24}, "Label", 2);
+    context.endFrame();
+
+    TEST_ASSERT_EQUAL(1, gfx.transparentTextColors);
+    TEST_ASSERT_EQUAL(0, gfx.opaqueTextColors);
+    TEST_ASSERT_EQUAL(2, gfx.lastTextSize);
+}
+
+void test_centered_drag_rate_has_deadzone_and_signed_edges() {
+    TEST_ASSERT_EQUAL(0, ui::centeredDragRate(86, 0, 172, 15, 400'000));
+    TEST_ASSERT_EQUAL(-400'000, ui::centeredDragRate(0, 0, 172, 15, 400'000));
+    TEST_ASSERT_EQUAL(400'000, ui::centeredDragRate(172, 0, 172, 15, 400'000));
+}
+
 void test_labels_truncate_to_their_rectangles() {
     Arduino_GFX gfx;
     ui::Context context(gfx);
@@ -239,19 +279,19 @@ void test_labels_truncate_to_their_rectangles() {
     context.beginFrame(1);
     context.label({0, 0, 30, 8}, "123456789", 1);
     context.endFrame();
-    TEST_ASSERT_EQUAL(5, gfx.textWrites);
+    TEST_ASSERT_EQUAL(3, gfx.textWrites);
 
     gfx.textWrites = 0;
     context.beginFrame(2);
     context.button({0, 0, 72, 40}, "Alpha Beta", true, ui::Icon::None, 2, "By", "42%");
     context.endFrame();
-    TEST_ASSERT_EQUAL(13, gfx.textWrites);
+    TEST_ASSERT_EQUAL(8, gfx.textWrites);
 
     gfx.textWrites = 0;
     context.beginFrame(3);
     context.button({0, 0, 120, 50}, "A", true, ui::Icon::None, 1, "12345678");
     context.endFrame();
-    TEST_ASSERT_EQUAL(9, gfx.textWrites);
+    TEST_ASSERT_EQUAL(7, gfx.textWrites);
 }
 
 void test_labels_align_and_battery_owns_its_drawing() {
@@ -261,7 +301,7 @@ void test_labels_align_and_battery_owns_its_drawing() {
     context.setTheme(colors);
     context.beginFrame(1);
     context.label({10, 0, 60, 8}, "AB", 1, ui::themes::ColorRole::Foreground, ui::TextAlign::Right);
-    TEST_ASSERT_EQUAL(58, gfx.cursorX);
+    TEST_ASSERT_EQUAL(70 - ui::Context::textWidth("AB", 1), gfx.cursorX);
     context.battery({100, 0, 120, 36}, 100, false, "100%");
     context.endFrame();
     TEST_ASSERT_EQUAL(ui::themes::rgb565(126, 176, 92), gfx.lastFillColor);
@@ -287,7 +327,7 @@ void test_setting_gives_long_values_the_full_card_width() {
     context.beginFrame(2);
     context.setting({0, 0, 306, 30}, "Home WiFi", "-42 dBm", ui::SettingLayout::Inline);
     context.endFrame();
-    TEST_ASSERT_EQUAL(215, gfx.cursorX);
+    TEST_ASSERT_EQUAL(299 - ui::Context::textWidth("-42 dBm", 2), gfx.cursorX);
 
     gfx.textWrites = 0;
     context.beginFrame(3);
@@ -312,8 +352,7 @@ void test_slider_redraws_with_its_active_color() {
 
     gfx.writes = 0;
     context.beginFrame(3);
-    context.slider({0, 0, 200, 40}, "Focus", focusMinutes, 1, 180, 1, " min",
-                   ui::themes::ColorRole::BreakAccent);
+    context.slider({0, 0, 200, 40}, "Focus", focusMinutes, 1, 180, 1, " min", ui::themes::ColorRole::BreakAccent);
     context.endFrame();
     TEST_ASSERT_GREATER_THAN(0, gfx.writes);
     TEST_ASSERT_EQUAL_HEX16(0x2222, gfx.lastFillColor);
@@ -573,6 +612,10 @@ int main(int, char**) {
     RUN_TEST(test_disabled_button_ignores_touch);
     RUN_TEST(test_tap_target_handles_touch_without_drawing);
     RUN_TEST(test_layout_cursors_are_deterministic);
+    RUN_TEST(test_ui_font_measures_utf8_codepoints);
+    RUN_TEST(test_utf8_text_decodes_and_keeps_codepoint_boundaries);
+    RUN_TEST(test_ui_font_preserves_widget_background);
+    RUN_TEST(test_centered_drag_rate_has_deadzone_and_signed_edges);
     RUN_TEST(test_labels_truncate_to_their_rectangles);
     RUN_TEST(test_labels_align_and_battery_owns_its_drawing);
     RUN_TEST(test_setting_gives_long_values_the_full_card_width);

@@ -1,116 +1,112 @@
 #include "storage/fs/StoragePaths.h"
 
-#include <cstring>
+#include <algorithm>
+
+#include "text/AsciiText.h"
 
 namespace StoragePaths {
     namespace {
 
-        bool hasExtension(const String& path, const char* extension) {
-            String lowered = path;
-            lowered.toLowerCase();
-            return lowered.endsWith(extension);
+        bool hasExtension(std::string_view path, std::string_view extension) {
+            return path.size() >= extension.size()
+                && std::ranges::equal(path.substr(path.size() - extension.size()), extension, {}, AsciiText::toLower,
+                                      AsciiText::toLower);
         }
 
     } // namespace
 
-    bool hasTextExtension(const String& path) {
+    bool hasTextExtension(std::string_view path) {
         return hasExtension(path, kTextExtension);
     }
 
-    bool hasRsvpExtension(const String& path) {
+    bool hasRsvpExtension(std::string_view path) {
         return hasExtension(path, kRsvpExtension);
     }
 
-    bool hasEpubExtension(const String& path) {
+    bool hasEpubExtension(std::string_view path) {
         return hasExtension(path, kEpubExtension);
     }
 
-    bool hasFontExtension(const String& path) {
+    bool hasFontExtension(std::string_view path) {
         return hasExtension(path, kFontExtension);
     }
 
-    String parentDirectoryForPath(const String& path) {
-        const int separator = path.lastIndexOf('/');
-        if (separator <= 0) {
+    std::string parentDirectoryForPath(std::string_view path) {
+        const size_t separator = path.find_last_of('/');
+        if (separator == std::string_view::npos || separator == 0) {
             return "/";
         }
-        return path.substring(0, separator);
+        return std::string{path.substr(0, separator)};
     }
 
-    String siblingPathWithExtension(const String& path, const char* extension) {
-        String siblingPath = path;
-        const int dot = siblingPath.lastIndexOf('.');
-        if (dot > 0) {
-            siblingPath = siblingPath.substring(0, dot);
+    std::string siblingPathWithExtension(std::string_view path, std::string_view extension) {
+        const size_t dot = path.find_last_of('.');
+        if (dot != std::string_view::npos && dot > 0) {
+            path = path.substr(0, dot);
         }
+        std::string siblingPath{path};
         siblingPath += extension;
         return siblingPath;
     }
 
-    String epubSiblingPathForRsvp(const String& rsvpPath) {
+    std::string epubSiblingPathForRsvp(std::string_view rsvpPath) {
         return siblingPathWithExtension(rsvpPath, kEpubExtension);
     }
 
-    String displayNameForPath(const String& path) {
-        const int separator = path.lastIndexOf('/');
-        if (separator < 0) {
-            return path;
-        }
-        return path.substring(separator + 1);
+    std::string displayNameForPath(std::string_view path) {
+        const size_t separator = path.find_last_of('/');
+        return std::string{separator == std::string_view::npos ? path : path.substr(separator + 1)};
     }
 
-    String displayNameWithoutExtension(const String& path) {
-        String name = displayNameForPath(path);
-        String lowered = name;
-        lowered.toLowerCase();
-        if (lowered.endsWith(kTextExtension)) {
-            name.remove(name.length() - std::strlen(kTextExtension));
-        } else if (lowered.endsWith(kRsvpExtension)) {
-            name.remove(name.length() - std::strlen(kRsvpExtension));
-        } else if (lowered.endsWith(kEpubExtension)) {
-            name.remove(name.length() - std::strlen(kEpubExtension));
+    std::string displayNameWithoutExtension(std::string_view path) {
+        std::string name = displayNameForPath(path);
+        for (const std::string_view extension:
+             {std::string_view{kTextExtension}, std::string_view{kRsvpExtension}, std::string_view{kEpubExtension}}) {
+            if (hasExtension(name, extension)) {
+                name.resize(name.size() - extension.size());
+                break;
+            }
         }
         return name;
     }
 
-    String rsvpCachePathForEpub(const String& epubPath) {
+    std::string rsvpCachePathForEpub(std::string_view epubPath) {
         return siblingPathWithExtension(epubPath, kRsvpExtension);
     }
 
-    String indexedIndexPathFor(const String& path) {
-        return path + kIndexExtension;
+    std::string indexedIndexPathFor(std::string_view path) {
+        return std::string{path} + kIndexExtension;
     }
 
-    String indexedDataPathFor(const String& path) {
-        return path + kDataExtension;
+    std::string indexedDataPathFor(std::string_view path) {
+        return std::string{path} + kDataExtension;
     }
 
-    String bookStatePathFor(const String& path) {
+    std::string bookStatePathFor(std::string_view path) {
         return siblingPathWithExtension(path, kBookStateExtension);
     }
 
-    String indexedTempPathFor(const String& path) {
-        return path + kTempExtension;
+    std::string indexedTempPathFor(std::string_view path) {
+        return std::string{path} + kTempExtension;
     }
 
-    bool isHiddenOrSidecarPath(const String& path) {
-        const String name = displayNameForPath(path);
-        if (name.length() == 0) {
+    bool isHiddenOrSidecarPath(std::string_view path) {
+        const std::string name = displayNameForPath(path);
+        if (name.empty()) {
             return true;
         }
 
-        String lowered = name;
-        lowered.toLowerCase();
-        if (lowered.startsWith(".")) {
+        if (name.starts_with('.')) {
             return true;
         }
 
-        if (lowered.endsWith(kIndexExtension) || lowered.endsWith(kDataExtension)
-            || lowered.endsWith(kBookStateExtension) || lowered.endsWith(kTempExtension)) {
+        if (hasExtension(name, kIndexExtension) || hasExtension(name, kDataExtension)
+            || hasExtension(name, kBookStateExtension) || hasExtension(name, kTempExtension)) {
             return true;
         }
 
-        return lowered == "thumbs.db" || lowered == "desktop.ini";
+        return std::ranges::equal(name, "thumbs.db", {}, AsciiText::toLower, AsciiText::toLower)
+            || std::ranges::equal(name, "desktop.ini", {}, AsciiText::toLower, AsciiText::toLower);
     }
 
 } // namespace StoragePaths

@@ -64,9 +64,18 @@ public:
         ++writes;
     }
     virtual void setFont(const GFXfont*) {}
-    virtual void setTextSize(uint8_t) {}
+    virtual void setFont(const uint8_t*) {}
+    virtual void setUTF8Print(bool) {}
+    virtual void setTextSize(uint8_t size) {
+        lastTextSize = size;
+    }
     virtual void setTextWrap(bool) {}
-    virtual void setTextColor(uint16_t) {}
+    virtual void setTextColor(uint16_t) {
+        ++transparentTextColors;
+    }
+    virtual void setTextColor(uint16_t, uint16_t) {
+        ++opaqueTextColors;
+    }
     virtual void setCursor(int16_t x, int16_t y) {
         cursorX = x;
         cursorY = y;
@@ -82,6 +91,9 @@ public:
 
     int writes = 0;
     int textWrites = 0;
+    int transparentTextColors = 0;
+    int opaqueTextColors = 0;
+    uint8_t lastTextSize = 0;
     int flushes = 0;
     int horizontalLines = 0;
     int verticalLines = 0;

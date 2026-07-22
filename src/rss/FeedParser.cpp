@@ -2,7 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstring>
+#include <ranges>
 
 #include "text/AsciiText.h"
 #include "text/TextNormalizer.h"
@@ -10,41 +10,27 @@
 namespace feedparser {
     namespace {
 
-        bool matchesIgnoreCaseAt(const String& text, size_t index, const char* needle) {
-            for (size_t i = 0; needle[i] != '\0'; ++i) {
-                if (index + i >= text.length()
-                    || AsciiText::toLower(text[index + i]) != AsciiText::toLower(needle[i])) {
-                    return false;
-                }
+        size_t indexOfIgnoreCase(std::string_view text, std::string_view needle, size_t start, size_t limit) {
+            if (needle.empty() || start >= text.size()) {
+                return std::string_view::npos;
             }
-            return true;
+            limit = std::min(limit, text.size());
+            if (limit < start || limit - start < needle.size()) {
+                return std::string_view::npos;
+            }
+
+            const std::string_view haystack = text.substr(start, limit - start);
+            const auto match = std::ranges::search(haystack, needle, [](char left, char right) {
+                return AsciiText::toLower(left) == AsciiText::toLower(right);
+            });
+            return match.begin() == haystack.end()
+                     ? std::string_view::npos
+                     : start + static_cast<size_t>(std::ranges::distance(haystack.begin(), match.begin()));
         }
 
-        int indexOfIgnoreCase(const String& text, const char* needle, size_t start, size_t limit) {
-            const size_t needleLength = strlen(needle);
-            if (needleLength == 0 || start >= text.length()) {
-                return -1;
-            }
-            limit = std::min(limit, static_cast<size_t>(text.length()));
-            if (limit < needleLength) {
-                return -1;
-            }
-            for (size_t i = start; i + needleLength <= limit; ++i) {
-                if (matchesIgnoreCaseAt(text, i, needle)) {
-                    return static_cast<int>(i);
-                }
-            }
-            return -1;
-        }
-
-        int tagEndIndex(const String& text, size_t start, size_t limit) {
-            limit = std::min(limit, static_cast<size_t>(text.length()));
-            for (size_t i = start; i < limit; ++i) {
-                if (text[i] == '>') {
-                    return static_cast<int>(i);
-                }
-            }
-            return -1;
+        size_t tagEndIndex(std::string_view text, size_t start, size_t limit) {
+            const size_t end = text.find('>', start);
+            return end < std::min(limit, text.size()) ? end : std::string_view::npos;
         }
 
         struct ItemBounds {
@@ -53,61 +39,61 @@ namespace feedparser {
             size_t next;
         };
 
-        bool findNextItem(const String& feedBody, size_t searchStart, ItemBounds& bounds) {
-            int itemStart = indexOfIgnoreCase(feedBody, "<item", searchStart, feedBody.length());
+        bool findNextItem(std::string_view feedBody, size_t searchStart, ItemBounds& bounds) {
+            size_t itemStart = indexOfIgnoreCase(feedBody, "<item", searchStart, feedBody.size());
             bool atom = false;
-            if (itemStart < 0) {
-                itemStart = indexOfIgnoreCase(feedBody, "<entry", searchStart, feedBody.length());
-                atom = itemStart >= 0;
+            if (itemStart == std::string_view::npos) {
+                itemStart = indexOfIgnoreCase(feedBody, "<entry", searchStart, feedBody.size());
+                atom = itemStart != std::string_view::npos;
             }
-            if (itemStart < 0) {
+            if (itemStart == std::string_view::npos) {
                 return false;
             }
 
-            const char* closeTag = atom ? "</entry>" : "</item>";
-            const int itemEnd = indexOfIgnoreCase(feedBody, closeTag, itemStart, feedBody.length());
-            if (itemEnd < 0) {
+            const std::string_view closeTag = atom ? "</entry>" : "</item>";
+            const size_t itemEnd = indexOfIgnoreCase(feedBody, closeTag, itemStart, feedBody.size());
+            if (itemEnd == std::string_view::npos) {
                 return false;
             }
 
             bounds = {
-                .start = static_cast<size_t>(itemStart),
-                .end = static_cast<size_t>(itemEnd),
-                .next = static_cast<size_t>(itemEnd) + strlen(closeTag),
+                .start = itemStart,
+                .end = itemEnd,
+                .next = itemEnd + closeTag.size(),
             };
             return true;
         }
 
-        String valueBetween(const String& text, const String& openTag, const String& closeTag, size_t start,
-                            size_t end) {
-            const int open = indexOfIgnoreCase(text, openTag.c_str(), start, end);
-            if (open < 0 || static_cast<size_t>(open) >= end) {
-                return "";
+        std::string valueBetween(std::string_view text, std::string_view openTag, std::string_view closeTag,
+                                 size_t start, size_t end) {
+            const size_t open = indexOfIgnoreCase(text, openTag, start, end);
+            if (open == std::string_view::npos || open >= end) {
+                return {};
             }
-            const int valueStart = tagEndIndex(text, static_cast<size_t>(open), end);
-            if (valueStart < 0 || static_cast<size_t>(valueStart) >= end) {
-                return "";
+            const size_t valueStart = tagEndIndex(text, open, end);
+            if (valueStart == std::string_view::npos || valueStart >= end) {
+                return {};
             }
-            const int close = indexOfIgnoreCase(text, closeTag.c_str(), valueStart + 1, end);
-            if (close < 0 || static_cast<size_t>(close) > end) {
-                return "";
+            const size_t close = indexOfIgnoreCase(text, closeTag, valueStart + 1, end);
+            if (close == std::string_view::npos || close > end) {
+                return {};
             }
-            return text.substring(valueStart + 1, close);
+            return std::string{text.substr(valueStart + 1, close - valueStart - 1)};
         }
 
-        String attributeValue(const String& text, const String& tagPrefix, const String& attribute, size_t start,
-                              size_t end) {
-            int tagStart = indexOfIgnoreCase(text, tagPrefix.c_str(), start, end);
-            while (tagStart >= 0 && static_cast<size_t>(tagStart) < end) {
-                const int tagEnd = tagEndIndex(text, static_cast<size_t>(tagStart), end);
-                if (tagEnd < 0 || static_cast<size_t>(tagEnd) > end) {
-                    return "";
+        std::string attributeValue(std::string_view text, std::string_view tagPrefix, std::string_view attribute,
+                                   size_t start, size_t end) {
+            size_t tagStart = indexOfIgnoreCase(text, tagPrefix, start, end);
+            while (tagStart != std::string_view::npos && tagStart < end) {
+                const size_t tagEnd = tagEndIndex(text, tagStart, end);
+                if (tagEnd == std::string_view::npos || tagEnd > end) {
+                    return {};
                 }
 
-                const String needle = attribute + "=";
-                const int attrIndex = indexOfIgnoreCase(text, needle.c_str(), tagStart, static_cast<size_t>(tagEnd));
-                if (attrIndex >= 0) {
-                    int valueStart = attrIndex + needle.length();
+                const std::string needle = std::string{attribute} + "=";
+                const size_t attrIndex = indexOfIgnoreCase(text, needle, tagStart, tagEnd);
+                if (attrIndex != std::string_view::npos) {
+                    size_t valueStart = attrIndex + needle.length();
                     while (valueStart < tagEnd && isspace(static_cast<unsigned char>(text[valueStart]))) {
                         ++valueStart;
                     }
@@ -115,38 +101,36 @@ namespace feedparser {
                         const char quote = text[valueStart];
                         if (quote == '"' || quote == '\'') {
                             ++valueStart;
-                            for (int i = valueStart; i < tagEnd; ++i) {
-                                if (text[i] == quote) {
-                                    return text.substring(valueStart, i);
-                                }
+                            const size_t valueEnd = text.find(quote, valueStart);
+                            if (valueEnd < tagEnd) {
+                                return std::string{text.substr(valueStart, valueEnd - valueStart)};
                             }
                         } else {
-                            int valueEnd = valueStart;
+                            size_t valueEnd = valueStart;
                             while (valueEnd < tagEnd && !isspace(static_cast<unsigned char>(text[valueEnd]))
                                    && text[valueEnd] != '>') {
                                 ++valueEnd;
                             }
                             if (valueEnd > valueStart) {
-                                return text.substring(valueStart, valueEnd);
+                                return std::string{text.substr(valueStart, valueEnd - valueStart)};
                             }
                         }
                     }
                 }
 
-                tagStart = indexOfIgnoreCase(text, tagPrefix.c_str(), static_cast<size_t>(tagEnd + 1), end);
+                tagStart = indexOfIgnoreCase(text, tagPrefix, tagEnd + 1, end);
             }
-            return "";
+            return {};
         }
 
-        String stripHtml(const String& html) {
-            String output;
-            output.reserve(std::min(static_cast<size_t>(html.length()), kMaxArticleChars));
+        std::string stripHtml(std::string_view html) {
+            std::string output;
+            output.reserve(std::min(html.size(), kMaxArticleChars));
             bool inTag = false;
-            for (size_t i = 0; i < html.length(); ++i) {
-                const char c = html[i];
+            for (const char c: html) {
                 if (c == '<') {
                     inTag = true;
-                    if (!output.endsWith(" ") && !output.endsWith("\n")) {
+                    if (!output.ends_with(' ') && !output.ends_with('\n')) {
                         output += ' ';
                     }
                     continue;
@@ -165,30 +149,36 @@ namespace feedparser {
             return output;
         }
 
-        String cleanText(String value) {
-            value.replace("<![CDATA[", "");
-            value.replace("]]>", "");
+        void eraseAll(std::string& text, std::string_view needle) {
+            for (size_t position = 0; (position = text.find(needle, position)) != std::string::npos;) {
+                text.erase(position, needle.size());
+            }
+        }
+
+        std::string cleanText(std::string value) {
+            eraseAll(value, "<![CDATA[");
+            eraseAll(value, "]]>");
             value = stripHtml(value);
             value = RsvpText::decodeMarkupEntities(value);
-            if (value.indexOf('&') >= 0) {
+            if (value.contains('&')) {
                 value = RsvpText::decodeMarkupEntities(value);
             }
-            value.replace("\r", "\n");
-            while (value.indexOf("\n\n\n") >= 0) {
-                value.replace("\n\n\n", "\n\n");
+            std::ranges::replace(value, '\r', '\n');
+            while (value.contains("\n\n\n")) {
+                const size_t position = value.find("\n\n\n");
+                value.erase(position, 1);
             }
-            value.trim();
-            return value;
+            return std::string{AsciiText::trim(value)};
         }
 
     } // namespace
 
-    bool hasCompleteFeed(const String& feedBody, size_t searchStart) {
-        return indexOfIgnoreCase(feedBody, "</rss>", searchStart, feedBody.length()) >= 0
-            || indexOfIgnoreCase(feedBody, "</feed>", searchStart, feedBody.length()) >= 0;
+    bool hasCompleteFeed(std::string_view feedBody, size_t searchStart) {
+        return indexOfIgnoreCase(feedBody, "</rss>", searchStart, feedBody.size()) != std::string_view::npos
+            || indexOfIgnoreCase(feedBody, "</feed>", searchStart, feedBody.size()) != std::string_view::npos;
     }
 
-    bool advancePastItem(const String& feedBody, size_t& searchStart) {
+    bool advancePastItem(std::string_view feedBody, size_t& searchStart) {
         ItemBounds bounds{};
         if (!findNextItem(feedBody, searchStart, bounds)) {
             return false;
@@ -197,30 +187,27 @@ namespace feedparser {
         return true;
     }
 
-    String hostLabelForUrl(const String& url) {
-        int start = url.indexOf("://");
-        start = start < 0 ? 0 : start + 3;
-        int end = url.indexOf('/', start);
-        if (end < 0) {
-            end = url.length();
+    std::string hostLabelForUrl(std::string_view url) {
+        const size_t scheme = url.find("://");
+        const size_t start = scheme == std::string_view::npos ? 0 : scheme + 3;
+        const size_t slash = url.find('/', start);
+        std::string_view host = url.substr(start, slash == std::string_view::npos ? slash : slash - start);
+        if (host.starts_with("www.")) {
+            host.remove_prefix(4);
         }
-        String host = url.substring(start, end);
-        if (host.startsWith("www.")) {
-            host.remove(0, 4);
-        }
-        return host;
+        return std::string{host};
     }
 
-    String sourceLabelForItem(const FeedItem& item) {
-        if (item.link.isEmpty()) {
+    std::string sourceLabelForItem(const FeedItem& item) {
+        if (item.link.empty()) {
             return "RSS";
         }
 
-        const String source = hostLabelForUrl(item.link);
-        return source.isEmpty() ? "RSS" : source;
+        std::string source = hostLabelForUrl(item.link);
+        return source.empty() ? "RSS" : std::move(source);
     }
 
-    bool parseNextItem(const String& feedBody, size_t& searchStart, FeedItem& item) {
+    bool parseNextItem(std::string_view feedBody, size_t& searchStart, FeedItem& item) {
         ItemBounds bounds{};
         if (!findNextItem(feedBody, searchStart, bounds)) {
             return false;
@@ -229,39 +216,39 @@ namespace feedparser {
 
         item.title = cleanText(valueBetween(feedBody, "<title", "</title>", bounds.start, bounds.end));
         item.link = cleanText(valueBetween(feedBody, "<link>", "</link>", bounds.start, bounds.end));
-        if (item.link.isEmpty()) {
+        if (item.link.empty()) {
             item.link = cleanText(attributeValue(feedBody, "<link", "href", bounds.start, bounds.end));
         }
-        if (item.link.isEmpty()) {
+        if (item.link.empty()) {
             item.link = cleanText(valueBetween(feedBody, "<guid", "</guid>", bounds.start, bounds.end));
         }
         item.author = cleanText(valueBetween(feedBody, "<author", "</author>", bounds.start, bounds.end));
-        if (item.author.isEmpty()) {
+        if (item.author.empty()) {
             item.author = cleanText(valueBetween(feedBody, "<dc:creator", "</dc:creator>", bounds.start, bounds.end));
         }
-        if (item.author.isEmpty()) {
+        if (item.author.empty()) {
             item.author = sourceLabelForItem(item);
         }
 
         item.body =
             cleanText(valueBetween(feedBody, "<content:encoded", "</content:encoded>", bounds.start, bounds.end));
-        if (item.body.isEmpty()) {
+        if (item.body.empty()) {
             item.body = cleanText(valueBetween(feedBody, "<content", "</content>", bounds.start, bounds.end));
         }
-        if (item.body.isEmpty()) {
+        if (item.body.empty()) {
             item.body = cleanText(valueBetween(feedBody, "<description", "</description>", bounds.start, bounds.end));
         }
-        if (item.body.isEmpty()) {
+        if (item.body.empty()) {
             item.body = cleanText(valueBetween(feedBody, "<summary", "</summary>", bounds.start, bounds.end));
         }
-        if (item.body.isEmpty()) {
+        if (item.body.empty()) {
             item.body = item.link;
         }
 
-        if (item.title.isEmpty()) {
-            item.title = item.link.isEmpty() ? "RSS Article" : item.link;
+        if (item.title.empty()) {
+            item.title = item.link.empty() ? "RSS Article" : item.link;
         }
-        return !item.body.isEmpty();
+        return !item.body.empty();
     }
 
 } // namespace feedparser

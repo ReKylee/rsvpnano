@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Arduino.h>
+#include <string_view>
 
 #include "book/BookMetadata.h"
 #include "storage/index/IndexedBookStore.h"
@@ -22,6 +22,6 @@ namespace IndexedBook {
 
     bool load(size_t index, BookLibrary::Listing& library, IndexedBookStore& store, BookMetadata& metadata,
               const OpenRequest& request);
-    bool readMetadata(const String& path, BookMetadata& metadata, IndexedBookStore::Header* headerOut = nullptr);
+    bool readMetadata(std::string_view path, BookMetadata& metadata, IndexedBookStore::Header* headerOut = nullptr);
 
 } // namespace IndexedBook

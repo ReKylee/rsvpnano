@@ -8,7 +8,10 @@
 #include <climits>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string_view>
+
+#include "text/Utf8Text.h"
 
 namespace ui::fonts {
 
@@ -117,9 +120,9 @@ namespace ui::fonts {
             rebuildBlendTable();
         }
 
-        int16_t drawString(std::string_view text, int16_t x, int16_t baseline) {
+        int16_t drawString(std::string_view text, int16_t x, int16_t baseline, int8_t tracking = 0) {
             Bounds bounds;
-            if (!measure(text, x, baseline, bounds)) {
+            if (!measure(text, x, baseline, bounds, tracking)) {
                 return -1;
             }
 
@@ -127,8 +130,8 @@ namespace ui::fonts {
                 return bounds.advance;
             }
 
-            if (!drawGlyphsToStrips(text, x, baseline, bounds)) {
-                drawGlyphs(text, x, baseline);
+            if (!drawGlyphsToStrips(text, x, baseline, bounds, tracking)) {
+                drawGlyphs(text, x, baseline, tracking);
             }
             return bounds.advance;
         }
@@ -170,23 +173,14 @@ namespace ui::fonts {
                 return 0;
             }
 
-            uint8_t lo = 0;
-            uint8_t hi = left.kernCount;
-            const AlphaKerningPair* pairs = font_->kerningPairs + left.kernOffset;
-            while (lo < hi) {
-                const uint8_t mid = static_cast<uint8_t>(lo + ((hi - lo) / 2U));
-                const AlphaKerningPair* pair = pairs + mid;
-                const uint16_t current = pgm_read_word(&pair->rightCodepoint);
-                if (current == rightCodepoint) {
-                    return static_cast<int8_t>(pgm_read_byte(reinterpret_cast<const uint8_t*>(&pair->xAdjust)));
-                }
-                if (current < rightCodepoint) {
-                    lo = static_cast<uint8_t>(mid + 1U);
-                } else {
-                    hi = mid;
-                }
-            }
-            return 0;
+            const std::span pairs{font_->kerningPairs + left.kernOffset, static_cast<size_t>(left.kernCount)};
+            const auto pair =
+                std::ranges::lower_bound(pairs, rightCodepoint, {}, [](const AlphaKerningPair& candidate) {
+                    return pgm_read_word(&candidate.rightCodepoint);
+                });
+            return pair != pairs.end() && pgm_read_word(&pair->rightCodepoint) == rightCodepoint
+                     ? static_cast<int8_t>(pgm_read_byte(reinterpret_cast<const uint8_t*>(&pair->xAdjust)))
+                     : 0;
         }
 
         void getTextBounds(std::string_view text, int16_t x, int16_t baseline, int16_t* x1, int16_t* y1, uint16_t* w,
@@ -218,9 +212,9 @@ namespace ui::fonts {
             return static_cast<int16_t>(bounds.w);
         }
 
-        int16_t textAdvance(std::string_view text) const {
+        int16_t textAdvance(std::string_view text, int8_t tracking = 0) const {
             Bounds bounds;
-            if (!measure(text, 0, 0, bounds)) {
+            if (!measure(text, 0, 0, bounds, tracking)) {
                 return 0;
             }
             return bounds.advance;
@@ -261,7 +255,7 @@ namespace ui::fonts {
             uint8_t width = 0;
         };
 
-        bool measure(std::string_view text, int16_t x, int16_t baseline, Bounds& bounds) const {
+        bool measure(std::string_view text, int16_t x, int16_t baseline, Bounds& bounds, int8_t tracking = 0) const {
             if (!ready_ || font_ == nullptr) {
                 bounds = {};
                 return false;
@@ -277,13 +271,15 @@ namespace ui::fonts {
             uint16_t previousCodepoint = 0;
             bool hasPrevious = false;
             uint16_t codepoint = 0;
-            while (nextCodepoint(cursor, codepoint)) {
+            while (Utf8Text::next(cursor, codepoint)) {
                 if (hasPrevious) {
                     cursorX = static_cast<int16_t>(cursorX + kerningAdjust(previousCodepoint, codepoint));
                 }
 
                 const AlphaGlyph* glyph = glyphOrFallback(codepoint);
                 if (glyph == nullptr) {
+                    if (!cursor.empty())
+                        cursorX = static_cast<int16_t>(cursorX + tracking);
                     previousCodepoint = codepoint;
                     hasPrevious = true;
                     continue;
@@ -303,6 +299,8 @@ namespace ui::fonts {
                 }
 
                 cursorX = static_cast<int16_t>(cursorX + metrics.xAdvance);
+                if (!cursor.empty())
+                    cursorX = static_cast<int16_t>(cursorX + tracking);
                 previousCodepoint = codepoint;
                 hasPrevious = true;
             }
@@ -325,7 +323,7 @@ namespace ui::fonts {
             return true;
         }
 
-        void drawGlyphs(std::string_view text, int16_t x, int16_t baseline) {
+        void drawGlyphs(std::string_view text, int16_t x, int16_t baseline, int8_t tracking) {
             if (font_ == nullptr) {
                 return;
             }
@@ -335,13 +333,15 @@ namespace ui::fonts {
             uint16_t previousCodepoint = 0;
             bool hasPrevious = false;
             uint16_t codepoint = 0;
-            while (nextCodepoint(cursor, codepoint)) {
+            while (Utf8Text::next(cursor, codepoint)) {
                 if (hasPrevious) {
                     cursorX = static_cast<int16_t>(cursorX + kerningAdjust(previousCodepoint, codepoint));
                 }
 
                 const AlphaGlyph* glyph = glyphOrFallback(codepoint);
                 if (glyph == nullptr) {
+                    if (!cursor.empty())
+                        cursorX = static_cast<int16_t>(cursorX + tracking);
                     previousCodepoint = codepoint;
                     hasPrevious = true;
                     continue;
@@ -354,12 +354,15 @@ namespace ui::fonts {
                 }
 
                 cursorX = static_cast<int16_t>(cursorX + metrics.xAdvance);
+                if (!cursor.empty())
+                    cursorX = static_cast<int16_t>(cursorX + tracking);
                 previousCodepoint = codepoint;
                 hasPrevious = true;
             }
         }
 
-        bool drawGlyphsToStrips(std::string_view text, int16_t x, int16_t baseline, const Bounds& bounds) {
+        bool drawGlyphsToStrips(std::string_view text, int16_t x, int16_t baseline, const Bounds& bounds,
+                                int8_t tracking) {
             if (font_ == nullptr || bounds.w == 0 || bounds.h == 0) {
                 return false;
             }
@@ -387,7 +390,7 @@ namespace ui::fonts {
                     static_cast<uint8_t>(std::min<int16_t>(MaxStripRows, static_cast<int16_t>(visibleY1 - stripY)));
 
                 clearStrip(stripWidth, stripRows);
-                compositeGlyphsIntoStrip(text, x, baseline, visibleX0, stripY, stripWidth, stripRows);
+                compositeGlyphsIntoStrip(text, x, baseline, visibleX0, stripY, stripWidth, stripRows, tracking);
                 flushStrip(visibleX0, stripY, stripWidth, stripRows);
 
                 stripY = static_cast<int16_t>(stripY + stripRows);
@@ -398,20 +401,20 @@ namespace ui::fonts {
 
         void clearStrip(uint16_t width, uint8_t rows) {
             for (uint8_t row = 0; row < rows; ++row) {
-                std::fill_n(strip_[row], width, bg_);
-                std::fill_n(stripInk_[row], width, static_cast<uint8_t>(0));
+                std::ranges::fill_n(strip_[row], width, bg_);
+                std::ranges::fill_n(stripInk_[row], width, static_cast<uint8_t>(0));
             }
         }
 
         void compositeGlyphsIntoStrip(std::string_view text, int16_t x, int16_t baseline, int16_t stripX,
-                                      int16_t stripY, uint16_t stripWidth, uint8_t stripRows) {
+                                      int16_t stripY, uint16_t stripWidth, uint8_t stripRows, int8_t tracking) {
             int16_t cursorX = x;
             std::string_view cursor = text;
             uint16_t previousCodepoint = 0;
             bool hasPrevious = false;
             uint16_t codepoint = 0;
 
-            while (nextCodepoint(cursor, codepoint)) {
+            while (Utf8Text::next(cursor, codepoint)) {
                 if (hasPrevious) {
                     cursorX = static_cast<int16_t>(cursorX + kerningAdjust(previousCodepoint, codepoint));
                 }
@@ -426,6 +429,8 @@ namespace ui::fonts {
                     }
                     cursorX = static_cast<int16_t>(cursorX + metrics.xAdvance);
                 }
+                if (!cursor.empty())
+                    cursorX = static_cast<int16_t>(cursorX + tracking);
 
                 previousCodepoint = codepoint;
                 hasPrevious = true;
@@ -727,23 +732,11 @@ namespace ui::fonts {
         }
 
         const AlphaGlyph* findGlyphBinary(uint16_t codepoint) const {
-            uint16_t lo = 0;
-            uint16_t hi = font_->glyphCount;
-            while (lo < hi) {
-                const uint16_t mid = static_cast<uint16_t>(lo + ((hi - lo) / 2));
-                const AlphaGlyph* glyph = font_->glyphs + mid;
-                const uint16_t glyphCodepoint = pgm_read_word(&glyph->codepoint);
-                if (glyphCodepoint == codepoint) {
-                    return glyph;
-                }
-                if (glyphCodepoint < codepoint) {
-                    lo = static_cast<uint16_t>(mid + 1);
-                } else {
-                    hi = mid;
-                }
-            }
-
-            return nullptr;
+            const std::span glyphs{font_->glyphs, static_cast<size_t>(font_->glyphCount)};
+            const auto glyph = std::ranges::lower_bound(glyphs, codepoint, {}, [](const AlphaGlyph& candidate) {
+                return pgm_read_word(&candidate.codepoint);
+            });
+            return glyph != glyphs.end() && pgm_read_word(&glyph->codepoint) == codepoint ? &*glyph : nullptr;
         }
 
         void rebuildBlendTable() {
@@ -773,71 +766,6 @@ namespace ui::fonts {
         static uint8_t blendChannel(uint8_t bg, uint8_t fg, uint8_t coverage, uint8_t maxCoverage) {
             const uint16_t inv = static_cast<uint16_t>(maxCoverage - coverage);
             return static_cast<uint8_t>((bg * inv + fg * coverage + maxCoverage / 2) / maxCoverage);
-        }
-
-        static bool nextCodepoint(std::string_view& text, uint16_t& codepoint) {
-            if (text.empty()) {
-                return false;
-            }
-
-            const uint8_t first = static_cast<uint8_t>(text.front());
-            text.remove_prefix(1);
-            if (first < 0x80) {
-                codepoint = first;
-                return true;
-            }
-
-            auto isContinuation = [](uint8_t value) {
-                return (value & 0xC0U) == 0x80U;
-            };
-
-            if ((first & 0xE0U) == 0xC0U) {
-                if (text.empty() || !isContinuation(static_cast<uint8_t>(text.front()))) {
-                    codepoint = '?';
-                    return true;
-                }
-                const uint8_t b1 = static_cast<uint8_t>(text.front());
-                text.remove_prefix(1);
-
-                const uint16_t value = static_cast<uint16_t>(((first & 0x1FU) << 6U) | (b1 & 0x3FU));
-                codepoint = value >= 0x80U ? value : static_cast<uint16_t>('?');
-                return true;
-            }
-
-            if ((first & 0xF0U) == 0xE0U) {
-                if (text.empty() || !isContinuation(static_cast<uint8_t>(text.front()))) {
-                    codepoint = '?';
-                    return true;
-                }
-                const uint8_t b1 = static_cast<uint8_t>(text.front());
-                text.remove_prefix(1);
-
-                if (text.empty() || !isContinuation(static_cast<uint8_t>(text.front()))) {
-                    codepoint = '?';
-                    return true;
-                }
-                const uint8_t b2 = static_cast<uint8_t>(text.front());
-                text.remove_prefix(1);
-
-                const uint16_t value =
-                    static_cast<uint16_t>(((first & 0x0FU) << 12U) | ((b1 & 0x3FU) << 6U) | (b2 & 0x3FU));
-                codepoint = value >= 0x800U ? value : static_cast<uint16_t>('?');
-                return true;
-            }
-
-            if ((first & 0xF8U) == 0xF0U) {
-                for (uint8_t i = 0; i < 3; ++i) {
-                    if (text.empty() || !isContinuation(static_cast<uint8_t>(text.front()))) {
-                        break;
-                    }
-                    text.remove_prefix(1);
-                }
-                codepoint = '?';
-                return true;
-            }
-
-            codepoint = '?';
-            return true;
         }
 
         Arduino_GFX& output_;

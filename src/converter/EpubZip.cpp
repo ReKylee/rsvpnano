@@ -114,7 +114,8 @@ namespace EpubZip {
             const int contentPercent = static_cast<int>((cappedBytes * 100ULL) / totalBytes);
             const int itemPercent = static_cast<int>(((itemIndex * 100ULL) + contentPercent) / itemCount);
             const int progressPercent = 25 + ((itemPercent * 70) / 100);
-            const String detail = String(itemIndex + 1) + "/" + String(itemCount) + " " + String(wordCount) + " words";
+            const std::string detail = std::to_string(itemIndex + 1) + "/" + std::to_string(itemCount) + " "
+                                     + std::to_string(wordCount) + " words";
             reportProgress(options, "Extracting content", detail.c_str(), progressPercent);
         }
 
@@ -269,9 +270,9 @@ namespace EpubZip {
 
     } // namespace
 
-    bool Archive::open(const String& path) {
+    bool Archive::open(std::string_view path) {
         archivePath_ = path;
-        file_ = Board::Storage::filesystem().open(path);
+        file_ = Board::Storage::filesystem().open(archivePath_.c_str());
 
         const auto failWithClosedArchive = [&]() {
             close();
@@ -279,13 +280,14 @@ namespace EpubZip {
         };
 
         if (!file_ || file_.isDirectory()) {
-            ESP_LOGE("epub-zip", "Open failed: %s", path.c_str());
+            ESP_LOGE("epub-zip", "Open failed: %s", archivePath_.c_str());
             return failWithClosedArchive();
         }
 
-        ESP_LOGI("epub-zip", "Opened archive: %s size=%lu", path.c_str(), static_cast<unsigned long>(file_.size()));
+        ESP_LOGI("epub-zip", "Opened archive: %s size=%lu", archivePath_.c_str(),
+                 static_cast<unsigned long>(file_.size()));
         if (!readCentralDirectory()) {
-            ESP_LOGE("epub-zip", "Central directory read failed: %s", path.c_str());
+            ESP_LOGE("epub-zip", "Central directory read failed: %s", archivePath_.c_str());
             return failWithClosedArchive();
         }
         ESP_LOGI("epub-zip", "Archive ready: %u file entries", static_cast<unsigned int>(entries_.size()));
@@ -300,24 +302,22 @@ namespace EpubZip {
         entries_.clear();
     }
 
-    bool Archive::contains(const String& name) const {
-        const String lowered = toLowerCopy(normalizeZipName(name));
-        return std::any_of(entries_.begin(), entries_.end(), [&](const ZipEntry& entry) {
+    bool Archive::contains(std::string_view name) const {
+        const std::string lowered = toLowerCopy(normalizeZipName(name));
+        return std::ranges::any_of(entries_, [&](const ZipEntry& entry) {
             return toLowerCopy(entry.name) == lowered;
         });
     }
 
-    const ZipEntry* Archive::find(const String& name) const {
-        const String normalized = normalizeZipName(name);
-        const auto exact = std::find_if(entries_.begin(), entries_.end(), [&](const ZipEntry& entry) {
-            return entry.name == normalized;
-        });
+    const ZipEntry* Archive::find(std::string_view name) const {
+        const std::string normalized = normalizeZipName(name);
+        const auto exact = std::ranges::find(entries_, normalized, &ZipEntry::name);
         if (exact != entries_.end()) {
             return &(*exact);
         }
 
-        const String lowered = toLowerCopy(normalized);
-        const auto insensitive = std::find_if(entries_.begin(), entries_.end(), [&](const ZipEntry& entry) {
+        const std::string lowered = toLowerCopy(normalized);
+        const auto insensitive = std::ranges::find_if(entries_, [&](const ZipEntry& entry) {
             return toLowerCopy(entry.name) == lowered;
         });
         if (insensitive != entries_.end()) {
@@ -331,8 +331,8 @@ namespace EpubZip {
         return nullptr;
     }
 
-    bool Archive::extractToString(const String& name, String& output, size_t maxBytes) {
-        ESP_LOGD("epub-zip", "Request string entry: %s", name.c_str());
+    bool Archive::extractToString(std::string_view name, std::string& output, size_t maxBytes) {
+        ESP_LOGD("epub-zip", "Request string entry: %.*s", static_cast<int>(name.size()), name.data());
         const ZipEntry* entry = find(name);
         if (entry == nullptr) {
             return false;
@@ -340,15 +340,17 @@ namespace EpubZip {
         return extractToString(*entry, output, maxBytes);
     }
 
-    ContentExtractStatus Archive::extractContentToRsvp(const String& name, File& output, size_t& wordCount,
-                                                       size_t maxWords, String& lastChapterTitle, size_t& chapterCount,
+    ContentExtractStatus Archive::extractContentToRsvp(std::string_view name, File& output, size_t& wordCount,
+                                                       size_t maxWords, std::string& lastChapterTitle,
+                                                       size_t& chapterCount,
                                                        std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
-                                                       const String& fallbackChapterTitle, const String& bookTitle,
+                                                       std::string_view fallbackChapterTitle,
+                                                       std::string_view bookTitle,
                                                        const EpubConverter::Options& options, size_t itemIndex,
                                                        size_t itemCount) {
         const ZipEntry* entry = find(name);
         if (entry == nullptr) {
-            ESP_LOGE("epub-zip", "Content entry not found: %s", name.c_str());
+            ESP_LOGE("epub-zip", "Content entry not found: %.*s", static_cast<int>(name.size()), name.data());
             return ContentExtractStatus::Failed;
         }
         return extractContentToRsvp(*entry, output, wordCount, maxWords, lastChapterTitle, chapterCount, tocEntries,
@@ -488,7 +490,7 @@ namespace EpubZip {
                 const bool nameRead = readExact(file_, reinterpret_cast<uint8_t*>(nameBuffer), fileNameLength);
                 nameBuffer[fileNameLength] = '\0';
 
-                entry.name = normalizeZipName(String(nameBuffer));
+                entry.name = normalizeZipName(nameBuffer);
                 entry.method = readLe16(header.data() + 10);
                 entry.flags = readLe16(header.data() + 8);
                 entry.compressedSize = readLe32(header.data() + 20);
@@ -508,7 +510,7 @@ namespace EpubZip {
                 return false;
             }
 
-            if (!entry.name.endsWith("/")) {
+            if (!entry.name.ends_with('/')) {
                 entries_.push_back(entry);
             }
         }
@@ -518,8 +520,8 @@ namespace EpubZip {
         return true;
     }
 
-    bool Archive::extractToString(const ZipEntry& entry, String& output, size_t maxBytes) {
-        output = "";
+    bool Archive::extractToString(const ZipEntry& entry, std::string& output, size_t maxBytes) {
+        output.clear();
 
         ESP_LOGD("epub-zip", "Extract string: %s method=%u flags=0x%04x c=%lu u=%lu max=%u", entry.name.c_str(),
                  entry.method, entry.flags, static_cast<unsigned long>(entry.compressedSize),
@@ -538,11 +540,7 @@ namespace EpubZip {
             return false;
         }
 
-        if (!output.reserve(static_cast<unsigned int>(entry.uncompressedSize + 1))) {
-            ESP_LOGE("epub-zip", "No memory to reserve string for %s (%lu bytes)", entry.name.c_str(),
-                     static_cast<unsigned long>(entry.uncompressedSize));
-            return false;
-        }
+        output.reserve(entry.uncompressedSize);
 
         uint32_t totalOutputBytes = 0;
         auto appendBytes = [&](const uint8_t* data, size_t length) -> bool {
@@ -550,14 +548,10 @@ namespace EpubZip {
                 return true;
             }
             if (totalOutputBytes + length > maxBytes) {
-                ESP_LOGE("epub-zip", "String extraction exceeded limit for %s", entry.name.c_str());
+                ESP_LOGE("epub-zip", "Text extraction exceeded limit for %s", entry.name.c_str());
                 return false;
             }
-            if (!output.concat(reinterpret_cast<const char*>(data), static_cast<unsigned int>(length))) {
-                ESP_LOGE("epub-zip", "String append failed for %s length=%u", entry.name.c_str(),
-                         static_cast<unsigned int>(length));
-                return false;
-            }
+            output.append(reinterpret_cast<const char*>(data), length);
             return true;
         };
 
@@ -575,7 +569,7 @@ namespace EpubZip {
         }();
 
         if (ok && totalOutputBytes != entry.uncompressedSize) {
-            ESP_LOGE("epub-zip", "String inflate size mismatch for %s (%lu of %lu bytes)", entry.name.c_str(),
+            ESP_LOGE("epub-zip", "Text inflate size mismatch for %s (%lu of %lu bytes)", entry.name.c_str(),
                      static_cast<unsigned long>(totalOutputBytes), static_cast<unsigned long>(entry.uncompressedSize));
             ok = false;
         }
@@ -589,9 +583,11 @@ namespace EpubZip {
     }
 
     ContentExtractStatus Archive::extractContentToRsvp(const ZipEntry& entry, File& output, size_t& wordCount,
-                                                       size_t maxWords, String& lastChapterTitle, size_t& chapterCount,
+                                                       size_t maxWords, std::string& lastChapterTitle,
+                                                       size_t& chapterCount,
                                                        std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
-                                                       const String& fallbackChapterTitle, const String& bookTitle,
+                                                       std::string_view fallbackChapterTitle,
+                                                       std::string_view bookTitle,
                                                        const EpubConverter::Options& options, size_t itemIndex,
                                                        size_t itemCount) {
         ESP_LOGD("epub-zip", "Extract content: %s method=%u flags=0x%04x c=%lu u=%lu", entry.name.c_str(), entry.method,

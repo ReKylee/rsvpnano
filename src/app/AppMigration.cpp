@@ -64,13 +64,6 @@ void App::migrateLegacyStorage() {
     if (prefs_.getBool(kMigrationMarker, false))
         return;
 
-    auto trim = [](std::string_view value) {
-        while (!value.empty() && (value.front() == ' ' || value.front() == '\t' || value.front() == '\r'))
-            value.remove_prefix(1);
-        while (!value.empty() && (value.back() == ' ' || value.back() == '\t' || value.back() == '\r'))
-            value.remove_suffix(1);
-        return value;
-    };
     auto nextLine = [](std::string_view& text) {
         const size_t end = text.find('\n');
         if (end == std::string_view::npos) {
@@ -83,19 +76,19 @@ void App::migrateLegacyStorage() {
         return line;
     };
     auto parseUnsigned = [&](std::string_view text, uint64_t& value) {
-        text = trim(text);
+        text = AsciiText::trim(text);
         value = 0;
         const auto [end, error] = std::from_chars(text.begin(), text.end(), value);
         return !text.empty() && error == std::errc{} && end == text.end();
     };
     auto parseSigned = [&](std::string_view text, int64_t& value) {
-        text = trim(text);
+        text = AsciiText::trim(text);
         value = 0;
         const auto [end, error] = std::from_chars(text.begin(), text.end(), value);
         return !text.empty() && error == std::errc{} && end == text.end();
     };
     auto parseBool = [&](std::string_view text, bool& value) {
-        text = trim(text);
+        text = AsciiText::trim(text);
         if (text == "true" || text == "1") {
             value = true;
             return true;
@@ -107,7 +100,7 @@ void App::migrateLegacyStorage() {
         return false;
     };
     auto parseString = [&](std::string_view text, std::string& value) {
-        text = trim(text);
+        text = AsciiText::trim(text);
         if (text.empty() || text.front() != '"') {
             value.assign(text);
             return true;
@@ -413,7 +406,7 @@ void App::migrateLegacyStorage() {
 
         std::string_view remaining = content;
         while (valid && !remaining.empty()) {
-            std::string_view line = trim(nextLine(remaining));
+            std::string_view line = AsciiText::trim(nextLine(remaining));
             if (line.empty() || line.front() == '#')
                 continue;
             const size_t separator = line.find('=');
@@ -421,8 +414,8 @@ void App::migrateLegacyStorage() {
                 valid = false;
                 break;
             }
-            const std::string_view key = trim(line.substr(0, separator));
-            const std::string_view value = trim(line.substr(separator + 1));
+            const std::string_view key = AsciiText::trim(line.substr(0, separator));
+            const std::string_view value = AsciiText::trim(line.substr(separator + 1));
             if (std::ranges::find(seenKeys, key) != seenKeys.end()) {
                 valid = false;
                 break;
@@ -542,7 +535,7 @@ void App::migrateLegacyStorage() {
                     bool valid = readFile(*filesystem, legacyPath.c_str(), kMaxLegacyThemeBytes, content);
                     std::string_view remaining = content;
                     while (valid && !remaining.empty()) {
-                        std::string_view line = trim(nextLine(remaining));
+                        std::string_view line = AsciiText::trim(nextLine(remaining));
                         if (line.starts_with("\xEF\xBB\xBF"))
                             line.remove_prefix(3);
                         if (line.empty() || line.front() == '#')
@@ -555,8 +548,8 @@ void App::migrateLegacyStorage() {
                         const size_t separator = line.find('=');
                         if (separator == std::string_view::npos)
                             continue;
-                        const std::string_view key = trim(line.substr(0, separator));
-                        std::string_view value = trim(line.substr(separator + 1));
+                        const std::string_view key = AsciiText::trim(line.substr(0, separator));
+                        std::string_view value = AsciiText::trim(line.substr(separator + 1));
                         if (key == "name") {
                             theme.name.assign(value);
                             continue;
@@ -668,11 +661,11 @@ void App::migrateLegacyStorage() {
                     rss::Config migrated;
                     std::string_view remaining = content;
                     while (!remaining.empty()) {
-                        std::string_view line = trim(nextLine(remaining));
+                        std::string_view line = AsciiText::trim(nextLine(remaining));
                         if (line.empty() || line.front() == '#')
                             continue;
                         if (line.starts_with("feed="))
-                            line = trim(line.substr(5));
+                            line = AsciiText::trim(line.substr(5));
                         migrated.feeds.emplace_back(line);
                     }
                     converted = rss::save(*filesystem, std::move(migrated)).has_value();
@@ -752,9 +745,8 @@ void App::migrateLegacyStorage() {
         storage_.refreshBooks(false);
         for (size_t index = 0; index < storage_.bookCount(); ++index) {
             const std::string bookPath = storage_.bookPath(index);
-            const String legacyPath =
-                StoragePaths::siblingPathWithExtension(bookPath.c_str(), kLegacyProgressExtension);
-            const String newPath = StoragePaths::bookStatePathFor(bookPath.c_str());
+            const std::string legacyPath = StoragePaths::siblingPathWithExtension(bookPath, kLegacyProgressExtension);
+            const std::string newPath = StoragePaths::bookStatePathFor(bookPath);
             const bool legacyFileSeen = StorageFiles::fileExists(legacyPath.c_str());
 
             uint32_t pathHash = 2166136261UL;
@@ -817,7 +809,7 @@ void App::migrateLegacyStorage() {
                     && currentState.sourceSize > 0 && currentState.wordCount > 0;
             }
             if (!converted && recoverable)
-                converted = ReadingProgress::writeBookStatePosition(bookPath.c_str(), identity, wordIndex).has_value();
+                converted = ReadingProgress::writeBookStatePosition(bookPath, identity, wordIndex).has_value();
             if (!converted && legacyFileSeen) {
                 booksComplete = false;
                 ESP_LOGW("migration", "preserved invalid progress %s", legacyPath.c_str());

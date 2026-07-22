@@ -104,19 +104,11 @@ namespace screens {
         if (dragging_) {
             const uint32_t elapsed = std::min<uint32_t>(nowMs - lastTickMs_, 100);
             lastTickMs_ = nowMs;
-            const int32_t halfHeight = std::max<int16_t>(1, viewport.h / 2);
-            const int32_t center = viewport.y + halfHeight;
-            const int32_t distance =
-                std::clamp<int32_t>(static_cast<int32_t>(lastY_) - center, -halfHeight, halfHeight);
-            const int32_t deadzone = std::min<int32_t>(kRowStep / 2, halfHeight - 1);
-            const int32_t magnitude = std::abs(distance);
-            if (dragDistance_ > kDragThreshold && magnitude > deadzone) {
-                const int32_t activeDistance = (distance < 0 ? -1 : 1) * (magnitude - deadzone);
-                const int32_t activeRange = halfHeight - deadzone;
+            const int32_t dragRate =
+                ui::centeredDragRate(lastY_, viewport.y, viewport.h, kRowStep / 2, kMaximumVelocity);
+            if (dragDistance_ > kDragThreshold && dragRate != 0) {
                 const int32_t direction = settings.chapterScrollReversed ? 1 : -1;
-                const int32_t target = direction
-                                     * static_cast<int32_t>(static_cast<int64_t>(kMaximumVelocity) * activeDistance
-                                                            * std::abs(activeDistance) / (activeRange * activeRange));
+                const int32_t target = direction * dragRate;
                 velocity_ += static_cast<int32_t>(static_cast<int64_t>(target - velocity_) * elapsed / kAccelerationMs);
                 scrollRemainder_ += static_cast<int32_t>(static_cast<int64_t>(velocity_) * elapsed);
                 const int16_t pixels = static_cast<int16_t>(scrollRemainder_ / kScrollScale);

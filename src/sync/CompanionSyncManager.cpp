@@ -644,13 +644,12 @@ void CompanionSyncManager::stopServer() {
 }
 
 void CompanionSyncManager::handleInfo() {
-    const OtaUpdater updater;
     sendData(server_, jsonBuffer_, 200,
              api::DeviceInfo{
                  "RSVP Nano",
                  networkMode_ == NetworkMode::Station ? api::NetworkMode::station : api::NetworkMode::access_point,
                  networkSsid_,
-                 std::string(updater.currentVersion()),
+                 std::string(OtaUpdater::currentVersion()),
                  Board::Config::OTA_ASSET_NAME,
                  1,
              });

@@ -250,7 +250,7 @@ void App::renderScreen(uint32_t nowMs) {
         break;
     case screens::Screen::Ota: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        action = screens::ota(immediateUi_, OtaUpdater{}.currentVersion().data(), screen_);
+        action = screens::ota(immediateUi_, OtaUpdater::currentVersion().data(), screen_);
         break;
     }
     case screens::Screen::FocusTimers:
@@ -516,10 +516,9 @@ void App::runOtaCheck(bool install) {
         settingsStore_.flush();
     }
     screens::status(immediateUi_, "OTA", immediateUi_.text(UiText::Checking));
-    OtaUpdater ota;
-    const OtaUpdater::Config config = ota.config(settingsStore_.settings(), settingsStore_.secrets());
-    const OtaUpdater::Result result = install ? ota.checkAndInstall(config, &App::renderStorageStatus, this)
-                                              : ota.checkOnly(config, &App::renderStorageStatus, this);
+    const OtaUpdater::Config config = OtaUpdater::config(settingsStore_.settings(), settingsStore_.secrets());
+    const OtaUpdater::Result result = install ? OtaUpdater::checkAndInstall(config, &App::renderStorageStatus, this)
+                                              : OtaUpdater::checkOnly(config, &App::renderStorageStatus, this);
     screens::status(immediateUi_, "OTA", result.summary.c_str(), result.detail.c_str());
     delay(install && result.rebootRequired ? 500 : 1400);
     if (install && result.rebootRequired) {

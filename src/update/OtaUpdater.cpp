@@ -1,7 +1,9 @@
 #include "update/OtaUpdater.h"
 
 #include <algorithm>
+#include <expected>
 #include <string>
+#include <utility>
 
 #include <HTTPClient.h>
 #include <HTTPUpdate.h>
@@ -24,6 +26,17 @@ namespace {
         std::string owner;
         std::string repo;
         std::string tag;
+    };
+
+    struct LatestRelease {
+        std::string version;
+        std::string assetUrl;
+    };
+
+    struct Error {
+        OtaUpdater::ResultCode code;
+        std::string summary;
+        std::string detail;
     };
 
     std::string trimCopy(std::string_view value) {
@@ -162,7 +175,7 @@ namespace {
 } // namespace
 
 OtaUpdater::Config OtaUpdater::config(const settings::DeviceSettings& settings,
-                                      const settings::DeviceSecrets& secrets) const {
+                                      const settings::DeviceSecrets& secrets) {
     Config result;
     if (!settings.network.wifiSsid.empty()) {
         result.wifiSsid = settings.network.wifiSsid;
@@ -175,31 +188,16 @@ OtaUpdater::Config OtaUpdater::config(const settings::DeviceSettings& settings,
     return result;
 }
 
-bool OtaUpdater::isConfigured(const Config& config) const {
-    return !AsciiText::trim(config.wifiSsid).empty();
-}
-
-std::string_view OtaUpdater::currentVersion() const {
+std::string_view OtaUpdater::currentVersion() {
     return kFirmwareVersion;
 }
 
-bool OtaUpdater::connectWiFi(const Config& config, StatusCallback callback, void* context) const {
-    return net::connectStation(config.wifiSsid.c_str(), config.wifiPassword.c_str(),
-                               [&](int percent) {
-                                   reportStatus(callback, context, kStatusTitle, "Connecting Wi-Fi",
-                                                config.wifiSsid.c_str(), percent);
-                               })
-        .has_value();
-}
+static void reportStatus(OtaUpdater::StatusCallback callback, void* context, const char* title, const char* line1,
+                         const char* line2, int progressPercent);
 
-void OtaUpdater::disconnectWiFi() const {
-    net::disconnect();
-}
-
-std::expected<OtaUpdater::LatestRelease, std::string> OtaUpdater::fetchRelease(const Config& config,
-                                                                               StatusCallback callback,
-                                                                               void* context) const {
-    const std::string installedVersion{currentVersion()};
+static std::expected<LatestRelease, std::string> fetchRelease(const OtaUpdater::Config& config,
+                                                              OtaUpdater::StatusCallback callback, void* context) {
+    const std::string installedVersion{OtaUpdater::currentVersion()};
     const ReleaseSource source = releaseSourceForConfig(config);
     if (source.owner.empty() || source.repo.empty())
         return std::unexpected(std::string{"GitHub source missing"});
@@ -269,9 +267,8 @@ std::expected<OtaUpdater::LatestRelease, std::string> OtaUpdater::fetchRelease(c
     return release;
 }
 
-std::expected<std::string, std::string> OtaUpdater::resolveDownloadUrl(std::string_view assetUrl,
-                                                                       std::string_view version,
-                                                                       StatusCallback callback, void* context) const {
+static std::expected<std::string, std::string> resolveDownloadUrl(std::string_view assetUrl, std::string_view version,
+                                                                  OtaUpdater::StatusCallback callback, void* context) {
     const std::string assetUrlString{assetUrl};
     const std::string versionString{version};
     reportStatus(callback, context, kStatusTitle, "Resolving asset", versionString.c_str(), 29);
@@ -309,8 +306,8 @@ std::expected<std::string, std::string> OtaUpdater::resolveDownloadUrl(std::stri
     return std::unexpected(errorDetail);
 }
 
-void OtaUpdater::reportStatus(StatusCallback callback, void* context, const char* title, const char* line1,
-                              const char* line2, int progressPercent) const {
+static void reportStatus(OtaUpdater::StatusCallback callback, void* context, const char* title, const char* line1,
+                         const char* line2, int progressPercent) {
     if (callback == nullptr) {
         return;
     }
@@ -318,54 +315,71 @@ void OtaUpdater::reportStatus(StatusCallback callback, void* context, const char
     callback(context, title, line1, line2, progressPercent);
 }
 
-OtaUpdater::Result OtaUpdater::checkOnly(const Config& config, StatusCallback callback, void* context) const {
-    Result result;
-    result.currentVersion = currentVersion();
+static OtaUpdater::Result resultForError(Error error) {
+    return {
+        .code = error.code,
+        .currentVersion = std::string{OtaUpdater::currentVersion()},
+        .summary = std::move(error.summary),
+        .detail = std::move(error.detail),
+    };
+}
 
+static std::expected<LatestRelease, Error> prepareRelease(const OtaUpdater::Config& config,
+                                                          OtaUpdater::StatusCallback callback, void* context) {
     if (auto compatible = validateAssetName(config.assetName); !compatible) {
-        result.code = ResultCode::AssetMismatch;
-        result.summary = "Wrong OTA asset";
-        result.detail = compatible.error();
-        return result;
+        return std::unexpected(Error{
+            .code = OtaUpdater::ResultCode::AssetMismatch,
+            .summary = "Wrong OTA asset",
+            .detail = std::move(compatible.error()),
+        });
     }
 
-    if (!isConfigured(config)) {
-        result.code = ResultCode::NotConfigured;
-        result.summary = "Wi-Fi not set";
-        result.detail = "Settings -> Wi-Fi";
-        return result;
+    if (AsciiText::trim(config.wifiSsid).empty()) {
+        return std::unexpected(Error{
+            .code = OtaUpdater::ResultCode::NotConfigured,
+            .summary = "Wi-Fi not set",
+            .detail = "Settings -> Wi-Fi",
+        });
     }
 
-    if (!connectWiFi(config, callback, context)) {
-        disconnectWiFi();
-        result.code = ResultCode::ConnectFailed;
-        result.summary = "Wi-Fi failed";
-        result.detail = "Check credentials";
-        return result;
+    auto connected = net::connectStation(config.wifiSsid.c_str(), config.wifiPassword.c_str(), [&](int percent) {
+        reportStatus(callback, context, kStatusTitle, "Connecting Wi-Fi", config.wifiSsid.c_str(), percent);
+    });
+    if (!connected) {
+        net::disconnect();
+        return std::unexpected(Error{
+            .code = OtaUpdater::ResultCode::ConnectFailed,
+            .summary = "Wi-Fi failed",
+            .detail = connected.error().message(),
+        });
     }
 
     auto release = fetchRelease(config, callback, context);
     if (!release) {
-        disconnectWiFi();
-        result.code = ResultCode::MetadataFailed;
-        result.summary = "GitHub failed";
-        result.detail = release.error();
-        return result;
+        net::disconnect();
+        return std::unexpected(Error{
+            .code = OtaUpdater::ResultCode::MetadataFailed,
+            .summary = "GitHub failed",
+            .detail = std::move(release.error()),
+        });
     }
 
-    disconnectWiFi();
+    return std::move(*release);
+}
+
+OtaUpdater::Result OtaUpdater::checkOnly(const Config& config, StatusCallback callback, void* context) {
+    auto release = prepareRelease(config, callback, context);
+    if (!release)
+        return resultForError(std::move(release.error()));
+
+    net::disconnect();
+    Result result;
+    result.currentVersion = currentVersion();
     result.latestVersion = release->version;
     if (release->version == result.currentVersion) {
         result.code = ResultCode::NoUpdate;
         result.summary = "Already current";
         result.detail = release->version;
-        return result;
-    }
-
-    if (release->assetUrl.empty()) {
-        result.code = ResultCode::AssetMissing;
-        result.summary = "Asset missing";
-        result.detail = config.assetName;
         return result;
     }
 
@@ -375,55 +389,19 @@ OtaUpdater::Result OtaUpdater::checkOnly(const Config& config, StatusCallback ca
     return result;
 }
 
-OtaUpdater::Result OtaUpdater::checkAndInstall(const Config& config, StatusCallback callback, void* context) const {
+OtaUpdater::Result OtaUpdater::checkAndInstall(const Config& config, StatusCallback callback, void* context) {
+    auto release = prepareRelease(config, callback, context);
+    if (!release)
+        return resultForError(std::move(release.error()));
+
     Result result;
     result.currentVersion = currentVersion();
-
-    if (auto compatible = validateAssetName(config.assetName); !compatible) {
-        result.code = ResultCode::AssetMismatch;
-        result.summary = "Wrong OTA asset";
-        result.detail = compatible.error();
-        return result;
-    }
-
-    if (!isConfigured(config)) {
-        result.code = ResultCode::NotConfigured;
-        result.summary = "Wi-Fi not set";
-        result.detail = "Settings -> Wi-Fi";
-        return result;
-    }
-
-    if (!connectWiFi(config, callback, context)) {
-        disconnectWiFi();
-        result.code = ResultCode::ConnectFailed;
-        result.summary = "Wi-Fi failed";
-        result.detail = "Check credentials";
-        return result;
-    }
-
-    auto release = fetchRelease(config, callback, context);
-    if (!release) {
-        disconnectWiFi();
-        result.code = ResultCode::MetadataFailed;
-        result.summary = "GitHub failed";
-        result.detail = release.error();
-        return result;
-    }
-
     result.latestVersion = release->version;
     if (release->version == result.currentVersion) {
-        disconnectWiFi();
+        net::disconnect();
         result.code = ResultCode::NoUpdate;
         result.summary = "Already current";
         result.detail = release->version;
-        return result;
-    }
-
-    if (release->assetUrl.empty()) {
-        disconnectWiFi();
-        result.code = ResultCode::AssetMissing;
-        result.summary = "Asset missing";
-        result.detail = config.assetName;
         return result;
     }
 
@@ -432,7 +410,7 @@ OtaUpdater::Result OtaUpdater::checkAndInstall(const Config& config, StatusCallb
 
     auto resolvedAssetUrl = resolveDownloadUrl(release->assetUrl, result.latestVersion, callback, context);
     if (!resolvedAssetUrl) {
-        disconnectWiFi();
+        net::disconnect();
         result.code = ResultCode::InstallFailed;
         result.summary = "Asset failed";
         result.detail = resolvedAssetUrl.error();
@@ -450,7 +428,7 @@ OtaUpdater::Result OtaUpdater::checkAndInstall(const Config& config, StatusCallb
     updater.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 
     int lastReportedProgress = -1;
-    updater.onProgress([this, callback, context, &result, &lastReportedProgress](int current, int total) {
+    updater.onProgress([callback, context, &result, &lastReportedProgress](int current, int total) {
         if (total <= 0) {
             reportStatus(callback, context, kStatusTitle, "Downloading update", result.latestVersion.c_str(), -1);
             return;
@@ -472,7 +450,7 @@ OtaUpdater::Result OtaUpdater::checkAndInstall(const Config& config, StatusCallb
         http->addHeader("Accept", "application/octet-stream");
     });
 
-    disconnectWiFi();
+    net::disconnect();
 
     switch (updateResult) {
     case HTTP_UPDATE_OK:

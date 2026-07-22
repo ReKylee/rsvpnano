@@ -1,14 +1,13 @@
 #pragma once
 
-#include <Arduino.h>
-#include <expected>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include "board/BoardConfig.h"
 #include "settings/SettingsModel.h"
 
-class OtaUpdater {
-public:
+namespace OtaUpdater {
+
     using StatusCallback = void (*)(void* context, const char* title, const char* line1, const char* line2,
                                     int progressPercent);
 
@@ -28,7 +27,6 @@ public:
         NotConfigured,
         ConnectFailed,
         MetadataFailed,
-        AssetMissing,
         AssetMismatch,
         InstallFailed,
     };
@@ -42,24 +40,9 @@ public:
         bool rebootRequired = false;
     };
 
-    Config config(const settings::DeviceSettings& settings, const settings::DeviceSecrets& secrets) const;
-    bool isConfigured(const Config& config) const;
-    std::string_view currentVersion() const;
-    Result checkOnly(const Config& config, StatusCallback callback = nullptr, void* context = nullptr) const;
-    Result checkAndInstall(const Config& config, StatusCallback callback = nullptr, void* context = nullptr) const;
+    Config config(const settings::DeviceSettings& settings, const settings::DeviceSecrets& secrets);
+    std::string_view currentVersion();
+    Result checkOnly(const Config& config, StatusCallback callback = nullptr, void* context = nullptr);
+    Result checkAndInstall(const Config& config, StatusCallback callback = nullptr, void* context = nullptr);
 
-private:
-    struct LatestRelease {
-        std::string version;
-        std::string assetUrl;
-    };
-
-    bool connectWiFi(const Config& config, StatusCallback callback, void* context) const;
-    void disconnectWiFi() const;
-    std::expected<LatestRelease, std::string> fetchRelease(const Config& config, StatusCallback callback,
-                                                           void* context) const;
-    std::expected<std::string, std::string> resolveDownloadUrl(std::string_view assetUrl, std::string_view version,
-                                                               StatusCallback callback, void* context) const;
-    void reportStatus(StatusCallback callback, void* context, const char* title, const char* line1, const char* line2,
-                      int progressPercent) const;
-};
+} // namespace OtaUpdater

@@ -2,6 +2,7 @@
 
 #include "settings/SettingsRules.h"
 #include "text/Utf8Text.h"
+#include "ui/Localization.h"
 #include "ui/Ui.h"
 
 namespace {
@@ -233,11 +234,31 @@ void test_layout_cursors_are_deterministic() {
 }
 
 void test_ui_font_measures_utf8_codepoints() {
-    TEST_ASSERT_EQUAL(24, ui::Context::textWidth("A\xC4\x80\xD0\x91", 1));
-    TEST_ASSERT_EQUAL(48, ui::Context::textWidth("A\xC4\x80\xD0\x91", 2));
-    TEST_ASSERT_EQUAL(8, ui::Context::textHeight(1));
-    TEST_ASSERT_EQUAL(16, ui::Context::textHeight(2));
-    TEST_ASSERT_EQUAL(24, ui::Context::textHeight(3));
+    TEST_ASSERT_EQUAL(18, ui::Context::textWidth("A\xC4\x80\xD0\x91", 1));
+    TEST_ASSERT_EQUAL(36, ui::Context::textWidth("A\xC4\x80\xD0\x91", 2));
+    TEST_ASSERT_EQUAL(9, ui::Context::textHeight(1));
+    TEST_ASSERT_EQUAL(18, ui::Context::textHeight(2));
+    TEST_ASSERT_EQUAL(27, ui::Context::textHeight(3));
+}
+
+void test_localization_keeps_native_accents() {
+    TEST_ASSERT_EQUAL_STRING("Espa\xC3\xB1ol", std::string{Localization::languageName(UiLanguage::spanish)}.c_str());
+    TEST_ASSERT_EQUAL_STRING("Fran\xC3\xA7"
+                             "ais",
+                             std::string{Localization::languageName(UiLanguage::french)}.c_str());
+    TEST_ASSERT_EQUAL_STRING("Rom\xC3\xA2n\xC4\x83",
+                             std::string{Localization::languageName(UiLanguage::romanian)}.c_str());
+    TEST_ASSERT_EQUAL_STRING("Cap\xC3\xADtulos",
+                             std::string{Localization::text(UiLanguage::spanish, UiText::Chapters)}.c_str());
+    TEST_ASSERT_EQUAL_STRING("Biblioth\xC3\xA8que",
+                             std::string{Localization::text(UiLanguage::french, UiText::Library)}.c_str());
+    TEST_ASSERT_EQUAL_STRING("Komplexit\xC3\xA4t",
+                             std::string{Localization::text(UiLanguage::german, UiText::Complexity)}.c_str());
+    TEST_ASSERT_EQUAL_STRING("Afi\xC8\x99"
+                             "aj",
+                             std::string{Localization::text(UiLanguage::romanian, UiText::Display)}.c_str());
+    TEST_ASSERT_EQUAL_STRING("J\xC4\x99zyk",
+                             std::string{Localization::text(UiLanguage::polish, UiText::Language)}.c_str());
 }
 
 void test_utf8_text_decodes_and_keeps_codepoint_boundaries() {
@@ -279,19 +300,19 @@ void test_labels_truncate_to_their_rectangles() {
     context.beginFrame(1);
     context.label({0, 0, 30, 8}, "123456789", 1);
     context.endFrame();
-    TEST_ASSERT_EQUAL(3, gfx.textWrites);
+    TEST_ASSERT_EQUAL(5, gfx.textWrites);
 
     gfx.textWrites = 0;
     context.beginFrame(2);
     context.button({0, 0, 72, 40}, "Alpha Beta", true, ui::Icon::None, 2, "By", "42%");
     context.endFrame();
-    TEST_ASSERT_EQUAL(8, gfx.textWrites);
+    TEST_ASSERT_EQUAL(13, gfx.textWrites);
 
     gfx.textWrites = 0;
     context.beginFrame(3);
     context.button({0, 0, 120, 50}, "A", true, ui::Icon::None, 1, "12345678");
     context.endFrame();
-    TEST_ASSERT_EQUAL(7, gfx.textWrites);
+    TEST_ASSERT_EQUAL(9, gfx.textWrites);
 }
 
 void test_labels_align_and_battery_owns_its_drawing() {
@@ -613,6 +634,7 @@ int main(int, char**) {
     RUN_TEST(test_tap_target_handles_touch_without_drawing);
     RUN_TEST(test_layout_cursors_are_deterministic);
     RUN_TEST(test_ui_font_measures_utf8_codepoints);
+    RUN_TEST(test_localization_keeps_native_accents);
     RUN_TEST(test_utf8_text_decodes_and_keeps_codepoint_boundaries);
     RUN_TEST(test_ui_font_preserves_widget_background);
     RUN_TEST(test_centered_drag_rate_has_deadzone_and_signed_edges);

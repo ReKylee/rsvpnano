@@ -4,7 +4,7 @@
 #include <cmath>
 #include <cstdio>
 
-#include "fonts/PxPlusTandyNewTv8.h"
+#include "fonts/UiFont6x9.h"
 #include "text/Utf8Text.h"
 
 namespace ui {
@@ -13,8 +13,8 @@ namespace ui {
         constexpr uint16_t kFallbackBlack = 0x0000;
         constexpr uint16_t kFallbackWhite = 0xFFFF;
 
-        constexpr uint8_t kUiFontCellWidth = 8;
-        constexpr uint8_t kUiFontHeight = 8;
+        constexpr uint8_t kUiFontCellWidth = 6;
+        constexpr uint8_t kUiFontHeight = 9;
 
         size_t fittedLength(std::string_view text, size_t capacity) {
             if (Utf8Text::count(text) <= capacity)
@@ -897,7 +897,7 @@ namespace ui {
         const size_t capacity = static_cast<size_t>(std::max<int16_t>(0, rect.w) / (kUiFontCellWidth * size));
         if (capacity == 0)
             return;
-        gfx_.setFont(u8g2_font_pxplustandynewtv_8_all);
+        gfx_.setFont(u8g2_font_rsvpnano_ui_6x9_tf);
         gfx_.setUTF8Print(true);
         gfx_.setTextSize(size);
         gfx_.setTextWrap(false);

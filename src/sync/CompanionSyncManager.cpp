@@ -6,6 +6,7 @@
 #include <WiFi.h>
 #include <algorithm>
 #include <cstdio>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -26,6 +27,7 @@
 #include "storage/index/ReadingProgress.h"
 #include "sync/CompanionSyncJson.h"
 #include "text/AsciiText.h"
+#include "text/RsvpDirectives.h"
 #include "timer/FocusTimerStorage.h"
 #include "ui/Localization.h"
 #include "update/OtaUpdater.h"
@@ -39,14 +41,6 @@ namespace {
     constexpr size_t kMaxFocusTimersBytes = 4096;
     constexpr size_t kMaxThemeUploadBytes = 4096;
     constexpr size_t kMaxFontUploadBytes = 2UL * 1024UL * 1024UL;
-
-    std::string toStdString(const String& value) {
-        return {value.c_str(), value.length()};
-    }
-
-    std::string_view toStringView(const String& value) {
-        return {value.c_str(), value.length()};
-    }
 
     template<typename T>
     bool sendData(WebServer& server, std::string& jsonBuffer, int status, const T& data) {
@@ -62,8 +56,8 @@ namespace {
         return true;
     }
 
-    std::expected<void, std::error_code> replaceUploadedFile(const String& tmpPath, const String& finalPath) {
-        const String backupPath = finalPath + ".bak";
+    std::expected<void, std::error_code> replaceUploadedFile(const std::string& tmpPath, const std::string& finalPath) {
+        const std::string backupPath = finalPath + ".bak";
         return StorageFiles::replaceFileAtomic(Board::Storage::filesystem(), finalPath.c_str(), tmpPath.c_str(),
                                                backupPath.c_str());
     }
@@ -138,6 +132,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <section id="settings" class="page">
 <div class="grid">
 <div class="card"><h2>Word Pacing</h2>
+<label>Reading mode</label><select id="readingMode"><option value="rsvp">RSVP</option><option value="page">Page</option></select>
 <label>Pause behaviour</label><select id="pauseMode"><option value="sentenceEnd">End of sentence</option><option value="instant">Instant</option></select>
 <label>Base speed <span id="wpmValue"></span></label><input id="wpm" type="range" min="10" max="1000" step="10">
 <label>Long words <span id="longWordMsValue"></span></label><input id="longWordMs" type="range" min="0" max="600" step="50">
@@ -249,8 +244,8 @@ function setThemeOptions(){const id=(settings&&settings.interface&&settings.inte
 function setFontOptions(){const id=(settings&&settings.reading&&settings.reading.typography&&settings.reading.typography.fontId)||'literata';const fonts=deviceFonts.some(f=>f.id===id)?deviceFonts:[...deviceFonts,{id,name:id}];$('typeface').innerHTML=fonts.map(f=>`<option value="${html(f.id)}">${html(f.name||f.id)}</option>`).join('');setVal('typeface',id)}
 function snapWpm(v){v=Math.max(10,Math.min(1000,Math.round(+v||300)));return Math.round(v/10)*10}
 function updateLabels(){['wpm','longWordMs','complexWordMs','punctuationMs','brightnessPercent','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>{const l=$(id+'Value')||$(id.replace('Percent','')+'Value')||$(id.replace('Index','')+'Value');if(l)l.textContent=$(id).value+(id==='wpm'?' WPM':id.includes('Ms')?' ms':id==='brightnessPercent'?'%':'')})}
-async function loadSettings(){try{[settings,{themes:deviceThemes=[]},{fonts:deviceFonts=[]}]=await Promise.all([api('/api/v1/settings'),api('/api/v1/appearance/themes'),api('/api/v1/appearance/fonts')]);setThemeOptions();setFontOptions();if(!themeCatalog.length)loadThemeCatalog();if(!fontCatalog.length)loadFontCatalog();const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;setVal('pauseMode',r.pauseMode);setVal('wpm',snapWpm(r.wpm));setVal('longWordMs',p.longWordDelayMs);setVal('complexWordMs',p.complexWordDelayMs);setVal('punctuationMs',p.punctuationDelayMs);setVal('themeId',i.selectedThemeId||'default');setVal('brightnessPercent',i.brightnessPercent);setVal('handedness',r.leftHanded?'left':'right');setVal('footerMetric',r.footerMetric);setVal('batteryLabel',r.batteryLabel);setVal('batteryIcon',r.batteryIconVisible);setVal('readingBattery',r.batteryVisibleWhileReading);setVal('readingChapter',r.chapterVisibleWhileReading);setVal('readingProgress',r.progressVisibleWhileReading);setVal('typeface',t.fontId);setVal('fontSizeIndex',t.fontSizeIndex);setVal('tracking',t.tracking);setVal('anchorPercent',t.anchor);setVal('guideWidth',t.guideWidth);setVal('guideGap',t.guideGap);setVal('focusHighlight',t.focusHighlight);setVal('phantomWords',r.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
-async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;r.wpm=+val('wpm');r.pauseMode=val('pauseMode');p.longWordDelayMs=+val('longWordMs');p.complexWordDelayMs=+val('complexWordMs');p.punctuationDelayMs=+val('punctuationMs');i.selectedThemeId=val('themeId');i.brightnessPercent=+val('brightnessPercent');r.leftHanded=val('handedness')==='left';r.footerMetric=val('footerMetric');r.batteryLabel=val('batteryLabel');r.batteryIconVisible=val('batteryIcon');r.batteryVisibleWhileReading=val('readingBattery');r.chapterVisibleWhileReading=val('readingChapter');r.progressVisibleWhileReading=val('readingProgress');r.phantomWords=val('phantomWords');t.fontId=val('typeface');t.fontSizeIndex=+val('fontSizeIndex');t.focusHighlight=val('focusHighlight');t.tracking=+val('tracking');t.anchor=+val('anchorPercent');t.guideWidth=+val('guideWidth');t.guideGap=+val('guideGap');try{settings=await api('/api/v1/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});status('Settings saved and applied.')}catch(e){status('Settings save failed: '+e.message)}}
+async function loadSettings(){try{[settings,{themes:deviceThemes=[]},{fonts:deviceFonts=[]}]=await Promise.all([api('/api/v1/settings'),api('/api/v1/appearance/themes'),api('/api/v1/appearance/fonts')]);setThemeOptions();setFontOptions();if(!themeCatalog.length)loadThemeCatalog();if(!fontCatalog.length)loadFontCatalog();const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;setVal('readingMode',r.mode||'rsvp');setVal('pauseMode',r.pauseMode);setVal('wpm',snapWpm(r.wpm));setVal('longWordMs',p.longWordDelayMs);setVal('complexWordMs',p.complexWordDelayMs);setVal('punctuationMs',p.punctuationDelayMs);setVal('themeId',i.selectedThemeId||'default');setVal('brightnessPercent',i.brightnessPercent);setVal('handedness',r.leftHanded?'left':'right');setVal('footerMetric',r.footerMetric);setVal('batteryLabel',r.batteryLabel);setVal('batteryIcon',r.batteryIconVisible);setVal('readingBattery',r.batteryVisibleWhileReading);setVal('readingChapter',r.chapterVisibleWhileReading);setVal('readingProgress',r.progressVisibleWhileReading);setVal('typeface',t.fontId);setVal('fontSizeIndex',t.fontSizeIndex);setVal('tracking',t.tracking);setVal('anchorPercent',t.anchor);setVal('guideWidth',t.guideWidth);setVal('guideGap',t.guideGap);setVal('focusHighlight',t.focusHighlight);setVal('phantomWords',r.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
+async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;r.wpm=+val('wpm');r.mode=val('readingMode');r.pauseMode=val('pauseMode');p.longWordDelayMs=+val('longWordMs');p.complexWordDelayMs=+val('complexWordMs');p.punctuationDelayMs=+val('punctuationMs');i.selectedThemeId=val('themeId');i.brightnessPercent=+val('brightnessPercent');r.leftHanded=val('handedness')==='left';r.footerMetric=val('footerMetric');r.batteryLabel=val('batteryLabel');r.batteryIconVisible=val('batteryIcon');r.batteryVisibleWhileReading=val('readingBattery');r.chapterVisibleWhileReading=val('readingChapter');r.progressVisibleWhileReading=val('readingProgress');r.phantomWords=val('phantomWords');t.fontId=val('typeface');t.fontSizeIndex=+val('fontSizeIndex');t.focusHighlight=val('focusHighlight');t.tracking=+val('tracking');t.anchor=+val('anchorPercent');t.guideWidth=+val('guideWidth');t.guideGap=+val('guideGap');try{settings=await api('/api/v1/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});status('Settings saved and applied.')}catch(e){status('Settings save failed: '+e.message)}}
 async function loadWifi(){try{await api('/api/v1/network');const ssid=(settings&&settings.network&&settings.network.wifiSsid)||'';$('wifiSsid').value=ssid;$('wifiPassword').value='';$('wifiCurrent').textContent=ssid?'Saved network: '+ssid:'No home Wi-Fi saved.'}catch(e){status('Wi-Fi load failed: '+e.message)}}
 async function saveWifi(){const ssid=$('wifiSsid').value.trim();if(!ssid){status('Enter a Wi-Fi SSID first.');return}try{await api('/api/v1/network',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password:$('wifiPassword').value})});settings.network.wifiSsid=ssid;$('wifiPassword').value='';$('wifiCurrent').textContent='Saved network: '+ssid;status('Wi-Fi saved for RSS and OTA.')}catch(e){status('Wi-Fi save failed: '+e.message)}}
 async function forgetWifi(){if(!confirm('Forget saved Wi-Fi?'))return;try{await api('/api/v1/network',{method:'DELETE'});settings.network.wifiSsid='';$('wifiSsid').value='';$('wifiPassword').value='';$('wifiCurrent').textContent='No home Wi-Fi saved.';status('Wi-Fi credentials cleared.')}catch(e){status('Forget Wi-Fi failed: '+e.message)}}
@@ -274,58 +269,34 @@ loadDraft();refresh();
         return AsciiText::isAlphaNumeric(c) || c == '-' || c == '_' || c == '.' || c == ' ';
     }
 
-    String ipToString(IPAddress ip) {
-        return String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]);
+    std::string ipToString(IPAddress ip) {
+        return std::to_string(ip[0]) + "." + std::to_string(ip[1]) + "." + std::to_string(ip[2]) + "."
+             + std::to_string(ip[3]);
     }
 
-    String stripBom(String value) {
-        if (value.length() >= 3 && static_cast<uint8_t>(value[0]) == 0xEF && static_cast<uint8_t>(value[1]) == 0xBB
-            && static_cast<uint8_t>(value[2]) == 0xBF) {
-            value.remove(0, 3);
-        }
-        return value;
+    bool isSupportedBookName(std::string_view loweredName) {
+        return loweredName.ends_with(".rsvp") || loweredName.ends_with(".txt") || loweredName.ends_with(".epub");
     }
 
-    bool directiveMatches(const String& loweredLine, const char* directive) {
-        if (!loweredLine.startsWith(directive)) {
-            return false;
-        }
-        const size_t directiveLength = strlen(directive);
-        return loweredLine.length() == directiveLength || AsciiText::isWhitespace(loweredLine[directiveLength]);
+    std::string displayNameForPath(std::string_view path) {
+        const size_t separator = path.rfind('/');
+        return std::string{separator == std::string_view::npos ? path : path.substr(separator + 1)};
     }
 
-    String directiveValue(const String& line, const char* directive) {
-        String value = line.substring(strlen(directive));
-        value.trim();
-        return value;
-    }
-
-    bool isSupportedBookName(const String& loweredName) {
-        return loweredName.endsWith(".rsvp") || loweredName.endsWith(".txt") || loweredName.endsWith(".epub");
-    }
-
-    String displayNameForPath(const String& path) {
-        const int separator = path.lastIndexOf('/');
-        if (separator < 0) {
-            return path;
-        }
-        return path.substring(separator + 1);
-    }
-
-    String relativeLibraryName(const String& path) {
-        const String prefix = String(StoragePaths::kBooksPath) + "/";
-        if (path.startsWith(prefix)) {
-            return path.substring(prefix.length());
+    std::string relativeLibraryName(std::string_view path) {
+        const std::string prefix = std::string{StoragePaths::kBooksPath} + "/";
+        if (path.starts_with(prefix)) {
+            return std::string{path.substr(prefix.length())};
         }
         return displayNameForPath(path);
     }
 
-    String libraryCategoryForPath(const String& path) {
-        const String relative = relativeLibraryName(path);
-        if (relative.startsWith("articles/")) {
+    std::string libraryCategoryForPath(std::string_view path) {
+        const std::string relative = relativeLibraryName(path);
+        if (relative.starts_with("articles/")) {
             return "article";
         }
-        if (relative.startsWith("books/")) {
+        if (relative.starts_with("books/")) {
             return "book";
         }
         return "root";
@@ -372,20 +343,17 @@ loadDraft();refresh();
         return focus::load(Board::Storage::filesystem()).value_or(focus::defaultTimers());
     }
 
-    String rsvpMetadataValueFromLine(const String& line, const char* directive, bool& pastDirectives) {
-        String trimmed = stripBom(line);
-        trimmed.trim();
-        if (trimmed.isEmpty()) {
+    std::string rsvpMetadataValueFromLine(std::string_view line, const char* directive, bool& pastDirectives) {
+        const std::string_view trimmed = RsvpText::stripBom(line);
+        if (trimmed.empty()) {
             return "";
         }
 
-        String lowered = trimmed;
-        lowered.toLowerCase();
-        if (directiveMatches(lowered, directive)) {
-            return directiveValue(trimmed, directive);
+        if (RsvpText::prefixHasBoundary(trimmed, directive)) {
+            return std::string{RsvpText::directiveValue(trimmed, directive)};
         }
 
-        if (!trimmed.startsWith("@")) {
+        if (!trimmed.starts_with('@')) {
             pastDirectives = true;
         }
         return "";
@@ -575,7 +543,7 @@ void CompanionSyncManager::handleNotFoundStatic() {
 }
 
 bool CompanionSyncManager::startAccessPoint() {
-    const std::string ssid = std::string{"RSVP-Nano-"} + deviceSuffix().c_str();
+    const std::string ssid = "RSVP-Nano-" + deviceSuffix();
     statusLine1_ = "Sync Wi-Fi";
     statusLine2_ = ssid;
     networkSsid_ = ssid;
@@ -608,10 +576,10 @@ bool CompanionSyncManager::startStation() {
 
     networkMode_ = NetworkMode::Station;
     networkSsid_ = ssid;
-    const String suffix = deviceSuffix();
-    String hostname = "rsvp-nano-" + suffix;
-    const String instanceName = "RSVP-Nano-" + suffix;
-    hostname.toLowerCase();
+    const std::string suffix = deviceSuffix();
+    std::string hostname = "rsvp-nano-" + suffix;
+    const std::string instanceName = "RSVP-Nano-" + suffix;
+    std::ranges::transform(hostname, hostname.begin(), AsciiText::toLower);
     if (!MDNS.begin(hostname.c_str())) {
         ESP_LOGE("sync", "mDNS failed; starting access point");
         net::disconnect();
@@ -682,7 +650,7 @@ void CompanionSyncManager::handleInfo() {
                  "RSVP Nano",
                  networkMode_ == NetworkMode::Station ? api::NetworkMode::station : api::NetworkMode::access_point,
                  networkSsid_,
-                 toStdString(updater.currentVersion()),
+                 std::string(updater.currentVersion()),
                  Board::Config::OTA_ASSET_NAME,
                  1,
              });
@@ -709,59 +677,55 @@ void CompanionSyncManager::handleBooksList() {
         File entry = dir.openNextFile();
         while (entry) {
             if (!entry.isDirectory()) {
-                const String name = displayNameForPath(String(entry.name()));
-                const String path = String(directoryPath) + "/" + name;
-                String lowered = name;
-                lowered.toLowerCase();
+                const std::string name = displayNameForPath(entry.name());
+                const std::string path = std::string{directoryPath} + "/" + name;
+                std::string lowered = name;
+                std::ranges::transform(lowered, lowered.begin(), AsciiText::toLower);
                 if (isSupportedBookName(lowered)) {
                     api::LibraryItem item;
-                    item.id = toStdString(bookIdForPath(path));
-                    item.name = toStdString(relativeLibraryName(path));
-                    item.category = toStdString(libraryCategoryForPath(path));
+                    item.id = bookIdForPath(path);
+                    item.name = relativeLibraryName(path);
+                    item.category = libraryCategoryForPath(path);
                     item.bytes = static_cast<uint32_t>(entry.size());
 
                     const RsvpMetadata sourceMetadata = readRsvpMetadata(path);
                     BookMetadata indexedMetadata;
                     IndexedBookStore::Header indexHeader;
-                    const bool hasIndexedMetadata = IndexedBook::readMetadata(path, indexedMetadata, &indexHeader);
+                    const bool hasIndexedMetadata =
+                        IndexedBook::readMetadata({path.c_str(), path.length()}, indexedMetadata, &indexHeader);
                     uint8_t progressPercent = 0;
                     uint32_t wordIndex = 0;
                     if (hasIndexedMetadata)
                         progressForPath(path, indexHeader.sourceSize, indexHeader.sourceFingerprint,
                                         indexHeader.wordCount, wordIndex, progressPercent);
-                    item.metadata.title = hasIndexedMetadata && !indexedMetadata.title.empty()
-                                            ? indexedMetadata.title
-                                            : toStdString(sourceMetadata.title);
+                    item.metadata.title = hasIndexedMetadata && !indexedMetadata.title.empty() ? indexedMetadata.title
+                                                                                               : sourceMetadata.title;
                     item.metadata.author = hasIndexedMetadata && !indexedMetadata.author.empty()
                                              ? indexedMetadata.author
-                                             : toStdString(sourceMetadata.author);
+                                             : sourceMetadata.author;
                     item.metadata.wordCount = hasIndexedMetadata ? indexHeader.wordCount : 0;
                     item.metadata.chapterCount =
                         hasIndexedMetadata ? static_cast<uint32_t>(indexedMetadata.chapters.size()) : 0;
                     if (hasIndexedMetadata) {
                         item.metadata.chapters.reserve(indexedMetadata.chapters.size());
-                        for (const auto& chapter: indexedMetadata.chapters) {
-                            item.metadata.chapters.push_back({chapter.title, static_cast<uint32_t>(chapter.wordIndex)});
-                        }
+                        std::ranges::transform(indexedMetadata.chapters, std::back_inserter(item.metadata.chapters),
+                                               [](const ChapterMarker& chapter) {
+                                                   return api::Chapter{chapter.title,
+                                                                       static_cast<uint32_t>(chapter.wordIndex)};
+                                               });
                         item.source = api::BookSource{indexHeader.sourceSize, indexHeader.sourceFingerprint};
 
                         api::BookReading reading;
                         reading.wordIndex = wordIndex;
                         reading.percent = progressPercent;
-                        size_t chapterIndex = 0;
-                        bool hasChapter = false;
-                        for (size_t index = 0; index < indexedMetadata.chapters.size(); ++index) {
-                            if (indexedMetadata.chapters[index].wordIndex > wordIndex)
-                                break;
-                            chapterIndex = index;
-                            hasChapter = true;
-                        }
                         reading.remainingWords =
                             indexHeader.wordCount > wordIndex + 1 ? indexHeader.wordCount - wordIndex - 1 : 0;
                         reading.estimatedMinutes = wpm == 0 ? 0 : (reading.remainingWords + wpm - 1) / wpm;
-                        if (hasChapter) {
-                            reading.currentChapter = api::CurrentChapter{static_cast<uint32_t>(chapterIndex + 1),
-                                                                         indexedMetadata.chapters[chapterIndex].title};
+                        if (const ChapterMarker* chapter = indexedMetadata.chapterAt(wordIndex)) {
+                            reading.currentChapter =
+                                api::CurrentChapter{static_cast<uint32_t>(chapter - indexedMetadata.chapters.data()
+                                                                          + 1),
+                                                    chapter->title};
                         }
                         item.reading = std::move(reading);
                     }
@@ -799,7 +763,7 @@ void CompanionSyncManager::handleSettings() {
         return;
     }
 
-    auto decoded = settings::codec::decodeJson(toStringView(body), settings::SettingsSource::Companion);
+    auto decoded = settings::codec::decodeJson({body.c_str(), body.length()}, settings::SettingsSource::Companion);
     if (!decoded) {
         sendError(400, "invalid_json", decoded.error().message.c_str());
         return;
@@ -847,7 +811,7 @@ void CompanionSyncManager::handleWifi() {
         return;
     }
 
-    auto update = api::decode<api::NetworkUpdate>(toStringView(body));
+    auto update = api::decode<api::NetworkUpdate>({body.c_str(), body.length()});
     if (!update) {
         sendError(400, "invalid_json", update.error().c_str());
         return;
@@ -890,7 +854,7 @@ void CompanionSyncManager::handleRssFeeds() {
         return;
     }
 
-    auto update = api::decode<rss::Config>(toStringView(body));
+    auto update = api::decode<rss::Config>({body.c_str(), body.length()});
     if (!update) {
         sendError(400, "invalid_json", update.error().c_str());
         return;
@@ -917,7 +881,7 @@ void CompanionSyncManager::handleFocusTimers() {
         return;
     }
 
-    auto timers = api::decode<focus::Timers>(toStringView(body));
+    auto timers = api::decode<focus::Timers>({body.c_str(), body.length()});
     if (!timers) {
         sendError(400, "invalid_json", timers.error().c_str());
         return;
@@ -939,14 +903,14 @@ void CompanionSyncManager::handleFocusTimers() {
 }
 
 void CompanionSyncManager::handleBooks() {
-    finishUpload(uploadError_.isEmpty());
-    if (!uploadError_.isEmpty()) {
+    finishUpload(uploadError_.empty());
+    if (!uploadError_.empty()) {
         sendError(422, "invalid_upload", uploadError_);
         uploadError_ = "";
         return;
     }
 
-    sendData(server_, jsonBuffer_, 201, api::UploadResponse{toStdString(uploadFinalPath_)});
+    sendData(server_, jsonBuffer_, 201, api::UploadResponse{uploadFinalPath_});
     uploadFinalPath_ = "";
 }
 
@@ -959,8 +923,9 @@ void CompanionSyncManager::handleThemes() {
 
         api::ThemesResponse response;
         response.themes.reserve(store.themes().size());
-        for (const auto& theme: store.themes())
-            response.themes.push_back({theme.id, theme.definition.name});
+        std::ranges::transform(store.themes(), std::back_inserter(response.themes), [](const auto& theme) {
+            return api::ThemeSummary{theme.id, theme.definition.name};
+        });
         sendData(server_, jsonBuffer_, 200, response);
         return;
     }
@@ -969,9 +934,9 @@ void CompanionSyncManager::handleThemes() {
         uploadFile_.close();
     }
 
-    if (!uploadError_.isEmpty()) {
-        Board::Storage::filesystem().remove(uploadTmpPath_);
-        const int status = uploadError_.indexOf("already exists") >= 0 ? 409 : 400;
+    if (!uploadError_.empty()) {
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
+        const int status = uploadError_.contains("already exists") ? 409 : 400;
         sendError(status, status == 409 ? "already_exists" : "invalid_upload", uploadError_);
         uploadError_ = "";
         uploadTmpPath_ = "";
@@ -979,18 +944,18 @@ void CompanionSyncManager::handleThemes() {
         return;
     }
 
-    if (uploadTmpPath_.isEmpty() || uploadFinalPath_.isEmpty()) {
+    if (uploadTmpPath_.empty() || uploadFinalPath_.empty()) {
         sendError(400, "missing_upload", "Theme file is required", "file");
         return;
     }
 
-    File tmpFile = Board::Storage::filesystem().open(uploadTmpPath_, FILE_READ);
+    File tmpFile = Board::Storage::filesystem().open(uploadTmpPath_.c_str(), FILE_READ);
     const size_t uploadSize = tmpFile ? static_cast<size_t>(tmpFile.size()) : 0;
     if (tmpFile) {
         tmpFile.close();
     }
     if (uploadSize == 0 || uploadSize > kMaxThemeUploadBytes) {
-        Board::Storage::filesystem().remove(uploadTmpPath_);
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
         sendError(422, "invalid_size", "Theme file must be between 1 byte and 4 KB", "file");
@@ -1002,7 +967,7 @@ void CompanionSyncManager::handleThemes() {
         StorageFiles::readTextFile(Board::Storage::filesystem(), uploadTmpPath_.c_str(), kMaxThemeUploadBytes);
     if (!themeText) {
         Logger::failure("sync", "read uploaded theme", uploadTmpPath_.c_str(), themeText.error());
-        Board::Storage::filesystem().remove(uploadTmpPath_);
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
         sendError(500, "storage_error", "Theme upload could not be read");
@@ -1010,7 +975,7 @@ void CompanionSyncManager::handleThemes() {
     }
     auto decoded = ui::themes::decodeToml(*themeText, id);
     if (!decoded) {
-        Board::Storage::filesystem().remove(uploadTmpPath_);
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
         sendError(422, "invalid_theme", decoded.error().message.c_str(), "file");
@@ -1018,7 +983,7 @@ void CompanionSyncManager::handleThemes() {
     }
 
     if (StorageFiles::fileExists(uploadFinalPath_.c_str())) {
-        Board::Storage::filesystem().remove(uploadTmpPath_);
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
         sendError(409, "already_exists", "Theme already exists", "name");
@@ -1028,7 +993,7 @@ void CompanionSyncManager::handleThemes() {
     auto replaced = replaceUploadedFile(uploadTmpPath_, uploadFinalPath_);
     if (!replaced) {
         Logger::failure("sync", "install theme", uploadTmpPath_.c_str(), uploadFinalPath_.c_str(), replaced.error());
-        Board::Storage::filesystem().remove(uploadTmpPath_);
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
         sendError(500, "storage_error", "Theme could not be saved");
@@ -1038,7 +1003,7 @@ void CompanionSyncManager::handleThemes() {
     statusLine1_ = "Theme received";
     statusLine2_ = uploadFinalPath_.c_str();
     ESP_LOGI("sync", "theme ready %s", uploadFinalPath_.c_str());
-    sendData(server_, jsonBuffer_, 201, api::ThemeUploadResponse{toStdString(uploadFinalPath_), id});
+    sendData(server_, jsonBuffer_, 201, api::ThemeUploadResponse{uploadFinalPath_, id});
     uploadTmpPath_ = "";
     uploadFinalPath_ = "";
 }
@@ -1050,8 +1015,9 @@ void CompanionSyncManager::handleFonts() {
 
         api::FontsResponse response;
         response.fonts.reserve(catalog.families().size());
-        for (const auto& family: catalog.families())
-            response.fonts.push_back({family.id, family.label});
+        std::ranges::transform(catalog.families(), std::back_inserter(response.fonts), [](const auto& family) {
+            return api::FontSummary{family.id, family.label};
+        });
         sendData(server_, jsonBuffer_, 200, response);
         return;
     }
@@ -1060,9 +1026,9 @@ void CompanionSyncManager::handleFonts() {
         uploadFile_.close();
     }
 
-    if (!uploadError_.isEmpty()) {
-        Board::Storage::filesystem().remove(uploadTmpPath_);
-        const int status = uploadError_.indexOf("already exists") >= 0 ? 409 : 400;
+    if (!uploadError_.empty()) {
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
+        const int status = uploadError_.contains("already exists") ? 409 : 400;
         sendError(status, status == 409 ? "already_exists" : "invalid_upload", uploadError_);
         uploadError_ = "";
         uploadTmpPath_ = "";
@@ -1070,27 +1036,27 @@ void CompanionSyncManager::handleFonts() {
         return;
     }
 
-    if (uploadTmpPath_.isEmpty() || uploadFinalPath_.isEmpty()) {
+    if (uploadTmpPath_.empty() || uploadFinalPath_.empty()) {
         sendError(400, "missing_upload", "Font file is required", "file");
         return;
     }
 
-    File tmpFile = Board::Storage::filesystem().open(uploadTmpPath_, FILE_READ);
+    File tmpFile = Board::Storage::filesystem().open(uploadTmpPath_.c_str(), FILE_READ);
     const size_t uploadSize = tmpFile ? static_cast<size_t>(tmpFile.size()) : 0;
     if (tmpFile) {
         tmpFile.close();
     }
     if (uploadSize == 0 || uploadSize > kMaxFontUploadBytes) {
-        Board::Storage::filesystem().remove(uploadTmpPath_);
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
         sendError(422, "invalid_size", "Font file must be between 1 byte and 2 MB", "file");
         return;
     }
 
-    auto validated = FontCatalog::validateFontFile(uploadTmpPath_);
+    auto validated = FontCatalog::validateFontFile({uploadTmpPath_.c_str(), uploadTmpPath_.length()});
     if (!validated) {
-        Board::Storage::filesystem().remove(uploadTmpPath_);
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
         sendError(422, "invalid_font", validated.error().c_str(), "file");
@@ -1098,7 +1064,7 @@ void CompanionSyncManager::handleFonts() {
     }
 
     if (StorageFiles::fileExists(uploadFinalPath_.c_str())) {
-        Board::Storage::filesystem().remove(uploadTmpPath_);
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
         sendError(409, "already_exists", "Font size already exists", "size");
@@ -1108,7 +1074,7 @@ void CompanionSyncManager::handleFonts() {
     auto replaced = replaceUploadedFile(uploadTmpPath_, uploadFinalPath_);
     if (!replaced) {
         Logger::failure("sync", "install font", uploadTmpPath_.c_str(), uploadFinalPath_.c_str(), replaced.error());
-        Board::Storage::filesystem().remove(uploadTmpPath_);
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
         sendError(500, "storage_error", "Font could not be saved");
@@ -1118,7 +1084,7 @@ void CompanionSyncManager::handleFonts() {
     statusLine1_ = "Font received";
     statusLine2_ = uploadFinalPath_.c_str();
     ESP_LOGI("sync", "font ready %s", uploadFinalPath_.c_str());
-    sendData(server_, jsonBuffer_, 201, api::UploadResponse{toStdString(uploadFinalPath_)});
+    sendData(server_, jsonBuffer_, 201, api::UploadResponse{uploadFinalPath_});
     uploadTmpPath_ = "";
     uploadFinalPath_ = "";
 }
@@ -1127,49 +1093,52 @@ void CompanionSyncManager::handleFontUpload() {
     HTTPUpload& upload = server_.upload();
 
     if (upload.status == UPLOAD_FILE_START) {
-        String family = sanitizeFilename(server_.arg("family"));
-        if (family.isEmpty()) {
-            family = sanitizeFilename(upload.filename);
-            const int dot = family.lastIndexOf('.');
-            if (dot > 0) {
-                family = family.substring(0, dot);
+        const String familyArg = server_.arg("family");
+        std::string family = sanitizeFilename({familyArg.c_str(), familyArg.length()});
+        if (family.empty()) {
+            family = sanitizeFilename({upload.filename.c_str(), upload.filename.length()});
+            const size_t dot = family.rfind('.');
+            if (dot != std::string::npos && dot > 0) {
+                family.erase(dot);
             }
         }
-        if (family.isEmpty()) {
+        if (family.empty()) {
             uploadError_ = "Missing font family";
             return;
         }
 
-        String sizeId = server_.arg("size");
-        sizeId.toLowerCase();
+        const String sizeArg = server_.arg("size");
+        std::string sizeId{sizeArg.c_str(), sizeArg.length()};
+        std::ranges::transform(sizeId, sizeId.begin(), AsciiText::toLower);
         const size_t sizeIndex = RFont4::sizeIndexForId(sizeId.c_str());
         if (sizeIndex == RFont4::kSizeCount) {
             uploadError_ = "Font size must be large, medium, or small";
             return;
         }
 
-        String filename = sanitizeFilename(server_.arg("name"));
-        if (filename.isEmpty()) {
-            filename = sanitizeFilename(upload.filename);
+        const String nameArg = server_.arg("name");
+        std::string filename = sanitizeFilename({nameArg.c_str(), nameArg.length()});
+        if (filename.empty()) {
+            filename = sanitizeFilename({upload.filename.c_str(), upload.filename.length()});
         }
         if (!RFont4::hasFontExtension(filename.c_str())) {
             filename += RFont4::kExtension;
         }
-        const String familyPath = String(StoragePaths::kFontsPath) + "/" + family;
+        const std::string familyPath = std::string{StoragePaths::kFontsPath} + "/" + family;
         if (!StorageFiles::ensureDirectory(StoragePaths::kFontsPath)
             || !StorageFiles::ensureDirectory(familyPath.c_str())) {
             uploadError_ = "Fonts folder unavailable";
             return;
         }
 
-        uploadFinalPath_ = String(StoragePaths::kFontsPath) + "/" + family + "/" + RFont4::sizeFilename(sizeIndex);
+        uploadFinalPath_ = std::string{StoragePaths::kFontsPath} + "/" + family + "/" + RFont4::sizeFilename(sizeIndex);
         if (StorageFiles::fileExists(uploadFinalPath_.c_str())) {
             uploadError_ = "Font size already exists";
             return;
         }
         uploadTmpPath_ = uploadFinalPath_ + ".tmp";
-        Board::Storage::filesystem().remove(uploadTmpPath_);
-        uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_, FILE_WRITE);
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
+        uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_.c_str(), FILE_WRITE);
         if (!uploadFile_) {
             uploadError_ = "Could not create file";
             return;
@@ -1182,20 +1151,20 @@ void CompanionSyncManager::handleFontUpload() {
     }
 
     if (upload.status == UPLOAD_FILE_WRITE) {
-        if (!uploadError_.isEmpty() || !uploadFile_) {
+        if (!uploadError_.empty() || !uploadFile_) {
             return;
         }
         if (static_cast<size_t>(upload.totalSize) + static_cast<size_t>(upload.currentSize) > kMaxFontUploadBytes) {
             uploadError_ = "Font file too large";
             uploadFile_.close();
-            Board::Storage::filesystem().remove(uploadTmpPath_);
+            Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
             return;
         }
         const size_t written = uploadFile_.write(upload.buf, upload.currentSize);
         if (written != upload.currentSize) {
             uploadError_ = "Font write failed";
             uploadFile_.close();
-            Board::Storage::filesystem().remove(uploadTmpPath_);
+            Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         }
         return;
     }
@@ -1211,8 +1180,8 @@ void CompanionSyncManager::handleFontUpload() {
         if (uploadFile_) {
             uploadFile_.close();
         }
-        if (!uploadTmpPath_.isEmpty()) {
-            Board::Storage::filesystem().remove(uploadTmpPath_);
+        if (!uploadTmpPath_.empty()) {
+            Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         }
         uploadError_ = "Upload aborted";
         finishUpload(false);
@@ -1220,18 +1189,18 @@ void CompanionSyncManager::handleFontUpload() {
 }
 
 void CompanionSyncManager::handleBookDelete() {
-    String path;
+    std::string path;
     const String id = server_.arg("id");
     if (id.isEmpty()) {
         sendError(400, "missing_field", "Book id is required", "id");
         return;
     }
-    if (!resolveBookId(id, path)) {
+    if (!resolveBookId({id.c_str(), id.length()}, path)) {
         sendError(404, "book_not_found", "Book not found", "id");
         return;
     }
 
-    if (!Board::Storage::filesystem().remove(path)) {
+    if (!Board::Storage::filesystem().remove(path.c_str())) {
         sendError(500, "storage_error", "Book could not be deleted");
         return;
     }
@@ -1239,7 +1208,7 @@ void CompanionSyncManager::handleBookDelete() {
     statusLine1_ = "Book deleted";
     statusLine2_ = relativeLibraryName(path).c_str();
     ESP_LOGD("sync", "deleted %s", path.c_str());
-    sendData(server_, jsonBuffer_, 200, api::DeleteResponse{toStdString(id), true});
+    sendData(server_, jsonBuffer_, 200, api::DeleteResponse{std::string{id.c_str(), id.length()}, true});
 }
 
 void CompanionSyncManager::handleBookPosition() {
@@ -1249,7 +1218,7 @@ void CompanionSyncManager::handleBookPosition() {
         return;
     }
 
-    auto update = api::decode<api::BookPositionUpdate>(toStringView(body));
+    auto update = api::decode<api::BookPositionUpdate>({body.c_str(), body.length()});
     if (!update) {
         sendError(400, "invalid_json", update.error().c_str());
         return;
@@ -1259,16 +1228,15 @@ void CompanionSyncManager::handleBookPosition() {
         return;
     }
 
-    const String id = update->id->c_str();
-    String path;
-    if (!resolveBookId(id, path)) {
+    std::string path;
+    if (!resolveBookId(*update->id, path)) {
         sendError(404, "book_not_found", "Book not found", "id");
         return;
     }
 
     BookMetadata metadata;
     IndexedBookStore::Header header;
-    if (!IndexedBook::readMetadata(path, metadata, &header)) {
+    if (!IndexedBook::readMetadata({path.c_str(), path.length()}, metadata, &header)) {
         sendError(409, "index_unavailable", "Book must be indexed on the reader before changing position");
         return;
     }
@@ -1279,10 +1247,12 @@ void CompanionSyncManager::handleBookPosition() {
 
     const uint32_t wordIndex = std::min<uint32_t>(*update->wordIndex, header.wordCount - 1);
     auto written =
-        ReadingProgress::writeBookStatePosition(path, {header.sourceSize, header.sourceFingerprint, header.wordCount},
+        ReadingProgress::writeBookStatePosition({path.c_str(), path.length()},
+                                                {header.sourceSize, header.sourceFingerprint, header.wordCount},
                                                 wordIndex);
     if (!written) {
-        Logger::failure("sync", "save reading position", StoragePaths::bookStatePathFor(path).c_str(), written.error());
+        Logger::failure("sync", "save reading position",
+                        StoragePaths::bookStatePathFor({path.c_str(), path.length()}).c_str(), written.error());
         sendError(500, "storage_error", "Reading position could not be saved");
         return;
     }
@@ -1300,23 +1270,25 @@ void CompanionSyncManager::handleBookUpload() {
     HTTPUpload& upload = server_.upload();
 
     if (upload.status == UPLOAD_FILE_START) {
-        String filename = sanitizeFilename(server_.arg("name"));
-        if (filename.isEmpty()) {
-            filename = sanitizeFilename(upload.filename);
+        const String nameArg = server_.arg("name");
+        std::string filename = sanitizeFilename({nameArg.c_str(), nameArg.length()});
+        if (filename.empty()) {
+            filename = sanitizeFilename({upload.filename.c_str(), upload.filename.length()});
         }
-        if (filename.isEmpty()) {
+        if (filename.empty()) {
             uploadError_ = "Missing filename";
             return;
         }
 
-        String lowered = filename;
-        lowered.toLowerCase();
+        std::string lowered = filename;
+        std::ranges::transform(lowered, lowered.begin(), AsciiText::toLower);
         if (!isSupportedBookName(lowered)) {
             filename += ".rsvp";
         }
 
-        String category = server_.arg("category");
-        category.toLowerCase();
+        const String categoryArg = server_.arg("category");
+        std::string category{categoryArg.c_str(), categoryArg.length()};
+        std::ranges::transform(category, category.begin(), AsciiText::toLower);
         const char* targetDirectory =
             category == "article" ? StoragePaths::kArticleFilesPath : StoragePaths::kBookFilesPath;
 
@@ -1326,10 +1298,10 @@ void CompanionSyncManager::handleBookUpload() {
             uploadError_ = "Library folders unavailable";
             return;
         }
-        uploadFinalPath_ = String(targetDirectory) + "/" + filename;
+        uploadFinalPath_ = std::string{targetDirectory} + "/" + filename;
         uploadTmpPath_ = uploadFinalPath_ + ".tmp";
-        Board::Storage::filesystem().remove(uploadTmpPath_);
-        uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_, FILE_WRITE);
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
+        uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_.c_str(), FILE_WRITE);
         if (!uploadFile_) {
             uploadError_ = "Could not create file";
             return;
@@ -1342,7 +1314,7 @@ void CompanionSyncManager::handleBookUpload() {
     }
 
     if (upload.status == UPLOAD_FILE_WRITE) {
-        if (!uploadError_.isEmpty() || !uploadFile_) {
+        if (!uploadError_.empty() || !uploadFile_) {
             return;
         }
         const size_t written = uploadFile_.write(upload.buf, upload.currentSize);
@@ -1367,11 +1339,12 @@ void CompanionSyncManager::handleThemeUpload() {
     HTTPUpload& upload = server_.upload();
 
     if (upload.status == UPLOAD_FILE_START) {
-        String filename = sanitizeFilename(server_.arg("name"));
-        if (filename.isEmpty()) {
-            filename = sanitizeFilename(upload.filename);
+        const String nameArg = server_.arg("name");
+        std::string filename = sanitizeFilename({nameArg.c_str(), nameArg.length()});
+        if (filename.empty()) {
+            filename = sanitizeFilename({upload.filename.c_str(), upload.filename.length()});
         }
-        if (filename.isEmpty()) {
+        if (filename.empty()) {
             uploadError_ = "Missing filename";
             return;
         }
@@ -1383,14 +1356,14 @@ void CompanionSyncManager::handleThemeUpload() {
             return;
         }
 
-        uploadFinalPath_ = String(StoragePaths::kThemesPath) + "/" + filename;
+        uploadFinalPath_ = std::string{StoragePaths::kThemesPath} + "/" + filename;
         if (StorageFiles::fileExists(uploadFinalPath_.c_str())) {
             uploadError_ = "Theme already exists";
             return;
         }
         uploadTmpPath_ = uploadFinalPath_ + ".tmp";
-        Board::Storage::filesystem().remove(uploadTmpPath_);
-        uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_, FILE_WRITE);
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
+        uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_.c_str(), FILE_WRITE);
         if (!uploadFile_) {
             uploadError_ = "Could not create file";
             return;
@@ -1403,7 +1376,7 @@ void CompanionSyncManager::handleThemeUpload() {
     }
 
     if (upload.status == UPLOAD_FILE_WRITE) {
-        if (!uploadError_.isEmpty() || !uploadFile_) {
+        if (!uploadError_.empty() || !uploadFile_) {
             return;
         }
         if (upload.totalSize + upload.currentSize > kMaxThemeUploadBytes) {
@@ -1427,8 +1400,8 @@ void CompanionSyncManager::handleNotFound() {
     sendError(404, "not_found", "API route not found");
 }
 
-void CompanionSyncManager::sendError(int status, const char* code, const String& message, const char* field) {
-    api::ApiError error{code == nullptr ? "unknown" : code, toStdString(message), std::nullopt};
+void CompanionSyncManager::sendError(int status, const char* code, std::string_view message, const char* field) {
+    api::ApiError error{code == nullptr ? "unknown" : code, std::string{message}, std::nullopt};
     if (field != nullptr && *field != '\0')
         error.field = field;
     if (auto encoded = api::encodeError(std::move(error), jsonBuffer_); !encoded) {
@@ -1441,36 +1414,36 @@ void CompanionSyncManager::sendError(int status, const char* code, const String&
     server_.send(status, "application/json", jsonBuffer_.c_str());
 }
 
-String CompanionSyncManager::deviceSuffix() const {
+std::string CompanionSyncManager::deviceSuffix() const {
     uint64_t mac = ESP.getEfuseMac();
     char suffix[7];
     snprintf(suffix, sizeof(suffix), "%06X", static_cast<unsigned int>(mac & 0xFFFFFF));
-    return String(suffix);
+    return suffix;
 }
 
-String CompanionSyncManager::sanitizeFilename(const String& name) const {
-    String sanitized;
+std::string CompanionSyncManager::sanitizeFilename(std::string_view name) const {
+    std::string sanitized;
     sanitized.reserve(name.length());
-    for (size_t i = 0; i < name.length(); ++i) {
-        const char c = name[i];
-        sanitized += isSafeFilenameChar(c) ? c : '-';
-    }
-    sanitized.trim();
-    while (sanitized.startsWith(".")) {
-        sanitized.remove(0, 1);
+    std::ranges::transform(name, std::back_inserter(sanitized), [](char c) {
+        return isSafeFilenameChar(c) ? c : '-';
+    });
+    sanitized = std::string{AsciiText::trim(sanitized)};
+    while (sanitized.starts_with('.')) {
+        sanitized.erase(0, 1);
     }
     return sanitized;
 }
 
-CompanionSyncManager::RsvpMetadata CompanionSyncManager::readRsvpMetadata(const String& path) const {
+CompanionSyncManager::RsvpMetadata CompanionSyncManager::readRsvpMetadata(std::string_view path) const {
     RsvpMetadata metadata;
-    String loweredPath = path;
-    loweredPath.toLowerCase();
-    if (!loweredPath.endsWith(".rsvp")) {
+    std::string loweredPath{path};
+    std::ranges::transform(loweredPath, loweredPath.begin(), AsciiText::toLower);
+    if (!loweredPath.ends_with(".rsvp")) {
         return metadata;
     }
 
-    File file = Board::Storage::filesystem().open(path);
+    const std::string ownedPath{path};
+    File file = Board::Storage::filesystem().open(ownedPath.c_str());
     if (!file || file.isDirectory()) {
         if (file) {
             file.close();
@@ -1478,7 +1451,7 @@ CompanionSyncManager::RsvpMetadata CompanionSyncManager::readRsvpMetadata(const 
         return metadata;
     }
 
-    String line;
+    std::string line;
     line.reserve(kMaxMetadataLineChars);
     bool pastDirectives = false;
     while (file.available()) {
@@ -1491,33 +1464,33 @@ CompanionSyncManager::RsvpMetadata CompanionSyncManager::readRsvpMetadata(const 
             line += c;
             if (line.length() > kMaxMetadataLineChars) {
                 pastDirectives = true;
-                line = "";
+                line.clear();
                 break;
             }
             continue;
         }
 
-        if (metadata.title.isEmpty()) {
+        if (metadata.title.empty()) {
             metadata.title = rsvpMetadataValueFromLine(line, "@title", pastDirectives);
         }
-        if (metadata.author.isEmpty() && !pastDirectives) {
+        if (metadata.author.empty() && !pastDirectives) {
             metadata.author = rsvpMetadataValueFromLine(line, "@author", pastDirectives);
         }
-        if (!metadata.title.isEmpty() && !metadata.author.isEmpty()) {
+        if (!metadata.title.empty() && !metadata.author.empty()) {
             break;
         }
 
         if (pastDirectives) {
             break;
         }
-        line = "";
+        line.clear();
     }
 
-    if (!line.isEmpty() && !pastDirectives) {
-        if (metadata.title.isEmpty()) {
+    if (!line.empty() && !pastDirectives) {
+        if (metadata.title.empty()) {
             metadata.title = rsvpMetadataValueFromLine(line, "@title", pastDirectives);
         }
-        if (metadata.author.isEmpty() && !pastDirectives) {
+        if (metadata.author.empty() && !pastDirectives) {
             metadata.author = rsvpMetadataValueFromLine(line, "@author", pastDirectives);
         }
     }
@@ -1526,7 +1499,7 @@ CompanionSyncManager::RsvpMetadata CompanionSyncManager::readRsvpMetadata(const 
     return metadata;
 }
 
-bool CompanionSyncManager::progressForPath(const String& path, uint32_t sourceSize, uint32_t sourceFingerprint,
+bool CompanionSyncManager::progressForPath(std::string_view path, uint32_t sourceSize, uint32_t sourceFingerprint,
                                            uint32_t wordCount, uint32_t& wordIndex, uint8_t& percent) {
     if (wordCount <= 1) {
         return false;
@@ -1545,10 +1518,10 @@ bool CompanionSyncManager::progressForPath(const String& path, uint32_t sourceSi
     return false;
 }
 
-String CompanionSyncManager::bookIdForPath(const String& path) const {
+std::string CompanionSyncManager::bookIdForPath(std::string_view path) const {
     uint32_t hash = 2166136261UL;
-    for (size_t index = 0; index < path.length(); ++index) {
-        hash ^= static_cast<uint8_t>(path[index]);
+    for (const char c: path) {
+        hash ^= static_cast<uint8_t>(c);
         hash *= 16777619UL;
     }
     char id[10];
@@ -1556,7 +1529,7 @@ String CompanionSyncManager::bookIdForPath(const String& path) const {
     return id;
 }
 
-bool CompanionSyncManager::resolveBookId(const String& id, String& path) const {
+bool CompanionSyncManager::resolveBookId(std::string_view id, std::string& path) const {
     const char* directories[] = {
         StoragePaths::kBooksPath,
         StoragePaths::kBookFilesPath,
@@ -1575,11 +1548,11 @@ bool CompanionSyncManager::resolveBookId(const String& id, String& path) const {
         File entry = dir.openNextFile();
         while (entry) {
             if (!entry.isDirectory()) {
-                const String name = displayNameForPath(String(entry.name()));
-                String lowered = name;
-                lowered.toLowerCase();
+                const std::string name = displayNameForPath(entry.name());
+                std::string lowered = name;
+                std::ranges::transform(lowered, lowered.begin(), AsciiText::toLower);
                 if (isSupportedBookName(lowered)) {
-                    const String candidate = String(directoryPath) + "/" + name;
+                    const std::string candidate = std::string{directoryPath} + "/" + name;
                     if (bookIdForPath(candidate) == id) {
                         path = candidate;
                         entry.close();
@@ -1602,23 +1575,23 @@ void CompanionSyncManager::finishUpload(bool success) {
         uploadFile_.close();
     }
 
-    if (uploadTmpPath_.isEmpty()) {
+    if (uploadTmpPath_.empty()) {
         return;
     }
 
-    if (success && uploadError_.isEmpty()) {
+    if (success && uploadError_.empty()) {
         auto replaced = replaceUploadedFile(uploadTmpPath_, uploadFinalPath_);
         if (!replaced) {
             Logger::failure("sync", "install book", uploadTmpPath_.c_str(), uploadFinalPath_.c_str(), replaced.error());
             uploadError_ = "Rename failed";
-            Board::Storage::filesystem().remove(uploadTmpPath_);
+            Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         } else {
             statusLine1_ = "Book received";
             statusLine2_ = uploadFinalPath_.c_str();
             ESP_LOGI("sync", "upload ready %s", uploadFinalPath_.c_str());
         }
     } else {
-        Board::Storage::filesystem().remove(uploadTmpPath_);
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
     }
 
     uploadTmpPath_ = "";

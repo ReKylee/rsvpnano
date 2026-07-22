@@ -29,8 +29,8 @@ private:
     };
 
     struct RsvpMetadata {
-        String title;
-        String author;
+        std::string title;
+        std::string author;
     };
 
     static void handleInfoStatic();
@@ -70,23 +70,23 @@ private:
     void handleFonts();
     void handleFontUpload();
     void handleNotFound();
-    void sendError(int status, const char* code, const String& message, const char* field = nullptr);
-    String deviceSuffix() const;
-    String sanitizeFilename(const String& name) const;
-    RsvpMetadata readRsvpMetadata(const String& path) const;
-    bool progressForPath(const String& path, uint32_t sourceSize, uint32_t sourceFingerprint, uint32_t wordCount,
+    void sendError(int status, const char* code, std::string_view message, const char* field = nullptr);
+    std::string deviceSuffix() const;
+    std::string sanitizeFilename(std::string_view name) const;
+    RsvpMetadata readRsvpMetadata(std::string_view path) const;
+    bool progressForPath(std::string_view path, uint32_t sourceSize, uint32_t sourceFingerprint, uint32_t wordCount,
                          uint32_t& wordIndex, uint8_t& percent);
-    String bookIdForPath(const String& path) const;
-    bool resolveBookId(const String& id, String& path) const;
+    std::string bookIdForPath(std::string_view path) const;
+    bool resolveBookId(std::string_view id, std::string& path) const;
     void finishUpload(bool success);
 
     static CompanionSyncManager* instance_;
 
     WebServer server_{80};
     File uploadFile_;
-    String uploadFinalPath_;
-    String uploadTmpPath_;
-    String uploadError_;
+    std::string uploadFinalPath_;
+    std::string uploadTmpPath_;
+    std::string uploadError_;
     std::string networkSsid_;
     std::string jsonBuffer_;
     settings::SettingsStore& settingsStore_;

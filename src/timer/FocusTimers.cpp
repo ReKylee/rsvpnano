@@ -6,49 +6,19 @@
 #include <utility>
 
 #include "settings/SettingsGlaze.h"
+#include "text/Utf8Text.h"
 
 namespace focus {
     namespace {
 
         constexpr size_t kMaxFileBytes = 4096;
 
-        bool validUtf8(std::string_view text) {
-            for (size_t index = 0; index < text.size();) {
-                const uint8_t first = static_cast<uint8_t>(text[index]);
-                if (first < 0x20 || first == 0x7F)
+        bool validTimerName(std::string_view text) {
+            uint32_t codepoint = 0;
+            while (!text.empty()) {
+                if (!Utf8Text::decode(text, codepoint) || codepoint < 0x20U || codepoint == 0x7FU
+                    || (codepoint >= 0x80U && codepoint <= 0x9FU))
                     return false;
-                if (first < 0x80) {
-                    ++index;
-                    continue;
-                }
-
-                size_t continuation = 0;
-                uint32_t codepoint = 0;
-                if ((first & 0xE0U) == 0xC0U) {
-                    continuation = 1;
-                    codepoint = first & 0x1FU;
-                } else if ((first & 0xF0U) == 0xE0U) {
-                    continuation = 2;
-                    codepoint = first & 0x0FU;
-                } else if ((first & 0xF8U) == 0xF0U) {
-                    continuation = 3;
-                    codepoint = first & 0x07U;
-                } else {
-                    return false;
-                }
-                if (index + continuation >= text.size())
-                    return false;
-                for (size_t offset = 1; offset <= continuation; ++offset) {
-                    const uint8_t next = static_cast<uint8_t>(text[index + offset]);
-                    if ((next & 0xC0U) != 0x80U)
-                        return false;
-                    codepoint = (codepoint << 6) | (next & 0x3FU);
-                }
-                const uint32_t minimum = continuation == 1 ? 0x80U : continuation == 2 ? 0x800U : 0x10000U;
-                if (codepoint < minimum || codepoint > 0x10FFFFU || (codepoint >= 0x80U && codepoint <= 0x9FU)
-                    || (codepoint >= 0xD800U && codepoint <= 0xDFFFU))
-                    return false;
-                index += continuation + 1;
             }
             return true;
         }
@@ -68,7 +38,7 @@ namespace focus {
     }
 
     bool valid(const Timer& timer) {
-        return !timer.name.empty() && timer.name.size() <= kMaxTimerNameBytes && validUtf8(timer.name);
+        return !timer.name.empty() && timer.name.size() <= kMaxTimerNameBytes && validTimerName(timer.name);
     }
 
     bool valid(const Timers& timers) {

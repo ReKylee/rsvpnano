@@ -13,7 +13,7 @@ namespace standby {
     }
 
     void IncrementalLifeGrid::clear() {
-        std::fill_n(cells_.begin(), cellCount_, uint8_t{0});
+        std::ranges::fill_n(cells_.begin(), cellCount_, uint8_t{0});
         clearPackedGrid(active_, wordCount_);
         clearPackedGrid(nextActive_, wordCount_);
         clearPackedGrid(dirtyCells_, wordCount_);
@@ -48,7 +48,7 @@ namespace standby {
         rebuildNeighborCounts();
         rebuildLiveCells();
         clearPackedGrid(dirtyCells_, wordCount_);
-        std::fill_n(active_.begin(), wordCount_, 0xFFFFFFFFUL);
+        std::ranges::fill_n(active_.begin(), wordCount_, 0xFFFFFFFFUL);
         fullRedraw_ = true;
     }
 

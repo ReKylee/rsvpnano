@@ -1,6 +1,7 @@
 #include "standby/PackedGrid.h"
 
 #include <algorithm>
+#include <span>
 
 namespace standby {
 
@@ -19,7 +20,7 @@ namespace standby {
     }
 
     void clearPackedGrid(PackedGridStorage& cells, size_t wordCount) {
-        std::fill_n(cells.begin(), std::min(wordCount, cells.size()), 0U);
+        std::ranges::fill_n(cells.begin(), std::min(wordCount, cells.size()), 0U);
     }
 
     bool cellAlive(PackedGridView cells, size_t index) {
@@ -34,12 +35,9 @@ namespace standby {
         if (cells.words == nullptr) {
             return false;
         }
-        for (size_t i = 0; i < cells.wordCount; ++i) {
-            if (cells.words[i] != 0) {
-                return true;
-            }
-        }
-        return false;
+        return std::ranges::any_of(std::span{cells.words, cells.wordCount}, [](uint32_t word) {
+            return word != 0;
+        });
     }
 
     void setCell(PackedGridStorage& cells, size_t index, bool alive) {

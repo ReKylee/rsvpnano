@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <esp_heap_caps.h>
+#include <string>
 #include "board/BoardStorage.h"
 
 #include "board/Board.h"
@@ -33,10 +34,10 @@ namespace {
     ui::themes::Theme gTheme = ui::themes::defaultTheme();
     bool gDisplayReady = false;
 
-    void showStatus(const String& title, const String& line1 = "", const String& line2 = "") {
-        ESP_LOGD("bench", "screen title=%s line1=%s line2=%s", title.c_str(), line1.c_str(), line2.c_str());
+    void showStatus(const char* title, const char* line1 = "", const char* line2 = "") {
+        ESP_LOGD("bench", "screen title=%s line1=%s line2=%s", title, line1, line2);
         if (gDisplayReady) {
-            screens::status(gDisplay, title.c_str(), line1.c_str(), line2.c_str());
+            screens::status(gDisplay, title, line1, line2);
         }
     }
 
@@ -145,12 +146,12 @@ namespace {
     }
 
     void reportEpubProgress(const EpubConverter::Options&, const char* line1, const char* line2, int progressPercent) {
-        String percentLine = String(progressPercent) + "%";
+        std::string percentLine = std::to_string(progressPercent) + "%";
         if (line2 != nullptr && line2[0] != '\0') {
             percentLine += " ";
             percentLine += line2;
         }
-        showStatus("EPUB", line1 == nullptr ? "" : line1, percentLine);
+        showStatus("EPUB", line1 == nullptr ? "" : line1, percentLine.c_str());
     }
 
     bool benchmarkDraculaConversion() {
@@ -161,10 +162,10 @@ namespace {
         }
 
         Board::Storage::filesystem().remove(kDraculaRsvpPath);
-        Board::Storage::filesystem().remove(StoragePaths::siblingPathWithExtension(kDraculaEpubPath,
-                                                                                   StoragePaths::kTempExtension));
-        Board::Storage::filesystem().remove(StoragePaths::siblingPathWithExtension(kDraculaEpubPath,
-                                                                                   StoragePaths::kFailedExtension));
+        Board::Storage::filesystem()
+            .remove(StoragePaths::siblingPathWithExtension(kDraculaEpubPath, StoragePaths::kTempExtension).c_str());
+        Board::Storage::filesystem()
+            .remove(StoragePaths::siblingPathWithExtension(kDraculaEpubPath, StoragePaths::kFailedExtension).c_str());
 
         EpubConverter::Options options;
         options.progressCallback = reportEpubProgress;
@@ -179,8 +180,8 @@ namespace {
         const bool ok = operation();
         const uint32_t elapsedMs = millis() - startedMs;
         logMetric(name, ok, elapsedMs, bytes);
-        showStatus(ok ? "Benchmark OK" : "Benchmark failed", name,
-                   String(static_cast<unsigned long>(elapsedMs)) + " ms");
+        const std::string elapsed = std::to_string(elapsedMs) + " ms";
+        showStatus(ok ? "Benchmark OK" : "Benchmark failed", name, elapsed.c_str());
         delay(250);
     }
 

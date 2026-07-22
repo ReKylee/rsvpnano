@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <esp_sleep.h>
 
+#include <algorithm>
 #include <esp_log.h>
 
 namespace {
@@ -19,9 +20,9 @@ namespace EspLightSleep {
                 pinMode(static_cast<int>(pin), INPUT_PULLUP);
 
             while (true) {
-                bool allReleased = true;
-                for (const gpio_num_t pin: wakePins)
-                    allReleased = allReleased && digitalRead(static_cast<int>(pin));
+                const bool allReleased = std::ranges::all_of(wakePins, [](gpio_num_t pin) {
+                    return digitalRead(static_cast<int>(pin));
+                });
                 if (allReleased)
                     break;
                 delay(kReleasePollMs);

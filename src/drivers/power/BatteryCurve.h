@@ -20,25 +20,17 @@ namespace BoardDrivers::BatteryCurve {
         if (voltage <= kCurve[0].voltage) {
             return kCurve[0].percent;
         }
-        constexpr size_t curveSize = sizeof(kCurve) / sizeof(kCurve[0]);
+        constexpr size_t curveSize = std::size(kCurve);
         if (voltage >= kCurve[curveSize - 1].voltage) {
             return kCurve[curveSize - 1].percent;
         }
 
-        for (size_t i = 1; i < curveSize; ++i) {
-            const Point& upper = kCurve[i];
-            const Point& lower = kCurve[i - 1];
-            if (voltage > upper.voltage) {
-                continue;
-            }
-
-            const float span = upper.voltage - lower.voltage;
-            const float ratio = span <= 0.0f ? 0.0f : (voltage - lower.voltage) / span;
-            const int percent = static_cast<int>(lower.percent + (upper.percent - lower.percent) * ratio + 0.5f);
-            return static_cast<uint8_t>(std::max(0, std::min(100, percent)));
-        }
-
-        return 0;
+        const auto upper = std::ranges::lower_bound(kCurve, voltage, {}, &Point::voltage);
+        const Point& lower = *std::prev(upper);
+        const float span = upper->voltage - lower.voltage;
+        const float ratio = span <= 0.0f ? 0.0f : (voltage - lower.voltage) / span;
+        const int percent = static_cast<int>(lower.percent + (upper->percent - lower.percent) * ratio + 0.5f);
+        return static_cast<uint8_t>(std::clamp(percent, 0, 100));
     }
 
 } // namespace BoardDrivers::BatteryCurve

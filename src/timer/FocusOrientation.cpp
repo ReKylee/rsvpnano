@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 
@@ -35,9 +36,8 @@ namespace focus {
         const std::array<uint8_t, 3> addresses = {Board::Imu::address(), 0x6B, 0x6A};
         for (size_t index = 0; index < addresses.size(); ++index) {
             const uint8_t address = addresses[index];
-            bool duplicate = false;
-            for (size_t previous = 0; previous < index; ++previous)
-                duplicate = duplicate || addresses[previous] == address;
+            const bool duplicate =
+                std::ranges::find(addresses.begin(), addresses.begin() + index, address) != addresses.begin() + index;
             if (duplicate || !Board::Imu::probeAddress(address))
                 continue;
 

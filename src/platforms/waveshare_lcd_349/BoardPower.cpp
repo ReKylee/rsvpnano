@@ -3,6 +3,8 @@
 
 #include <Wire.h>
 #include <algorithm>
+#include <numeric>
+#include <span>
 
 #include "drivers/gpio/tca9554/Tca9554.h"
 #include "drivers/power/BatteryCurve.h"
@@ -74,16 +76,13 @@ namespace Board::Power {
                 (static_cast<float>(rawTotal) / static_cast<float>(kRawSamples)) * 3300.0f / 4095.0f;
             status.voltage = (pinMillivolts * kBatteryDividerRatio / 1000.0f) + kBatteryVoltageOffset;
         } else {
-            std::sort(millivolts, millivolts + samples);
+            std::span values{millivolts, static_cast<size_t>(samples)};
+            std::ranges::sort(values);
             const uint8_t trim = samples >= 10 ? 2 : 0;
-            uint32_t trimmedTotal = 0;
-            uint8_t trimmedSamples = 0;
-            for (uint8_t i = trim; i < samples - trim; ++i) {
-                trimmedTotal += millivolts[i];
-                ++trimmedSamples;
-            }
+            const auto trimmed = values.subspan(trim, samples - 2 * trim);
+            const uint32_t trimmedTotal = std::accumulate(trimmed.begin(), trimmed.end(), uint32_t{0});
             const float pinMillivolts =
-                static_cast<float>(trimmedTotal) / static_cast<float>(std::max<uint8_t>(1, trimmedSamples));
+                static_cast<float>(trimmedTotal) / static_cast<float>(std::max<size_t>(1, trimmed.size()));
             status.voltage = (pinMillivolts * kBatteryDividerRatio / 1000.0f) + kBatteryVoltageOffset;
         }
 

@@ -88,7 +88,7 @@ namespace ui {
 
         TouchContact contact;
         // IRQ starts a contact; the controller packet, not the IRQ level, ends it.
-        if (touchSource_.ready != nullptr && !touchSource_.ready() && !touchActive_) {
+        if (!touchActive_ && touchSource_.ready != nullptr && !touchSource_.ready()) {
             contact = {};
         } else if (!touchSource_.read(contact)) {
             touchBackoffUntilMs_ = nowMs + touchSource_.timing.failureBackoffMs;

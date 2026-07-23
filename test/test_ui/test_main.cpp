@@ -11,11 +11,13 @@ namespace {
 
     ui::TouchContact gContact;
     bool gTouchReady;
+    uint32_t gTouchReadyReads;
 
     bool beginTouch() {
         return true;
     }
     bool touchReady() {
+        ++gTouchReadyReads;
         return gTouchReady;
     }
     bool readTouch(ui::TouchContact& contact) {
@@ -38,6 +40,7 @@ namespace {
 void setUp() {
     gContact = {};
     gTouchReady = true;
+    gTouchReadyReads = 0;
 }
 void tearDown() {}
 
@@ -192,16 +195,19 @@ void test_active_touch_outlives_irq_and_emits_hold_before_release() {
     gContact = {true, 20, 10};
     TEST_ASSERT_TRUE(context.pollTouch(1));
     TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchStart));
+    const uint32_t readyReads = gTouchReadyReads;
 
     gTouchReady = false;
     TEST_ASSERT_TRUE(context.pollTouch(500));
     TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchHold));
     TEST_ASSERT_FALSE(ui::hasTouch(*context.touch(), ui::TouchRelease));
+    TEST_ASSERT_EQUAL_UINT32(readyReads, gTouchReadyReads);
 
     gContact = {};
     TEST_ASSERT_TRUE(context.pollTouch(501));
     TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchRelease));
     TEST_ASSERT_FALSE(ui::hasTouch(*context.touch(), ui::TouchTap));
+    TEST_ASSERT_EQUAL_UINT32(readyReads, gTouchReadyReads);
 }
 
 void test_stepper_taps_and_repeats() {

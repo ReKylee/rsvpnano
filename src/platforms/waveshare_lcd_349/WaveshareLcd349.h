@@ -91,7 +91,7 @@ namespace WaveshareLcd349::TouchWiring {
     constexpr bool kReleaseBusBeforeRead = false;
     constexpr uint8_t kReleaseConfirmSamples = 2;
     constexpr uint8_t kMaxConsecutiveReadFailures = 5;
-    constexpr uint32_t kPollIntervalMs = 20;
+    constexpr uint32_t kPollIntervalMs = 30;
     constexpr uint32_t kFailureBackoffMs = 250;
     constexpr uint32_t kRecoveryRetryMs = 1000;
     constexpr uint32_t kRecoveryEventIgnoreMs = 0;

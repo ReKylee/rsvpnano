@@ -14,7 +14,7 @@ namespace screens {
         bool changed = false;
         bool reset = false;
         const ui::Rect content = detail::content(ui);
-        constexpr int16_t headerHeight = 26;
+        constexpr int16_t headerHeight = 32;
         if (ui.button({content.x, content.y, 64, headerHeight}, "<<"))
             screen = Screen::Settings;
         constexpr int16_t resetWidth = 80;

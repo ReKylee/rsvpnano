@@ -33,10 +33,10 @@ namespace screens {
 
         if (ui.width() < 620 || ui.height() < 150 || ui.height() > 240) {
             ui::Column column{detail::tabContent(ui), 4};
-            const size_t visible = std::min<size_t>(items.size(), std::max<int16_t>(1, column.bounds.h / 24));
+            const size_t visible = std::min<size_t>(items.size(), std::max<int16_t>(1, column.bounds.h / 36));
             for (size_t index = 0; index < visible; ++index) {
-                if (ui.button(column.next(20), items[index].title)) {
-                    result.open = index == selectedIndex_;
+                if (ui.button(column.next(32), items[index].title)) {
+                    result.open = true;
                     selectedIndex_ = index;
                 }
             }
@@ -82,7 +82,7 @@ namespace screens {
                 if (tapped == items.size()) {
                     result.open = true;
                 } else {
-                    result.open = tapped == selectedIndex_;
+                    result.open = true;
                     selectedIndex_ = tapped;
                     offset_ = centeredOffset(items, tapped, viewport.w);
                 }

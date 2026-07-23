@@ -1,6 +1,7 @@
 #include "ui/screens/ChaptersScreen.h"
 
 #include <algorithm>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 
@@ -10,7 +11,7 @@ namespace screens {
 
     namespace {
 
-        constexpr int16_t kHeaderHeight = 24;
+        constexpr int16_t kHeaderHeight = 32;
         constexpr int16_t kRowStep = 30;
         constexpr int16_t kDragThreshold = 5;
         constexpr int32_t kMaximumVelocity = 400'000;
@@ -81,7 +82,6 @@ namespace screens {
             lastY_ = touch->y;
         }
 
-        const int16_t centerY = static_cast<int16_t>(viewport.y + viewport.h / 2);
         if (dragging_ && touch != nullptr && ui::hasTouch(*touch, ui::TouchRelease)
             && ui::hasTouch(*touch, ui::TouchTap) && ui::contains(viewport, touch->x, touch->y)) {
             dragging_ = false;
@@ -89,16 +89,27 @@ namespace screens {
             velocity_ = 0;
             scrollRemainder_ = 0;
             centeredIndex_ = dragStartIndex_;
-            if (touch->y < centerY - kRowStep / 2) {
-                if (centeredIndex_ > 0)
-                    --centeredIndex_;
-            } else if (touch->y >= centerY + kRowStep / 2) {
-                if (centeredIndex_ + 1 < chapters.size())
-                    ++centeredIndex_;
-            } else {
-                ReadingLoop::seekTo(reader, chapters[centeredIndex_].wordIndex);
-                return Action::Resume;
+
+            const size_t tapCenter = centeredIndex_;
+            const size_t tapFirst = tapCenter > 4 ? tapCenter - 4 : 0;
+            const size_t tapLast = std::min(chapters.size(), tapCenter + 5);
+            size_t tappedIndex = tapCenter;
+            int closestDistance = INT_MAX;
+            for (size_t index = tapFirst; index < tapLast; ++index) {
+                const int raw = (static_cast<int>(index) - static_cast<int>(tapCenter)) * kRowStep;
+                const int magnitude = std::min<int>(std::abs(raw), viewport.h);
+                const int curved = raw * (2 * viewport.h - magnitude) / (2 * viewport.h);
+                const int rowY = viewport.y + viewport.h / 2 + curved;
+                const int distance = std::abs(rowY - touch->y);
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    tappedIndex = index;
+                }
             }
+
+            centeredIndex_ = tappedIndex;
+            ReadingLoop::seekTo(reader, chapters[centeredIndex_].wordIndex);
+            return Action::Resume;
         }
 
         if (dragging_) {
@@ -153,6 +164,7 @@ namespace screens {
         state = ui::Context::combine(state, static_cast<uint32_t>(readingIndex));
         const size_t first = centeredIndex_ > 4 ? centeredIndex_ - 4 : 0;
         const size_t last = std::min(chapters.size(), centeredIndex_ + 5);
+        const int16_t centerY = static_cast<int16_t>(viewport.y + viewport.h / 2);
         for (size_t index = first; index < last; ++index)
             state =
                 ui::Context::signature(chapters[index].title,

@@ -13,9 +13,10 @@ namespace screens {
         ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
                  ui.text(UiText::Reading), 2);
 
-        const int16_t controlsY = static_cast<int16_t>(content.y + 30);
         const int16_t sliderWidth = std::min<int16_t>(content.w, 480);
         const int16_t sliderX = static_cast<int16_t>(content.x + (content.w - sliderWidth) / 2);
+        const int16_t controlsY = static_cast<int16_t>(
+            content.y + (sliderX >= content.x + 64 ? 30 : detail::kBackButtonHeight));
         changed |=
             ui.slider({sliderX, controlsY, sliderWidth, 36}, ui.text(UiText::WordsPerMinute), config.wpm, " WPM");
 

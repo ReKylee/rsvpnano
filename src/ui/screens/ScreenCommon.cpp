@@ -40,7 +40,7 @@ namespace screens::detail {
                    ui::Icon::Hourglass)) {
             screen = Screen::FocusTimers;
         }
-        if (ui.iconButton({static_cast<int16_t>(ui.width() - 38), 7, 28, 28}, ui::Icon::Power)) {
+        if (ui.iconButton({static_cast<int16_t>(ui.width() - 46), 4, 36, 36}, ui::Icon::Power)) {
             return Action::PowerOff;
         }
         return Action::None;

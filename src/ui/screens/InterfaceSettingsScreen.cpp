@@ -27,7 +27,7 @@ namespace screens {
         ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
                  ui.text(UiText::Interface), 2);
 
-        const int16_t controlsY = static_cast<int16_t>(content.y + 32);
+        const int16_t controlsY = static_cast<int16_t>(content.y + detail::kBackButtonHeight);
         const int16_t sliderWidth = std::min<int16_t>(content.w, 480);
         const int16_t sliderX = static_cast<int16_t>(content.x + (content.w - sliderWidth) / 2);
         if (ui.slider({sliderX, controlsY, sliderWidth, 34}, ui.text(UiText::Brightness), config.brightnessPercent,
@@ -39,14 +39,14 @@ namespace screens {
 
         const int16_t gap = 6;
         const int16_t halfWidth = static_cast<int16_t>((content.w - gap) / 2);
-        const int16_t sectionsY = static_cast<int16_t>(controlsY + 40);
+        const int16_t sectionsY = static_cast<int16_t>(controlsY + 36);
         ui.separator({content.x, sectionsY, halfWidth, 10}, ui.text(UiText::AppearanceSection));
         ui.separator({static_cast<int16_t>(content.x + halfWidth + gap), sectionsY, halfWidth, 10},
                      ui.text(UiText::StandbySection));
 
         const int16_t firstRowY = static_cast<int16_t>(sectionsY + 14);
-        const int16_t secondRowY = static_cast<int16_t>(firstRowY + 37);
-        if (ui.setting({content.x, firstRowY, halfWidth, 32}, ui.text(UiText::Theme), themes.selected().definition.name,
+        const int16_t secondRowY = static_cast<int16_t>(firstRowY + 36);
+        if (ui.setting({content.x, firstRowY, halfWidth, 34}, ui.text(UiText::Theme), themes.selected().definition.name,
                        ui::SettingLayout::Inline)) {
             themes.selectNext();
             config.selectedThemeId = themes.selected().id;
@@ -54,7 +54,7 @@ namespace screens {
             changed = true;
         }
 
-        if (ui.setting({content.x, secondRowY, halfWidth, 32}, ui.text(UiText::Language),
+        if (ui.setting({content.x, secondRowY, halfWidth, 34}, ui.text(UiText::Language),
                        Localization::languageName(config.language), ui::SettingLayout::Inline)) {
             config.language = Localization::nextLanguage(config.language);
             ui.setLanguage(config.language);
@@ -66,7 +66,7 @@ namespace screens {
         if (standbyIndex < standbyDurations.size() && standbyDurations[standbyIndex] != 0) {
             standby = std::to_string(standbyDurations[standbyIndex] / 60000UL) + "m";
         }
-        if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), firstRowY, halfWidth, 32},
+        if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), firstRowY, halfWidth, 34},
                        ui.text(UiText::Standby), standby, ui::SettingLayout::Inline)) {
             config.standbyTimerIndex.cycle();
             changed = true;
@@ -77,7 +77,7 @@ namespace screens {
                                  : config.screensaver == standby::Kind::reaction  ? UiText::Reaction
                                  : config.screensaver == standby::Kind::screenOff ? UiText::ScreenOff
                                                                                   : UiText::Life;
-        if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), secondRowY, halfWidth, 32},
+        if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), secondRowY, halfWidth, 34},
                        ui.text(UiText::Screensaver), ui.text(screensaver), ui::SettingLayout::Inline)) {
             config.screensaver = settings::cycleEnum(config.screensaver);
             changed = true;

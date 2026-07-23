@@ -32,26 +32,26 @@ namespace screens {
         ui.separator({content.x, sectionY, content.w, 10}, ui.text(UiText::ConnectionReleaseSection));
         const int16_t firstRowY = static_cast<int16_t>(sectionY + 14);
         const int16_t networkWidth = static_cast<int16_t>((content.w - gap) * 3 / 5);
-        if (ui.setting({content.x, firstRowY, networkWidth, 32}, ui.text(UiText::Network),
+        if (ui.setting({content.x, firstRowY, networkWidth, 34}, ui.text(UiText::Network),
                        ssid.empty() ? ui.text(UiText::NotSet) : std::string_view{ssid}, ui::SettingLayout::Inline)) {
             openWifiScan();
             screen = Screen::WifiScan;
         }
         if (ui.toggle({static_cast<int16_t>(content.x + networkWidth + gap), firstRowY,
-                       static_cast<int16_t>(content.w - networkWidth - gap), 32},
+                       static_cast<int16_t>(content.w - networkWidth - gap), 34},
                       ui.text(UiText::StartupCheck), store.settings().updates.checkOnStartup)) {
             store.acceptChanges();
         }
-        const int16_t secondRowY = static_cast<int16_t>(firstRowY + 38);
+        const int16_t secondRowY = static_cast<int16_t>(firstRowY + 36);
         const int16_t halfWidth = static_cast<int16_t>((content.w - gap) / 2);
-        if (ui.setting({content.x, secondRowY, halfWidth, 32}, ui.text(UiText::OtaOwner),
+        if (ui.setting({content.x, secondRowY, halfWidth, 34}, ui.text(UiText::OtaOwner),
                        owner.empty() ? ui.text(UiText::Default) : std::string_view{owner})) {
             editField_ = EditField::Owner;
             editValue_ = owner;
             keyboard_ = {};
             screen = Screen::NetworkEdit;
         }
-        if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), secondRowY, halfWidth, 32},
+        if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), secondRowY, halfWidth, 34},
                        ui.text(UiText::ReleaseTag), tag.empty() ? ui.text(UiText::Latest) : std::string_view{tag})) {
             editField_ = EditField::Tag;
             editValue_ = tag;
@@ -138,8 +138,8 @@ namespace screens {
             }
         }
 
-        const ui::Rect list{content.x, static_cast<int16_t>(content.y + 30), content.w,
-                            static_cast<int16_t>(content.h - 30)};
+        const ui::Rect list{content.x, static_cast<int16_t>(content.y + detail::kBackButtonHeight), content.w,
+                            static_cast<int16_t>(content.h - detail::kBackButtonHeight)};
         if (scanState_ == WifiScanState::Idle || scanState_ == WifiScanState::Scanning) {
             ui.label(list, ui.text(UiText::ScanningNetworks), 2, ui::themes::ColorRole::Muted, ui::TextAlign::Center);
             return;
@@ -154,7 +154,7 @@ namespace screens {
             return;
         }
 
-        ui::Grid grid{list, 2, 30, 2};
+        ui::Grid grid{list, 2, 30, 0};
         for (size_t index = 0; index < networkCount_; ++index) {
             const WifiNetwork& network = networks_[index];
             const std::string signal = std::to_string(network.rssi) + " dBm";

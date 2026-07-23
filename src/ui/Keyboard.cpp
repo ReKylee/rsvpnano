@@ -23,7 +23,7 @@ namespace ui {
 
     KeyboardAction Context::keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state,
                                      std::string_view label, bool masked) {
-        constexpr int16_t gap = 2;
+        constexpr int16_t gap = 1;
         const int16_t inputHeight = std::min<int16_t>(36, std::max<int16_t>(32, rect.h / 5));
         const int16_t rowHeight = std::max<int16_t>(1, static_cast<int16_t>((rect.h - inputHeight - gap * 4) / 4));
         const int16_t firstRowY = static_cast<int16_t>(rect.y + inputHeight + gap);

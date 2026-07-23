@@ -96,7 +96,3 @@ namespace WaveshareLcd349::TouchWiring {
     constexpr uint32_t kRecoveryRetryMs = 1000;
     constexpr uint32_t kRecoveryEventIgnoreMs = 0;
 } // namespace WaveshareLcd349::TouchWiring
-
-namespace WaveshareLcd349 {
-    bool readTouchExpanderInterrupt(bool& active);
-}

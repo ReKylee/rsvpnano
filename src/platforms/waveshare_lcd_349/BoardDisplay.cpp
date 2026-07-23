@@ -94,7 +94,6 @@ namespace Board::Display {
         }
 
         logDisplayMemory();
-
         const bool ok = gCanvas.begin(kPanelBusHz);
 
         if (ok)
@@ -107,9 +106,6 @@ namespace Board::Display {
             setBacklight(false);
             return false;
         }
-
-        // Rev1 routes the unused panel TE output through the touch IRQ's shared TCA9554 interrupt.
-        gBus.sendCommand(0x34); // TEOFF
 
         logCanvasMemory();
 

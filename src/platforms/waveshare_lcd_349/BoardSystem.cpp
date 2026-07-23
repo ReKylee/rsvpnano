@@ -5,6 +5,7 @@
 
 #include <Wire.h>
 
+#include "drivers/gpio/tca9554/Tca9554.h"
 #include "platforms/waveshare_lcd_349/WaveshareLcd349.h"
 
 namespace Board {
@@ -49,8 +50,11 @@ namespace Board {
         }
 
         EspLightSleep::WakeReason lightSleep(uint32_t timeoutMs) {
-            bool touchInterruptActive = false;
-            if (!WaveshareLcd349::readTouchExpanderInterrupt(touchInterruptActive))
+            bool ignored = true;
+            if (!BoardDrivers::Tca9554::readInputPin(
+                    Wire1, WaveshareLcd349::Tca9554Wiring::kAddress,
+                    WaveshareLcd349::Tca9554Wiring::kTouchInterruptPin, ignored,
+                    WaveshareLcd349::Tca9554Wiring::kReleaseBusBeforeRead))
                 ESP_LOGW("sleep", "failed to clear touch expander interrupt");
 
             constexpr gpio_num_t wakePins[] = {

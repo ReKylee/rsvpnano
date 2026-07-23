@@ -4,6 +4,7 @@
 
 #include <Wire.h>
 
+#include "drivers/gpio/tca9554/Tca9554.h"
 #include "drivers/touch/axs15231b_touch/axs15231b_touch.h"
 #include "platforms/waveshare_lcd_349/WaveshareLcd349.h"
 
@@ -85,29 +86,23 @@ namespace Board::Input {
     }
 
     bool beginTouch() {
-        const bool ready = Axs15231bTouch::probe(touchWire(), WaveshareLcd349::TouchWiring::kAddress);
-        bool active = false;
-        WaveshareLcd349::readTouchExpanderInterrupt(active);
-        return ready;
+        return Axs15231bTouch::probe(touchWire(), WaveshareLcd349::TouchWiring::kAddress);
     }
 
     bool touchReady() {
-        if constexpr (WaveshareLcd349::System::kTouchIrqPin < 0) {
-            return true;
-        }
-        if (digitalRead(WaveshareLcd349::System::kTouchIrqPin))
+        bool high = true;
+        if (!BoardDrivers::Tca9554::readInputPin(Wire1, WaveshareLcd349::Tca9554Wiring::kAddress,
+                                                 WaveshareLcd349::Tca9554Wiring::kTouchInterruptPin, high,
+                                                 WaveshareLcd349::Tca9554Wiring::kReleaseBusBeforeRead)) {
             return false;
-
-        bool active = false;
-        return WaveshareLcd349::readTouchExpanderInterrupt(active) && active;
+        }
+        return !high;
     }
 
     bool readTouch(ui::TouchContact& contact) {
         std::array<uint8_t, Axs15231bTouch::kPacketLength> data = {};
         const bool read =
             Axs15231bTouch::readPacket(touchWire(), WaveshareLcd349::TouchWiring::kAddress, data.data(), data.size());
-        bool active = false;
-        WaveshareLcd349::readTouchExpanderInterrupt(active);
         if (!read) {
             return false;
         }

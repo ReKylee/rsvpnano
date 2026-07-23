@@ -3,6 +3,7 @@
 #include <array>
 
 #include <Wire.h>
+#include <esp_log.h>
 
 #include "drivers/gpio/tca9554/Tca9554.h"
 #include "drivers/touch/axs15231b_touch/axs15231b_touch.h"
@@ -51,8 +52,7 @@ namespace Board::Input {
     void cancel() {}
 
     ::Input::ControlTiming controlTiming() {
-        return {WaveshareLcd349::Buttons::kDebounceMs, WaveshareLcd349::Buttons::kShortPressMaxMs,
-                WaveshareLcd349::Buttons::kLongPressMs};
+        return {};
     }
 
     ::Input::PressActions currentActions() {
@@ -74,15 +74,8 @@ namespace Board::Input {
         return {WaveshareLcd349::DisplayWiring::kPanelWidth, WaveshareLcd349::DisplayWiring::kPanelHeight};
     }
 
-    ui::TouchTiming touchTiming() {
-        ui::TouchTiming timing = {};
-        timing.releaseConfirmSamples = WaveshareLcd349::TouchWiring::kReleaseConfirmSamples;
-        timing.maxConsecutiveReadFailures = WaveshareLcd349::TouchWiring::kMaxConsecutiveReadFailures;
-        timing.pollIntervalMs = WaveshareLcd349::TouchWiring::kPollIntervalMs;
-        timing.failureBackoffMs = WaveshareLcd349::TouchWiring::kFailureBackoffMs;
-        timing.recoveryRetryMs = WaveshareLcd349::TouchWiring::kRecoveryRetryMs;
-        timing.recoveryEventIgnoreMs = WaveshareLcd349::TouchWiring::kRecoveryEventIgnoreMs;
-        return timing;
+    ::Input::TouchTiming touchTiming() {
+        return {.pollIntervalMs = WaveshareLcd349::TouchWiring::kPollIntervalMs};
     }
 
     bool beginTouch() {
@@ -90,12 +83,19 @@ namespace Board::Input {
     }
 
     bool touchReady() {
+        static bool readFailureLogged = false;
         bool high = true;
         if (!BoardDrivers::Tca9554::readInputPin(Wire1, WaveshareLcd349::Tca9554Wiring::kAddress,
                                                  WaveshareLcd349::Tca9554Wiring::kTouchInterruptPin, high,
                                                  WaveshareLcd349::Tca9554Wiring::kReleaseBusBeforeRead)) {
+            if (!readFailureLogged)
+                ESP_LOGW("input", "EXIO0 read failed");
+            readFailureLogged = true;
             return false;
         }
+        if (readFailureLogged)
+            ESP_LOGI("input", "EXIO0 reads recovered");
+        readFailureLogged = false;
         return !high;
     }
 

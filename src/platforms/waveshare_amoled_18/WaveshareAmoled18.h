@@ -25,8 +25,6 @@ namespace WaveshareAmoled18::Buttons {
     constexpr int kPowerPin = -1;
     constexpr int kKeyPin = -1;
     constexpr uint16_t kDebounceMs = 10;
-    constexpr uint16_t kShortPressMaxMs = 700;
-    constexpr uint16_t kLongPressMs = 900;
 } // namespace WaveshareAmoled18::Buttons
 
 namespace WaveshareAmoled18::Axp2101Wiring {
@@ -103,9 +101,6 @@ namespace WaveshareAmoled18::Tca9554Wiring {
 namespace WaveshareAmoled18::TouchWiring {
     constexpr uint8_t kAddress = Version::kTouchAddress;
     constexpr bool kReleaseBusBeforeRead = true;
-    constexpr uint8_t kReleaseConfirmSamples = 2;
-    constexpr uint8_t kMaxConsecutiveReadFailures = 5;
-    constexpr uint32_t kPollIntervalMs = 20;
     constexpr uint32_t kFailureBackoffMs = 500;
     constexpr uint32_t kRecoveryRetryMs = 3000;
     constexpr uint32_t kRecoveryEventIgnoreMs = 1200;

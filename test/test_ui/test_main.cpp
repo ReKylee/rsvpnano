@@ -10,25 +10,16 @@
 namespace {
 
     ui::TouchContact gContact;
-    bool gTouchReady;
-    uint32_t gTouchReadyReads;
+    bool gTouchReadSucceeds;
 
-    bool beginTouch() {
-        return true;
-    }
-    bool touchReady() {
-        ++gTouchReadyReads;
-        return gTouchReady;
-    }
-    bool readTouch(ui::TouchContact& contact) {
+    ui::TouchSampleResult pollTouch(ui::TouchContact& contact) {
+        if (!gTouchReadSucceeds)
+            return ui::TouchSampleResult::None;
         contact = gContact;
-        return true;
+        return ui::TouchSampleResult::Contact;
     }
     void enableTouch(ui::Context& context) {
-        ui::TouchTiming timing;
-        timing.releaseConfirmSamples = 1;
-        timing.pollIntervalMs = 0;
-        context.setTouchSource({{320, 172}, timing, &beginTouch, &touchReady, &readTouch}, 0);
+        context.setTouchSource({.surface = {320, 172}, .poll = &pollTouch});
     }
 
     ui::themes::Theme theme() {
@@ -39,8 +30,7 @@ namespace {
 
 void setUp() {
     gContact = {};
-    gTouchReady = true;
-    gTouchReadyReads = 0;
+    gTouchReadSucceeds = true;
 }
 void tearDown() {}
 
@@ -162,32 +152,95 @@ void test_tap_capture_tolerates_slow_release_just_outside() {
     TEST_ASSERT_FALSE(context.button(button, "Tap"));
     context.endFrame();
 
+}
+
+void test_tap_tolerates_one_coordinate_outlier() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx);
+    enableTouch(context);
+    constexpr ui::Rect button{0, 0, 80, 24};
+
     gContact = {true, 40, 12};
-    TEST_ASSERT_TRUE(context.pollTouch(600));
+    TEST_ASSERT_TRUE(context.pollTouch(1));
     context.beginFrame(1);
     TEST_ASSERT_FALSE(context.button(button, "Tap"));
     context.endFrame();
 
     gContact = {true, 70, 12};
-    TEST_ASSERT_TRUE(context.pollTouch(610));
+    TEST_ASSERT_TRUE(context.pollTouch(2));
     context.beginFrame(1);
     TEST_ASSERT_FALSE(context.button(button, "Tap"));
     context.endFrame();
 
     gContact = {true, 40, 12};
-    TEST_ASSERT_TRUE(context.pollTouch(620));
+    TEST_ASSERT_TRUE(context.pollTouch(3));
     context.beginFrame(1);
     TEST_ASSERT_FALSE(context.button(button, "Tap"));
     context.endFrame();
 
     gContact = {};
-    TEST_ASSERT_TRUE(context.pollTouch(630));
+    TEST_ASSERT_TRUE(context.pollTouch(4));
+    context.beginFrame(1);
+    TEST_ASSERT_TRUE(context.button(button, "Tap"));
+    context.endFrame();
+
+    gContact = {true, 40, 12};
+    TEST_ASSERT_TRUE(context.pollTouch(10));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button(button, "Tap"));
+    context.endFrame();
+
+    gContact = {true, 70, 12};
+    TEST_ASSERT_TRUE(context.pollTouch(11));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button(button, "Tap"));
+    context.endFrame();
+
+    gContact = {true, 75, 12};
+    TEST_ASSERT_TRUE(context.pollTouch(12));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button(button, "Tap"));
+    context.endFrame();
+
+    gContact = {true, 40, 12};
+    TEST_ASSERT_TRUE(context.pollTouch(13));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button(button, "Tap"));
+    context.endFrame();
+
+    gContact = {};
+    TEST_ASSERT_TRUE(context.pollTouch(14));
     context.beginFrame(1);
     TEST_ASSERT_FALSE(context.button(button, "Tap"));
     context.endFrame();
 }
 
-void test_active_touch_outlives_irq_and_emits_hold_before_release() {
+void test_slow_press_remains_tap_until_hold_threshold() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx);
+    enableTouch(context);
+    constexpr ui::Rect button{0, 0, 80, 24};
+
+    gContact = {true, 40, 12};
+    TEST_ASSERT_TRUE(context.pollTouch(1));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button(button, "Tap"));
+    context.endFrame();
+
+    TEST_ASSERT_TRUE(context.pollTouch(500));
+    TEST_ASSERT_FALSE(ui::hasTouch(*context.touch(), ui::TouchHold));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button(button, "Tap"));
+    context.endFrame();
+
+    gContact = {};
+    TEST_ASSERT_TRUE(context.pollTouch(590));
+    context.beginFrame(1);
+    TEST_ASSERT_TRUE(context.button(button, "Tap"));
+    context.endFrame();
+}
+
+void test_missing_sample_does_not_interrupt_active_touch() {
     Arduino_GFX gfx;
     ui::Context context(gfx);
     enableTouch(context);
@@ -195,19 +248,37 @@ void test_active_touch_outlives_irq_and_emits_hold_before_release() {
     gContact = {true, 20, 10};
     TEST_ASSERT_TRUE(context.pollTouch(1));
     TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchStart));
-    const uint32_t readyReads = gTouchReadyReads;
 
-    gTouchReady = false;
-    TEST_ASSERT_TRUE(context.pollTouch(500));
+    gTouchReadSucceeds = false;
+    TEST_ASSERT_FALSE(context.pollTouch(2));
+    gTouchReadSucceeds = true;
+    TEST_ASSERT_TRUE(context.pollTouch(3));
+
+    TEST_ASSERT_TRUE(context.pollTouch(650));
     TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchHold));
     TEST_ASSERT_FALSE(ui::hasTouch(*context.touch(), ui::TouchRelease));
-    TEST_ASSERT_EQUAL_UINT32(readyReads, gTouchReadyReads);
 
     gContact = {};
-    TEST_ASSERT_TRUE(context.pollTouch(501));
+    TEST_ASSERT_TRUE(context.pollTouch(651));
     TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchRelease));
     TEST_ASSERT_FALSE(ui::hasTouch(*context.touch(), ui::TouchTap));
-    TEST_ASSERT_EQUAL_UINT32(readyReads, gTouchReadyReads);
+}
+
+void test_queued_touch_uses_sample_time_instead_of_ui_time() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx);
+    ui::TouchTiming timing;
+    timing.tapMaxDurationMs = 600;
+    context.setTouchSource({{320, 172}, timing, &pollTouch});
+
+    gContact = {.touched = true, .x = 40, .y = 50, .sampledAtMs = 100};
+    TEST_ASSERT_TRUE(context.pollTouch(1000));
+    TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchStart));
+
+    gContact = {.touched = false, .sampledAtMs = 800};
+    TEST_ASSERT_TRUE(context.pollTouch(1001));
+    TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchRelease));
+    TEST_ASSERT_FALSE(ui::hasTouch(*context.touch(), ui::TouchTap));
 }
 
 void test_stepper_taps_and_repeats() {
@@ -237,7 +308,7 @@ void test_stepper_taps_and_repeats() {
     context.stepper({0, 0, 200, 40}, "Focus", value, 1, 180, 1, " min");
     context.endFrame();
 
-    TEST_ASSERT_TRUE(context.pollTouch(640));
+    TEST_ASSERT_TRUE(context.pollTouch(880));
     context.beginFrame(1);
     TEST_ASSERT_TRUE(context.stepper({0, 0, 200, 40}, "Focus", value, 1, 180, 1, " min"));
     context.endFrame();
@@ -734,7 +805,10 @@ int main(int, char**) {
     RUN_TEST(test_changed_and_removed_widgets_redraw);
     RUN_TEST(test_button_and_slider_consume_touch);
     RUN_TEST(test_tap_capture_tolerates_slow_release_just_outside);
-    RUN_TEST(test_active_touch_outlives_irq_and_emits_hold_before_release);
+    RUN_TEST(test_tap_tolerates_one_coordinate_outlier);
+    RUN_TEST(test_slow_press_remains_tap_until_hold_threshold);
+    RUN_TEST(test_missing_sample_does_not_interrupt_active_touch);
+    RUN_TEST(test_queued_touch_uses_sample_time_instead_of_ui_time);
     RUN_TEST(test_stepper_taps_and_repeats);
     RUN_TEST(test_disabled_button_ignores_touch);
     RUN_TEST(test_tap_target_handles_touch_without_drawing);

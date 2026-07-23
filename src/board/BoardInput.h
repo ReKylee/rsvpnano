@@ -11,9 +11,9 @@ namespace Board::Input {
     void end();
     void cancel();
     ::Input::ControlTiming controlTiming();
+    ::Input::TouchTiming touchTiming();
     ::Input::PressActions currentActions();
     ui::TouchSurface touchSurface();
-    ui::TouchTiming touchTiming();
     bool beginTouch();
     bool touchReady();
     bool readTouch(ui::TouchContact& contact);

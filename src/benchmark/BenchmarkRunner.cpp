@@ -11,7 +11,7 @@
 #include "board/BoardInput.h"
 #include "converter/EpubConverter.h"
 #include "input/Input.h"
-#include "storage/fs/SdDiagnostics.h"
+#include "storage/fs/SdCard.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 #include "ui/Theme.h"
@@ -192,9 +192,7 @@ namespace {
     }
     bool beginInput() {
         const bool started = Input::begin();
-        gDisplay.setTouchSource({Board::Input::touchSurface(), Board::Input::touchTiming(), &Board::Input::beginTouch,
-                                 &Board::Input::touchReady, &Board::Input::readTouch},
-                                millis());
+        gDisplay.setTouchSource({.surface = Board::Input::touchSurface(), .poll = &Input::pollTouch});
         return started;
     }
     bool beginAudio() {
@@ -225,7 +223,7 @@ namespace {
             if (gDisplay.pollTouch(millis())) {
                 break;
             }
-            Input::poll(event, millis());
+            Input::poll(event);
 
             const bool held = startButtonHeld();
             if (!inputWasHeld && held) {
@@ -269,7 +267,7 @@ namespace Benchmark {
         }
 
         const uint32_t mountStartedMs = millis();
-        mounted = SdDiagnostics::mountCard(mounted, &mountedFrequencyKhz);
+        mounted = SdCard::mount(mounted, &mountedFrequencyKhz);
         logMetric("sd_mount", mounted, millis() - mountStartedMs);
         ESP_LOGD("bench", "sd_frequency_khz=%d", mountedFrequencyKhz);
         if (mounted) {

@@ -2,6 +2,7 @@
 #include <esp_log.h>
 
 #include <array>
+#include <cstdio>
 #include <esp_system.h>
 #include <string>
 
@@ -11,6 +12,7 @@
 #include "board/BoardPower.h"
 #include "board/BoardStorage.h"
 #include "board/BoardSystem.h"
+#include "freertos/task.h"
 #include "rss/RssFeeds.h"
 #include "settings/NvsSecurity.h"
 #include "storage/index/ReadingProgress.h"
@@ -23,6 +25,19 @@ namespace {
         0, 1UL * 60UL * 1000UL, 5UL * 60UL * 1000UL, 15UL * 60UL * 1000UL, 30UL * 60UL * 1000UL,
     };
     constexpr uint32_t kStandbyPowerOffMs = 5UL * 60UL * 1000UL;
+    constexpr UBaseType_t kJobQueueLength = 8;
+    constexpr uint32_t kJobStackBytes = 12288;
+    constexpr UBaseType_t kJobPriority = 1;
+
+    template<size_t Size>
+    void copyText(char (&destination)[Size], const char* source) {
+        std::snprintf(destination, Size, "%s", source == nullptr ? "" : source);
+    }
+
+    bool deadlineReached(uint32_t nowMs, uint32_t deadlineMs) {
+        return static_cast<int32_t>(nowMs - deadlineMs) >= 0;
+    }
+
     void powerOffBoard() {
         if (!Board::Power::powerOff())
             ESP_LOGI("app", "hardware power off unavailable; entering light sleep");
@@ -35,12 +50,9 @@ namespace {
 void App::begin() {
     prefs_.begin(settings::kStateNvsNamespace);
     storage_.setStatusCallback(&App::renderStorageStatus, this);
-    Input::begin();
     bootMs_ = millis();
     lastActivityMs_ = bootMs_;
-    immediateUi_.setTouchSource({Board::Input::touchSurface(), Board::Input::touchTiming(), &Board::Input::beginTouch,
-                                 &Board::Input::touchReady, &Board::Input::readTouch},
-                                bootMs_);
+    statusUntilMs_ = bootMs_ + kBootSplashMs;
 
     if (!Board::Display::begin()) {
         ESP_LOGE("app", "display init failed");
@@ -48,6 +60,9 @@ void App::begin() {
     immediateUi_.setOrientation(Board::Display::defaultUiOrientation());
     immediateUi_.setTheme(interfaceScreen_.themes.selected());
     screens::status(immediateUi_, immediateUi_.text(UiText::Ready));
+    if (!Input::begin())
+        ESP_LOGE("input", "startup failed");
+    immediateUi_.setTouchSource({.surface = Board::Input::touchSurface(), .poll = &Input::pollTouch});
 
     storage_.begin();
     if (auto result = settingsStore_.begin(storage_.mounted() ? &Board::Storage::filesystem() : nullptr); !result)
@@ -67,15 +82,35 @@ void App::begin() {
 
 void App::update(uint32_t nowMs) {
     Input::Event event;
-    while (Input::poll(event, nowMs)) {
+    while (Input::poll(event)) {
         lastActivityMs_ = nowMs;
         handleInput(event, nowMs);
         nowMs = millis();
     }
-    if (immediateUi_.pollTouch(nowMs)) {
+    while (immediateUi_.pollTouch(nowMs)) {
         lastActivityMs_ = nowMs;
         handleTouch(nowMs);
         nowMs = millis();
+    }
+
+    updateBackgroundJob();
+    if (backgroundJobActive())
+        return;
+
+    if (screen_ == screens::Screen::Status) {
+        if (statusUntilMs_ == 0 || !deadlineReached(nowMs, statusUntilMs_))
+            return;
+        statusUntilMs_ = 0;
+        if (restartAfterStatus_) {
+            ESP.restart();
+            return;
+        }
+        screen_ = statusDestination_;
+        if (networkScreen_.startupCheckPending) {
+            networkScreen_.startupCheckPending = false;
+            runOtaCheck(false);
+            return;
+        }
     }
 
     if (!usbTransfer_.active())
@@ -88,15 +123,6 @@ void App::update(uint32_t nowMs) {
         }
         standbyScreen_.update(immediateUi_, nowMs);
         return;
-    }
-
-    if (screen_ == screens::Screen::Status && nowMs - bootMs_ >= kBootSplashMs) {
-        screen_ = screens::Screen::Reader;
-        if (networkScreen_.startupCheckPending) {
-            networkScreen_.startupCheckPending = false;
-            runOtaCheck(false);
-            return;
-        }
     }
 
     Board::Power::updateBattery(battery_, nowMs);
@@ -136,13 +162,7 @@ void App::renderScreen(uint32_t nowMs) {
         const screens::LibraryResult result = libraryScreen_.draw(immediateUi_, items, nowMs, screen_);
         immediateUi_.endFrame();
         if (result.open) {
-            const size_t bookIndex = libraryScreen_.selectedIndex();
-            if (bookIndex < storage_.bookCount()
-                && readerScreen_.openBook(immediateUi_, storage_, prefs_, bookIndex, nowMs)) {
-                ReadingLoop::pause(readerScreen_.session);
-                screen_ = screens::Screen::Reader;
-                renderScreen(nowMs);
-            }
+            runBookOpen(libraryScreen_.selectedIndex(), nowMs);
         } else {
             handleScreenAction(result.action, nowMs);
         }
@@ -303,26 +323,27 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
     case screens::Action::UsbTransfer:
         enterUsbTransfer(nowMs);
         return;
-    case screens::Action::StorageStatus: {
-        const std::string entries =
-            std::to_string(storage_.bookCount()) + " " + std::string(immediateUi_.text(UiText::LibraryEntries));
-        screens::status(immediateUi_, immediateUi_.text(UiText::Storage),
-                        immediateUi_.text(storage_.mounted() ? UiText::SdReady : UiText::SdUnavailable), entries);
-        delay(1200);
-        renderScreen(nowMs);
-        break;
-    }
+    case screens::Action::StorageStatus:
+        jobStorageInventory_ = {
+            .libraryItems = storage_.bookCount(),
+            .fonts = readerScreen_.fonts.families().size() - 1,
+            .themes = interfaceScreen_.themes.themes().size() - 1,
+        };
+        screen_ = screens::Screen::Status;
+        statusUntilMs_ = 0;
+        screens::status(immediateUi_, immediateUi_.text(UiText::Storage), immediateUi_.text(UiText::Checking));
+        if (!startBackgroundJob(JobKind::StorageCheck))
+            showTransientStatus(immediateUi_.text(UiText::Storage), immediateUi_.text(UiText::CouldNotStart), {}, 1200,
+                                screens::Screen::Device);
+        return;
     case screens::Action::EnableStorageEncryption:
         screens::status(immediateUi_, immediateUi_.text(UiText::StorageEncryption),
                         immediateUi_.text(UiText::EnablingEncryption));
         ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
         ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
         if (!storage_.mounted() || !settings::enableNvsEncryption(prefs_, settingsStore_)) {
-            screens::status(immediateUi_, immediateUi_.text(UiText::StorageEncryption),
-                            immediateUi_.text(UiText::Unavailable));
-            delay(1200);
-            screen_ = screens::Screen::Device;
-            renderScreen(nowMs);
+            showTransientStatus(immediateUi_.text(UiText::StorageEncryption), immediateUi_.text(UiText::Unavailable),
+                                {}, 1200, screens::Screen::Device);
         }
         return;
     case screens::Action::OtaCheck:
@@ -339,6 +360,8 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
         exitStandby(nowMs);
         return;
     }
+    if (backgroundJobActive() || screen_ == screens::Screen::Status)
+        return;
     if (usbTransfer_.active() && Input::hasAction(event.actions, Input::ActionPowerOff)) {
         exitUsbTransfer();
         return;
@@ -453,17 +476,159 @@ void App::handleTouch(uint32_t nowMs) {
     }
 }
 
+void App::showTransientStatus(std::string_view title, std::string_view line1, std::string_view line2,
+                              uint32_t durationMs, screens::Screen destination, int progressPercent) {
+    screen_ = screens::Screen::Status;
+    statusDestination_ = destination;
+    statusUntilMs_ = millis() + durationMs;
+    restartAfterStatus_ = false;
+    screens::status(immediateUi_, title, line1, line2, progressPercent);
+}
+
+void App::updateBackgroundJob() {
+    JobUpdate update;
+    while (jobQueue_ != nullptr && xQueueReceive(jobQueue_, &update, 0) == pdTRUE) {
+        if (!update.complete) {
+            screens::status(immediateUi_, update.title, update.line1, update.line2, update.progressPercent);
+            continue;
+        }
+
+        const JobKind completed = jobKind_;
+        jobKind_ = JobKind::None;
+        if (completed == JobKind::Book) {
+            if (jobBookLoaded_) {
+                readerScreen_.finishBookOpen(prefs_, jobLoadedBookIndex_, jobBookPath_, millis());
+                ReadingLoop::pause(readerScreen_.session);
+                screen_ = screens::Screen::Reader;
+                statusUntilMs_ = 0;
+                renderScreen(millis());
+            } else {
+                showTransientStatus(immediateUi_.text(UiText::BookFailed), jobBookName_,
+                                    immediateUi_.text(UiText::CheckSdCard), 1200, screens::Screen::Library);
+            }
+            return;
+        }
+        if (completed == JobKind::Rss) {
+            libraryScreen_.invalidate();
+            showTransientStatus("RSS", jobRssResult_.summary, jobRssResult_.detail, 1400, screens::Screen::Reader);
+            return;
+        }
+        if (completed == JobKind::StorageCheck) {
+            showTransientStatus(immediateUi_.text(UiText::Storage), jobStorageResult_.summary, jobStorageResult_.detail,
+                                1800, screens::Screen::Device);
+            return;
+        }
+
+        const bool reboot = completed == JobKind::OtaInstall && jobOtaResult_.rebootRequired;
+        showTransientStatus("OTA", jobOtaResult_.summary, jobOtaResult_.detail, reboot ? 500 : 1400,
+                            screens::Screen::Reader);
+        restartAfterStatus_ = reboot;
+        return;
+    }
+}
+
+bool App::startBackgroundJob(JobKind kind) {
+    if (backgroundJobActive())
+        return false;
+    if (jobQueue_ == nullptr)
+        jobQueue_ = xQueueCreate(kJobQueueLength, sizeof(JobUpdate));
+    if (jobQueue_ == nullptr)
+        return false;
+    xQueueReset(jobQueue_);
+    jobKind_ = kind;
+    if (xTaskCreate(backgroundJobEntry, "background", kJobStackBytes, this, kJobPriority, nullptr) != pdPASS) {
+        jobKind_ = JobKind::None;
+        return false;
+    }
+    return true;
+}
+
+void App::backgroundJobEntry(void* context) {
+    ESP_LOGI("background", "started task=%s core=%d", pcTaskGetName(nullptr), xPortGetCoreID());
+    static_cast<App*>(context)->runBackgroundJob();
+    ESP_LOGI("background", "finished task=%s core=%d", pcTaskGetName(nullptr), xPortGetCoreID());
+    vTaskDelete(nullptr);
+}
+
+void App::runBackgroundJob() {
+    switch (jobKind_) {
+    case JobKind::Rss: {
+        Preferences preferences;
+        if (!preferences.begin(settings::kStateNvsNamespace)) {
+            jobRssResult_.summary = "RSS failed";
+            jobRssResult_.detail = "Could not open state";
+        } else {
+            jobRssResult_ = RssFeeds::check(preferences, jobSettings_, jobSecrets_, &App::renderStorageStatus, this);
+            preferences.end();
+        }
+        storage_.refreshBooks();
+        break;
+    }
+    case JobKind::StorageCheck:
+        jobStorageResult_ = SdDiagnostics::run(storage_.mounted(), jobStorageInventory_);
+        break;
+    case JobKind::OtaCheck:
+        jobOtaResult_ = OtaUpdater::checkOnly(jobOtaConfig_, &App::renderStorageStatus, this);
+        break;
+    case JobKind::OtaInstall:
+        jobOtaResult_ = OtaUpdater::checkAndInstall(jobOtaConfig_, &App::renderStorageStatus, this);
+        break;
+    case JobKind::Book: {
+        StorageManager::IndexedBookLoadOptions options;
+        options.loadedPath = &jobBookPath_;
+        options.loadedIndex = &jobLoadedBookIndex_;
+        jobBookLoaded_ =
+            storage_.loadIndexedBook(jobBookIndex_, readerScreen_.store, readerScreen_.session.metadata, options);
+        break;
+    }
+    case JobKind::None:
+        break;
+    }
+
+    JobUpdate complete;
+    complete.complete = true;
+    enqueueJobUpdate(complete, true);
+}
+
+void App::enqueueJobUpdate(JobUpdate update, bool mustSucceed) {
+    if (mustSucceed) {
+        xQueueSend(jobQueue_, &update, portMAX_DELAY);
+        return;
+    }
+    if (xQueueSend(jobQueue_, &update, 0) == pdTRUE)
+        return;
+    JobUpdate discarded;
+    xQueueReceive(jobQueue_, &discarded, 0);
+    xQueueSend(jobQueue_, &update, 0);
+}
+
 void App::runRss() {
     ReadingLoop::pause(readerScreen_.session);
+    screen_ = screens::Screen::Status;
+    statusUntilMs_ = 0;
     screens::status(immediateUi_, "RSS", immediateUi_.text(UiText::CheckingFeeds));
-    const RssFeeds::Result result =
-        RssFeeds::check(prefs_, settingsStore_.settings(), settingsStore_.secrets(), &App::renderStorageStatus, this);
-    storage_.refreshBooks();
-    libraryScreen_.invalidate();
-    screens::status(immediateUi_, "RSS", result.summary.c_str(), result.detail.c_str());
-    delay(1400);
-    screen_ = screens::Screen::Reader;
-    renderScreen(millis());
+    jobSettings_ = settingsStore_.settings();
+    jobSecrets_ = settingsStore_.secrets();
+    if (!startBackgroundJob(JobKind::Rss))
+        showTransientStatus("RSS", immediateUi_.text(UiText::CouldNotStart), {}, 1200, screens::Screen::Reader);
+}
+
+void App::runBookOpen(size_t index, uint32_t nowMs) {
+    if (!storage_.mounted() || index >= storage_.bookCount())
+        return;
+
+    jobBookIndex_ = index;
+    jobLoadedBookIndex_ = index;
+    jobBookPath_.clear();
+    jobBookName_ = storage_.bookDisplayName(index);
+    jobBookLoaded_ = false;
+    screens::status(immediateUi_, immediateUi_.text(UiText::OpeningBook), jobBookName_, {}, 5);
+    screen_ = screens::Screen::Status;
+    statusUntilMs_ = 0;
+    readerScreen_.prepareBookOpen(prefs_, nowMs);
+    if (!startBackgroundJob(JobKind::Book))
+        showTransientStatus(immediateUi_.text(UiText::BookFailed), jobBookName_,
+                            immediateUi_.text(UiText::CheckSdCard), 1200, screens::Screen::Library);
 }
 
 void App::enterUsbTransfer(uint32_t nowMs) {
@@ -472,20 +637,15 @@ void App::enterUsbTransfer(uint32_t nowMs) {
     ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
     settingsStore_.flush();
     if (!usbTransfer_.begin(true)) {
-        screens::status(immediateUi_, "USB", immediateUi_.text(UiText::CouldNotStart), usbTransfer_.statusMessage());
-        delay(1200);
-        screen_ = screens::Screen::Reader;
-        renderScreen(nowMs);
+        showTransientStatus("USB", immediateUi_.text(UiText::CouldNotStart), usbTransfer_.statusMessage(), 1200,
+                            screens::Screen::Reader);
         return;
     }
     ReadingLoop::pause(readerScreen_.session);
     screen_ = screens::Screen::Usb;
     renderScreen(nowMs);
 #else
-    screens::status(immediateUi_, "USB", immediateUi_.text(UiText::Unavailable));
-    delay(1000);
-    screen_ = screens::Screen::Reader;
-    renderScreen(nowMs);
+    showTransientStatus("USB", immediateUi_.text(UiText::Unavailable), {}, 1000, screens::Screen::Reader);
 #endif
 }
 
@@ -515,17 +675,12 @@ void App::runOtaCheck(bool install) {
         ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
         settingsStore_.flush();
     }
+    screen_ = screens::Screen::Status;
+    statusUntilMs_ = 0;
     screens::status(immediateUi_, "OTA", immediateUi_.text(UiText::Checking));
-    const OtaUpdater::Config config = OtaUpdater::config(settingsStore_.settings(), settingsStore_.secrets());
-    const OtaUpdater::Result result = install ? OtaUpdater::checkAndInstall(config, &App::renderStorageStatus, this)
-                                              : OtaUpdater::checkOnly(config, &App::renderStorageStatus, this);
-    screens::status(immediateUi_, "OTA", result.summary.c_str(), result.detail.c_str());
-    delay(install && result.rebootRequired ? 500 : 1400);
-    if (install && result.rebootRequired) {
-        ESP.restart();
-    }
-    screen_ = screens::Screen::Reader;
-    renderScreen(millis());
+    jobOtaConfig_ = OtaUpdater::config(settingsStore_.settings(), settingsStore_.secrets());
+    if (!startBackgroundJob(install ? JobKind::OtaInstall : JobKind::OtaCheck))
+        showTransientStatus("OTA", immediateUi_.text(UiText::CouldNotStart), {}, 1200, screens::Screen::Reader);
 }
 
 void App::enterStandby(uint32_t nowMs) {
@@ -598,7 +753,7 @@ void App::lightSleepFromStandby() {
     }
 
     const uint32_t wokeAtMs = millis();
-    Input::cancel();
+    Input::resume();
     exitStandby(wokeAtMs);
 
     if (wokeByTouch) {
@@ -630,9 +785,19 @@ void App::powerOff(uint32_t nowMs) {
 
 void App::renderStorageStatus(void* context, const char* title, const char* line1, const char* line2,
                               int progressPercent) {
-    if (context == nullptr) {
+    if (context == nullptr)
+        return;
+
+    App& app = *static_cast<App*>(context);
+    if (app.backgroundJobActive()) {
+        JobUpdate update;
+        copyText(update.title, title == nullptr ? "SD" : title);
+        copyText(update.line1, line1);
+        copyText(update.line2, line2);
+        update.progressPercent = progressPercent;
+        app.enqueueJobUpdate(update);
         return;
     }
-    screens::status(static_cast<App*>(context)->immediateUi_, title == nullptr ? "SD" : title,
-                    line1 == nullptr ? "" : line1, line2 == nullptr ? "" : line2, progressPercent);
+    screens::status(app.immediateUi_, title == nullptr ? "SD" : title, line1 == nullptr ? "" : line1,
+                    line2 == nullptr ? "" : line2, progressPercent);
 }

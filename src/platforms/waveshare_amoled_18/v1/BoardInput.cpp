@@ -62,8 +62,7 @@ namespace Board::Input {
     void cancel() {}
 
     ::Input::ControlTiming controlTiming() {
-        return {WaveshareAmoled18::Buttons::kDebounceMs, WaveshareAmoled18::Buttons::kShortPressMaxMs,
-                WaveshareAmoled18::Buttons::kLongPressMs};
+        return {.debounceMs = WaveshareAmoled18::Buttons::kDebounceMs};
     }
 
     ::Input::PressActions currentActions() {
@@ -85,15 +84,12 @@ namespace Board::Input {
         return {WaveshareAmoled18::DisplayWiring::kPanelWidth, WaveshareAmoled18::DisplayWiring::kPanelHeight};
     }
 
-    ui::TouchTiming touchTiming() {
-        ui::TouchTiming timing = {};
-        timing.releaseConfirmSamples = WaveshareAmoled18::TouchWiring::kReleaseConfirmSamples;
-        timing.maxConsecutiveReadFailures = WaveshareAmoled18::TouchWiring::kMaxConsecutiveReadFailures;
-        timing.pollIntervalMs = WaveshareAmoled18::TouchWiring::kPollIntervalMs;
-        timing.failureBackoffMs = WaveshareAmoled18::TouchWiring::kFailureBackoffMs;
-        timing.recoveryRetryMs = WaveshareAmoled18::TouchWiring::kRecoveryRetryMs;
-        timing.recoveryEventIgnoreMs = WaveshareAmoled18::TouchWiring::kRecoveryEventIgnoreMs;
-        return timing;
+    ::Input::TouchTiming touchTiming() {
+        return {
+            .failureBackoffMs = WaveshareAmoled18::TouchWiring::kFailureBackoffMs,
+            .recoveryRetryMs = WaveshareAmoled18::TouchWiring::kRecoveryRetryMs,
+            .recoveryEventIgnoreMs = WaveshareAmoled18::TouchWiring::kRecoveryEventIgnoreMs,
+        };
     }
 
     bool beginTouch() {

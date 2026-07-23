@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include "ui/Touch.h"
+
 namespace Input {
 
     using ActionMask = uint16_t;
@@ -31,6 +33,15 @@ namespace Input {
         uint16_t longPressMs = 900;
     };
 
+    struct TouchTiming {
+        uint8_t releaseConfirmSamples = 2;
+        uint8_t maxConsecutiveReadFailures = 5;
+        uint32_t pollIntervalMs = 20;
+        uint32_t failureBackoffMs = 250;
+        uint32_t recoveryRetryMs = 1000;
+        uint32_t recoveryEventIgnoreMs = 0;
+    };
+
     constexpr bool hasAction(ActionMask actions, ActionMask action) {
         return (actions & action) != 0;
     }
@@ -38,6 +49,8 @@ namespace Input {
     bool begin();
     void end();
     void cancel();
-    bool poll(Event& event, uint32_t nowMs);
+    void resume();
+    bool poll(Event& event);
+    ui::TouchSampleResult pollTouch(ui::TouchContact& contact);
 
 } // namespace Input

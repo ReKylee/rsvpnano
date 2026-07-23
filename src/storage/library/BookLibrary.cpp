@@ -216,31 +216,6 @@ namespace BookLibrary {
                  static_cast<unsigned int>(counts.text), static_cast<unsigned int>(counts.pendingEpub));
     }
 
-    void printListing(const Listing& listing) {
-        ESP_LOGD("storage", "Listing /books, /books/books, /books/articles (.rsvp/.txt/.epub pending conversion):");
-        for (const std::string& path: listing.paths) {
-            File entry = Board::Storage::filesystem().open(path.c_str());
-            if (!entry || entry.isDirectory()) {
-                if (entry) {
-                    entry.close();
-                }
-                continue;
-            }
-
-            ESP_LOGD("storage", "  %s (%lu bytes)", path.c_str(), static_cast<unsigned long>(entry.size()));
-            entry.close();
-        }
-    }
-
-    size_t unsupportedFileCount() {
-        const std::vector<DirectoryEntryInfo> entries = scanLibraryDirectories();
-        return std::ranges::count_if(entries, [](const DirectoryEntryInfo& entry) {
-            const std::string& path = entry.path;
-            return !isHiddenOrSidecarPath(path) && !hasRsvpExtension(path) && !hasTextExtension(path)
-                && !hasEpubExtension(path);
-        });
-    }
-
     std::string pathAt(const Listing& listing, size_t index) {
         if (index >= listing.paths.size()) {
             return "";

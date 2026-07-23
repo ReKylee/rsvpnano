@@ -53,6 +53,7 @@ namespace ui {
         bool touched = false;
         uint16_t x = 0;
         uint16_t y = 0;
+        uint32_t sampledAtMs = 0;
     };
 
     struct TouchSurface {
@@ -61,23 +62,21 @@ namespace ui {
     };
 
     struct TouchTiming {
-        uint8_t releaseConfirmSamples = 2;
-        uint8_t maxConsecutiveReadFailures = 5;
         uint16_t tapMoveTolerancePx = 20;
         uint16_t tapMaxDurationMs = 600;
-        uint16_t holdMs = 420;
-        uint32_t pollIntervalMs = 20;
-        uint32_t failureBackoffMs = 250;
-        uint32_t recoveryRetryMs = 1000;
-        uint32_t recoveryEventIgnoreMs = 0;
+        uint16_t holdMs = 600;
+    };
+
+    enum class TouchSampleResult : uint8_t {
+        None,
+        Contact,
+        Reset,
     };
 
     struct TouchSource {
         TouchSurface surface;
         TouchTiming timing;
-        bool (*begin)() = nullptr;
-        bool (*ready)() = nullptr;
-        bool (*read)(TouchContact&) = nullptr;
+        TouchSampleResult (*poll)(TouchContact&) = nullptr;
     };
 
 } // namespace ui

@@ -123,7 +123,7 @@ namespace ui {
             return touchOrientation_;
         }
         std::string_view text(UiText key) const;
-        void setTouchSource(TouchSource source, uint32_t nowMs);
+        void setTouchSource(TouchSource source);
         bool pollTouch(uint32_t nowMs);
         const Touch* touch() const {
             return touchPending_ ? &touchEvent_ : nullptr;
@@ -211,10 +211,6 @@ namespace ui {
         int16_t height() const {
             return gfx_.height();
         }
-        bool drew() const {
-            return drew_;
-        }
-
         static uint32_t signature(std::string_view text, uint32_t seed = 2166136261U);
         static uint32_t combine(uint32_t seed, uint32_t value);
         static int16_t textWidth(std::string_view text, uint8_t size);
@@ -267,7 +263,6 @@ namespace ui {
         bool stepperValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,
                           std::string_view suffix, ui::themes::ColorRole activeRole);
         void resetTouchGesture();
-        bool beginTouch(uint32_t nowMs);
         TouchContact mapTouch(TouchContact contact) const;
         bool updateTouch(const TouchContact& contact, uint32_t nowMs);
 
@@ -277,20 +272,15 @@ namespace ui {
         TouchSource touchSource_{};
         Touch touchEvent_{};
         Orientation touchOrientation_ = Orientation::Portrait;
-        uint8_t touchEmptySamples_ = 0;
-        uint8_t touchReadFailures_ = 0;
         uint32_t touchStartedAtMs_ = 0;
         uint32_t touchLastPollMs_ = 0;
-        uint32_t touchBackoffUntilMs_ = 0;
-        uint32_t touchIgnoreUntilMs_ = 0;
         uint16_t touchStartX_ = 0;
         uint16_t touchStartY_ = 0;
         uint16_t touchLastX_ = 0;
         uint16_t touchLastY_ = 0;
-        bool touchInitialized_ = false;
         bool touchActive_ = false;
         bool touchHoldEmitted_ = false;
-        bool touchSlopExceeded_ = false;
+        uint8_t touchOutsideSamples_ = 0;
         bool touchPending_ = false;
         std::array<Slot, kSlotCapacity> slots_{};
         size_t slotCount_ = 0;

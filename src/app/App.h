@@ -3,11 +3,18 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
+#include <string>
+#include <string_view>
+
 #include "board/BoardDisplay.h"
 #include "board/BoardPower.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 #include "input/Input.h"
+#include "rss/RssFeeds.h"
 #include "settings/SettingsStore.h"
 #include "storage/StorageManager.h"
+#include "storage/fs/SdDiagnostics.h"
 #include "sync/CompanionSyncManager.h"
 #include "ui/Ui.h"
 #include "ui/screens/ChaptersScreen.h"
@@ -15,6 +22,7 @@
 #include "ui/screens/ReaderScreen.h"
 #include "ui/screens/Screens.h"
 #include "ui/screens/StandbyScreen.h"
+#include "update/OtaUpdater.h"
 #include "usb/UsbMassStorageManager.h"
 
 class App {
@@ -23,12 +31,37 @@ public:
     void update(uint32_t nowMs);
 
 private:
+    enum class JobKind : uint8_t {
+        None,
+        Rss,
+        StorageCheck,
+        OtaCheck,
+        OtaInstall,
+        Book,
+    };
+
+    struct JobUpdate {
+        bool complete = false;
+        char title[24] = {};
+        char line1[96] = {};
+        char line2[96] = {};
+        int progressPercent = -1;
+    };
+
     void migrateLegacyStorage();
     void renderScreen(uint32_t nowMs);
     void handleScreenAction(screens::Action action, uint32_t nowMs);
     void handleInput(const Input::Event& event, uint32_t nowMs);
     void handleTouch(uint32_t nowMs);
     void runRss();
+    void runBookOpen(size_t index, uint32_t nowMs);
+    void updateBackgroundJob();
+    bool startBackgroundJob(JobKind kind);
+    static void backgroundJobEntry(void* context);
+    void runBackgroundJob();
+    void enqueueJobUpdate(JobUpdate update, bool mustSucceed = false);
+    void showTransientStatus(std::string_view title, std::string_view line1, std::string_view line2,
+                             uint32_t durationMs, screens::Screen destination, int progressPercent = -1);
     void reloadSettings();
     void enterUsbTransfer(uint32_t nowMs);
     void exitUsbTransfer(screens::Screen destination = screens::Screen::Reader);
@@ -39,6 +72,9 @@ private:
     void powerOff(uint32_t nowMs);
     static void renderStorageStatus(void* context, const char* title, const char* line1, const char* line2,
                                     int progressPercent);
+    bool backgroundJobActive() const {
+        return jobKind_ != JobKind::None;
+    }
 
     ui::Context immediateUi_{Board::Display::gfx()};
     settings::SettingsStore settingsStore_;
@@ -54,8 +90,25 @@ private:
     UsbMassStorageManager usbTransfer_;
     screens::FocusScreen focusScreen_;
     screens::StandbyScreen standbyScreen_;
+    QueueHandle_t jobQueue_ = nullptr;
+    JobKind jobKind_ = JobKind::None;
+    settings::DeviceSettings jobSettings_;
+    settings::DeviceSecrets jobSecrets_;
+    OtaUpdater::Config jobOtaConfig_;
+    RssFeeds::Result jobRssResult_;
+    SdDiagnostics::Inventory jobStorageInventory_;
+    SdDiagnostics::Result jobStorageResult_;
+    OtaUpdater::Result jobOtaResult_;
+    size_t jobBookIndex_ = 0;
+    size_t jobLoadedBookIndex_ = 0;
+    std::string jobBookPath_;
+    std::string jobBookName_;
+    bool jobBookLoaded_ = false;
     screens::Screen screen_ = screens::Screen::Status;
+    screens::Screen statusDestination_ = screens::Screen::Reader;
     uint32_t bootMs_ = 0;
     uint32_t lastActivityMs_ = 0;
     uint32_t standbyEnteredMs_ = 0;
+    uint32_t statusUntilMs_ = 0;
+    bool restartAfterStatus_ = false;
 };

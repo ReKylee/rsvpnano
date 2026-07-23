@@ -15,8 +15,6 @@ namespace BookLibrary {
 
     void clear(Listing& listing);
     void refresh(Listing& listing, bool includeMetadata, bool onDeviceEpubConversionEnabled);
-    void printListing(const Listing& listing);
-    size_t unsupportedFileCount();
 
     std::string pathAt(const Listing& listing, size_t index);
     bool isArticle(const Listing& listing, size_t index);

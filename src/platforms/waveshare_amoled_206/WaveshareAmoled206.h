@@ -19,9 +19,6 @@ namespace WaveshareAmoled206::Buttons {
     constexpr int kBootPin = 0;
     constexpr int kPowerPin = -1;
     constexpr int kKeyPin = -1;
-    constexpr uint16_t kDebounceMs = 25;
-    constexpr uint16_t kShortPressMaxMs = 700;
-    constexpr uint16_t kLongPressMs = 900;
 } // namespace WaveshareAmoled206::Buttons
 
 namespace WaveshareAmoled206::Axp2101Wiring {
@@ -81,10 +78,4 @@ namespace WaveshareAmoled206::System {
 namespace WaveshareAmoled206::TouchWiring {
     constexpr uint8_t kAddress = 0x38;
     constexpr bool kReleaseBusBeforeRead = false;
-    constexpr uint8_t kReleaseConfirmSamples = 2;
-    constexpr uint8_t kMaxConsecutiveReadFailures = 5;
-    constexpr uint32_t kPollIntervalMs = 20;
-    constexpr uint32_t kFailureBackoffMs = 250;
-    constexpr uint32_t kRecoveryRetryMs = 1000;
-    constexpr uint32_t kRecoveryEventIgnoreMs = 0;
 } // namespace WaveshareAmoled206::TouchWiring

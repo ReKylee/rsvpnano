@@ -65,8 +65,7 @@ namespace Board::Input {
     void cancel() {}
 
     ::Input::ControlTiming controlTiming() {
-        return {WaveshareAmoled216::Buttons::kDebounceMs, WaveshareAmoled216::Buttons::kShortPressMaxMs,
-                WaveshareAmoled216::Buttons::kLongPressMs};
+        return {};
     }
 
     ::Input::PressActions currentActions() {
@@ -92,15 +91,8 @@ namespace Board::Input {
         return {WaveshareAmoled216::DisplayWiring::kPanelWidth, WaveshareAmoled216::DisplayWiring::kPanelHeight};
     }
 
-    ui::TouchTiming touchTiming() {
-        ui::TouchTiming timing = {};
-        timing.releaseConfirmSamples = WaveshareAmoled216::TouchWiring::kReleaseConfirmSamples;
-        timing.maxConsecutiveReadFailures = WaveshareAmoled216::TouchWiring::kMaxConsecutiveReadFailures;
-        timing.pollIntervalMs = WaveshareAmoled216::TouchWiring::kPollIntervalMs;
-        timing.failureBackoffMs = WaveshareAmoled216::TouchWiring::kFailureBackoffMs;
-        timing.recoveryRetryMs = WaveshareAmoled216::TouchWiring::kRecoveryRetryMs;
-        timing.recoveryEventIgnoreMs = WaveshareAmoled216::TouchWiring::kRecoveryEventIgnoreMs;
-        return timing;
+    ::Input::TouchTiming touchTiming() {
+        return {};
     }
 
     bool beginTouch() {

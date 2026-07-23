@@ -50,8 +50,7 @@ namespace Board::Input {
     void cancel() {}
 
     ::Input::ControlTiming controlTiming() {
-        return {WaveshareC6TouchLcd147::Buttons::kDebounceMs, WaveshareC6TouchLcd147::Buttons::kShortPressMaxMs,
-                WaveshareC6TouchLcd147::Buttons::kLongPressMs};
+        return {};
     }
 
     ::Input::PressActions currentActions() {
@@ -68,15 +67,8 @@ namespace Board::Input {
                 WaveshareC6TouchLcd147::DisplayWiring::kPanelHeight};
     }
 
-    ui::TouchTiming touchTiming() {
-        ui::TouchTiming timing = {};
-        timing.releaseConfirmSamples = WaveshareC6TouchLcd147::TouchWiring::kReleaseConfirmSamples;
-        timing.maxConsecutiveReadFailures = WaveshareC6TouchLcd147::TouchWiring::kMaxConsecutiveReadFailures;
-        timing.pollIntervalMs = WaveshareC6TouchLcd147::TouchWiring::kPollIntervalMs;
-        timing.failureBackoffMs = WaveshareC6TouchLcd147::TouchWiring::kFailureBackoffMs;
-        timing.recoveryRetryMs = WaveshareC6TouchLcd147::TouchWiring::kRecoveryRetryMs;
-        timing.recoveryEventIgnoreMs = WaveshareC6TouchLcd147::TouchWiring::kRecoveryEventIgnoreMs;
-        return timing;
+    ::Input::TouchTiming touchTiming() {
+        return {};
     }
 
     bool beginTouch() {

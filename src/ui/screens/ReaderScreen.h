@@ -25,6 +25,8 @@ namespace screens {
         void applyTheme(const ui::themes::Theme& theme);
         void refreshTypography();
         bool openBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, size_t index, uint32_t nowMs);
+        void prepareBookOpen(Preferences& preferences, uint32_t nowMs);
+        void finishBookOpen(Preferences& preferences, size_t loadedIndex, std::string_view loadedPath, uint32_t nowMs);
         void loadInitialBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, uint32_t nowMs);
         void draw(ui::Context& ui, const StorageManager& storage, const Board::Power::BatteryState& battery,
                   uint32_t nowMs);

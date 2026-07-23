@@ -9,9 +9,6 @@ namespace WaveshareC6TouchLcd147::Buttons {
     constexpr int kBootPin = 9;
     constexpr int kPowerPin = -1;
     constexpr int kKeyPin = -1;
-    constexpr uint16_t kDebounceMs = 25;
-    constexpr uint16_t kShortPressMaxMs = 700;
-    constexpr uint16_t kLongPressMs = 900;
 } // namespace WaveshareC6TouchLcd147::Buttons
 
 namespace WaveshareC6TouchLcd147::DisplayWiring {
@@ -63,10 +60,4 @@ namespace WaveshareC6TouchLcd147::System {
 namespace WaveshareC6TouchLcd147::TouchWiring {
     constexpr uint8_t kAddress = 0x63;
     constexpr bool kReleaseBusBeforeRead = true;
-    constexpr uint8_t kReleaseConfirmSamples = 2;
-    constexpr uint8_t kMaxConsecutiveReadFailures = 5;
-    constexpr uint32_t kPollIntervalMs = 20;
-    constexpr uint32_t kFailureBackoffMs = 250;
-    constexpr uint32_t kRecoveryRetryMs = 1000;
-    constexpr uint32_t kRecoveryEventIgnoreMs = 0;
 } // namespace WaveshareC6TouchLcd147::TouchWiring

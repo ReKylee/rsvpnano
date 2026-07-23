@@ -31,7 +31,7 @@ void setup() {
     ESP_LOGI("main", "benchmark setup");
     Benchmark::run();
 #else
-    ESP_LOGI("main", "app setup");
+    ESP_LOGI("main", "app setup task=%s core=%d", pcTaskGetName(nullptr), xPortGetCoreID());
     app.begin();
 #endif
 }

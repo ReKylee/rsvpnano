@@ -24,9 +24,6 @@ namespace WaveshareLcd349::Buttons {
     constexpr int kBootPin = 0;
     constexpr int kPowerPin = 16;
     constexpr int kKeyPin = -1;
-    constexpr uint16_t kDebounceMs = 25;
-    constexpr uint16_t kShortPressMaxMs = 700;
-    constexpr uint16_t kLongPressMs = 900;
 } // namespace WaveshareLcd349::Buttons
 
 namespace WaveshareLcd349::DisplayWiring {
@@ -89,10 +86,5 @@ namespace WaveshareLcd349::Tca9554Wiring {
 namespace WaveshareLcd349::TouchWiring {
     constexpr uint8_t kAddress = 0x3B;
     constexpr bool kReleaseBusBeforeRead = false;
-    constexpr uint8_t kReleaseConfirmSamples = 2;
-    constexpr uint8_t kMaxConsecutiveReadFailures = 5;
     constexpr uint32_t kPollIntervalMs = 30;
-    constexpr uint32_t kFailureBackoffMs = 250;
-    constexpr uint32_t kRecoveryRetryMs = 1000;
-    constexpr uint32_t kRecoveryEventIgnoreMs = 0;
 } // namespace WaveshareLcd349::TouchWiring

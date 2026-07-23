@@ -15,6 +15,7 @@ namespace ui {
 
         constexpr uint8_t kUiFontCellWidth = 6;
         constexpr uint8_t kUiFontHeight = 9;
+        constexpr uint8_t kTapCancelOutsideSamples = 2;
 
         size_t fittedLength(std::string_view text, size_t capacity) {
             if (Utf8Text::count(text) <= capacity)
@@ -66,47 +67,30 @@ namespace ui {
         return Localization::text(language_, key);
     }
 
-    void Context::setTouchSource(TouchSource source, uint32_t nowMs) {
+    void Context::setTouchSource(TouchSource source) {
         touchSource_ = source;
-        beginTouch(nowMs);
+        resetTouchGesture();
     }
 
     bool Context::pollTouch(uint32_t nowMs) {
         touchPending_ = false;
-        if (touchSource_.read == nullptr)
+        if (touchSource_.poll == nullptr)
             return false;
-
-        if (!touchInitialized_) {
-            if (nowMs >= touchBackoffUntilMs_ && !beginTouch(nowMs)) {
-                touchBackoffUntilMs_ = nowMs + touchSource_.timing.recoveryRetryMs;
-            }
-            return false;
-        }
-        if (nowMs < touchBackoffUntilMs_ || nowMs - touchLastPollMs_ < touchSource_.timing.pollIntervalMs)
-            return false;
-        touchLastPollMs_ = nowMs;
 
         TouchContact contact;
-        // IRQ starts a contact; the controller packet, not the IRQ level, ends it.
-        if (!touchActive_ && touchSource_.ready != nullptr && !touchSource_.ready()) {
-            contact = {};
-        } else if (!touchSource_.read(contact)) {
-            touchBackoffUntilMs_ = nowMs + touchSource_.timing.failureBackoffMs;
-            if (++touchReadFailures_ >= touchSource_.timing.maxConsecutiveReadFailures) {
-                touchInitialized_ = false;
-                touchBackoffUntilMs_ = nowMs + touchSource_.timing.recoveryRetryMs;
-                resetTouchGesture();
-            }
+        switch (touchSource_.poll(contact)) {
+        case TouchSampleResult::None:
             return false;
-        } else {
-            touchReadFailures_ = 0;
-        }
-
-        if (nowMs < touchIgnoreUntilMs_) {
+        case TouchSampleResult::Reset:
             resetTouchGesture();
             return false;
+        case TouchSampleResult::Contact:
+            break;
         }
-        return updateTouch(contact, nowMs);
+
+        const uint32_t sampledAtMs = contact.sampledAtMs == 0 ? nowMs : contact.sampledAtMs;
+        touchLastPollMs_ = sampledAtMs;
+        return updateTouch(contact, sampledAtMs);
     }
 
     void Context::beginFrame(uint8_t screen) {
@@ -970,27 +954,14 @@ namespace ui {
     void Context::resetTouchGesture() {
         touchActive_ = false;
         touchHoldEmitted_ = false;
-        touchSlopExceeded_ = false;
+        touchOutsideSamples_ = 0;
         touchPending_ = false;
-        touchEmptySamples_ = 0;
         touchStartedAtMs_ = 0;
         touchStartX_ = 0;
         touchStartY_ = 0;
         touchLastX_ = 0;
         touchLastY_ = 0;
         capturedSlot_ = kSlotCapacity;
-    }
-
-    bool Context::beginTouch(uint32_t nowMs) {
-        resetTouchGesture();
-        touchLastPollMs_ = 0;
-        touchBackoffUntilMs_ = 0;
-        touchReadFailures_ = 0;
-        touchInitialized_ = touchSource_.begin != nullptr && touchSource_.begin();
-        if (touchInitialized_) {
-            touchIgnoreUntilMs_ = nowMs + touchSource_.timing.recoveryEventIgnoreMs;
-        }
-        return touchInitialized_;
     }
 
     TouchContact Context::mapTouch(TouchContact contact) const {
@@ -1012,23 +983,21 @@ namespace ui {
 
     bool Context::updateTouch(const TouchContact& contact, uint32_t nowMs) {
         if (!contact.touched) {
-            if (!touchActive_ || ++touchEmptySamples_ < touchSource_.timing.releaseConfirmSamples)
+            if (!touchActive_)
                 return false;
             const bool tapped = !touchHoldEmitted_ && nowMs - touchStartedAtMs_ <= touchSource_.timing.tapMaxDurationMs
-                             && !touchSlopExceeded_;
+                             && touchOutsideSamples_ < kTapCancelOutsideSamples;
             touchActive_ = false;
-            touchEmptySamples_ = 0;
             touchEvent_ = {static_cast<uint8_t>(TouchRelease | (tapped ? TouchTap : TouchNone)), touchLastX_,
                            touchLastY_};
             return touchPending_ = true;
         }
 
-        touchEmptySamples_ = 0;
         const TouchContact mapped = mapTouch(contact);
         if (!touchActive_) {
             touchActive_ = true;
             touchHoldEmitted_ = false;
-            touchSlopExceeded_ = false;
+            touchOutsideSamples_ = 0;
             touchStartedAtMs_ = nowMs;
             touchStartX_ = touchLastX_ = mapped.x;
             touchStartY_ = touchLastY_ = mapped.y;
@@ -1041,9 +1010,14 @@ namespace ui {
         uint8_t actions = TouchMove;
         const uint16_t dx = std::max(touchLastX_, touchStartX_) - std::min(touchLastX_, touchStartX_);
         const uint16_t dy = std::max(touchLastY_, touchStartY_) - std::min(touchLastY_, touchStartY_);
-        touchSlopExceeded_ = touchSlopExceeded_ || dx > touchSource_.timing.tapMoveTolerancePx
-                          || dy > touchSource_.timing.tapMoveTolerancePx;
-        if (!touchHoldEmitted_ && !touchSlopExceeded_ && nowMs - touchStartedAtMs_ >= touchSource_.timing.holdMs) {
+        const bool outside = dx > touchSource_.timing.tapMoveTolerancePx || dy > touchSource_.timing.tapMoveTolerancePx;
+        if (outside) {
+            touchOutsideSamples_ = std::min<uint8_t>(touchOutsideSamples_ + 1, kTapCancelOutsideSamples);
+        } else if (touchOutsideSamples_ < kTapCancelOutsideSamples) {
+            touchOutsideSamples_ = 0;
+        }
+        if (!touchHoldEmitted_ && touchOutsideSamples_ < kTapCancelOutsideSamples
+            && nowMs - touchStartedAtMs_ >= touchSource_.timing.holdMs) {
             touchHoldEmitted_ = true;
             actions |= TouchHold;
         }

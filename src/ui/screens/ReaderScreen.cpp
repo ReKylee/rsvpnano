@@ -79,10 +79,7 @@ namespace screens {
         if (!storage.mounted() || index >= storage.bookCount())
             return false;
         status(ui, ui.text(UiText::OpeningBook), storage.bookDisplayName(index), {}, 5);
-        ReadingProgress::save(session, preferences, true, nowMs);
-        ReadingProgress::mirror(session, store);
-        store.close();
-        session.metadata.clear();
+        prepareBookOpen(preferences, nowMs);
         StorageManager::IndexedBookLoadOptions options;
         std::string loadedPath;
         size_t loadedIndex = index;
@@ -90,9 +87,21 @@ namespace screens {
         options.loadedIndex = &loadedIndex;
         if (!storage.loadIndexedBook(index, store, session.metadata, options)) {
             status(ui, ui.text(UiText::BookFailed), storage.bookDisplayName(index), ui.text(UiText::CheckSdCard));
-            delay(1200);
             return false;
         }
+        finishBookOpen(preferences, loadedIndex, loadedPath, nowMs);
+        return true;
+    }
+
+    void ReaderScreen::prepareBookOpen(Preferences& preferences, uint32_t nowMs) {
+        ReadingProgress::save(session, preferences, true, nowMs);
+        ReadingProgress::mirror(session, store);
+        store.close();
+        session.metadata.clear();
+    }
+
+    void ReaderScreen::finishBookOpen(Preferences& preferences, size_t loadedIndex, std::string_view loadedPath,
+                                      uint32_t nowMs) {
         session.bookIndex = loadedIndex;
         session.path = loadedPath;
         session.fromStorage = true;
@@ -109,7 +118,6 @@ namespace screens {
             preferences.putString("book", session.path.c_str());
         }
         refreshTypography();
-        return true;
     }
 
     void ReaderScreen::loadInitialBook(ui::Context& ui, StorageManager& storage, Preferences& preferences,

@@ -86,5 +86,6 @@ namespace WaveshareLcd349::Tca9554Wiring {
 namespace WaveshareLcd349::TouchWiring {
     constexpr uint8_t kAddress = 0x3B;
     constexpr bool kReleaseBusBeforeRead = false;
+    constexpr uint32_t kReadyPollIntervalMs = 5;
     constexpr uint32_t kPollIntervalMs = 30;
 } // namespace WaveshareLcd349::TouchWiring

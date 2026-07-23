@@ -36,6 +36,7 @@ namespace Input {
     struct TouchTiming {
         uint8_t releaseConfirmSamples = 2;
         uint8_t maxConsecutiveReadFailures = 5;
+        uint32_t readyPollIntervalMs = 20;
         uint32_t pollIntervalMs = 20;
         uint32_t failureBackoffMs = 250;
         uint32_t recoveryRetryMs = 1000;

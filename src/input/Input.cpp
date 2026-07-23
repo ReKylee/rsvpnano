@@ -237,8 +237,11 @@ namespace Input {
                 }
 
                 if (gTouchInitialized && deadlineReached(nowMs, nextTouchMs)) {
-                    nextTouchMs = nowMs + std::max<uint32_t>(1, gTouchTiming.pollIntervalMs);
+                    const uint32_t readyIntervalMs = std::max<uint32_t>(1, gTouchTiming.readyPollIntervalMs);
+                    const uint32_t packetIntervalMs = std::max<uint32_t>(1, gTouchTiming.pollIntervalMs);
+                    nextTouchMs = nowMs + readyIntervalMs;
                     if (gTouchActive || Board::Input::touchReady()) {
+                        nextTouchMs = nowMs + packetIntervalMs;
                         TouchSample sample;
                         sample.contact.sampledAtMs = nowMs;
                         if (Board::Input::readTouch(sample.contact)) {
@@ -258,6 +261,8 @@ namespace Input {
                                 gTouchActive = false;
                                 gTouchReleaseSamples = 0;
                             }
+                            if (!gTouchActive)
+                                nextTouchMs = nowMs + readyIntervalMs;
                             if (emitContact && deadlineReached(nowMs, gTouchIgnoreUntilMs)) {
                                 sample.result = ui::TouchSampleResult::Contact;
                                 enqueueLatest(gTouchQueue, sample);

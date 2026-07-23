@@ -75,7 +75,10 @@ namespace Board::Input {
     }
 
     ::Input::TouchTiming touchTiming() {
-        return {.pollIntervalMs = WaveshareLcd349::TouchWiring::kPollIntervalMs};
+        return {
+            .readyPollIntervalMs = WaveshareLcd349::TouchWiring::kReadyPollIntervalMs,
+            .pollIntervalMs = WaveshareLcd349::TouchWiring::kPollIntervalMs,
+        };
     }
 
     bool beginTouch() {

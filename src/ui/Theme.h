@@ -22,7 +22,7 @@ namespace ui::themes {
         Rgb565 subtle = 0x528A;
         Rgb565 accent = 0xF800;
         Rgb565 accentBar = 0xF800;
-        Rgb565 breakAccent = rgb565(68, 132, 88);
+        Rgb565 breakAccent = rgb565(38, 122, 134);
         Rgb565 onAccent = 0xFFFF;
         Rgb565 surface = 0x0000;
         Rgb565 surfaceMuted = 0x2104;

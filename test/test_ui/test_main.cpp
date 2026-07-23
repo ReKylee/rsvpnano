@@ -1,9 +1,11 @@
 #include <unity.h>
 
+#include "reader/ReadingLoop.h"
 #include "settings/SettingsRules.h"
 #include "text/Utf8Text.h"
 #include "ui/Localization.h"
 #include "ui/Ui.h"
+#include "ui/screens/PageReaderScreen.h"
 
 namespace {
 
@@ -113,6 +115,73 @@ void test_button_and_slider_consume_touch() {
     TEST_ASSERT_TRUE(context.slider({0, 30, 101, 20}, "", value));
     context.endFrame();
     TEST_ASSERT_EQUAL(25, value);
+}
+
+void test_tap_capture_tolerates_slow_release_just_outside() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx);
+    enableTouch(context);
+    constexpr ui::Rect button{0, 0, 80, 24};
+
+    gContact = {true, 75, 12};
+    TEST_ASSERT_TRUE(context.pollTouch(1));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button(button, "Tap"));
+    context.endFrame();
+
+    gContact = {true, 85, 12};
+    TEST_ASSERT_TRUE(context.pollTouch(350));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button(button, "Tap"));
+    context.endFrame();
+
+    gContact = {};
+    TEST_ASSERT_TRUE(context.pollTouch(470));
+    context.beginFrame(1);
+    TEST_ASSERT_TRUE(context.button(button, "Tap"));
+    context.endFrame();
+
+    gContact = {true, 85, 12};
+    TEST_ASSERT_TRUE(context.pollTouch(500));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button(button, "Tap"));
+    context.endFrame();
+
+    gContact = {true, 75, 12};
+    TEST_ASSERT_TRUE(context.pollTouch(510));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button(button, "Tap"));
+    context.endFrame();
+
+    gContact = {};
+    TEST_ASSERT_TRUE(context.pollTouch(520));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button(button, "Tap"));
+    context.endFrame();
+
+    gContact = {true, 40, 12};
+    TEST_ASSERT_TRUE(context.pollTouch(600));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button(button, "Tap"));
+    context.endFrame();
+
+    gContact = {true, 70, 12};
+    TEST_ASSERT_TRUE(context.pollTouch(610));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button(button, "Tap"));
+    context.endFrame();
+
+    gContact = {true, 40, 12};
+    TEST_ASSERT_TRUE(context.pollTouch(620));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button(button, "Tap"));
+    context.endFrame();
+
+    gContact = {};
+    TEST_ASSERT_TRUE(context.pollTouch(630));
+    context.beginFrame(1);
+    TEST_ASSERT_FALSE(context.button(button, "Tap"));
+    context.endFrame();
 }
 
 void test_active_touch_outlives_irq_and_emits_hold_before_release() {
@@ -231,6 +300,36 @@ void test_layout_cursors_are_deterministic() {
     TEST_ASSERT_EQUAL_INT16(48, grid.next().w);
     TEST_ASSERT_EQUAL_INT16(52, grid.next().x);
     TEST_ASSERT_EQUAL_INT16(24, grid.next().y);
+}
+
+void test_page_reader_redraws_after_skipping_a_colliding_page_range() {
+    Arduino_GFX gfx(136, 26);
+    ui::Context context(gfx);
+    auto colors = theme();
+    context.setTheme(colors);
+    std::array<std::string, 12> words;
+    words.fill("a");
+    ReadingSession session;
+    ReadingLoop::setWords(session, words, 0);
+    session.metadata.paragraphStarts = {0, 4, 8};
+    screens::PageReader::State state;
+    constexpr ui::Rect area{0, 0, 136, 26};
+
+    context.beginFrame(1);
+    screens::PageReader::draw(state, context, session, area);
+    context.endFrame();
+    TEST_ASSERT_EQUAL(0, state.pageStart);
+    TEST_ASSERT_EQUAL(4, state.pageEnd);
+
+    gfx.textWrites = 0;
+    ReadingLoop::seekTo(session, 8);
+    context.beginFrame(1);
+    screens::PageReader::draw(state, context, session, area);
+    context.endFrame();
+
+    TEST_ASSERT_EQUAL(8, state.pageStart);
+    TEST_ASSERT_EQUAL(12, state.pageEnd);
+    TEST_ASSERT_EQUAL(4, gfx.textWrites);
 }
 
 void test_ui_font_measures_utf8_codepoints() {
@@ -628,11 +727,13 @@ int main(int, char**) {
     RUN_TEST(test_unchanged_widget_does_not_draw_or_flush);
     RUN_TEST(test_changed_and_removed_widgets_redraw);
     RUN_TEST(test_button_and_slider_consume_touch);
+    RUN_TEST(test_tap_capture_tolerates_slow_release_just_outside);
     RUN_TEST(test_active_touch_outlives_irq_and_emits_hold_before_release);
     RUN_TEST(test_stepper_taps_and_repeats);
     RUN_TEST(test_disabled_button_ignores_touch);
     RUN_TEST(test_tap_target_handles_touch_without_drawing);
     RUN_TEST(test_layout_cursors_are_deterministic);
+    RUN_TEST(test_page_reader_redraws_after_skipping_a_colliding_page_range);
     RUN_TEST(test_ui_font_measures_utf8_codepoints);
     RUN_TEST(test_localization_keeps_native_accents);
     RUN_TEST(test_utf8_text_decodes_and_keeps_codepoint_boundaries);

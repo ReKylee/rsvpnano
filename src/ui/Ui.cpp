@@ -964,12 +964,13 @@ namespace ui {
         if (!hasTouch(*event, TouchRelease) || capturedSlot_ != slot)
             return false;
         capturedSlot_ = kSlotCapacity;
-        return hasTouch(*event, TouchTap) && contains(rect, event->x, event->y);
+        return hasTouch(*event, TouchTap);
     }
 
     void Context::resetTouchGesture() {
         touchActive_ = false;
         touchHoldEmitted_ = false;
+        touchSlopExceeded_ = false;
         touchPending_ = false;
         touchEmptySamples_ = 0;
         touchStartedAtMs_ = 0;
@@ -1013,11 +1014,8 @@ namespace ui {
         if (!contact.touched) {
             if (!touchActive_ || ++touchEmptySamples_ < touchSource_.timing.releaseConfirmSamples)
                 return false;
-            const uint16_t dx = std::max(touchLastX_, touchStartX_) - std::min(touchLastX_, touchStartX_);
-            const uint16_t dy = std::max(touchLastY_, touchStartY_) - std::min(touchLastY_, touchStartY_);
-            const bool tapped = nowMs - touchStartedAtMs_ <= touchSource_.timing.tapMaxDurationMs
-                             && dx <= touchSource_.timing.tapMoveTolerancePx
-                             && dy <= touchSource_.timing.tapMoveTolerancePx;
+            const bool tapped = !touchHoldEmitted_ && nowMs - touchStartedAtMs_ <= touchSource_.timing.tapMaxDurationMs
+                             && !touchSlopExceeded_;
             touchActive_ = false;
             touchEmptySamples_ = 0;
             touchEvent_ = {static_cast<uint8_t>(TouchRelease | (tapped ? TouchTap : TouchNone)), touchLastX_,
@@ -1030,6 +1028,7 @@ namespace ui {
         if (!touchActive_) {
             touchActive_ = true;
             touchHoldEmitted_ = false;
+            touchSlopExceeded_ = false;
             touchStartedAtMs_ = nowMs;
             touchStartX_ = touchLastX_ = mapped.x;
             touchStartY_ = touchLastY_ = mapped.y;
@@ -1042,8 +1041,9 @@ namespace ui {
         uint8_t actions = TouchMove;
         const uint16_t dx = std::max(touchLastX_, touchStartX_) - std::min(touchLastX_, touchStartX_);
         const uint16_t dy = std::max(touchLastY_, touchStartY_) - std::min(touchLastY_, touchStartY_);
-        if (!touchHoldEmitted_ && nowMs - touchStartedAtMs_ >= touchSource_.timing.holdMs
-            && dx <= touchSource_.timing.tapMoveTolerancePx && dy <= touchSource_.timing.tapMoveTolerancePx) {
+        touchSlopExceeded_ = touchSlopExceeded_ || dx > touchSource_.timing.tapMoveTolerancePx
+                          || dy > touchSource_.timing.tapMoveTolerancePx;
+        if (!touchHoldEmitted_ && !touchSlopExceeded_ && nowMs - touchStartedAtMs_ >= touchSource_.timing.holdMs) {
             touchHoldEmitted_ = true;
             actions |= TouchHold;
         }

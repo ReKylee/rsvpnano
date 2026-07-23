@@ -129,8 +129,8 @@ namespace screens::PageReader {
         if (current >= state.pageEnd)
             layout(state, session, area, current);
 
-        const uint32_t pageSignature =
-            ui::Context::combine(static_cast<uint32_t>(state.pageStart), static_cast<uint32_t>(state.pageEnd));
+        uint32_t pageSignature = ui::Context::combine(2166136261U, static_cast<uint32_t>(state.pageStart));
+        pageSignature = ui::Context::combine(pageSignature, static_cast<uint32_t>(state.pageEnd));
         const uint32_t signature = ui::Context::signature(overlay, pageSignature);
         if (!ui.redraw(area, signature)) {
             if (state.highlighted == current)

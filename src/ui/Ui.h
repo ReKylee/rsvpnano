@@ -290,6 +290,7 @@ namespace ui {
         bool touchInitialized_ = false;
         bool touchActive_ = false;
         bool touchHoldEmitted_ = false;
+        bool touchSlopExceeded_ = false;
         bool touchPending_ = false;
         std::array<Slot, kSlotCapacity> slots_{};
         size_t slotCount_ = 0;

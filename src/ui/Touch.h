@@ -64,7 +64,7 @@ namespace ui {
         uint8_t releaseConfirmSamples = 2;
         uint8_t maxConsecutiveReadFailures = 5;
         uint16_t tapMoveTolerancePx = 20;
-        uint16_t tapMaxDurationMs = 300;
+        uint16_t tapMaxDurationMs = 600;
         uint16_t holdMs = 420;
         uint32_t pollIntervalMs = 20;
         uint32_t failureBackoffMs = 250;

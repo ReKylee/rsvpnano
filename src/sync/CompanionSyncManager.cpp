@@ -361,14 +361,11 @@ loadDraft();refresh();
 
 } // namespace
 
-CompanionSyncManager* CompanionSyncManager::instance_ = nullptr;
-
 bool CompanionSyncManager::begin() {
     if (active_) {
         return true;
     }
 
-    instance_ = this;
     statusLine1_ = "Starting sync";
     statusLine2_ = "Preparing Wi-Fi";
     settingsChanged_ = false;
@@ -421,7 +418,6 @@ void CompanionSyncManager::end() {
     settingsChanged_ = false;
     statusLine1_ = "Idle";
     statusLine2_ = "";
-    instance_ = nullptr;
 }
 
 bool CompanionSyncManager::active() const {
@@ -444,102 +440,6 @@ std::string CompanionSyncManager::baseUrl() const {
         return std::string{"http://"} + ipToString(WiFi.softAPIP()).c_str();
     }
     return "";
-}
-
-void CompanionSyncManager::handleInfoStatic() {
-    if (instance_ != nullptr) {
-        instance_->handleInfo();
-    }
-}
-
-void CompanionSyncManager::handleRootStatic() {
-    if (instance_ != nullptr) {
-        instance_->handleRoot();
-    }
-}
-
-void CompanionSyncManager::handleBooksListStatic() {
-    if (instance_ != nullptr) {
-        instance_->handleBooksList();
-    }
-}
-
-void CompanionSyncManager::handleSettingsStatic() {
-    if (instance_ != nullptr) {
-        instance_->handleSettings();
-    }
-}
-
-void CompanionSyncManager::handleWifiStatic() {
-    if (instance_ != nullptr) {
-        instance_->handleWifi();
-    }
-}
-
-void CompanionSyncManager::handleRssFeedsStatic() {
-    if (instance_ != nullptr) {
-        instance_->handleRssFeeds();
-    }
-}
-
-void CompanionSyncManager::handleFocusTimersStatic() {
-    if (instance_ != nullptr) {
-        instance_->handleFocusTimers();
-    }
-}
-
-void CompanionSyncManager::handleBookDeleteStatic() {
-    if (instance_ != nullptr) {
-        instance_->handleBookDelete();
-    }
-}
-
-void CompanionSyncManager::handleBookPositionStatic() {
-    if (instance_ != nullptr) {
-        instance_->handleBookPosition();
-    }
-}
-
-void CompanionSyncManager::handleBooksStatic() {
-    if (instance_ != nullptr) {
-        instance_->handleBooks();
-    }
-}
-
-void CompanionSyncManager::handleBookUploadStatic() {
-    if (instance_ != nullptr) {
-        instance_->handleBookUpload();
-    }
-}
-
-void CompanionSyncManager::handleThemesStatic() {
-    if (instance_ != nullptr) {
-        instance_->handleThemes();
-    }
-}
-
-void CompanionSyncManager::handleThemeUploadStatic() {
-    if (instance_ != nullptr) {
-        instance_->handleThemeUpload();
-    }
-}
-
-void CompanionSyncManager::handleFontsStatic() {
-    if (instance_ != nullptr) {
-        instance_->handleFonts();
-    }
-}
-
-void CompanionSyncManager::handleFontUploadStatic() {
-    if (instance_ != nullptr) {
-        instance_->handleFontUpload();
-    }
-}
-
-void CompanionSyncManager::handleNotFoundStatic() {
-    if (instance_ != nullptr) {
-        instance_->handleNotFound();
-    }
 }
 
 bool CompanionSyncManager::startAccessPoint() {
@@ -605,26 +505,26 @@ bool CompanionSyncManager::startStation() {
 }
 
 bool CompanionSyncManager::startServer() {
-    server_.on("/", HTTP_GET, handleRootStatic);
-    server_.on("/api/v1/device", HTTP_GET, handleInfoStatic);
-    server_.on("/api/v1/library", HTTP_GET, handleBooksListStatic);
-    server_.on("/api/v1/library", HTTP_DELETE, handleBookDeleteStatic);
-    server_.on("/api/v1/library", HTTP_POST, handleBooksStatic, handleBookUploadStatic);
-    server_.on("/api/v1/library/position", HTTP_PATCH, handleBookPositionStatic);
-    server_.on("/api/v1/appearance/themes", HTTP_GET, handleThemesStatic);
-    server_.on("/api/v1/appearance/themes", HTTP_POST, handleThemesStatic, handleThemeUploadStatic);
-    server_.on("/api/v1/appearance/fonts", HTTP_GET, handleFontsStatic);
-    server_.on("/api/v1/appearance/fonts", HTTP_POST, handleFontsStatic, handleFontUploadStatic);
-    server_.on("/api/v1/settings", HTTP_GET, handleSettingsStatic);
-    server_.on("/api/v1/settings", HTTP_PUT, handleSettingsStatic);
-    server_.on("/api/v1/network", HTTP_GET, handleWifiStatic);
-    server_.on("/api/v1/network", HTTP_PUT, handleWifiStatic);
-    server_.on("/api/v1/network", HTTP_DELETE, handleWifiStatic);
-    server_.on("/api/v1/feeds", HTTP_GET, handleRssFeedsStatic);
-    server_.on("/api/v1/feeds", HTTP_PUT, handleRssFeedsStatic);
-    server_.on("/api/v1/focus", HTTP_GET, handleFocusTimersStatic);
-    server_.on("/api/v1/focus", HTTP_PUT, handleFocusTimersStatic);
-    server_.onNotFound(handleNotFoundStatic);
+    server_.on("/", HTTP_GET, [this] { handleRoot(); });
+    server_.on("/api/v1/device", HTTP_GET, [this] { handleInfo(); });
+    server_.on("/api/v1/library", HTTP_GET, [this] { handleBooksList(); });
+    server_.on("/api/v1/library", HTTP_DELETE, [this] { handleBookDelete(); });
+    server_.on("/api/v1/library", HTTP_POST, [this] { handleBooks(); }, [this] { handleBookUpload(); });
+    server_.on("/api/v1/library/position", HTTP_PATCH, [this] { handleBookPosition(); });
+    server_.on("/api/v1/appearance/themes", HTTP_GET, [this] { handleThemes(); });
+    server_.on("/api/v1/appearance/themes", HTTP_POST, [this] { handleThemes(); }, [this] { handleThemeUpload(); });
+    server_.on("/api/v1/appearance/fonts", HTTP_GET, [this] { handleFonts(); });
+    server_.on("/api/v1/appearance/fonts", HTTP_POST, [this] { handleFonts(); }, [this] { handleFontUpload(); });
+    server_.on("/api/v1/settings", HTTP_GET, [this] { handleSettings(); });
+    server_.on("/api/v1/settings", HTTP_PUT, [this] { handleSettings(); });
+    server_.on("/api/v1/network", HTTP_GET, [this] { handleWifi(); });
+    server_.on("/api/v1/network", HTTP_PUT, [this] { handleWifi(); });
+    server_.on("/api/v1/network", HTTP_DELETE, [this] { handleWifi(); });
+    server_.on("/api/v1/feeds", HTTP_GET, [this] { handleRssFeeds(); });
+    server_.on("/api/v1/feeds", HTTP_PUT, [this] { handleRssFeeds(); });
+    server_.on("/api/v1/focus", HTTP_GET, [this] { handleFocusTimers(); });
+    server_.on("/api/v1/focus", HTTP_PUT, [this] { handleFocusTimers(); });
+    server_.onNotFound([this] { handleNotFound(); });
     server_.begin();
     serverStarted_ = true;
 

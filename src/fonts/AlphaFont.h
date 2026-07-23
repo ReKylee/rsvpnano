@@ -102,10 +102,6 @@ namespace ui::fonts {
             return ready_;
         }
 
-        bool ready() const {
-            return ready_;
-        }
-
         void setFont(const AlphaFont* font) {
             font_ = font;
         }

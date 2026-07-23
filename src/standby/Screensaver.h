@@ -25,10 +25,6 @@ namespace standby {
         void step();
         Frame frame() const;
 
-        Kind kind() const {
-            return kind_;
-        }
-
         explicit operator bool() const {
             return !std::holds_alternative<std::monostate>(storage_);
         }

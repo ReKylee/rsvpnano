@@ -52,12 +52,6 @@ public:
     std::string_view wordAt(size_t index) const;
     void prefetchAround(size_t index) const;
 
-    const std::string& indexPath() const {
-        return indexPath_;
-    }
-    const std::string& dataPath() const {
-        return dataPath_;
-    }
     uint32_t sourceSize() const {
         return isOpen() ? header_.sourceSize : 0;
     }

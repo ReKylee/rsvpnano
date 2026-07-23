@@ -33,23 +33,6 @@ private:
         std::string author;
     };
 
-    static void handleInfoStatic();
-    static void handleRootStatic();
-    static void handleBooksListStatic();
-    static void handleSettingsStatic();
-    static void handleWifiStatic();
-    static void handleRssFeedsStatic();
-    static void handleFocusTimersStatic();
-    static void handleBookDeleteStatic();
-    static void handleBookPositionStatic();
-    static void handleBooksStatic();
-    static void handleBookUploadStatic();
-    static void handleThemesStatic();
-    static void handleThemeUploadStatic();
-    static void handleFontsStatic();
-    static void handleFontUploadStatic();
-    static void handleNotFoundStatic();
-
     bool startStation();
     bool startAccessPoint();
     bool startServer();
@@ -79,8 +62,6 @@ private:
     std::string bookIdForPath(std::string_view path) const;
     bool resolveBookId(std::string_view id, std::string& path) const;
     void finishUpload(bool success);
-
-    static CompanionSyncManager* instance_;
 
     WebServer server_{80};
     File uploadFile_;

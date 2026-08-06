@@ -13,6 +13,7 @@
 
 namespace WaveshareAmoled18::AudioWiring {
     constexpr uint8_t kEs8311Address = 0x18;
+    constexpr int kAudioEnablePin = 46;
     constexpr int kMclkPin = 16;
     constexpr int kBclkPin = 9;
     constexpr int kWsPin = 45;
@@ -75,7 +76,8 @@ namespace WaveshareAmoled18::System {
     constexpr int kTouchSdaPin = 15;
     constexpr int kTouchSclPin = 14;
     constexpr int kTouchResetPin = -1;
-    constexpr int kTouchIrqPin = Version::kTouchIrqPin;
+    constexpr int kTouchIrqPin = 21;
+    constexpr bool kUseTouchIrqForReady = false;
     constexpr uint32_t kTouchI2cClockHz = kSystemI2cClockHz;
     constexpr uint32_t kTouchI2cTimeoutMs = kSystemI2cTimeoutMs;
     constexpr gpio_num_t kLightSleepWakeGpio = GPIO_NUM_0;

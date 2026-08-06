@@ -13,7 +13,6 @@ namespace WaveshareAmoled18::Version {
     constexpr uint16_t kPanelRowOffset = 0;
     constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Landscape;
 
-    constexpr int kTouchIrqPin = -1;
     constexpr uint8_t kTouchAddress = 0x38;
 
 } // namespace WaveshareAmoled18::Version

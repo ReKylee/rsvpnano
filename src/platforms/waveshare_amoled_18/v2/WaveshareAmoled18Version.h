@@ -16,9 +16,6 @@ namespace WaveshareAmoled18::Version {
     constexpr uint16_t kPanelRowOffset = 0;
     constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::LandscapeFlipped;
 
-    // Waveshare's v2 samples route TP_INT to GPIO21, but the app polls touch to
-    // avoid missing short interrupt pulses between loop samples.
-    constexpr int kTouchIrqPin = -1;
     constexpr uint8_t kTouchAddress = 0x15;
 
 } // namespace WaveshareAmoled18::Version

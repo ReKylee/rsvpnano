@@ -20,7 +20,7 @@ namespace {
 
     void configureIoExpander() {
         BoardDrivers::Tca9554::PortState state = {};
-        if (!BoardDrivers::Tca9554::readPortState(Wire1, WaveshareAmoled18::Tca9554Wiring::kAddress, state,
+        if (!BoardDrivers::Tca9554::readPortState(Wire, WaveshareAmoled18::Tca9554Wiring::kAddress, state,
                                                   WaveshareAmoled18::Tca9554Wiring::kReleaseBusBeforeRead)) {
             ESP_LOGW("board", "TCA9554 not detected");
             return;
@@ -31,7 +31,7 @@ namespace {
         state.config &= WaveshareAmoled18::Tca9554Wiring::kOutputClearMask;
         state.config |= WaveshareAmoled18::Tca9554Wiring::kInputMask;
 
-        if (!BoardDrivers::Tca9554::writePortState(Wire1, WaveshareAmoled18::Tca9554Wiring::kAddress, state)) {
+        if (!BoardDrivers::Tca9554::writePortState(Wire, WaveshareAmoled18::Tca9554Wiring::kAddress, state)) {
             ESP_LOGE("board", "TCA9554 output setup failed");
             return;
         }
@@ -102,6 +102,8 @@ namespace Board::Power {
     }
 
     bool enableAudioPowerIfAvailable() {
+        pinMode(WaveshareAmoled18::AudioWiring::kAudioEnablePin, OUTPUT);
+        digitalWrite(WaveshareAmoled18::AudioWiring::kAudioEnablePin, HIGH);
         return true;
     }
 

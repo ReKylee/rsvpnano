@@ -16,7 +16,7 @@ namespace {
 
     bool tcaPinHeld(uint8_t pin) {
         bool levelHigh = false;
-        return BoardDrivers::Tca9554::readInputPin(Wire1, WaveshareAmoled18::Tca9554Wiring::kAddress, pin, levelHigh,
+        return BoardDrivers::Tca9554::readInputPin(Wire, WaveshareAmoled18::Tca9554Wiring::kAddress, pin, levelHigh,
                                                    WaveshareAmoled18::Tca9554Wiring::kReleaseBusBeforeRead)
             && levelHigh;
     }
@@ -89,7 +89,7 @@ namespace Board::Input {
     }
 
     bool touchReady() {
-        if constexpr (WaveshareAmoled18::System::kTouchIrqPin < 0) {
+        if constexpr (!WaveshareAmoled18::System::kUseTouchIrqForReady) {
             return true;
         }
         return !digitalRead(WaveshareAmoled18::System::kTouchIrqPin);

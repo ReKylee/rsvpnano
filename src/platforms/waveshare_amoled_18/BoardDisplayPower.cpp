@@ -11,7 +11,7 @@ namespace WaveshareAmoled18::DisplayPower {
 
     void releaseHardware() {
         BoardDrivers::Tca9554::PortState state = {};
-        if (!BoardDrivers::Tca9554::readPortState(Wire1, Tca9554Wiring::kAddress, state,
+        if (!BoardDrivers::Tca9554::readPortState(Wire, Tca9554Wiring::kAddress, state,
                                                   Tca9554Wiring::kReleaseBusBeforeRead)) {
             ESP_LOGW("board", "TCA9554 not detected");
             return;
@@ -20,14 +20,14 @@ namespace WaveshareAmoled18::DisplayPower {
         state.output &= Tca9554Wiring::kDisplayClearMask;
         state.config &= Tca9554Wiring::kOutputClearMask;
         state.config |= Tca9554Wiring::kInputMask;
-        if (!BoardDrivers::Tca9554::writePortState(Wire1, Tca9554Wiring::kAddress, state)) {
+        if (!BoardDrivers::Tca9554::writePortState(Wire, Tca9554Wiring::kAddress, state)) {
             ESP_LOGE("board", "TCA9554 display hold failed");
             return;
         }
 
         delay(20);
         state.output |= Tca9554Wiring::kDisplayMask;
-        if (!BoardDrivers::Tca9554::writeOutput(Wire1, Tca9554Wiring::kAddress, state.output)) {
+        if (!BoardDrivers::Tca9554::writeOutput(Wire, Tca9554Wiring::kAddress, state.output)) {
             ESP_LOGE("board", "TCA9554 display release failed");
             return;
         }

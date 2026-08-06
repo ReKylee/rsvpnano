@@ -32,7 +32,7 @@ namespace Board::Storage {
     }
 
     bool supportsFrequencySelection() {
-        return false;
+        return true;
     }
 
     bool setSdMmcPins() {

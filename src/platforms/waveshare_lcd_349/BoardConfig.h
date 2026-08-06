@@ -17,8 +17,8 @@ namespace Board::Config {
 
     constexpr int PANEL_NATIVE_WIDTH = WaveshareLcd349::DisplayWiring::kPanelWidth;
     constexpr int PANEL_NATIVE_HEIGHT = WaveshareLcd349::DisplayWiring::kPanelHeight;
-    constexpr int DISPLAY_WIDTH = 640;
-    constexpr int DISPLAY_HEIGHT = 172;
+    constexpr int DISPLAY_WIDTH = PANEL_NATIVE_HEIGHT;
+    constexpr int DISPLAY_HEIGHT = PANEL_NATIVE_WIDTH;
     constexpr int READER_CHROME_MARGIN_X = 12;
     constexpr int READER_CHROME_MARGIN_TOP = 8;
     constexpr int READER_CHROME_MARGIN_BOTTOM = 8;

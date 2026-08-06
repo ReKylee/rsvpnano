@@ -15,10 +15,10 @@ namespace Board::Config {
     constexpr bool ENABLE_RESTRUCTURED_MENU = true;
     constexpr bool HAS_LIGHT_SLEEP_TOUCH_IRQ = WaveshareAmoled206::System::kTouchIrqPin >= 0;
 
-    constexpr int PANEL_NATIVE_WIDTH = 410;
-    constexpr int PANEL_NATIVE_HEIGHT = 502;
-    constexpr int DISPLAY_WIDTH = 502;
-    constexpr int DISPLAY_HEIGHT = 410;
+    constexpr int PANEL_NATIVE_WIDTH = WaveshareAmoled206::DisplayWiring::kPanelWidth;
+    constexpr int PANEL_NATIVE_HEIGHT = WaveshareAmoled206::DisplayWiring::kPanelHeight;
+    constexpr int DISPLAY_WIDTH = PANEL_NATIVE_HEIGHT;
+    constexpr int DISPLAY_HEIGHT = PANEL_NATIVE_WIDTH;
     constexpr int READER_CHROME_MARGIN_X = 48;
     constexpr int READER_CHROME_MARGIN_TOP = 24;
     constexpr int READER_CHROME_MARGIN_BOTTOM = 24;

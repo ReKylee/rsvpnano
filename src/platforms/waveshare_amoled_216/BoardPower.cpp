@@ -81,6 +81,8 @@ namespace Board::Power {
     }
 
     bool enableAudioPowerIfAvailable() {
+        pinMode(WaveshareAmoled216::AudioWiring::kAudioEnablePin, OUTPUT);
+        digitalWrite(WaveshareAmoled216::AudioWiring::kAudioEnablePin, HIGH);
         return true;
     }
 

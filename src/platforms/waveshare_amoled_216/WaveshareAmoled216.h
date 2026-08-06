@@ -7,6 +7,7 @@
 
 namespace WaveshareAmoled216::AudioWiring {
     constexpr uint8_t kEs8311Address = 0x18;
+    constexpr int kAudioEnablePin = 46;
     constexpr int kMclkPin = 42;
     constexpr int kBclkPin = 9;
     constexpr int kWsPin = 45;

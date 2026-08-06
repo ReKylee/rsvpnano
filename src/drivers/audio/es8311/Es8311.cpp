@@ -81,9 +81,12 @@ namespace BoardDrivers::Es8311 {
         bool detectCodec(Context& context) {
             uint8_t chipId1 = 0;
             uint8_t chipId2 = 0;
-            if (readRegister(context, kChipId1RegFD, chipId1) && readRegister(context, kChipId2RegFE, chipId2)) {
-                ESP_LOGI(kTag, "ES8311 detected: id=%02X %02X", chipId1, chipId2);
+            if (!readRegister(context, kChipId1RegFD, chipId1) || !readRegister(context, kChipId2RegFE, chipId2)) {
+                ESP_LOGW(kTag, "ES8311 not responding");
+                return false;
             }
+
+            ESP_LOGI(kTag, "ES8311 detected: id=%02X %02X", chipId1, chipId2);
             return true;
         }
 

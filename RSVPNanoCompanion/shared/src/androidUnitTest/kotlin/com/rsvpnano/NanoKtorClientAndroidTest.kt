@@ -2,21 +2,34 @@ package com.rsvpnano
 
 import com.rsvpnano.api.NanoKtorClient
 import com.rsvpnano.api.NanoClientError
+import com.rsvpnano.models.NanoFocusTimer
+import com.rsvpnano.models.NanoFocusTimers
+import com.rsvpnano.models.NanoRssFeeds
+import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.models.NanoWifiUpdate
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.HttpRequestData
+import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import io.ktor.http.content.TextContent
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 
 class NanoKtorClientAndroidTest {
     @Test
@@ -83,46 +96,92 @@ class NanoKtorClientAndroidTest {
     }
 
     @Test
-    fun settingsUseCanonicalDocumentAndPut() = runBlocking {
+    fun settingsRoundTripUsesCanonicalDocumentAndPut() = runBlocking {
         val seen = mutableListOf<String>()
+        var deviceSettings = sampleSettings()
         val client = NanoKtorClient(mockHttpClient { request ->
             seen += "${request.method.value} ${request.url.encodedPath}"
-            val wpm = if (request.method == HttpMethod.Put) 450 else 300
-            """{"data":{"reading":{"wpm":$wpm,"pauseMode":"sentenceEnd","phantomWords":true,"chapterScrollReversed":false,"footerMetric":"chapterTime","batteryLabel":"timeRemaining","batteryIconVisible":true,"batteryVisibleWhileReading":true,"chapterVisibleWhileReading":false,"progressVisibleWhileReading":true,"leftHanded":false,"typography":{"fontId":"literata","fontSizeIndex":1,"focusHighlight":true,"tracking":0,"anchor":30,"guideWidth":30,"guideGap":5},"pacing":{"longWordDelayMs":200,"complexWordDelayMs":250,"punctuationDelayMs":300}},"interface":{"brightnessPercent":70,"language":"english","standbyTimerIndex":1,"screensaver":"reaction","selectedThemeId":"night"},"network":{"wifiSsid":"Home"},"updates":{"automatic":true,"repositoryOwner":"reader","releaseTag":"preview"}}}"""
+            if (request.method == HttpMethod.Put) {
+                assertEquals(ContentType.Application.Json, request.body.contentType)
+                deviceSettings = testJson.decodeFromString(NanoSettings.serializer(), requestBodyText(request))
+            }
+            """{"data":${testJson.encodeToString(NanoSettings.serializer(), deviceSettings)}}"""
         })
 
         val fetched = client.fetchSettings("http://device.local")
-        assertEquals("sentenceEnd", fetched.reading.pauseMode)
-        assertEquals(250, fetched.reading.pacing.complexWordDelayMs)
-        assertEquals("literata", fetched.reading.typography.fontId)
-        assertEquals("reaction", fetched.`interface`.screensaver)
-        assertEquals("Home", fetched.network.wifiSsid)
-        assertEquals("reader", fetched.updates.repositoryOwner)
+        assertEquals(sampleSettings(), fetched)
 
-        val updated = client.updateSettings("http://device.local", fetched.withWpm(450))
-        assertEquals(450, updated.reading.wpm)
+        val requested = fetched
+            .withWpm(450)
+            .withBrightnessPercent(55)
+            .withLanguage("spanish")
+            .withTypeface("atkinson")
+            .withThemeId("default")
+        val updated = client.updateSettings("http://device.local", requested)
+        val fetchedAgain = client.fetchSettings("http://device.local")
+
+        assertEquals(requested, updated)
+        assertEquals(requested, fetchedAgain)
         assertEquals(
-            listOf("GET /api/v1/settings", "PUT /api/v1/settings"),
+            listOf("GET /api/v1/settings", "PUT /api/v1/settings", "GET /api/v1/settings"),
             seen,
         )
     }
 
     @Test
-    fun networkApiKeepsSsidInDeviceSettings() = runBlocking {
+    fun configurationApisRoundTripTheirPayloads() = runBlocking {
         val seen = mutableListOf<String>()
+        var wifiPasswordSet = false
+        var feeds = NanoRssFeeds()
+        var focus = NanoFocusTimers()
         val client = NanoKtorClient(mockHttpClient { request ->
             seen += "${request.method.value} ${request.url.encodedPath}"
-            """{"data":{"passwordSet":${request.method != HttpMethod.Delete}}}"""
+            when (request.url.encodedPath) {
+                "/api/v1/network" -> {
+                    when (request.method) {
+                        HttpMethod.Put -> {
+                            val update = testJson.decodeFromString(NanoWifiUpdate.serializer(), requestBodyText(request))
+                            assertEquals(NanoWifiUpdate("Home", "secret"), update)
+                            wifiPasswordSet = update.password.isNotEmpty()
+                        }
+                        HttpMethod.Delete -> wifiPasswordSet = false
+                    }
+                    """{"data":{"passwordSet":$wifiPasswordSet}}"""
+                }
+                "/api/v1/feeds" -> {
+                    if (request.method == HttpMethod.Put) {
+                        feeds = testJson.decodeFromString(NanoRssFeeds.serializer(), requestBodyText(request))
+                    }
+                    """{"data":${testJson.encodeToString(NanoRssFeeds.serializer(), feeds)}}"""
+                }
+                "/api/v1/focus" -> {
+                    if (request.method == HttpMethod.Put) {
+                        focus = testJson.decodeFromString(NanoFocusTimers.serializer(), requestBodyText(request))
+                    }
+                    """{"data":${testJson.encodeToString(NanoFocusTimers.serializer(), focus)}}"""
+                }
+                else -> error("Unexpected request: ${request.url}")
+            }
         })
 
-        assertEquals(true, client.fetchWifiSettings("http://device.local").passwordSet)
+        assertEquals(false, client.fetchWifiSettings("http://device.local").passwordSet)
         assertEquals(true, client.updateWifi("http://device.local", "Home", "secret").passwordSet)
         assertEquals(false, client.forgetWifi("http://device.local").passwordSet)
+        val requestedFeeds = NanoRssFeeds(listOf("https://example.com/feed.xml"))
+        val requestedFocus = NanoFocusTimers(listOf(NanoFocusTimer("Deep work", 50, 10, 3)))
+        assertEquals(requestedFeeds, client.updateRssFeeds("http://device.local", requestedFeeds))
+        assertEquals(requestedFeeds, client.fetchRssFeeds("http://device.local"))
+        assertEquals(requestedFocus, client.updateFocusTimers("http://device.local", requestedFocus))
+        assertEquals(requestedFocus, client.fetchFocusTimers("http://device.local"))
         assertEquals(
             listOf(
                 "GET /api/v1/network",
                 "PUT /api/v1/network",
                 "DELETE /api/v1/network",
+                "PUT /api/v1/feeds",
+                "GET /api/v1/feeds",
+                "PUT /api/v1/focus",
+                "GET /api/v1/focus",
             ),
             seen,
         )
@@ -137,13 +196,19 @@ class NanoKtorClientAndroidTest {
                 HttpMethod.Post -> {
                     assertEquals("Story.rsvp", request.url.parameters["name"])
                     assertEquals("article", request.url.parameters["category"])
+                    assertIs<MultiPartFormDataContent>(request.body)
                     """{"data":{"path":"/books/articles/Story.rsvp"}}"""
                 }
                 HttpMethod.Delete -> {
                     assertEquals("b12345678", request.url.parameters["id"])
                     """{"data":{"id":"b12345678","deleted":true}}"""
                 }
-                HttpMethod.Patch -> """{"data":{"id":"b12345678","wordIndex":250,"percent":25}}"""
+                HttpMethod.Patch -> {
+                    val body = testJson.parseToJsonElement(requestBodyText(request)).jsonObject
+                    assertEquals("b12345678", body.getValue("id").jsonPrimitive.content)
+                    assertEquals(250, body.getValue("wordIndex").jsonPrimitive.int)
+                    """{"data":{"id":"b12345678","wordIndex":250,"percent":25}}"""
+                }
                 else -> error("Unexpected method: ${request.method}")
             }
         })
@@ -175,6 +240,75 @@ class NanoKtorClientAndroidTest {
     }
 
     @Test
+    fun appearanceCatalogsDownloadsAndUploadsUseTheirContracts() = runBlocking {
+        val seen = mutableListOf<String>()
+        val client = NanoKtorClient(mockHttpClient { request ->
+            seen += "${request.method.value} ${request.url.encodedPath}?${request.url.encodedQuery}"
+            when (request.url.encodedPath) {
+                "/themes/catalog.json" ->
+                    """[{"id":"night","name":"Night","file":"night.toml"}]"""
+                "/themes/night.toml" -> "theme-data"
+                "/fonts/catalog.json" ->
+                    """[{"id":"atkinson","name":"Atkinson Hyperlegible","files":{"small":"atkinson/small.rfont4"}}]"""
+                "/fonts/atkinson/small.rfont4" -> "font-data"
+                "/api/v1/appearance/themes" -> {
+                    assertEquals(HttpMethod.Post, request.method)
+                    assertEquals("night.toml", request.url.parameters["name"])
+                    assertIs<MultiPartFormDataContent>(request.body)
+                    """{"data":{"path":"/themes/night.toml","id":"night"}}"""
+                }
+                "/api/v1/appearance/fonts" -> {
+                    assertEquals(HttpMethod.Post, request.method)
+                    assertEquals("atkinson", request.url.parameters["family"])
+                    assertEquals("small", request.url.parameters["size"])
+                    assertEquals("small.rfont4", request.url.parameters["name"])
+                    assertIs<MultiPartFormDataContent>(request.body)
+                    """{"data":{"path":"/fonts/atkinson/small.rfont4"}}"""
+                }
+                else -> error("Unexpected request: ${request.url}")
+            }
+        })
+
+        val theme = client.fetchThemeCatalog("https://catalog.example/themes/catalog.json").single()
+        val font = client.fetchFontCatalog("https://catalog.example/fonts/catalog.json").single()
+        assertEquals("night", theme.id)
+        assertEquals("atkinson/small.rfont4", font.files["small"])
+        assertContentEquals(
+            "theme-data".encodeToByteArray(),
+            client.downloadTheme("https://catalog.example/themes/night.toml"),
+        )
+        assertContentEquals(
+            "font-data".encodeToByteArray(),
+            client.downloadFont("https://catalog.example/fonts/atkinson/small.rfont4"),
+        )
+        assertEquals(
+            "night",
+            client.uploadTheme("http://device.local", "night.toml", "theme-data".encodeToByteArray()).id,
+        )
+        assertEquals(
+            "/fonts/atkinson/small.rfont4",
+            client.uploadFont(
+                "http://device.local",
+                "atkinson",
+                "small",
+                "small.rfont4",
+                "font-data".encodeToByteArray(),
+            ).path,
+        )
+        assertEquals(
+            listOf(
+                "GET /themes/catalog.json?",
+                "GET /fonts/catalog.json?",
+                "GET /themes/night.toml?",
+                "GET /fonts/atkinson/small.rfont4?",
+                "POST /api/v1/appearance/themes?name=night.toml",
+                "POST /api/v1/appearance/fonts?family=atkinson&size=small&name=small.rfont4",
+            ),
+            seen,
+        )
+    }
+
+    @Test
     fun exposesStructuredDeviceErrors() = runBlocking {
         val client = NanoKtorClient(
             HttpClient(MockEngine) {
@@ -199,7 +333,10 @@ class NanoKtorClientAndroidTest {
         assertEquals(422, error.status)
     }
 
-    private fun mockHttpClient(handler: (io.ktor.client.request.HttpRequestData) -> String): HttpClient {
+    private fun requestBodyText(request: HttpRequestData): String =
+        assertIs<TextContent>(request.body).text
+
+    private fun mockHttpClient(handler: (HttpRequestData) -> String): HttpClient {
         return HttpClient(MockEngine) {
             engine {
                 addHandler { request ->
@@ -212,13 +349,17 @@ class NanoKtorClientAndroidTest {
             }
             install(ContentNegotiation) {
                 json(
-                    Json {
-                        ignoreUnknownKeys = true
-                        encodeDefaults = true
-                        explicitNulls = false
-                    }
+                    testJson
                 )
             }
+        }
+    }
+
+    private companion object {
+        val testJson = Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+            explicitNulls = false
         }
     }
 }

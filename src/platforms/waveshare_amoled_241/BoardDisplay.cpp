@@ -16,7 +16,11 @@ namespace {
 
     Arduino_RM690B0 gPanel(&gBus, WaveshareAmoled241::DisplayWiring::kResetPin, 0,
                            WaveshareAmoled241::DisplayWiring::kPanelWidth,
-                           WaveshareAmoled241::DisplayWiring::kPanelHeight);
+                           WaveshareAmoled241::DisplayWiring::kPanelHeight,
+                           WaveshareAmoled241::DisplayWiring::kPanelColumnOffset,
+                           WaveshareAmoled241::DisplayWiring::kPanelRowOffset,
+                           WaveshareAmoled241::DisplayWiring::kPanelColumnOffset,
+                           WaveshareAmoled241::DisplayWiring::kPanelRowOffset);
 
     void enableDisplayRail() {
         BoardDrivers::Tca9554::configureOutputPin(Wire1, WaveshareAmoled241::Tca9554Wiring::kDisplayRailAddress,

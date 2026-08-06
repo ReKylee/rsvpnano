@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate RSVP Nano localization C++ from localization/strings.toml.
+"""Generate firmware and companion localization data from localization/strings.toml.
 
 The firmware output stays direct and length-aware:
 - UiLanguage and UiText enums generated from TOML order
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import json
 import re
 import sys
 import tomllib
@@ -31,6 +32,18 @@ REPO_ROOT = SCRIPT_DIR.parent
 DEFAULT_TOML = REPO_ROOT / "localization" / "strings.toml"
 DEFAULT_HEADER = REPO_ROOT / "src" / "ui" / "Localization.h"
 DEFAULT_CPP = REPO_ROOT / "src" / "ui" / "Localization.generated.cpp"
+DEFAULT_COMPANION = (
+	REPO_ROOT
+	/ "RSVPNanoCompanion"
+	/ "shared"
+	/ "src"
+	/ "commonMain"
+	/ "kotlin"
+	/ "com"
+	/ "rsvpnano"
+	/ "models"
+	/ "NanoLanguages.generated.kt"
+)
 
 
 class LocalizationError(ValueError):
@@ -71,6 +84,7 @@ class LocalizationModel:
 class GeneratedFiles:
 	header: str
 	cpp: str
+	companion: str
 
 
 class CodeWriter:
@@ -330,12 +344,12 @@ def generate_header(model: LocalizationModel) -> str:
 	writer.add()
 	writer.add("namespace Localization {")
 	writer.add()
-	writer.add("UiLanguage sanitizeLanguage(uint8_t value);")
-	writer.add("UiLanguage nextLanguage(UiLanguage current);")
-	writer.add("std::string_view languageName(UiLanguage language);")
-	writer.add("std::string_view text(UiLanguage language, UiText key);")
+	writer.add("    UiLanguage sanitizeLanguage(uint8_t value);")
+	writer.add("    UiLanguage nextLanguage(UiLanguage current);")
+	writer.add("    std::string_view languageName(UiLanguage language);")
+	writer.add("    std::string_view text(UiLanguage language, UiText key);")
 	writer.add()
-	writer.add("}  // namespace Localization")
+	writer.add("} // namespace Localization")
 	return writer.render()
 
 
@@ -343,8 +357,8 @@ def write_enum(writer: CodeWriter, enum_name: str, values: Sequence[str]) -> Non
 	writer.add(f"enum class {enum_name} : uint8_t {{")
 	for index, value in enumerate(values):
 		initializer = " = 0" if index == 0 else ""
-		writer.add(f"\t{value}{initializer},")
-	writer.add("\tCount,")
+		writer.add(f"    {value}{initializer},")
+	writer.add("    Count,")
 	writer.add("};")
 
 
@@ -357,107 +371,132 @@ def generate_cpp(model: LocalizationModel) -> str:
 	writer.add("#include <array>")
 	writer.add("#include <cstddef>")
 	writer.add()
+	writer.add("// clang-format off")
 	writer.add("namespace {")
 	writer.add()
-	writer.add("constexpr size_t kLanguageCount = static_cast<size_t>(UiLanguage::Count);")
-	writer.add("constexpr size_t kTextCount = static_cast<size_t>(UiText::Count);")
-	writer.add(f"constexpr size_t kDefaultLanguageIndex = {model.default_language_index};")
+	writer.add("    constexpr size_t kLanguageCount = static_cast<size_t>(UiLanguage::Count);")
+	writer.add("    constexpr size_t kTextCount = static_cast<size_t>(UiText::Count);")
+	writer.add(f"    constexpr size_t kDefaultLanguageIndex = {model.default_language_index};")
 	writer.add(
-		f'static_assert(kLanguageCount == {len(model.languages)}, "UiLanguage count mismatch");'
+		f'    static_assert(kLanguageCount == {len(model.languages)}, "UiLanguage count mismatch");'
 	)
-	writer.add(f'static_assert(kTextCount == {len(model.texts)}, "UiText count mismatch");')
+	writer.add(f'    static_assert(kTextCount == {len(model.texts)}, "UiText count mismatch");')
 	writer.add()
 	writer.extend(generate_language_names(model))
 	writer.add()
 	writer.extend(generate_texts(model))
 	writer.add()
-	writer.add("size_t languageIndex(UiLanguage language) {")
-	writer.add("\tconst size_t value = static_cast<size_t>(language);")
-	writer.add("\treturn value < kLanguageCount ? value : kDefaultLanguageIndex;")
-	writer.add("}")
+	writer.add("    size_t languageIndex(UiLanguage language) {")
+	writer.add("        const size_t value = static_cast<size_t>(language);")
+	writer.add("        return value < kLanguageCount ? value : kDefaultLanguageIndex;")
+	writer.add("    }")
 	writer.add()
-	writer.add("}  // namespace")
+	writer.add("} // namespace")
 	writer.add()
 	writer.add("namespace Localization {")
 	writer.add()
 	writer.extend(generate_localization_functions())
 	writer.add()
-	writer.add("}  // namespace Localization")
+	writer.add("} // namespace Localization")
+	writer.add("// clang-format on")
 
 	return writer.render()
 
 
 def generate_language_names(model: LocalizationModel) -> list[str]:
-	lines = ["constexpr std::array<std::string_view, kLanguageCount> kLanguageNames = {{"]
+	lines = ["    constexpr std::array<std::string_view, kLanguageCount> kLanguageNames = {{"]
 	lines.extend(
-		f"\t/* {language.name:<8} */ {cxx_string_literal(language.label)},"
+		f"        /* {language.name:<8} */ {cxx_string_literal(language.label)},"
 		for language in model.languages
 	)
-	lines.append("}};")
+	lines.append("    }};")
 	return lines
 
 
 def generate_texts(model: LocalizationModel) -> list[str]:
 	lines = [
-		"using TextRow = std::array<std::string_view, kTextCount>;",
-		"using TextTable = std::array<TextRow, kLanguageCount>;",
+		"    using TextRow = std::array<std::string_view, kTextCount>;",
+		"    using TextTable = std::array<TextRow, kLanguageCount>;",
 		"",
-		"constexpr TextTable kTexts = {{",
+		"    constexpr TextTable kTexts = {{",
 	]
 
 	for language in model.languages:
-		lines.append(f"\t// {language.name} ({language.code})")
-		lines.append("\t{{")
+		lines.append(f"        // {language.name} ({language.code})")
+		lines.append("        {{")
 		lines.extend(
-			f"\t\t/* {text.key:<24} */ "
+			f"            /* {text.key:<24} */ "
 			+ (cxx_string_literal(text.values.get(language.name, "")) if text.values.get(language.name, "") else "{}")
 			+ ","
 			for text in model.texts
 		)
-		lines.append("\t}},")
+		lines.append("        }},")
 
-	lines.append("}};")
+	lines.append("    }};")
 	return lines
 
 
 def generate_localization_functions() -> list[str]:
 	return [
-		"UiLanguage sanitizeLanguage(uint8_t value) {",
-		"\tif (value >= kLanguageCount) {",
-		"\t\treturn static_cast<UiLanguage>(kDefaultLanguageIndex);",
-		"\t}",
-		"\treturn static_cast<UiLanguage>(value);",
-		"}",
+		"    UiLanguage sanitizeLanguage(uint8_t value) {",
+		"        if (value >= kLanguageCount) {",
+		"            return static_cast<UiLanguage>(kDefaultLanguageIndex);",
+		"        }",
+		"        return static_cast<UiLanguage>(value);",
+		"    }",
 		"",
-		"UiLanguage nextLanguage(UiLanguage current) {",
-		"\tconst size_t value = languageIndex(current);",
-		"\treturn static_cast<UiLanguage>((value + 1) % kLanguageCount);",
-		"}",
+		"    UiLanguage nextLanguage(UiLanguage current) {",
+		"        const size_t value = languageIndex(current);",
+		"        return static_cast<UiLanguage>((value + 1) % kLanguageCount);",
+		"    }",
 		"",
-		"std::string_view languageName(UiLanguage language) {",
-		"\treturn kLanguageNames[languageIndex(language)];",
-		"}",
+		"    std::string_view languageName(UiLanguage language) {",
+		"        return kLanguageNames[languageIndex(language)];",
+		"    }",
 		"",
-		"std::string_view text(UiLanguage language, UiText key) {",
-		"\tconst size_t textIndex = static_cast<size_t>(key);",
-		"\tif (textIndex >= kTextCount) {",
-		"\t\treturn \"\";",
-		"\t}",
+		"    std::string_view text(UiLanguage language, UiText key) {",
+		"        const size_t textIndex = static_cast<size_t>(key);",
+		"        if (textIndex >= kTextCount) {",
+		"            return \"\";",
+		"        }",
 		"",
-		"\tconst size_t lang = languageIndex(language);",
-		"\tstd::string_view value = kTexts[lang][textIndex];",
+		"        const size_t lang = languageIndex(language);",
+		"        std::string_view value = kTexts[lang][textIndex];",
 		"",
-		"\tif (value.empty()) {",
-		"\t\tvalue = kTexts[kDefaultLanguageIndex][textIndex];",
-		"\t}",
+		"        if (value.empty()) {",
+		"            value = kTexts[kDefaultLanguageIndex][textIndex];",
+		"        }",
 		"",
-		"\treturn value;",
-		"}",
+		"        return value;",
+		"    }",
 	]
 
 
+def generate_companion(model: LocalizationModel) -> str:
+	writer = CodeWriter()
+	writer.extend(generated_banner())
+	writer.add("package com.rsvpnano.models")
+	writer.add()
+	writer.add("object NanoLanguages {")
+	default_value = model.default_language.lower()
+	writer.add(f"    const val DEFAULT = {json.dumps(default_value, ensure_ascii=False)}")
+	writer.add()
+	writer.add("    val OPTIONS = listOf(")
+	for language in model.languages:
+		value = json.dumps(language.name.lower(), ensure_ascii=False)
+		label = json.dumps(language.label, ensure_ascii=False)
+		writer.add(f"        {value} to {label},")
+	writer.add("    )")
+	writer.add("}")
+	return writer.render()
+
+
 def generate_files(model: LocalizationModel) -> GeneratedFiles:
-	return GeneratedFiles(header=generate_header(model), cpp=generate_cpp(model))
+	return GeneratedFiles(
+		header=generate_header(model),
+		cpp=generate_cpp(model),
+		companion=generate_companion(model),
+	)
 
 
 def normalize_newlines(content: str) -> str:
@@ -504,26 +543,43 @@ def print_diff(path: Path, actual: str, expected: str) -> None:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-	parser = argparse.ArgumentParser(description="Generate RSVP Nano localization C++ from TOML.")
+	parser = argparse.ArgumentParser(description="Generate RSVP Nano localization data from TOML.")
 	parser.add_argument("--toml", type=Path, default=DEFAULT_TOML)
 	parser.add_argument("--header", type=Path, default=DEFAULT_HEADER)
 	parser.add_argument("--cpp", type=Path, default=DEFAULT_CPP)
+	parser.add_argument("--companion", type=Path, default=DEFAULT_COMPANION)
 	parser.add_argument("--check", action="store_true", help="fail if generated files are not up to date")
 	parser.add_argument("--diff", action="store_true", help="print unified diffs when used with --check")
 	return parser
 
 
-def write_outputs(files: GeneratedFiles, header_path: Path, cpp_path: Path) -> None:
-	for path, content in ((header_path, files.header), (cpp_path, files.cpp)):
+def write_outputs(
+	files: GeneratedFiles,
+	header_path: Path,
+	cpp_path: Path,
+	companion_path: Path,
+) -> None:
+	for path, content in (
+		(header_path, files.header),
+		(cpp_path, files.cpp),
+		(companion_path, files.companion),
+	):
 		changed = write_if_changed(path, content)
 		print(("wrote" if changed else "unchanged") + f" {path}")
 
 
-def check_outputs(files: GeneratedFiles, header_path: Path, cpp_path: Path, show_diff: bool) -> bool:
+def check_outputs(
+	files: GeneratedFiles,
+	header_path: Path,
+	cpp_path: Path,
+	companion_path: Path,
+	show_diff: bool,
+) -> bool:
 	return all(
 		(
 			check_file(header_path, files.header, show_diff),
 			check_file(cpp_path, files.cpp, show_diff),
+			check_file(companion_path, files.companion, show_diff),
 		)
 	)
 
@@ -535,9 +591,9 @@ def main() -> int:
 		files = generate_files(load_model(args.toml))
 
 		if args.check:
-			return 0 if check_outputs(files, args.header, args.cpp, args.diff) else 1
+			return 0 if check_outputs(files, args.header, args.cpp, args.companion, args.diff) else 1
 
-		write_outputs(files, args.header, args.cpp)
+		write_outputs(files, args.header, args.cpp, args.companion)
 		return 0
 
 	except Exception as exc:

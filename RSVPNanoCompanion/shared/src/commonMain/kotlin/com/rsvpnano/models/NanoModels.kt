@@ -190,7 +190,7 @@ data class NanoSettings(
     @Serializable
     data class Interface(
         val brightnessPercent: Int = 70,
-        val language: String = NanoSettingsSchema.LANGUAGE_ENGLISH,
+        val language: String = NanoLanguages.DEFAULT,
         val standbyTimerIndex: Int = NanoSettingsSchema.STANDBY_TIMER_NEVER,
         val screensaver: String = NanoSettingsSchema.SCREENSAVER_LIFE,
         val selectedThemeId: String = NanoSettingsSchema.THEME_DEFAULT,
@@ -345,13 +345,6 @@ object NanoSettingsSchema {
     const val SCREENSAVER_VORONOI = "voronoi"
     const val SCREENSAVER_SCREEN_OFF = "screenOff"
     const val SCREENSAVER_REACTION = "reaction"
-    const val LANGUAGE_ENGLISH = "english"
-    const val LANGUAGE_SPANISH = "spanish"
-    const val LANGUAGE_FRENCH = "french"
-    const val LANGUAGE_GERMAN = "german"
-    const val LANGUAGE_ROMANIAN = "romanian"
-    const val LANGUAGE_POLISH = "polish"
-    const val LANGUAGE_RUSSIAN = "russian"
     const val TYPEFACE_DEFAULT = "literata"
 
     const val WPM_MIN = 10
@@ -407,16 +400,8 @@ object NanoSettingsSchema {
         value.coerceIn(STANDBY_TIMER_NEVER, STANDBY_TIMER_30_MIN)
 
     fun coerceLanguage(value: String): String =
-        when (value) {
-            LANGUAGE_SPANISH,
-            LANGUAGE_FRENCH,
-            LANGUAGE_GERMAN,
-            LANGUAGE_ROMANIAN,
-            LANGUAGE_POLISH,
-            LANGUAGE_RUSSIAN,
-            -> value
-            else -> LANGUAGE_ENGLISH
-        }
+        value.takeIf { candidate -> NanoLanguages.OPTIONS.any { it.first == candidate } }
+            ?: NanoLanguages.DEFAULT
 
     fun coerceFontSizeIndex(value: Int): Int =
         value.coerceIn(FONT_SIZE_MIN, FONT_SIZE_MAX)

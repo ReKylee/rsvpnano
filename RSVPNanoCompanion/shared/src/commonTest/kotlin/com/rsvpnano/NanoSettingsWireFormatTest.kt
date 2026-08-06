@@ -1,6 +1,8 @@
 package com.rsvpnano
 
+import com.rsvpnano.models.NanoLanguages
 import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.models.NanoSettingsSchema
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -47,5 +49,13 @@ class NanoSettingsWireFormatTest {
         assertEquals("bookTime", settings.reading.footerMetric)
         assertEquals("timeRemaining", settings.reading.batteryLabel)
         assertTrue(settings.reading.batteryIconVisible)
+    }
+
+    @Test
+    fun acceptsEveryGeneratedFirmwareLanguage() {
+        NanoLanguages.OPTIONS.forEach { (value, _) ->
+            assertEquals(value, NanoSettingsSchema.coerceLanguage(value))
+        }
+        assertEquals(NanoLanguages.DEFAULT, NanoSettingsSchema.coerceLanguage("unknown"))
     }
 }

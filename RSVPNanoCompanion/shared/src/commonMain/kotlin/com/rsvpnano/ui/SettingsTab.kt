@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.rsvpnano.models.NanoLanguages
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoSettingsSchema
 
@@ -618,15 +619,7 @@ private fun DisplaySettings(
             DropdownRow(
                 label = "Language",
                 selected = settings.`interface`.language,
-                options = listOf(
-                    NanoSettingsSchema.LANGUAGE_ENGLISH to "English",
-                    NanoSettingsSchema.LANGUAGE_SPANISH to "Español",
-                    NanoSettingsSchema.LANGUAGE_FRENCH to "Français",
-                    NanoSettingsSchema.LANGUAGE_GERMAN to "Deutsch",
-                    NanoSettingsSchema.LANGUAGE_ROMANIAN to "Română",
-                    NanoSettingsSchema.LANGUAGE_POLISH to "Polski",
-                    NanoSettingsSchema.LANGUAGE_RUSSIAN to "Русский",
-                ),
+                options = NanoLanguages.OPTIONS,
                 onSelected = { language -> onUpdateSettings { it.withLanguage(language) } },
             )
         }

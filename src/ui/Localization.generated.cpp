@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 
+// clang-format off
 namespace {
 
     constexpr size_t kLanguageCount = static_cast<size_t>(UiLanguage::Count);
@@ -145,10 +146,8 @@ namespace {
             /* StorageEncryption        */ "Storage encryption",
             /* Encryption               */ "Encryption",
             /* StorageEncryptionExplanation */ "Uses a device-only key. Copied NVS settings cannot be read elsewhere.",
-            /* StorageEncryptionPermanent */
-            "Permanent: burns a hardware fuse, erases NVS, and requires encryption-aware firmware.",
-            /* StorageEncryptionReset   */
-            "SD settings return after restart. The Wi-Fi password must be entered again.",
+            /* StorageEncryptionPermanent */ "Permanent: burns a hardware fuse, erases NVS, and requires encryption-aware firmware.",
+            /* StorageEncryptionReset   */ "SD settings return after restart. The Wi-Fi password must be entered again.",
             /* TapToContinue            */ "Tap to continue",
             /* IUnderstand              */ "I understand",
             /* EnableProtection         */ "Enable protection",
@@ -321,12 +320,9 @@ namespace {
             /* OtaUpdate                */ "Actualizaci\u00F3n OTA",
             /* StorageEncryption        */ "Cifrado del almacenamiento",
             /* Encryption               */ "Cifrado",
-            /* StorageEncryptionExplanation */
-            "Usa una clave del dispositivo. Las copias de NVS no se pueden leer en otro lugar.",
-            /* StorageEncryptionPermanent */
-            "Permanente: quema un eFuse, borra NVS y exige firmware compatible con cifrado.",
-            /* StorageEncryptionReset   */
-            "Los ajustes SD vuelven al reiniciar. Debes introducir otra vez la contrase\u00F1a Wi-Fi.",
+            /* StorageEncryptionExplanation */ "Usa una clave del dispositivo. Las copias de NVS no se pueden leer en otro lugar.",
+            /* StorageEncryptionPermanent */ "Permanente: quema un eFuse, borra NVS y exige firmware compatible con cifrado.",
+            /* StorageEncryptionReset   */ "Los ajustes SD vuelven al reiniciar. Debes introducir otra vez la contrase\u00F1a Wi-Fi.",
             /* TapToContinue            */ "Toca para continuar",
             /* IUnderstand              */ "Lo entiendo",
             /* EnableProtection         */ "Activar protecci\u00F3n",
@@ -499,12 +495,9 @@ namespace {
             /* OtaUpdate                */ "Mise \u00E0 jour OTA",
             /* StorageEncryption        */ "Chiffrement du stockage",
             /* Encryption               */ "Chiffrement",
-            /* StorageEncryptionExplanation */
-            "Utilise une cl\u00E9 propre \u00E0 l'appareil. Les copies NVS sont illisibles ailleurs.",
-            /* StorageEncryptionPermanent */
-            "Permanent : grave un eFuse, efface la NVS et exige un firmware compatible.",
-            /* StorageEncryptionReset   */
-            "Les r\u00E9glages SD reviennent au red\u00E9marrage. Le mot de passe Wi-Fi doit \u00EAtre ressaisi.",
+            /* StorageEncryptionExplanation */ "Utilise une cl\u00E9 propre \u00E0 l'appareil. Les copies NVS sont illisibles ailleurs.",
+            /* StorageEncryptionPermanent */ "Permanent : grave un eFuse, efface la NVS et exige un firmware compatible.",
+            /* StorageEncryptionReset   */ "Les r\u00E9glages SD reviennent au red\u00E9marrage. Le mot de passe Wi-Fi doit \u00EAtre ressaisi.",
             /* TapToContinue            */ "Touchez pour continuer",
             /* IUnderstand              */ "J'ai compris",
             /* EnableProtection         */ "Activer la protection",
@@ -677,12 +670,9 @@ namespace {
             /* OtaUpdate                */ "OTA-Update",
             /* StorageEncryption        */ "Speicherverschl\u00FCsselung",
             /* Encryption               */ "Verschl\u00FCsselung",
-            /* StorageEncryptionExplanation */
-            "Nutzt einen Ger\u00E4teschl\u00FCssel. Kopierte NVS-Daten sind anderswo nicht lesbar.",
-            /* StorageEncryptionPermanent */
-            "Dauerhaft: Brennt eine eFuse, l\u00F6scht NVS und erfordert passende Firmware.",
-            /* StorageEncryptionReset   */
-            "SD-Einstellungen kehren nach Neustart zur\u00FCck. Das WLAN-Passwort muss neu eingegeben werden.",
+            /* StorageEncryptionExplanation */ "Nutzt einen Ger\u00E4teschl\u00FCssel. Kopierte NVS-Daten sind anderswo nicht lesbar.",
+            /* StorageEncryptionPermanent */ "Dauerhaft: Brennt eine eFuse, l\u00F6scht NVS und erfordert passende Firmware.",
+            /* StorageEncryptionReset   */ "SD-Einstellungen kehren nach Neustart zur\u00FCck. Das WLAN-Passwort muss neu eingegeben werden.",
             /* TapToContinue            */ "Zum Fortfahren tippen",
             /* IUnderstand              */ "Ich verstehe",
             /* EnableProtection         */ "Schutz aktivieren",
@@ -855,12 +845,9 @@ namespace {
             /* OtaUpdate                */ "Actualizare OTA",
             /* StorageEncryption        */ "Criptarea stoc\u0103rii",
             /* Encryption               */ "Criptare",
-            /* StorageEncryptionExplanation */
-            "Folose\u0219te o cheie a dispozitivului. Copiile NVS nu pot fi citite \u00EEn alt\u0103 parte.",
-            /* StorageEncryptionPermanent */
-            "Permanent: arde un eFuse, \u0219terge NVS \u0219i necesit\u0103 firmware compatibil.",
-            /* StorageEncryptionReset   */
-            "Set\u0103rile SD revin dup\u0103 repornire. Parola Wi-Fi trebuie introdus\u0103 din nou.",
+            /* StorageEncryptionExplanation */ "Folose\u0219te o cheie a dispozitivului. Copiile NVS nu pot fi citite \u00EEn alt\u0103 parte.",
+            /* StorageEncryptionPermanent */ "Permanent: arde un eFuse, \u0219terge NVS \u0219i necesit\u0103 firmware compatibil.",
+            /* StorageEncryptionReset   */ "Set\u0103rile SD revin dup\u0103 repornire. Parola Wi-Fi trebuie introdus\u0103 din nou.",
             /* TapToContinue            */ "Atinge pentru a continua",
             /* IUnderstand              */ "Am \u00EEn\u021Beles",
             /* EnableProtection         */ "Activeaz\u0103 protec\u021Bia",
@@ -1033,11 +1020,9 @@ namespace {
             /* OtaUpdate                */ "Aktualizacja OTA",
             /* StorageEncryption        */ "Szyfrowanie pami\u0119ci",
             /* Encryption               */ "Szyfrowanie",
-            /* StorageEncryptionExplanation */
-            "U\u017Cywa klucza urz\u0105dzenia. Kopii NVS nie mo\u017Cna odczyta\u0107 gdzie indziej.",
+            /* StorageEncryptionExplanation */ "U\u017Cywa klucza urz\u0105dzenia. Kopii NVS nie mo\u017Cna odczyta\u0107 gdzie indziej.",
             /* StorageEncryptionPermanent */ "Trwale: wypala eFuse, kasuje NVS i wymaga zgodnego oprogramowania.",
-            /* StorageEncryptionReset   */
-            "Ustawienia SD wr\u00F3c\u0105 po restarcie. Has\u0142o Wi-Fi trzeba wpisa\u0107 ponownie.",
+            /* StorageEncryptionReset   */ "Ustawienia SD wr\u00F3c\u0105 po restarcie. Has\u0142o Wi-Fi trzeba wpisa\u0107 ponownie.",
             /* TapToContinue            */ "Dotknij, aby kontynuowa\u0107",
             /* IUnderstand              */ "Rozumiem",
             /* EnableProtection         */ "W\u0142\u0105cz ochron\u0119",
@@ -1102,8 +1087,7 @@ namespace {
             /* UsbTransfer              */ "USB-\u043F\u0435\u0440\u0435\u0434\u0430\u0447\u0430",
             /* PowerOff                 */ "\u0412\u044B\u043A\u043B\u044E\u0447\u0438\u0442\u044C",
             /* Display                  */ "\u042D\u043A\u0440\u0430\u043D",
-            /* TypographyTune           */
-            "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430 \u0448\u0440\u0438\u0444\u0442\u0430",
+            /* TypographyTune           */ "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430 \u0448\u0440\u0438\u0444\u0442\u0430",
             /* WordPacing               */ "\u0422\u0435\u043C\u043F \u0447\u0442\u0435\u043D\u0438\u044F",
             /* Theme                    */ "\u0422\u0435\u043C\u0430",
             /* Brightness               */ "\u042F\u0440\u043A\u043E\u0441\u0442\u044C",
@@ -1120,34 +1104,20 @@ namespace {
             /* Off                      */ "\u0412\u044B\u043A\u043B.",
             /* FontSize                 */ "\u0420\u0430\u0437\u043C\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430",
             /* Typeface                 */ "\u0428\u0440\u0438\u0444\u0442",
-            /* PhantomWords             */
-            "\u0421\u043B\u043E\u0432\u0430-\u043F\u0440\u0438\u0437\u0440\u0430\u043A\u0438",
-            /* RedHighlight             */
-            "\u041A\u0440\u0430\u0441\u043D\u043E\u0435 \u0432\u044B\u0434\u0435\u043B\u0435\u043D\u0438\u0435",
+            /* PhantomWords             */ "\u0421\u043B\u043E\u0432\u0430-\u043F\u0440\u0438\u0437\u0440\u0430\u043A\u0438",
+            /* RedHighlight             */ "\u041A\u0440\u0430\u0441\u043D\u043E\u0435 \u0432\u044B\u0434\u0435\u043B\u0435\u043D\u0438\u0435",
             /* Tracking                 */ "\u0418\u043D\u0442\u0435\u0440\u0432\u0430\u043B",
             /* Anchor                   */ "\u042F\u043A\u043E\u0440\u044C",
             /* GuideWidth               */ "\u0428\u0438\u0440\u0438\u043D\u0430 \u043C\u0435\u0442\u043A\u0438",
             /* GuideGap                 */ "\u0417\u0430\u0437\u043E\u0440 \u043C\u0435\u0442\u043A\u0438",
             /* Reset                    */ "\u0421\u0431\u0440\u043E\u0441\u0438\u0442\u044C",
             /* Typography               */ "\u0422\u0438\u043F\u043E\u0433\u0440\u0430\u0444\u0438\u043A\u0430",
-            /* TapToExit                */
-            "\u041A\u043E\u0441\u043D\u0438\u0442\u0435\u0441\u044C \u0434\u043B\u044F "
-            "\u0432\u044B\u0445\u043E\u0434\u0430",
-            /* TapToReset               */
-            "\u041A\u043E\u0441\u043D\u0438\u0442\u0435\u0441\u044C \u0434\u043B\u044F "
-            "\u0441\u0431\u0440\u043E\u0441\u0430",
-            /* TapChangeSample          */
-            "\u041A\u0430\u0441\u0430\u043D\u0438\u0435: \u0438\u0437\u043C\u0435\u043D\u0438\u0442\u044C  "
-            "\u041B/\u041F: \u043F\u0440\u0438\u043C\u0435\u0440",
-            /* TapExitSample            */
-            "\u041A\u0430\u0441\u0430\u043D\u0438\u0435: \u0432\u044B\u0445\u043E\u0434  \u041B/\u041F: "
-            "\u043F\u0440\u0438\u043C\u0435\u0440",
-            /* TapToggleSample          */
-            "\u041A\u0430\u0441\u0430\u043D\u0438\u0435: \u0432\u043A\u043B/\u0432\u044B\u043A\u043B  \u041B/\u041F: "
-            "\u043F\u0440\u0438\u043C\u0435\u0440",
-            /* TapCycleSample           */
-            "\u041A\u0430\u0441\u0430\u043D\u0438\u0435: \u0434\u0430\u043B\u0435\u0435  \u041B/\u041F: "
-            "\u043F\u0440\u0438\u043C\u0435\u0440",
+            /* TapToExit                */ "\u041A\u043E\u0441\u043D\u0438\u0442\u0435\u0441\u044C \u0434\u043B\u044F \u0432\u044B\u0445\u043E\u0434\u0430",
+            /* TapToReset               */ "\u041A\u043E\u0441\u043D\u0438\u0442\u0435\u0441\u044C \u0434\u043B\u044F \u0441\u0431\u0440\u043E\u0441\u0430",
+            /* TapChangeSample          */ "\u041A\u0430\u0441\u0430\u043D\u0438\u0435: \u0438\u0437\u043C\u0435\u043D\u0438\u0442\u044C  \u041B/\u041F: \u043F\u0440\u0438\u043C\u0435\u0440",
+            /* TapExitSample            */ "\u041A\u0430\u0441\u0430\u043D\u0438\u0435: \u0432\u044B\u0445\u043E\u0434  \u041B/\u041F: \u043F\u0440\u0438\u043C\u0435\u0440",
+            /* TapToggleSample          */ "\u041A\u0430\u0441\u0430\u043D\u0438\u0435: \u0432\u043A\u043B/\u0432\u044B\u043A\u043B  \u041B/\u041F: \u043F\u0440\u0438\u043C\u0435\u0440",
+            /* TapCycleSample           */ "\u041A\u0430\u0441\u0430\u043D\u0438\u0435: \u0434\u0430\u043B\u0435\u0435  \u041B/\u041F: \u043F\u0440\u0438\u043C\u0435\u0440",
             /* Start                    */ "\u041D\u0430\u0447\u0430\u0442\u044C",
             /* StartOfBook              */ "\u041D\u0430\u0447\u0430\u043B\u043E \u043A\u043D\u0438\u0433\u0438",
             /* RestartBook              */ "\u041D\u0430\u0447\u0430\u0442\u044C \u0437\u0430\u043D\u043E\u0432\u043E",
@@ -1160,10 +1130,8 @@ namespace {
             /* Small                    */ "\u041C\u0430\u043B\u0435\u043D\u044C\u043A\u0438\u0439",
             /* Standard                 */ "\u0421\u0442\u0430\u043D\u0434\u0430\u0440\u0442\u043D\u044B\u0439",
             /* RsvpMode                 */ "RSVP",
-            /* ScrollMode               */
-            "\u041F\u0440\u043E\u043A\u0440\u0443\u0442\u043A\u0430 \u0441\u0442\u0440\u0430\u043D\u0438\u0446",
-            /* TimeEstimate             */
-            "\u041E\u0446\u0435\u043D\u043A\u0430 \u0432\u0440\u0435\u043C\u0435\u043D\u0438",
+            /* ScrollMode               */ "\u041F\u0440\u043E\u043A\u0440\u0443\u0442\u043A\u0430 \u0441\u0442\u0440\u0430\u043D\u0438\u0446",
+            /* TimeEstimate             */ "\u041E\u0446\u0435\u043D\u043A\u0430 \u0432\u0440\u0435\u043C\u0435\u043D\u0438",
             /* TimeEstimateAccurate     */ "\u0422\u043E\u0447\u043D\u043E",
             /* TimeEstimateFast         */ "\u0411\u044B\u0441\u0442\u0440\u043E",
             /* Read                     */ "\u0427\u0438\u0442\u0430\u0442\u044C",
@@ -1171,16 +1139,14 @@ namespace {
             /* Focus                    */ "\u0424\u043E\u043A\u0443\u0441",
             /* Reading                  */ "\u0427\u0442\u0435\u043D\u0438\u0435",
             /* ReaderScreen             */ "\u042D\u043A\u0440\u0430\u043D \u0447\u0442\u0435\u043D\u0438\u044F",
-            /* NetworkUpdates           */
-            "\u0421\u0435\u0442\u044C \u0438 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F",
+            /* NetworkUpdates           */ "\u0421\u0435\u0442\u044C \u0438 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F",
             /* Interface                */ "\u0418\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441",
             /* ReadingSection           */ "\u0427\u0422\u0415\u041D\u0418\u0415",
             /* SystemSection            */ "\u0421\u0418\u0421\u0422\u0415\u041C\u0410",
             /* WordsPerMinute           */ "\u0421\u043B\u043E\u0432 \u0432 \u043C\u0438\u043D\u0443\u0442\u0443",
             /* BehaviorSection          */ "\u041F\u041E\u0412\u0415\u0414\u0415\u041D\u0418\u0415",
             /* Pause                    */ "\u041F\u0430\u0443\u0437\u0430",
-            /* SentenceEnd              */
-            "\u041A\u043E\u043D\u0435\u0446 \u043F\u0440\u0435\u0434\u043B\u043E\u0436\u0435\u043D\u0438\u044F",
+            /* SentenceEnd              */ "\u041A\u043E\u043D\u0435\u0446 \u043F\u0440\u0435\u0434\u043B\u043E\u0436\u0435\u043D\u0438\u044F",
             /* Instant                  */ "\u0421\u0440\u0430\u0437\u0443",
             /* AppearanceSection        */ "\u0412\u0418\u0414",
             /* StandbySection           */ "\u041E\u0416\u0418\u0414\u0410\u041D\u0418\u0415",
@@ -1189,38 +1155,27 @@ namespace {
             /* Maze                     */ "\u041B\u0430\u0431\u0438\u0440\u0438\u043D\u0442",
             /* Voronoi                  */ "\u0412\u043E\u0440\u043E\u043D\u043E\u0439",
             /* Reaction                 */ "\u0420\u0435\u0430\u043A\u0446\u0438\u044F",
-            /* ScreenOff                */
-            "\u042D\u043A\u0440\u0430\u043D \u0432\u044B\u043A\u043B\u044E\u0447\u0435\u043D",
+            /* ScreenOff                */ "\u042D\u043A\u0440\u0430\u043D \u0432\u044B\u043A\u043B\u044E\u0447\u0435\u043D",
             /* Life                     */ "\u0416\u0438\u0437\u043D\u044C",
-            /* AdditionalDelaySection   */
-            "\u0414\u041E\u041F\u041E\u041B\u041D\u0418\u0422\u0415\u041B\u042C\u041D\u0410\u042F "
-            "\u0417\u0410\u0414\u0415\u0420\u0416\u041A\u0410",
+            /* AdditionalDelaySection   */ "\u0414\u041E\u041F\u041E\u041B\u041D\u0418\u0422\u0415\u041B\u042C\u041D\u0410\u042F \u0417\u0410\u0414\u0415\u0420\u0416\u041A\u0410",
             /* FontSection              */ "\u0428\u0420\u0418\u0424\u0422",
             /* GeometrySection          */ "\u0413\u0415\u041E\u041C\u0415\u0422\u0420\u0418\u042F",
-            /* FocusLetter              */
-            "\u0424\u043E\u043A\u0443\u0441\u043D\u0430\u044F \u0431\u0443\u043A\u0432\u0430",
-            /* BehaviorMetricsSection   */
-            "\u041F\u041E\u0412\u0415\u0414\u0415\u041D\u0418\u0415 \u0418 "
-            "\u041F\u041E\u041A\u0410\u0417\u0410\u0422\u0415\u041B\u0418",
+            /* FocusLetter              */ "\u0424\u043E\u043A\u0443\u0441\u043D\u0430\u044F \u0431\u0443\u043A\u0432\u0430",
+            /* BehaviorMetricsSection   */ "\u041F\u041E\u0412\u0415\u0414\u0415\u041D\u0418\u0415 \u0418 \u041F\u041E\u041A\u0410\u0417\u0410\u0422\u0415\u041B\u0418",
             /* ReaderHand               */ "\u0420\u0430\u0431\u043E\u0447\u0430\u044F \u0440\u0443\u043A\u0430",
             /* Left                     */ "\u041B\u0435\u0432\u0430\u044F",
             /* Right                    */ "\u041F\u0440\u0430\u0432\u0430\u044F",
-            /* ChapterScroll            */
-            "\u041F\u0440\u043E\u043A\u0440\u0443\u0442\u043A\u0430 \u0433\u043B\u0430\u0432",
+            /* ChapterScroll            */ "\u041F\u0440\u043E\u043A\u0440\u0443\u0442\u043A\u0430 \u0433\u043B\u0430\u0432",
             /* Reversed                 */ "\u041E\u0431\u0440\u0430\u0442\u043D\u0430\u044F",
             /* Normal                   */ "\u041E\u0431\u044B\u0447\u043D\u0430\u044F",
             /* Footer                   */ "\u041D\u0438\u0436\u043D\u044F\u044F \u0441\u0442\u0440\u043E\u043A\u0430",
             /* ChapterTime              */ "\u0412\u0440\u0435\u043C\u044F \u0433\u043B\u0430\u0432\u044B",
             /* BookTime                 */ "\u0412\u0440\u0435\u043C\u044F \u043A\u043D\u0438\u0433\u0438",
             /* Percentage               */ "\u041F\u0440\u043E\u0446\u0435\u043D\u0442",
-            /* BatteryLabel             */
-            "\u041F\u043E\u0434\u043F\u0438\u0441\u044C \u0431\u0430\u0442\u0430\u0440\u0435\u0438",
-            /* TimeLeft                 */
-            "\u041E\u0441\u0442\u0430\u043B\u043E\u0441\u044C \u0432\u0440\u0435\u043C\u0435\u043D\u0438",
+            /* BatteryLabel             */ "\u041F\u043E\u0434\u043F\u0438\u0441\u044C \u0431\u0430\u0442\u0430\u0440\u0435\u0438",
+            /* TimeLeft                 */ "\u041E\u0441\u0442\u0430\u043B\u043E\u0441\u044C \u0432\u0440\u0435\u043C\u0435\u043D\u0438",
             /* Voltage                  */ "\u041D\u0430\u043F\u0440\u044F\u0436\u0435\u043D\u0438\u0435",
-            /* VisibleWhileReadingSection */
-            "\u041F\u041E\u041A\u0410\u0417\u042B\u0412\u0410\u0422\u042C \u041F\u0420\u0418 "
-            "\u0427\u0422\u0415\u041D\u0418\u0418",
+            /* VisibleWhileReadingSection */ "\u041F\u041E\u041A\u0410\u0417\u042B\u0412\u0410\u0422\u042C \u041F\u0420\u0418 \u0427\u0422\u0415\u041D\u0418\u0418",
             /* Battery                  */ "\u0411\u0430\u0442\u0430\u0440\u0435\u044F",
             /* Progress                 */ "\u041F\u0440\u043E\u0433\u0440\u0435\u0441\u0441",
             /* ConnectionReleaseSection */ "\u0421\u0415\u0422\u042C \u0418 \u0412\u0415\u0420\u0421\u0418\u042F",
@@ -1232,53 +1187,25 @@ namespace {
             /* ReleaseTag               */ "\u0422\u0435\u0433 \u0432\u0435\u0440\u0441\u0438\u0438",
             /* Latest                   */ "\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u044F\u044F",
             /* CompanionSetup           */ "\u041D\u0430\u0441\u0442\u0440\u043E\u0438\u0442\u044C companion",
-            /* FirmwareUpdates          */
-            "\u041E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F "
-            "\u043F\u0440\u043E\u0448\u0438\u0432\u043A\u0438",
+            /* FirmwareUpdates          */ "\u041E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F \u043F\u0440\u043E\u0448\u0438\u0432\u043A\u0438",
             /* ForgetNetwork            */ "\u0417\u0430\u0431\u044B\u0442\u044C \u0441\u0435\u0442\u044C",
-            /* StorageReady             */
-            "\u0425\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0435 \u0433\u043E\u0442\u043E\u0432\u043E",
-            /* StorageUnavailable       */
-            "\u0425\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0435 "
-            "\u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E",
+            /* StorageReady             */ "\u0425\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0435 \u0433\u043E\u0442\u043E\u0432\u043E",
+            /* StorageUnavailable       */ "\u0425\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0435 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E",
             /* Items                    */ "\u044D\u043B\u0435\u043C\u0435\u043D\u0442\u043E\u0432",
             /* OtaUpdate                */ "\u041E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 OTA",
-            /* StorageEncryption        */
-            "\u0428\u0438\u0444\u0440\u043E\u0432\u0430\u043D\u0438\u0435 "
-            "\u0445\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0430",
+            /* StorageEncryption        */ "\u0428\u0438\u0444\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0445\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0430",
             /* Encryption               */ "\u0428\u0438\u0444\u0440\u043E\u0432\u0430\u043D\u0438\u0435",
-            /* StorageEncryptionExplanation */
-            "\u0418\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0435\u0442 \u043A\u043B\u044E\u0447 "
-            "\u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430. \u041A\u043E\u043F\u0438\u044E NVS "
-            "\u043D\u0435\u043B\u044C\u0437\u044F \u043F\u0440\u043E\u0447\u0438\u0442\u0430\u0442\u044C \u043D\u0430 "
-            "\u0434\u0440\u0443\u0433\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435.",
-            /* StorageEncryptionPermanent */
-            "\u041D\u0430\u0432\u0441\u0435\u0433\u0434\u0430: \u043F\u0440\u043E\u0436\u0438\u0433\u0430\u0435\u0442 "
-            "eFuse, \u0441\u0442\u0438\u0440\u0430\u0435\u0442 NVS \u0438 \u0442\u0440\u0435\u0431\u0443\u0435\u0442 "
-            "\u0441\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u0443\u044E "
-            "\u043F\u0440\u043E\u0448\u0438\u0432\u043A\u0443.",
-            /* StorageEncryptionReset   */
-            "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 SD "
-            "\u0432\u0435\u0440\u043D\u0443\u0442\u0441\u044F \u043F\u043E\u0441\u043B\u0435 "
-            "\u043F\u0435\u0440\u0435\u0437\u0430\u043F\u0443\u0441\u043A\u0430. \u041F\u0430\u0440\u043E\u043B\u044C "
-            "Wi-Fi \u043D\u0443\u0436\u043D\u043E \u0432\u0432\u0435\u0441\u0442\u0438 \u0441\u043D\u043E\u0432\u0430.",
-            /* TapToContinue            */
-            "\u041D\u0430\u0436\u043C\u0438\u0442\u0435, \u0447\u0442\u043E\u0431\u044B "
-            "\u043F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C",
+            /* StorageEncryptionExplanation */ "\u0418\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0435\u0442 \u043A\u043B\u044E\u0447 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430. \u041A\u043E\u043F\u0438\u044E NVS \u043D\u0435\u043B\u044C\u0437\u044F \u043F\u0440\u043E\u0447\u0438\u0442\u0430\u0442\u044C \u043D\u0430 \u0434\u0440\u0443\u0433\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435.",
+            /* StorageEncryptionPermanent */ "\u041D\u0430\u0432\u0441\u0435\u0433\u0434\u0430: \u043F\u0440\u043E\u0436\u0438\u0433\u0430\u0435\u0442 eFuse, \u0441\u0442\u0438\u0440\u0430\u0435\u0442 NVS \u0438 \u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u0441\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u0443\u044E \u043F\u0440\u043E\u0448\u0438\u0432\u043A\u0443.",
+            /* StorageEncryptionReset   */ "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 SD \u0432\u0435\u0440\u043D\u0443\u0442\u0441\u044F \u043F\u043E\u0441\u043B\u0435 \u043F\u0435\u0440\u0435\u0437\u0430\u043F\u0443\u0441\u043A\u0430. \u041F\u0430\u0440\u043E\u043B\u044C Wi-Fi \u043D\u0443\u0436\u043D\u043E \u0432\u0432\u0435\u0441\u0442\u0438 \u0441\u043D\u043E\u0432\u0430.",
+            /* TapToContinue            */ "\u041D\u0430\u0436\u043C\u0438\u0442\u0435, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C",
             /* IUnderstand              */ "\u042F \u043F\u043E\u043D\u0438\u043C\u0430\u044E",
-            /* EnableProtection         */
-            "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0437\u0430\u0449\u0438\u0442\u0443",
-            /* EnablingEncryption       */
-            "\u0412\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 "
-            "\u0448\u0438\u0444\u0440\u043E\u0432\u0430\u043D\u0438\u044F",
-            /* CompanionSync            */
-            "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F companion",
+            /* EnableProtection         */ "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0437\u0430\u0449\u0438\u0442\u0443",
+            /* EnablingEncryption       */ "\u0412\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0448\u0438\u0444\u0440\u043E\u0432\u0430\u043D\u0438\u044F",
+            /* CompanionSync            */ "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F companion",
             /* RefreshRss               */ "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C RSS",
-            /* CheckOnly                */
-            "\u0422\u043E\u043B\u044C\u043A\u043E \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C",
-            /* InstallUpdate            */
-            "\u0423\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C "
-            "\u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435",
+            /* CheckOnly                */ "\u0422\u043E\u043B\u044C\u043A\u043E \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C",
+            /* InstallUpdate            */ "\u0423\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435",
             /* FocusTimer               */ "\u0422\u0430\u0439\u043C\u0435\u0440 \u0444\u043E\u043A\u0443\u0441\u0430",
             /* TimerName                */ "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435",
             /* FocusMinutes             */ "\u0424\u043E\u043A\u0443\u0441",
@@ -1295,43 +1222,32 @@ namespace {
             /* StartReading             */ "\u041D\u0430\u0447\u0430\u0442\u044C \u0447\u0442\u0435\u043D\u0438\u0435",
             /* Chapter                  */ "\u0413\u043B\u0430\u0432\u0430",
             /* Unknown                  */ "\u041D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E",
-            /* NoLibraryItems           */
-            "\u0411\u0438\u0431\u043B\u0438\u043E\u0442\u0435\u043A\u0430 \u043F\u0443\u0441\u0442\u0430",
+            /* NoLibraryItems           */ "\u0411\u0438\u0431\u043B\u0438\u043E\u0442\u0435\u043A\u0430 \u043F\u0443\u0441\u0442\u0430",
             /* Done                     */ "\u0433\u043E\u0442\u043E\u0432\u043E",
-            /* OpeningBook              */
-            "\u041E\u0442\u043A\u0440\u044B\u0442\u0438\u0435 \u043A\u043D\u0438\u0433\u0438",
+            /* OpeningBook              */ "\u041E\u0442\u043A\u0440\u044B\u0442\u0438\u0435 \u043A\u043D\u0438\u0433\u0438",
             /* BookFailed               */ "\u041E\u0448\u0438\u0431\u043A\u0430 \u043A\u043D\u0438\u0433\u0438",
-            /* CheckSdCard              */
-            "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 SD-\u043A\u0430\u0440\u0442\u0443",
+            /* CheckSdCard              */ "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 SD-\u043A\u0430\u0440\u0442\u0443",
             /* Ready                    */ "\u0413\u041E\u0422\u041E\u0412\u041E",
-            /* HoldPowerToExit          */
-            "\u0443\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0439\u0442\u0435 PWR \u0434\u043B\u044F "
-            "\u0432\u044B\u0445\u043E\u0434\u0430",
+            /* HoldPowerToExit          */ "\u0443\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0439\u0442\u0435 PWR \u0434\u043B\u044F \u0432\u044B\u0445\u043E\u0434\u0430",
             /* SdReady                  */ "SD \u0433\u043E\u0442\u043E\u0432\u0430",
             /* SdUnavailable            */ "SD \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430",
-            /* LibraryEntries           */
-            "\u0437\u0430\u043F\u0438\u0441\u0435\u0439 \u0431\u0438\u0431\u043B\u0438\u043E\u0442\u0435\u043A\u0438",
+            /* LibraryEntries           */ "\u0437\u0430\u043F\u0438\u0441\u0435\u0439 \u0431\u0438\u0431\u043B\u0438\u043E\u0442\u0435\u043A\u0438",
             /* CheckingFeeds            */ "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043B\u0435\u043D\u0442",
-            /* CouldNotStart            */
-            "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C "
-            "\u0437\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u044C",
+            /* CouldNotStart            */ "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u044C",
             /* Unavailable              */ "\u041D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E",
             /* Checking                 */ "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430",
             /* ReleasePower             */ "\u041E\u0442\u043F\u0443\u0441\u0442\u0438\u0442\u0435 PWR",
             /* Storage                  */ "\u0425\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0435",
-            /* Sync                     */
-            "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F",
+            /* Sync                     */ "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F",
             /* ChapterShort             */ "\u0413\u041B",
             /* BookShort                */ "\u041A\u041D\u0418\u0413\u0410",
             /* WifiNetworks             */ "\u0421\u0435\u0442\u0438 Wi-Fi",
             /* ScanningNetworks         */ "\u041F\u043E\u0438\u0441\u043A \u0441\u0435\u0442\u0435\u0439",
             /* ScanFailed               */ "\u041E\u0448\u0438\u0431\u043A\u0430 \u043F\u043E\u0438\u0441\u043A\u0430",
-            /* NoNetworksFound          */
-            "\u0421\u0435\u0442\u0438 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u044B",
+            /* NoNetworksFound          */ "\u0421\u0435\u0442\u0438 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u044B",
             /* Retry                    */ "\u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u044C",
             /* Connecting               */ "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435",
-            /* ConnectionFailed         */
-            "\u041E\u0448\u0438\u0431\u043A\u0430 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F",
+            /* ConnectionFailed         */ "\u041E\u0448\u0438\u0431\u043A\u0430 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F",
             /* Space                    */ "\u041F\u0440\u043E\u0431\u0435\u043B",
             /* Clear                    */ "\u041E\u0447\u0438\u0441\u0442\u0438\u0442\u044C",
             /* Show                     */ "\u041F\u043E\u043A\u0430\u0437",
@@ -1381,3 +1297,4 @@ namespace Localization {
     }
 
 } // namespace Localization
+// clang-format on

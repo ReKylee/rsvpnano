@@ -12,6 +12,7 @@ fonts/
     large.rfont4
     medium.rfont4
     small.rfont4
+    OFL.txt
 ```
 
 The generated fallback header is the one font artifact that belongs under `src` because it is compiled into firmware:
@@ -47,3 +48,4 @@ Runtime behavior:
 - Each folder may contain `large.rfont4`, `medium.rfont4`, and/or `small.rfont4`.
 - Missing sizes fall back to the built-in Literata fallback for that size.
 - Only the currently selected `.rfont4` file is read into memory.
+- Each bundled font keeps its license and any upstream font log beside its converted assets.

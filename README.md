@@ -606,4 +606,4 @@ The next areas of work are:
 
 MIT. See [LICENSE](LICENSE).
 
-The bundled OpenDyslexic and Atkinson Hyperlegible font catalog assets are derived from the upstream projects and are included under the SIL Open Font License. See [third_party/opendyslexic/OFL.txt](third_party/opendyslexic/OFL.txt) and [third_party/atkinson-hyperlegible/OFL.txt](third_party/atkinson-hyperlegible/OFL.txt).
+The bundled fonts include their upstream license files beside the corresponding catalog assets under [`fonts/`](fonts/).

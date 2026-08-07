@@ -4,7 +4,9 @@
 
 #include <ESPmDNS.h>
 #include <WiFi.h>
+#include <uri/UriBraces.h>
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <iterator>
 #include <optional>
@@ -27,7 +29,9 @@
 #include "storage/index/ReadingProgress.h"
 #include "sync/CompanionSyncJson.h"
 #include "text/AsciiText.h"
+#include "text/LocaleTag.h"
 #include "text/RsvpDirectives.h"
+#include "text/UnicodeText.h"
 #include "timer/FocusTimerStorage.h"
 #include "ui/Localization.h"
 #include "update/OtaUpdater.h"
@@ -40,7 +44,27 @@ namespace {
     constexpr size_t kMaxRssFeedsPatchBytes = 4096;
     constexpr size_t kMaxFocusTimersBytes = 4096;
     constexpr size_t kMaxThemeUploadBytes = 4096;
-    constexpr size_t kMaxFontUploadBytes = 2UL * 1024UL * 1024UL;
+    constexpr size_t kMaxFontUploadBytes = 96UL * 1024UL * 1024UL;
+
+    std::vector<std::string> scriptNames(uint32_t mask) {
+        std::vector<std::string> result;
+        result.reserve(UnicodeText::SupportedScripts.size());
+        for (const UnicodeText::ScriptTag& script: UnicodeText::SupportedScripts) {
+            if ((mask & script.mask) != 0)
+                result.emplace_back(script.tag);
+        }
+        return result;
+    }
+
+    std::vector<std::string> capabilityNames(uint32_t mask) {
+        std::vector<std::string> result;
+        result.reserve(UnicodeText::SupportedCapabilities.size());
+        for (const UnicodeText::CapabilityTag& capability: UnicodeText::SupportedCapabilities) {
+            if ((mask & capability.mask) != 0)
+                result.emplace_back(capability.tag);
+        }
+        return result;
+    }
 
     template<typename T>
     bool sendData(WebServer& server, std::string& jsonBuffer, int status, const T& data) {
@@ -147,10 +171,8 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <div class="row"><button id="uploadThemeButton">Upload theme file</button></div>
 <hr>
 <label>Online font</label><select id="onlineFontId"></select>
-<label>Online font size</label><select id="onlineFontSize"><option value="large">Large</option><option value="medium">Medium</option><option value="small">Small</option></select>
-<div class="row"><button id="installOnlineFontButton">Install online font size</button></div>
+<div class="row"><button id="installOnlineFontButton">Install online font</button></div>
 <label>Font family</label><input id="fontFamilyName" placeholder="Font folder name">
-<label>Font size</label><select id="fontUploadSize"><option value="large">Large</option><option value="medium">Medium</option><option value="small">Small</option></select>
 <label>Font file</label><input id="fontFileInput" type="file" accept=".rfont4">
 <div class="row"><button id="uploadFontButton">Upload font file</button></div>
 <label>Brightness <span id="brightnessValue"></span></label><input id="brightnessPercent" type="range" min="5" max="100" step="5">
@@ -161,6 +183,13 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <label><input id="readingBattery" type="checkbox" style="width:auto"> Show battery while reading</label>
 <label><input id="readingChapter" type="checkbox" style="width:auto"> Show chapter while reading</label>
 <label><input id="readingProgress" type="checkbox" style="width:auto"> Show book percent while reading</label>
+</div>
+<div class="card"><h2>Languages</h2>
+<label>Interface language</label><select id="interfaceLocale"><option value="en">English</option></select>
+<div id="localesList" class="muted">Loading...</div>
+<label>Locale-pack folder</label><input id="localePackFiles" type="file" webkitdirectory multiple>
+<p class="muted">Choose a folder containing <code>manifest.toml</code> and its <code>ui</code>/<code>reader</code> files.</p>
+<div class="row"><button class="primary" id="installLocalePackButton">Install locale pack</button><button id="refreshLocalesButton">Refresh</button></div>
 </div>
 <div class="card"><h2>Typography</h2>
 <label>Typeface</label><select id="typeface"><option value="literata">Literata</option></select>
@@ -211,7 +240,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 </section>
 </main>
 <script>
-const $=id=>document.getElementById(id);let settings=null,rssConfig={feeds:[]},focusTimers={timers:[]};let deviceThemes=[],deviceFonts=[];let themeCatalog=[];let themeCatalogUrl='';let fontCatalog=[];let fontCatalogUrl='';
+const $=id=>document.getElementById(id);let settings=null,rssConfig={feeds:[]},focusTimers={timers:[]};let deviceThemes=[],deviceFonts=[],deviceLocales={locales:[],rejected:[]};let themeCatalog=[];let themeCatalogUrl='';let fontCatalog=[];let fontCatalogUrl='';
 function status(msg){$('status').textContent=msg}
 function catalogUrl(path){const u=(settings&&settings.updates)||{};let owner=String(u.repositoryOwner||'').trim(),repo='rsvpnano',tag=String(u.releaseTag||'').trim();const apply=v=>{const p=v.trim().split('/');if(p.length!==2||!p[0]||!p[1])return false;owner=p[0];repo=p[1];return true};apply(owner);const at=tag.indexOf('@');if(at>0&&at<tag.length-1){const r=tag.slice(0,at).trim();tag=tag.slice(at+1).trim();if(!apply(r)&&r)repo=r}if(!owner||!repo)throw new Error('Configure a GitHub release owner first.');return 'https://raw.githubusercontent.com/'+[owner,repo,tag||'main'].map(encodeURIComponent).join('/')+'/'+path}
 async function api(path,opts){const r=await fetch(path,opts);const t=await r.text();let j={};try{j=t?JSON.parse(t):{}}catch(e){throw new Error(t||'Bad response')}if(!r.ok)throw new Error((j.error&&j.error.message)||r.statusText);return j.data}
@@ -230,11 +259,10 @@ async function uploadPickedTheme(){const f=$('themeFileInput').files[0];if(!f){s
 async function loadThemeCatalog(){try{themeCatalogUrl=catalogUrl('themes/index.json');themeCatalog=await fetch(themeCatalogUrl,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Catalog unavailable');return r.json()});$('onlineThemeId').innerHTML=themeCatalog.map(t=>`<option value="${html(t.id)}">${html(t.name)}</option>`).join('')}catch(e){$('onlineThemeId').innerHTML='<option value="">Catalog unavailable</option>'}}
 async function installOnlineTheme(){const id=val('onlineThemeId');const theme=themeCatalog.find(t=>t.id===id);if(!theme){status('Choose an online theme first.');return}try{const url=new URL(theme.file,themeCatalogUrl).toString();const blob=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Theme unavailable');return r.blob()});const uploaded=await uploadThemeBlob(blob,theme.file);settings.interface.selectedThemeId=uploaded.id;settings=await api('/api/v1/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});await loadSettings();status('Installed '+theme.name)}catch(e){status('Online theme install failed: '+e.message)}}
 function fontFamilyFromName(name){return safeName(String(name||'font').replace(/\.rfont4$/i,'').replace(/[-_ ]?(large|medium|small)$/i,''))||'font'}
-async function uploadFontBlob(blob,family,size,name){const fd=new FormData();fd.append('file',blob,name||size+'.rfont4');await api('/api/v1/appearance/fonts?family='+encodeURIComponent(family)+'&size='+encodeURIComponent(size)+'&name='+encodeURIComponent(name||size+'.rfont4'),{method:'POST',body:fd})}
-async function uploadPickedFont(){const f=$('fontFileInput').files[0];if(!f){status('Choose a font file first.');return}const family=$('fontFamilyName').value.trim()||fontFamilyFromName(f.name);const size=val('fontUploadSize');try{await uploadFontBlob(f,family,size,f.name);$('fontFileInput').value='';$('fontFamilyName').value='';await loadSettings();status('Uploaded '+family+' '+size)}catch(e){status('Font upload failed: '+e.message)}}
+async function uploadFontBlob(blob,family,name){const fd=new FormData();fd.append('file',blob,name||'font.rfont4');await api('/api/v1/appearance/fonts?family='+encodeURIComponent(family),{method:'POST',body:fd})}
+async function uploadPickedFont(){const f=$('fontFileInput').files[0];if(!f){status('Choose a font file first.');return}const family=$('fontFamilyName').value.trim()||fontFamilyFromName(f.name);try{await uploadFontBlob(f,family,f.name);$('fontFileInput').value='';$('fontFamilyName').value='';await loadSettings();status('Uploaded '+family)}catch(e){status('Font upload failed: '+e.message)}}
 async function loadFontCatalog(){try{fontCatalogUrl=catalogUrl('fonts/index.json');fontCatalog=await fetch(fontCatalogUrl,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Catalog unavailable');return r.json()});$('onlineFontId').innerHTML=fontCatalog.map(f=>`<option value="${html(f.id)}">${html(f.name)}</option>`).join('')}catch(e){$('onlineFontId').innerHTML='<option value="">Catalog unavailable</option>'}}
-function onlineFontFile(font,size){if(font.files&&font.files[size])return font.files[size];return font.file||''}
-async function installOnlineFont(){const id=val('onlineFontId');const size=val('onlineFontSize');const font=fontCatalog.find(f=>f.id===id);if(!font){status('Choose an online font first.');return}const file=onlineFontFile(font,size);if(!file){status('This online font is missing '+size+'.');return}try{const url=new URL(file,fontCatalogUrl).toString();const blob=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Font unavailable');return r.blob()});await uploadFontBlob(blob,font.name||font.id,size,file.split('/').pop()||size+'.rfont4');await loadSettings();status('Installed '+(font.name||font.id)+' '+size)}catch(e){status('Online font install failed: '+e.message)}}
+async function installOnlineFont(){const id=val('onlineFontId'),font=fontCatalog.find(f=>f.id===id);if(!font||!font.file){status('Choose an online font first.');return}try{const url=new URL(font.file,fontCatalogUrl).toString();const blob=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Font unavailable');return r.blob()});await uploadFontBlob(blob,font.name||font.id,font.file.split('/').pop()||'font.rfont4');await loadSettings();status('Installed '+(font.name||font.id))}catch(e){status('Online font install failed: '+e.message)}}
 async function syncArticle(){const f=articleFile();if(!$('articleBody').value.trim()){status('Paste article text first.');return}try{await uploadBlob(f.blob,f.name,'article');localStorage.removeItem('rsvpArticleDraft');await refresh();status('Synced '+f.name)}catch(e){status('Article sync failed: '+e.message)}}
 function saveDraft(){localStorage.setItem('rsvpArticleDraft',JSON.stringify({title:$('articleTitle').value,author:$('articleAuthor').value,body:$('articleBody').value}));status('Draft saved in this browser.')}
 function loadDraft(){try{const d=JSON.parse(localStorage.getItem('rsvpArticleDraft')||'{}');$('articleTitle').value=d.title||'';$('articleAuthor').value=d.author||'';$('articleBody').value=d.body||''}catch(e){}}
@@ -242,10 +270,16 @@ function val(id){const e=$(id);return e.type==='checkbox'?e.checked:e.value}
 function setVal(id,v){const e=$(id);if(e.type==='checkbox')e.checked=!!v;else e.value=v}
 function setThemeOptions(){const id=(settings&&settings.interface&&settings.interface.selectedThemeId)||'default';const themes=deviceThemes.some(t=>t.id===id)?deviceThemes:[...deviceThemes,{id,name:id}];$('themeId').innerHTML=themes.map(t=>`<option value="${html(t.id)}">${html(t.name||t.id)}</option>`).join('');setVal('themeId',id)}
 function setFontOptions(){const id=(settings&&settings.reading&&settings.reading.typography&&settings.reading.typography.fontId)||'literata';const fonts=deviceFonts.some(f=>f.id===id)?deviceFonts:[...deviceFonts,{id,name:id}];$('typeface').innerHTML=fonts.map(f=>`<option value="${html(f.id)}">${html(f.name||f.id)}</option>`).join('');setVal('typeface',id)}
+function setLocaleOptions(){const current=(settings&&settings.interface&&settings.interface.locale)||'en';const locales=new Map([['en','English']]);(deviceLocales.locales||[]).filter(p=>p.locale).forEach(p=>locales.set(p.locale,p.nativeName||p.englishName||p.locale));if(!locales.has(current))locales.set(current,current);$('interfaceLocale').innerHTML=[...locales].map(([id,name])=>`<option value="${html(id)}">${html(name)}</option>`).join('');setVal('interfaceLocale',current)}
+function renderLocales(){const packs=deviceLocales.locales||[],rejected=deviceLocales.rejected||[];let out=packs.map(p=>`<div class="item"><div class="item-title">${html(p.nativeName||p.englishName||p.id)}</div><div class="item-meta">${html([p.id,p.version,p.locale,p.direction].filter(Boolean).join(' - '))}</div><p><button class="danger" data-delete-locale="${html(encodeURIComponent(p.id))}">Remove</button></p></div>`).join('');if(!out)out='<span class="muted">No external locale packs installed.</span>';if(rejected.length)out+=`<p class="muted">Rejected: ${rejected.map(i=>html(i.id+': '+i.reason)).join('; ')}</p>`;$('localesList').innerHTML=out;document.querySelectorAll('[data-delete-locale]').forEach(b=>b.onclick=()=>removeLocalePack(decodeURIComponent(b.dataset.deleteLocale)));setLocaleOptions()}
+async function loadLocales(){try{deviceLocales=await api('/api/v1/locales');renderLocales()}catch(e){status('Locale packs load failed: '+e.message)}}
+function selectedPackFiles(){const files=[...$('localePackFiles').files];return files.map(file=>{let path=file.webkitRelativePath||file.name;const slash=path.indexOf('/');if(slash>=0)path=path.slice(slash+1);return {file,path}}).filter(x=>x.path==='manifest.toml'||x.path.startsWith('ui/')||x.path.startsWith('reader/'))}
+async function installLocalePack(){const files=selectedPackFiles(),manifest=files.find(x=>x.path==='manifest.toml');if(!manifest){status('Choose a locale-pack folder containing manifest.toml.');return}try{const match=(await manifest.file.text()).match(/^id\s*=\s*"([A-Za-z0-9-]+)"\s*$/m);if(!match)throw new Error('manifest.toml has no valid pack id');const id=match[1];await api('/api/v1/locales/'+encodeURIComponent(id)+'/stage',{method:'POST'});for(let index=0;index<files.length;index++){const item=files[index],fd=new FormData();fd.append('file',item.file,item.file.name);status('Uploading locale pack '+(index+1)+'/'+files.length+'...');await api('/api/v1/locales/'+encodeURIComponent(id)+'/files?path='+encodeURIComponent(item.path),{method:'POST',body:fd})}await api('/api/v1/locales/'+encodeURIComponent(id)+'/activate',{method:'POST'});$('localePackFiles').value='';await loadLocales();status('Installed locale pack '+id)}catch(e){status('Locale pack install failed: '+e.message)}}
+async function removeLocalePack(id){if(!confirm('Remove locale pack '+id+'?'))return;try{await api('/api/v1/locales/'+encodeURIComponent(id),{method:'DELETE'});await loadLocales();status('Removed locale pack '+id)}catch(e){status('Locale pack removal failed: '+e.message)}}
 function snapWpm(v){v=Math.max(10,Math.min(1000,Math.round(+v||300)));return Math.round(v/10)*10}
 function updateLabels(){['wpm','longWordMs','complexWordMs','punctuationMs','brightnessPercent','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>{const l=$(id+'Value')||$(id.replace('Percent','')+'Value')||$(id.replace('Index','')+'Value');if(l)l.textContent=$(id).value+(id==='wpm'?' WPM':id.includes('Ms')?' ms':id==='brightnessPercent'?'%':'')})}
-async function loadSettings(){try{[settings,{themes:deviceThemes=[]},{fonts:deviceFonts=[]}]=await Promise.all([api('/api/v1/settings'),api('/api/v1/appearance/themes'),api('/api/v1/appearance/fonts')]);setThemeOptions();setFontOptions();if(!themeCatalog.length)loadThemeCatalog();if(!fontCatalog.length)loadFontCatalog();const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;setVal('readingMode',r.mode||'rsvp');setVal('pauseMode',r.pauseMode);setVal('wpm',snapWpm(r.wpm));setVal('longWordMs',p.longWordDelayMs);setVal('complexWordMs',p.complexWordDelayMs);setVal('punctuationMs',p.punctuationDelayMs);setVal('themeId',i.selectedThemeId||'default');setVal('brightnessPercent',i.brightnessPercent);setVal('handedness',r.leftHanded?'left':'right');setVal('footerMetric',r.footerMetric);setVal('batteryLabel',r.batteryLabel);setVal('batteryIcon',r.batteryIconVisible);setVal('readingBattery',r.batteryVisibleWhileReading);setVal('readingChapter',r.chapterVisibleWhileReading);setVal('readingProgress',r.progressVisibleWhileReading);setVal('typeface',t.fontId);setVal('fontSizeIndex',t.fontSizeIndex);setVal('tracking',t.tracking);setVal('anchorPercent',t.anchor);setVal('guideWidth',t.guideWidth);setVal('guideGap',t.guideGap);setVal('focusHighlight',t.focusHighlight);setVal('phantomWords',r.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
-async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;r.wpm=+val('wpm');r.mode=val('readingMode');r.pauseMode=val('pauseMode');p.longWordDelayMs=+val('longWordMs');p.complexWordDelayMs=+val('complexWordMs');p.punctuationDelayMs=+val('punctuationMs');i.selectedThemeId=val('themeId');i.brightnessPercent=+val('brightnessPercent');r.leftHanded=val('handedness')==='left';r.footerMetric=val('footerMetric');r.batteryLabel=val('batteryLabel');r.batteryIconVisible=val('batteryIcon');r.batteryVisibleWhileReading=val('readingBattery');r.chapterVisibleWhileReading=val('readingChapter');r.progressVisibleWhileReading=val('readingProgress');r.phantomWords=val('phantomWords');t.fontId=val('typeface');t.fontSizeIndex=+val('fontSizeIndex');t.focusHighlight=val('focusHighlight');t.tracking=+val('tracking');t.anchor=+val('anchorPercent');t.guideWidth=+val('guideWidth');t.guideGap=+val('guideGap');try{settings=await api('/api/v1/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});status('Settings saved and applied.')}catch(e){status('Settings save failed: '+e.message)}}
+async function loadSettings(){try{[settings,{themes:deviceThemes=[]},{fonts:deviceFonts=[]},deviceLocales]=await Promise.all([api('/api/v1/settings'),api('/api/v1/appearance/themes'),api('/api/v1/appearance/fonts'),api('/api/v1/locales')]);setThemeOptions();setFontOptions();renderLocales();if(!themeCatalog.length)loadThemeCatalog();if(!fontCatalog.length)loadFontCatalog();const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;setVal('readingMode',r.mode||'rsvp');setVal('pauseMode',r.pauseMode);setVal('wpm',snapWpm(r.wpm));setVal('longWordMs',p.longWordDelayMs);setVal('complexWordMs',p.complexWordDelayMs);setVal('punctuationMs',p.punctuationDelayMs);setVal('themeId',i.selectedThemeId||'default');setVal('interfaceLocale',i.locale||'en');setVal('brightnessPercent',i.brightnessPercent);setVal('handedness',r.leftHanded?'left':'right');setVal('footerMetric',r.footerMetric);setVal('batteryLabel',r.batteryLabel);setVal('batteryIcon',r.batteryIconVisible);setVal('readingBattery',r.batteryVisibleWhileReading);setVal('readingChapter',r.chapterVisibleWhileReading);setVal('readingProgress',r.progressVisibleWhileReading);setVal('typeface',t.fontId);setVal('fontSizeIndex',t.fontSizeIndex);setVal('tracking',t.tracking);setVal('anchorPercent',t.anchor);setVal('guideWidth',t.guideWidth);setVal('guideGap',t.guideGap);setVal('focusHighlight',t.focusHighlight);setVal('phantomWords',r.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
+async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;r.wpm=+val('wpm');r.mode=val('readingMode');r.pauseMode=val('pauseMode');p.longWordDelayMs=+val('longWordMs');p.complexWordDelayMs=+val('complexWordMs');p.punctuationDelayMs=+val('punctuationMs');i.selectedThemeId=val('themeId');i.locale=val('interfaceLocale');i.brightnessPercent=+val('brightnessPercent');r.leftHanded=val('handedness')==='left';r.footerMetric=val('footerMetric');r.batteryLabel=val('batteryLabel');r.batteryIconVisible=val('batteryIcon');r.batteryVisibleWhileReading=val('readingBattery');r.chapterVisibleWhileReading=val('readingChapter');r.progressVisibleWhileReading=val('readingProgress');r.phantomWords=val('phantomWords');t.fontId=val('typeface');t.fontSizeIndex=+val('fontSizeIndex');t.focusHighlight=val('focusHighlight');t.tracking=+val('tracking');t.anchor=+val('anchorPercent');t.guideWidth=+val('guideWidth');t.guideGap=+val('guideGap');try{settings=await api('/api/v1/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});status('Settings saved and applied.')}catch(e){status('Settings save failed: '+e.message)}}
 async function loadWifi(){try{await api('/api/v1/network');const ssid=(settings&&settings.network&&settings.network.wifiSsid)||'';$('wifiSsid').value=ssid;$('wifiPassword').value='';$('wifiCurrent').textContent=ssid?'Saved network: '+ssid:'No home Wi-Fi saved.'}catch(e){status('Wi-Fi load failed: '+e.message)}}
 async function saveWifi(){const ssid=$('wifiSsid').value.trim();if(!ssid){status('Enter a Wi-Fi SSID first.');return}try{await api('/api/v1/network',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password:$('wifiPassword').value})});settings.network.wifiSsid=ssid;$('wifiPassword').value='';$('wifiCurrent').textContent='Saved network: '+ssid;status('Wi-Fi saved for RSS and OTA.')}catch(e){status('Wi-Fi save failed: '+e.message)}}
 async function forgetWifi(){if(!confirm('Forget saved Wi-Fi?'))return;try{await api('/api/v1/network',{method:'DELETE'});settings.network.wifiSsid='';$('wifiSsid').value='';$('wifiPassword').value='';$('wifiCurrent').textContent='No home Wi-Fi saved.';status('Wi-Fi credentials cleared.')}catch(e){status('Forget Wi-Fi failed: '+e.message)}}
@@ -259,7 +293,7 @@ async function saveFocus(){readFocus();try{focusTimers=await api('/api/v1/focus'
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.tab).classList.add('active');if(b.dataset.tab==='settings'){loadSettings();loadWifi()}if(b.dataset.tab==='rss')loadRss();if(b.dataset.tab==='focus')loadFocus()});
 $('wpm').oninput=()=>{setVal('wpm',snapWpm(val('wpm')));updateLabels()};
 ['longWordMs','complexWordMs','punctuationMs','brightnessPercent','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>$(id).oninput=updateLabels);
-$('refreshBooksButton').onclick=refresh;$('refreshArticlesButton').onclick=refresh;$('uploadBookButton').onclick=()=>uploadPicked('bookFileInput','book');$('uploadArticleButton').onclick=()=>uploadPicked('articleFileInput','article');$('uploadThemeButton').onclick=uploadPickedTheme;$('installOnlineThemeButton').onclick=installOnlineTheme;$('uploadFontButton').onclick=uploadPickedFont;$('installOnlineFontButton').onclick=installOnlineFont;$('syncArticleButton').onclick=syncArticle;$('saveDraftButton').onclick=saveDraft;$('saveSettingsButton').onclick=saveSettings;$('saveWifiButton').onclick=saveWifi;$('forgetWifiButton').onclick=forgetWifi;$('saveRssButton').onclick=saveRss;$('reloadRssButton').onclick=loadRss;$('addFocusButton').onclick=addFocus;$('saveFocusButton').onclick=saveFocus;
+$('refreshBooksButton').onclick=refresh;$('refreshArticlesButton').onclick=refresh;$('uploadBookButton').onclick=()=>uploadPicked('bookFileInput','book');$('uploadArticleButton').onclick=()=>uploadPicked('articleFileInput','article');$('uploadThemeButton').onclick=uploadPickedTheme;$('installOnlineThemeButton').onclick=installOnlineTheme;$('uploadFontButton').onclick=uploadPickedFont;$('installOnlineFontButton').onclick=installOnlineFont;$('installLocalePackButton').onclick=installLocalePack;$('refreshLocalesButton').onclick=loadLocales;$('syncArticleButton').onclick=syncArticle;$('saveDraftButton').onclick=saveDraft;$('saveSettingsButton').onclick=saveSettings;$('saveWifiButton').onclick=saveWifi;$('forgetWifiButton').onclick=forgetWifi;$('saveRssButton').onclick=saveRss;$('reloadRssButton').onclick=loadRss;$('addFocusButton').onclick=addFocus;$('saveFocusButton').onclick=saveFocus;
 loadDraft();refresh();
 </script>
 </body>
@@ -511,10 +545,17 @@ bool CompanionSyncManager::startServer() {
     server_.on("/api/v1/library", HTTP_DELETE, [this] { handleBookDelete(); });
     server_.on("/api/v1/library", HTTP_POST, [this] { handleBooks(); }, [this] { handleBookUpload(); });
     server_.on("/api/v1/library/position", HTTP_PATCH, [this] { handleBookPosition(); });
+    server_.on("/api/v1/library/language-fonts", HTTP_PATCH, [this] { handleBookLanguageFonts(); });
     server_.on("/api/v1/appearance/themes", HTTP_GET, [this] { handleThemes(); });
     server_.on("/api/v1/appearance/themes", HTTP_POST, [this] { handleThemes(); }, [this] { handleThemeUpload(); });
     server_.on("/api/v1/appearance/fonts", HTTP_GET, [this] { handleFonts(); });
     server_.on("/api/v1/appearance/fonts", HTTP_POST, [this] { handleFonts(); }, [this] { handleFontUpload(); });
+    server_.on("/api/v1/locales", HTTP_GET, [this] { handleLocales(); });
+    server_.on(UriBraces("/api/v1/locales/{}/stage"), HTTP_POST, [this] { handleLocaleStage(); });
+    server_.on(UriBraces("/api/v1/locales/{}/files"), HTTP_POST, [this] { handleLocaleFile(); },
+               [this] { handleLocaleFileUpload(); });
+    server_.on(UriBraces("/api/v1/locales/{}/activate"), HTTP_POST, [this] { handleLocaleActivate(); });
+    server_.on(UriBraces("/api/v1/locales/{}"), HTTP_DELETE, [this] { handleLocaleDelete(); });
     server_.on("/api/v1/settings", HTTP_GET, [this] { handleSettings(); });
     server_.on("/api/v1/settings", HTTP_PUT, [this] { handleSettings(); });
     server_.on("/api/v1/network", HTTP_GET, [this] { handleWifi(); });
@@ -594,9 +635,10 @@ void CompanionSyncManager::handleBooksList() {
                         IndexedBook::readMetadata({path.c_str(), path.length()}, indexedMetadata, &indexHeader);
                     uint8_t progressPercent = 0;
                     uint32_t wordIndex = 0;
+                    settings::ReadingOverrides overrides;
                     if (hasIndexedMetadata)
                         progressForPath(path, indexHeader.sourceSize, indexHeader.sourceFingerprint,
-                                        indexHeader.wordCount, wordIndex, progressPercent);
+                                        indexHeader.wordCount, wordIndex, progressPercent, overrides);
                     item.metadata.title = hasIndexedMetadata && !indexedMetadata.title.empty() ? indexedMetadata.title
                                                                                                : sourceMetadata.title;
                     item.metadata.author = hasIndexedMetadata && !indexedMetadata.author.empty()
@@ -606,6 +648,25 @@ void CompanionSyncManager::handleBooksList() {
                     item.metadata.chapterCount =
                         hasIndexedMetadata ? static_cast<uint32_t>(indexedMetadata.chapters.size()) : 0;
                     if (hasIndexedMetadata) {
+                        item.metadata.locale = indexedMetadata.locale;
+                        item.metadata.direction = toString(indexedMetadata.baseDirection);
+                        item.metadata.scriptMask = indexedMetadata.scriptMask;
+                        item.metadata.scripts = scriptNames(indexedMetadata.scriptMask);
+                        const auto addLanguage = [&](std::string_view locale, uint32_t scripts) {
+                            if (locale.empty())
+                                return;
+                            const auto existing = std::ranges::find(item.metadata.languages, locale,
+                                                                    &api::BookLanguage::locale);
+                            if (existing == item.metadata.languages.end())
+                                item.metadata.languages.push_back({std::string{locale}, scripts});
+                            else
+                                existing->scriptMask |= scripts;
+                        };
+                        addLanguage(indexedMetadata.locale,
+                                    indexedMetadata.textRuns.empty() ? indexedMetadata.scriptMask : 0);
+                        for (const BookTextRun& run: indexedMetadata.textRuns)
+                            addLanguage(run.locale, run.scriptMask);
+                        item.metadata.requiredCapabilities = capabilityNames(indexedMetadata.requiredCapabilities);
                         item.metadata.chapters.reserve(indexedMetadata.chapters.size());
                         std::ranges::transform(indexedMetadata.chapters, std::back_inserter(item.metadata.chapters),
                                                [](const ChapterMarker& chapter) {
@@ -620,6 +681,7 @@ void CompanionSyncManager::handleBooksList() {
                         reading.remainingWords =
                             indexHeader.wordCount > wordIndex + 1 ? indexHeader.wordCount - wordIndex - 1 : 0;
                         reading.estimatedMinutes = wpm == 0 ? 0 : (reading.remainingWords + wpm - 1) / wpm;
+                        reading.languageFonts = std::move(overrides.languageFonts);
                         if (const ChapterMarker* chapter = indexedMetadata.chapterAt(wordIndex)) {
                             reading.currentChapter =
                                 api::CurrentChapter{static_cast<uint32_t>(chapter - indexedMetadata.chapters.data()
@@ -651,10 +713,9 @@ void CompanionSyncManager::handleSettings() {
         return;
     }
 
-    FontCatalog fontCatalog;
-    fontCatalog.loadFromSd();
+    fontCatalog_.loadFromSd();
     ThemeStore themeStore;
-    themeStore.loadFromSd(fontCatalog, settingsStore_.settings().reading.typography);
+    themeStore.loadFromSd();
 
     const String body = server_.arg("plain");
     if (body.length() > settings::kMaxSettingsBytes) {
@@ -673,7 +734,7 @@ void CompanionSyncManager::handleSettings() {
                   "interface.selectedThemeId");
         return;
     }
-    if (fontCatalog.find(decoded->reading.typography.fontId.c_str()) == nullptr) {
+    if (!fontCatalog_.find(decoded->reading.typography.fontId.c_str())) {
         sendError(422, "invalid_setting", "fontId does not match an available font", "reading.typography.fontId");
         return;
     }
@@ -815,10 +876,8 @@ void CompanionSyncManager::handleBooks() {
 
 void CompanionSyncManager::handleThemes() {
     if (server_.method() == HTTP_GET) {
-        FontCatalog fonts;
-        fonts.loadFromSd();
         ThemeStore store;
-        store.loadFromSd(fonts, settingsStore_.settings().reading.typography);
+        store.loadFromSd();
 
         api::ThemesResponse response;
         response.themes.reserve(store.themes().size());
@@ -909,13 +968,21 @@ void CompanionSyncManager::handleThemes() {
 
 void CompanionSyncManager::handleFonts() {
     if (server_.method() == HTTP_GET) {
-        FontCatalog catalog;
-        catalog.loadFromSd();
+        fontCatalog_.loadFromSd();
 
         api::FontsResponse response;
-        response.fonts.reserve(catalog.families().size());
-        std::ranges::transform(catalog.families(), std::back_inserter(response.fonts), [](const auto& family) {
-            return api::FontSummary{family.id, family.label};
+        response.fonts.reserve(fontCatalog_.families().size());
+        std::ranges::transform(fontCatalog_.families(), std::back_inserter(response.fonts), [](const auto& family) {
+            api::FontSummary summary{.id = family.id,
+                                     .name = family.label,
+                                     .scriptMask = family.scriptMask,
+                                     .shaping = family.shaping};
+            for (size_t offset = 0; offset < family.locales.size();) {
+                const std::string_view locale{family.locales.data() + offset};
+                summary.locales.emplace_back(locale);
+                offset += locale.size() + 1;
+            }
+            return summary;
         });
         sendData(server_, jsonBuffer_, 200, response);
         return;
@@ -949,11 +1016,11 @@ void CompanionSyncManager::handleFonts() {
         Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
-        sendError(422, "invalid_size", "Font file must be between 1 byte and 2 MB", "file");
+        sendError(422, "invalid_size", "Font file must be between 1 byte and 64 MB", "file");
         return;
     }
 
-    auto validated = FontCatalog::validateFontFile({uploadTmpPath_.c_str(), uploadTmpPath_.length()});
+    auto validated = FontCatalog::validateFontFile(uploadTmpPath_);
     if (!validated) {
         Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         uploadTmpPath_ = "";
@@ -966,7 +1033,7 @@ void CompanionSyncManager::handleFonts() {
         Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
-        sendError(409, "already_exists", "Font size already exists", "size");
+        sendError(409, "already_exists", "Font family already exists", "family");
         return;
     }
 
@@ -984,8 +1051,180 @@ void CompanionSyncManager::handleFonts() {
     statusLine2_ = uploadFinalPath_.c_str();
     ESP_LOGI("sync", "font ready %s", uploadFinalPath_.c_str());
     sendData(server_, jsonBuffer_, 201, api::UploadResponse{uploadFinalPath_});
+    fontCatalog_.loadFromSd();
+    settingsChanged_ = true;
     uploadTmpPath_ = "";
     uploadFinalPath_ = "";
+}
+
+void CompanionSyncManager::handleLocales() {
+    localeCatalog_ = locales::scanInstalled(Board::Storage::filesystem());
+    api::LocalesResponse response;
+    response.locales.reserve(localeCatalog_.packs.size());
+    std::ranges::transform(localeCatalog_.packs, std::back_inserter(response.locales), [](const auto& pack) {
+        const auto& manifest = pack.manifest;
+        return api::LocaleSummary{
+            .id = manifest.id,
+            .version = manifest.version,
+            .locale = manifest.locale,
+            .nativeName = manifest.nativeName,
+            .englishName = manifest.englishName,
+            .direction = std::string{locales::toString(manifest.direction)},
+            .translationStatus = std::string{locales::toString(manifest.translationStatus)},
+            .scriptMask = pack.scriptMask,
+            .requiredCapabilities = manifest.requiredCapabilities,
+            .scripts = manifest.scripts,
+        };
+    });
+    response.rejected.reserve(localeCatalog_.rejected.size());
+    std::ranges::transform(localeCatalog_.rejected, std::back_inserter(response.rejected), [](const auto& issue) {
+        return api::LocaleIssue{.id = issue.id, .reason = issue.reason};
+    });
+    sendData(server_, jsonBuffer_, 200, response);
+}
+
+void CompanionSyncManager::handleLocaleStage() {
+    const String id = server_.pathArg(0);
+    auto started = locales::beginStaging(Board::Storage::filesystem(), {id.c_str(), id.length()});
+    if (!started) {
+        sendError(started.error() == "invalid pack ID" ? 400 : 500, "staging_failed", started.error(), "id");
+        return;
+    }
+    statusLine1_ = "Locale staging";
+    statusLine2_ = id.c_str();
+    sendData(server_, jsonBuffer_, 201, api::IdResponse{std::string{id.c_str()}});
+}
+
+void CompanionSyncManager::handleLocaleFile() {
+    if (uploadFile_)
+        uploadFile_.close();
+    const auto resetUpload = [this] {
+        uploadError_.clear();
+        uploadTmpPath_.clear();
+        uploadFinalPath_.clear();
+    };
+    if (!uploadError_.empty()) {
+        if (!uploadTmpPath_.empty())
+            Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
+        const std::string error = uploadError_;
+        resetUpload();
+        sendError(422, "invalid_pack_file", error, "file");
+        return;
+    }
+    if (uploadTmpPath_.empty() || uploadFinalPath_.empty()) {
+        resetUpload();
+        sendError(400, "missing_upload", "Locale-pack file is required", "file");
+        return;
+    }
+    auto replaced = replaceUploadedFile(uploadTmpPath_, uploadFinalPath_);
+    if (!replaced) {
+        Logger::failure("sync", "stage locale file", uploadTmpPath_.c_str(), uploadFinalPath_.c_str(),
+                        replaced.error());
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
+        resetUpload();
+        sendError(500, "storage_error", "Locale-pack file could not be staged");
+        return;
+    }
+    const std::string path = uploadFinalPath_;
+    statusLine1_ = "Locale file received";
+    statusLine2_ = path.c_str();
+    resetUpload();
+    sendData(server_, jsonBuffer_, 201, api::UploadResponse{path});
+}
+
+void CompanionSyncManager::handleLocaleFileUpload() {
+    HTTPUpload& upload = server_.upload();
+    if (upload.status == UPLOAD_FILE_START) {
+        if (uploadFile_)
+            uploadFile_.close();
+        uploadError_.clear();
+        uploadTmpPath_.clear();
+        uploadFinalPath_.clear();
+
+        const String id = server_.pathArg(0);
+        const String relativePath = server_.arg("path");
+        auto target = locales::prepareStagedFile(Board::Storage::filesystem(), {id.c_str(), id.length()},
+                                                   {relativePath.c_str(), relativePath.length()});
+        if (!target) {
+            uploadError_ = target.error();
+            return;
+        }
+        uploadFinalPath_ = std::move(*target);
+        uploadTmpPath_ = uploadFinalPath_ + ".uploading";
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
+        uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_.c_str(), FILE_WRITE);
+        if (!uploadFile_) {
+            uploadError_ = "could not create the staged file";
+            return;
+        }
+        statusLine1_ = "Receiving locale file";
+        statusLine2_ = relativePath.c_str();
+        return;
+    }
+
+    if (upload.status == UPLOAD_FILE_WRITE) {
+        if (!uploadError_.empty() || !uploadFile_)
+            return;
+        const size_t maximum = uploadFinalPath_.ends_with("/manifest.toml") ? locales::kMaximumManifestBytes
+                                                                            : locales::kMaximumAssetBytes;
+        if (static_cast<size_t>(upload.totalSize) + upload.currentSize > maximum) {
+            uploadError_ = "locale-pack file is too large";
+            uploadFile_.close();
+            Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
+            return;
+        }
+        if (uploadFile_.write(upload.buf, upload.currentSize) != upload.currentSize) {
+            uploadError_ = "locale-pack file write failed";
+            uploadFile_.close();
+            Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
+        }
+        return;
+    }
+
+    if (upload.status == UPLOAD_FILE_END) {
+        if (uploadFile_)
+            uploadFile_.close();
+        return;
+    }
+
+    if (upload.status == UPLOAD_FILE_ABORTED) {
+        if (uploadFile_)
+            uploadFile_.close();
+        if (!uploadTmpPath_.empty())
+            Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
+        uploadError_ = "upload aborted";
+    }
+}
+
+void CompanionSyncManager::handleLocaleActivate() {
+    const String id = server_.pathArg(0);
+    auto activated = locales::activateStaged(Board::Storage::filesystem(), {id.c_str(), id.length()});
+    if (!activated) {
+        const int status = activated.error().contains("another pack") ? 409
+                         : activated.error().contains("could not")    ? 500
+                                                                      : 422;
+        sendError(status, "activation_failed", activated.error(), "id");
+        return;
+    }
+    localeCatalog_ = locales::scanInstalled(Board::Storage::filesystem());
+    settingsChanged_ = true;
+    statusLine1_ = "Locale installed";
+    statusLine2_ = id.c_str();
+    sendData(server_, jsonBuffer_, 200, api::IdResponse{std::string{id.c_str()}});
+}
+
+void CompanionSyncManager::handleLocaleDelete() {
+    const String id = server_.pathArg(0);
+    auto removed = locales::removeInstalled(Board::Storage::filesystem(), {id.c_str(), id.length()});
+    if (!removed) {
+        sendError(removed.error() == "invalid pack ID" ? 400 : 500, "remove_failed", removed.error(), "id");
+        return;
+    }
+    localeCatalog_ = locales::scanInstalled(Board::Storage::filesystem());
+    settingsChanged_ = true;
+    statusLine1_ = "Locale removed";
+    statusLine2_ = id.c_str();
+    sendData(server_, jsonBuffer_, 200, api::DeleteResponse{std::string{id.c_str()}, true});
 }
 
 void CompanionSyncManager::handleFontUpload() {
@@ -1006,23 +1245,6 @@ void CompanionSyncManager::handleFontUpload() {
             return;
         }
 
-        const String sizeArg = server_.arg("size");
-        std::string sizeId{sizeArg.c_str(), sizeArg.length()};
-        std::ranges::transform(sizeId, sizeId.begin(), AsciiText::toLower);
-        const size_t sizeIndex = RFont4::sizeIndexForId(sizeId.c_str());
-        if (sizeIndex == RFont4::kSizeCount) {
-            uploadError_ = "Font size must be large, medium, or small";
-            return;
-        }
-
-        const String nameArg = server_.arg("name");
-        std::string filename = sanitizeFilename({nameArg.c_str(), nameArg.length()});
-        if (filename.empty()) {
-            filename = sanitizeFilename({upload.filename.c_str(), upload.filename.length()});
-        }
-        if (!RFont4::hasFontExtension(filename.c_str())) {
-            filename += RFont4::kExtension;
-        }
         const std::string familyPath = std::string{StoragePaths::kFontsPath} + "/" + family;
         if (!StorageFiles::ensureDirectory(StoragePaths::kFontsPath)
             || !StorageFiles::ensureDirectory(familyPath.c_str())) {
@@ -1030,9 +1252,9 @@ void CompanionSyncManager::handleFontUpload() {
             return;
         }
 
-        uploadFinalPath_ = std::string{StoragePaths::kFontsPath} + "/" + family + "/" + RFont4::sizeFilename(sizeIndex);
+        uploadFinalPath_ = familyPath + "/" + RFont4::kFilename;
         if (StorageFiles::fileExists(uploadFinalPath_.c_str())) {
-            uploadError_ = "Font size already exists";
+            uploadError_ = "Font asset already exists";
             return;
         }
         uploadTmpPath_ = uploadFinalPath_ + ".tmp";
@@ -1044,7 +1266,7 @@ void CompanionSyncManager::handleFontUpload() {
         }
         uploadError_ = "";
         statusLine1_ = "Receiving font";
-        statusLine2_ = (family + " " + RFont4::sizeId(sizeIndex)).c_str();
+        statusLine2_ = family.c_str();
         ESP_LOGI("sync", "font upload start %s", uploadFinalPath_.c_str());
         return;
     }
@@ -1163,6 +1385,84 @@ void CompanionSyncManager::handleBookPosition() {
     statusLine2_ = relativeLibraryName(path).c_str();
     sendData(server_, jsonBuffer_, 200,
              api::BookPositionResponse{*update->id, wordIndex, ReadingProgress::percent(wordIndex, header.wordCount)});
+}
+
+void CompanionSyncManager::handleBookLanguageFonts() {
+    const String body = server_.arg("plain");
+    if (body.length() > 2048) {
+        sendError(413, "payload_too_large", "Language font payload exceeds 2 KiB");
+        return;
+    }
+    auto update = api::decode<api::BookLanguageFontsUpdate>({body.c_str(), body.length()});
+    if (!update) {
+        sendError(400, "invalid_json", update.error().c_str());
+        return;
+    }
+    if (!update->id) {
+        sendError(400, "missing_field", "Book id is required", "id");
+        return;
+    }
+    if (update->languageFonts.size() > settings::kMaximumBookLanguages) {
+        sendError(422, "too_many_languages", "A book can configure at most 8 languages", "languageFonts");
+        return;
+    }
+
+    std::string path;
+    if (!resolveBookId(*update->id, path)) {
+        sendError(404, "book_not_found", "Book not found", "id");
+        return;
+    }
+    BookMetadata metadata;
+    IndexedBookStore::Header header;
+    if (!IndexedBook::readMetadata({path.c_str(), path.length()}, metadata, &header) || header.wordCount == 0) {
+        sendError(409, "index_unavailable", "Book must be indexed before configuring language fonts");
+        return;
+    }
+
+    std::vector<std::string_view> bookLanguages;
+    bookLanguages.reserve(metadata.textRuns.size() + 1);
+    const auto addLanguage = [&](std::string_view locale) {
+        if (!locale.empty() && std::ranges::find(bookLanguages, locale) == bookLanguages.end())
+            bookLanguages.push_back(locale);
+    };
+    addLanguage(metadata.locale);
+    for (const BookTextRun& run: metadata.textRuns)
+        addLanguage(run.locale);
+
+    fontCatalog_.loadFromSd();
+    for (size_t index = 0; index < update->languageFonts.size(); ++index) {
+        auto& selection = update->languageFonts[index];
+        auto locale = LocaleTag::normalize(selection.locale);
+        if (!locale || std::ranges::find(bookLanguages, *locale) == bookLanguages.end()) {
+            sendError(422, "invalid_language", "Language is not present in this book", "languageFonts");
+            return;
+        }
+        selection.locale = std::move(*locale);
+        if (std::ranges::find(update->languageFonts.begin(), update->languageFonts.begin() + index, selection.locale,
+                              &settings::LanguageFont::locale)
+            != update->languageFonts.begin() + index) {
+            sendError(422, "duplicate_language", "Each language can select one font", "languageFonts");
+            return;
+        }
+        const auto family = fontCatalog_.find(selection.fontId);
+        const uint32_t requiredScripts = metadata.scriptsForLocale(selection.locale);
+        if (!family || !family->get().usableFor(selection.locale, requiredScripts)) {
+            sendError(422, "incompatible_font", "Font does not support this language", "languageFonts");
+            return;
+        }
+        selection.fontId = family->get().id;
+    }
+
+    auto written = ReadingProgress::writeBookLanguageFonts(
+        path, {header.sourceSize, header.sourceFingerprint, header.wordCount}, std::move(update->languageFonts));
+    if (!written) {
+        Logger::failure("sync", "save language fonts", StoragePaths::bookStatePathFor(path).c_str(), written.error());
+        sendError(500, "storage_error", "Language font choices could not be saved");
+        return;
+    }
+    statusLine1_ = "Language fonts saved";
+    statusLine2_ = relativeLibraryName(path).c_str();
+    sendData(server_, jsonBuffer_, 200, api::IdResponse{*update->id});
 }
 
 void CompanionSyncManager::handleBookUpload() {
@@ -1399,16 +1699,17 @@ CompanionSyncManager::RsvpMetadata CompanionSyncManager::readRsvpMetadata(std::s
 }
 
 bool CompanionSyncManager::progressForPath(std::string_view path, uint32_t sourceSize, uint32_t sourceFingerprint,
-                                           uint32_t wordCount, uint32_t& wordIndex, uint8_t& percent) {
+                                           uint32_t wordCount, uint32_t& wordIndex, uint8_t& percent,
+                                           settings::ReadingOverrides& overrides) {
     if (wordCount <= 1) {
         return false;
     }
 
-    const auto savedWordIndex =
-        ReadingProgress::readBookStatePosition(path, {sourceSize, sourceFingerprint, wordCount});
-    if (savedWordIndex) {
-        wordIndex = *savedWordIndex;
-        percent = ReadingProgress::percent(*savedWordIndex, wordCount);
+    const auto state = ReadingProgress::readBookState(path, {sourceSize, sourceFingerprint, wordCount});
+    if (state) {
+        wordIndex = state->wordIndex;
+        percent = ReadingProgress::percent(wordIndex, wordCount);
+        overrides = state->overrides;
         return true;
     }
 

@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <FS.h>
+#include <array>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -23,6 +24,12 @@ public:
         uint32_t paragraphsOffset = 0;
         uint32_t chaptersOffset = 0;
         uint32_t dataSize = 0;
+        uint32_t textRunCount = 0;
+        uint32_t textRunsOffset = 0;
+        uint32_t scriptMask = 0;
+        uint32_t requiredCapabilities = 0;
+        std::array<char, 36> locale{};
+        uint8_t baseDirection = 0;
     };
 
     struct __attribute__((packed)) WordRecord {
@@ -36,8 +43,15 @@ public:
         char title[64] = {};
     };
 
+    struct __attribute__((packed)) TextRunRecord {
+        uint32_t wordIndex = 0;
+        uint32_t scriptMask = 0;
+        std::array<char, 36> locale{};
+        uint8_t direction = 0;
+    };
+
     static constexpr uint32_t kMagic = 0x58444952UL; // RIDX
-    static constexpr uint32_t kVersion = 6;
+    static constexpr uint32_t kVersion = 9;
     static constexpr size_t kWordCacheSize = 256;
 
     IndexedBookStore() = default;

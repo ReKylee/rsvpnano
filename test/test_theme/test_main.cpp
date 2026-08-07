@@ -68,11 +68,10 @@ progressTrack = "#707070"
 void setUp() {}
 void tearDown() {}
 
-void test_parses_named_colors_and_typography() {
+void test_parses_named_colors_and_ignores_legacy_typography() {
     const auto theme = parseValidTheme();
     TEST_ASSERT_EQUAL_STRING("valid", theme.id.c_str());
     TEST_ASSERT_EQUAL_STRING("Valid Theme", theme.definition.name.c_str());
-    TEST_ASSERT_EQUAL_STRING("atkinson", theme.definition.typography.fontId.c_str());
     TEST_ASSERT_EQUAL_UINT16(0x0000, theme.definition.colors.background.value);
     TEST_ASSERT_EQUAL_UINT16(0xFFFF, theme.definition.colors.foreground.value);
     TEST_ASSERT_EQUAL_UINT16(0xF800, theme.definition.colors.accent.value);
@@ -82,7 +81,7 @@ void test_round_trip_is_canonical_toml() {
     const auto original = parseValidTheme();
     auto encoded = ui::themes::encodeToml(original.definition);
     TEST_ASSERT_TRUE_MESSAGE(encoded.has_value(), encoded ? "" : encoded.error().message.c_str());
-    TEST_ASSERT_NOT_EQUAL(std::string::npos, encoded->find("[typography]"));
+    TEST_ASSERT_EQUAL(std::string::npos, encoded->find("[typography]"));
     TEST_ASSERT_NOT_EQUAL(std::string::npos, encoded->find("[colors]"));
     TEST_ASSERT_NOT_EQUAL(std::string::npos, encoded->find("\"#FF0000\""));
     auto decoded = ui::themes::decodeToml(*encoded, original.id);
@@ -90,14 +89,9 @@ void test_round_trip_is_canonical_toml() {
     TEST_ASSERT_TRUE(original.definition == decoded->definition);
 }
 
-void test_missing_fields_retain_application_defaults() {
-    settings::TypographySettings defaults;
-    defaults.fontId = "application-font";
-    defaults.tracking = 2;
-    auto theme = ui::themes::decodeToml("name = \"Sparse\"\n", "sparse", defaults);
+void test_missing_fields_retain_color_defaults() {
+    auto theme = ui::themes::decodeToml("name = \"Sparse\"\n", "sparse");
     TEST_ASSERT_TRUE_MESSAGE(theme.has_value(), theme ? "" : theme.error().message.c_str());
-    TEST_ASSERT_EQUAL_STRING("application-font", theme->definition.typography.fontId.c_str());
-    TEST_ASSERT_EQUAL_INT(2, theme->definition.typography.tracking);
     TEST_ASSERT_EQUAL_UINT16(0xFFFF, theme->definition.colors.foreground.value);
 }
 
@@ -157,9 +151,9 @@ void test_theme_catalog_references_existing_files() {
 
 int main() {
     UNITY_BEGIN();
-    RUN_TEST(test_parses_named_colors_and_typography);
+    RUN_TEST(test_parses_named_colors_and_ignores_legacy_typography);
     RUN_TEST(test_round_trip_is_canonical_toml);
-    RUN_TEST(test_missing_fields_retain_application_defaults);
+    RUN_TEST(test_missing_fields_retain_color_defaults);
     RUN_TEST(test_rejects_bad_color_transactionally);
     RUN_TEST(test_ignores_unknown_key);
     RUN_TEST(test_theme_id_from_path);

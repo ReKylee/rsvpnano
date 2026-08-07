@@ -7,11 +7,15 @@
 #include <string>
 #include <string_view>
 
+#include "fonts/FontCatalog.h"
+#include "locales/LocaleCatalog.h"
 #include "settings/SettingsStore.h"
 
 class CompanionSyncManager {
 public:
-    explicit CompanionSyncManager(settings::SettingsStore& settingsStore) : settingsStore_(settingsStore) {}
+    CompanionSyncManager(settings::SettingsStore& settingsStore, locales::Catalog& localeCatalog,
+                         FontCatalog& fontCatalog)
+        : settingsStore_(settingsStore), localeCatalog_(localeCatalog), fontCatalog_(fontCatalog) {}
 
     bool begin();
     bool update();
@@ -46,19 +50,26 @@ private:
     void handleFocusTimers();
     void handleBookDelete();
     void handleBookPosition();
+    void handleBookLanguageFonts();
     void handleBooks();
     void handleBookUpload();
     void handleThemes();
     void handleThemeUpload();
     void handleFonts();
     void handleFontUpload();
+    void handleLocales();
+    void handleLocaleStage();
+    void handleLocaleFile();
+    void handleLocaleFileUpload();
+    void handleLocaleActivate();
+    void handleLocaleDelete();
     void handleNotFound();
     void sendError(int status, const char* code, std::string_view message, const char* field = nullptr);
     std::string deviceSuffix() const;
     std::string sanitizeFilename(std::string_view name) const;
     RsvpMetadata readRsvpMetadata(std::string_view path) const;
     bool progressForPath(std::string_view path, uint32_t sourceSize, uint32_t sourceFingerprint, uint32_t wordCount,
-                         uint32_t& wordIndex, uint8_t& percent);
+                         uint32_t& wordIndex, uint8_t& percent, settings::ReadingOverrides& overrides);
     std::string bookIdForPath(std::string_view path) const;
     bool resolveBookId(std::string_view id, std::string& path) const;
     void finishUpload(bool success);
@@ -71,6 +82,8 @@ private:
     std::string networkSsid_;
     std::string jsonBuffer_;
     settings::SettingsStore& settingsStore_;
+    locales::Catalog& localeCatalog_;
+    FontCatalog& fontCatalog_;
     std::string statusLine1_ = "Idle";
     std::string statusLine2_;
     NetworkMode networkMode_ = NetworkMode::None;

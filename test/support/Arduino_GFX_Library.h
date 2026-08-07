@@ -80,6 +80,10 @@ public:
         cursorX = x;
         cursorY = y;
     }
+    virtual void draw16bitRGBBitmap(int16_t, int16_t, uint16_t*, int16_t, int16_t) {
+        ++writes;
+        ++bitmapWrites;
+    }
     virtual size_t write(uint8_t) {
         ++writes;
         ++textWrites;
@@ -91,6 +95,7 @@ public:
 
     int writes = 0;
     int textWrites = 0;
+    int bitmapWrites = 0;
     int transparentTextColors = 0;
     int opaqueTextColors = 0;
     uint8_t lastTextSize = 0;

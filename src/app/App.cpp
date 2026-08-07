@@ -65,17 +65,28 @@ void App::begin() {
     immediateUi_.setTouchSource({.surface = Board::Input::touchSurface(), .poll = &Input::pollTouch});
 
     storage_.begin();
-    if (auto result = settingsStore_.begin(storage_.mounted() ? &Board::Storage::filesystem() : nullptr); !result)
+    fs::FS* filesystem = storage_.mounted() ? &Board::Storage::filesystem() : nullptr;
+    migrateSettingsLocale();
+    if (filesystem != nullptr)
+        migrateSettingsLocale(*filesystem);
+    if (auto result = settingsStore_.begin(filesystem); !result)
         ESP_LOGW("settings", "startup warning: %s", result.error().message.c_str());
     migrateLegacyStorage();
+    localeCatalog_ = filesystem == nullptr ? locales::Catalog{} : locales::scanInstalled(*filesystem);
+    for (const auto& issue: localeCatalog_.rejected)
+        ESP_LOGW("languages", "rejected %s: %s", issue.id.c_str(), issue.reason.c_str());
+    reloadUiAssets();
     readerScreen_.fonts.loadFromSd();
     auto& deviceSettings = settingsStore_.settings();
-    interfaceScreen_.begin(immediateUi_, deviceSettings.interface, deviceSettings.reading.typography,
-                           readerScreen_.fonts, &Board::Display::setBrightness);
+    interfaceScreen_.begin(immediateUi_, deviceSettings.interface, localeCatalog_,
+                           &Board::Display::setBrightness);
     Board::Power::updateBattery(battery_, bootMs_, true);
     readerScreen_.begin(interfaceScreen_.themes.selected());
     networkScreen_.begin(settingsStore_);
-    focusScreen_.begin(storage_.mounted() ? &Board::Storage::filesystem() : nullptr);
+    if (storage_.mounted())
+        focusScreen_.begin(Board::Storage::filesystem());
+    else
+        focusScreen_.begin();
     readerScreen_.loadInitialBook(immediateUi_, storage_, prefs_, bootMs_);
     libraryScreen_.invalidate();
 }
@@ -206,9 +217,12 @@ void App::renderScreen(uint32_t nowMs) {
     }
     case screens::Screen::InterfaceSettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        const std::string locale = settingsStore_.settings().interface.locale;
         if (interfaceScreen_.draw(immediateUi_, settingsStore_.settings().interface, kStandbyMs,
                                   &Board::Display::setBrightness, screen_)) {
             settingsStore_.acceptChanges();
+            if (locale != settingsStore_.settings().interface.locale)
+                reloadUiAssets();
             readerScreen_.applyTheme(interfaceScreen_.themes.selected());
         }
         break;
@@ -221,9 +235,18 @@ void App::renderScreen(uint32_t nowMs) {
     }
     case screens::Screen::TypographySettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        if (screens::typographySettings(immediateUi_, readerScreen_.session.state.bookTypographyOverride,
-                                        interfaceScreen_.themes.selected().definition.typography, readerScreen_.fonts,
-                                        screen_)) {
+        if (screens::typographySettings(immediateUi_, settingsStore_.settings().reading.typography,
+                                        readerScreen_.fonts, screen_)) {
+            settingsStore_.acceptChanges();
+            readerScreen_.refreshTypography();
+        }
+        break;
+    }
+    case screens::Screen::BookFonts: {
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        if (screens::bookFonts(immediateUi_, readerScreen_.session.metadata,
+                               readerScreen_.session.state.overrides, settingsStore_.settings().reading.typography,
+                               readerScreen_.fonts, screen_)) {
             ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
             readerScreen_.refreshTypography();
         }
@@ -434,6 +457,8 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
                        || screen_ == screens::Screen::PacingSettings || screen_ == screens::Screen::TypographySettings
                        || screen_ == screens::Screen::ReaderSettings || screen_ == screens::Screen::NetworkSettings) {
                 screen_ = screens::Screen::Settings;
+            } else if (screen_ == screens::Screen::BookFonts) {
+                screen_ = screens::Screen::Read;
             } else if (screen_ == screens::Screen::FocusNameEdit) {
                 screen_ = screens::Screen::FocusEditor;
             } else if (screen_ == screens::Screen::FocusEditor) {
@@ -627,8 +652,8 @@ void App::runBookOpen(size_t index, uint32_t nowMs) {
     statusUntilMs_ = 0;
     readerScreen_.prepareBookOpen(prefs_, nowMs);
     if (!startBackgroundJob(JobKind::Book))
-        showTransientStatus(immediateUi_.text(UiText::BookFailed), jobBookName_,
-                            immediateUi_.text(UiText::CheckSdCard), 1200, screens::Screen::Library);
+        showTransientStatus(immediateUi_.text(UiText::BookFailed), jobBookName_, immediateUi_.text(UiText::CheckSdCard),
+                            1200, screens::Screen::Library);
 }
 
 void App::enterUsbTransfer(uint32_t nowMs) {
@@ -658,13 +683,29 @@ void App::exitUsbTransfer(screens::Screen destination) {
 }
 
 void App::reloadSettings() {
+    if (storage_.mounted())
+        localeCatalog_ = locales::scanInstalled(Board::Storage::filesystem());
+    reloadUiAssets();
     readerScreen_.fonts.loadFromSd();
-    interfaceScreen_.begin(immediateUi_, settingsStore_.settings().interface,
-                           settingsStore_.settings().reading.typography, readerScreen_.fonts,
+    interfaceScreen_.begin(immediateUi_, settingsStore_.settings().interface, localeCatalog_,
                            &Board::Display::setBrightness);
     readerScreen_.begin(interfaceScreen_.themes.selected());
     networkScreen_.begin(settingsStore_);
     networkScreen_.startupCheckPending = false;
+}
+
+void App::reloadUiAssets() {
+    locales::UiAssets assets;
+    if (storage_.mounted()) {
+        auto loaded = locales::loadUiAssets(Board::Storage::filesystem(), localeCatalog_,
+                                              settingsStore_.settings().interface.locale,
+                                              static_cast<size_t>(UiText::Count));
+        if (loaded)
+            assets = std::move(*loaded);
+        else
+            ESP_LOGW("languages", "selected UI pack rejected: %s", loaded.error().c_str());
+    }
+    immediateUi_.setLanguageAssets(std::move(assets));
 }
 
 void App::runOtaCheck(bool install) {

@@ -1,14 +1,5 @@
 name = "Dracula"
 
-[typography]
-fontId = "literata"
-fontSizeIndex = 0
-focusHighlight = true
-tracking = 0
-anchor = 30
-guideWidth = 30
-guideGap = 5
-
 [colors]
 background = "#282A36"
 foreground = "#F8F8F2"

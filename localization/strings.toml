@@ -13,33 +13,58 @@ language_order = [
 	"Russian",
 ]
 
+# Add ui_font = { source = "localization/fonts/<locale>.u8g2", license = "..." }
+# to a language only when the compiled UI font does not cover it.
+# Reader capability is installed independently through RFont4 files under /fonts.
+
 [languages.English]
 code = "en"
 name = "English"
+scripts = ["Latn"]
+direction = "ltr"
+translation_status = "reviewed"
 
 [languages.Spanish]
 code = "es"
 name = "Español"
+scripts = ["Latn"]
+direction = "ltr"
+translation_status = "preview"
 
 [languages.French]
 code = "fr"
 name = "Français"
+scripts = ["Latn"]
+direction = "ltr"
+translation_status = "preview"
 
 [languages.German]
 code = "de"
 name = "Deutsch"
+scripts = ["Latn"]
+direction = "ltr"
+translation_status = "preview"
 
 [languages.Romanian]
 code = "ro"
 name = "Română"
+scripts = ["Latn"]
+direction = "ltr"
+translation_status = "preview"
 
 [languages.Polish]
 code = "pl"
 name = "Polski"
+scripts = ["Latn"]
+direction = "ltr"
+translation_status = "preview"
 
 [languages.Russian]
 code = "ru"
 name = "Русский"
+scripts = ["Cyrl"]
+direction = "ltr"
+translation_status = "preview"
 
 # Main menu
 [[strings]]

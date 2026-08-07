@@ -9,10 +9,12 @@
 using StoreHeader = IndexedBookStore::Header;
 using StoreWordRecord = IndexedBookStore::WordRecord;
 using StoreChapterRecord = IndexedBookStore::ChapterRecord;
+using StoreTextRunRecord = IndexedBookStore::TextRunRecord;
 
-static_assert(sizeof(StoreHeader) == 52, "RIDX header size changed");
+static_assert(sizeof(StoreHeader) == 108, "RIDX header size changed");
 static_assert(sizeof(StoreWordRecord) == 6, "RIDX word record size changed");
 static_assert(sizeof(StoreChapterRecord) == 72, "RIDX chapter record size changed");
+static_assert(sizeof(StoreTextRunRecord) == 45, "RIDX text run record size changed");
 
 namespace {
 
@@ -41,16 +43,20 @@ namespace {
         uint32_t recordsEnd = 0;
         uint32_t paragraphsEnd = 0;
         uint32_t chaptersEnd = 0;
+        uint32_t textRunsEnd = 0;
         if (!checkedAdd(header.recordsOffset, recordsBytes, recordsEnd)
             || header.paragraphCount > std::numeric_limits<uint32_t>::max() / sizeof(uint32_t)
             || !checkedAdd(header.paragraphsOffset, header.paragraphCount * sizeof(uint32_t), paragraphsEnd)
             || header.chapterCount > std::numeric_limits<uint32_t>::max() / sizeof(StoreChapterRecord)
-            || !checkedAdd(header.chaptersOffset, header.chapterCount * sizeof(StoreChapterRecord), chaptersEnd)) {
+            || !checkedAdd(header.chaptersOffset, header.chapterCount * sizeof(StoreChapterRecord), chaptersEnd)
+            || header.textRunCount > std::numeric_limits<uint32_t>::max() / sizeof(StoreTextRunRecord)
+            || !checkedAdd(header.textRunsOffset, header.textRunCount * sizeof(StoreTextRunRecord), textRunsEnd)) {
             return false;
         }
 
         return header.recordsOffset >= sizeof(StoreHeader) && header.paragraphsOffset == recordsEnd
-            && header.chaptersOffset == paragraphsEnd && chaptersEnd <= indexBytes && header.dataSize <= dataBytes;
+            && header.chaptersOffset == paragraphsEnd && header.textRunsOffset == chaptersEnd
+            && textRunsEnd <= indexBytes && header.dataSize <= dataBytes;
     }
 
 } // namespace

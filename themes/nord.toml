@@ -1,14 +1,5 @@
 name = "Nord"
 
-[typography]
-fontId = "literata"
-fontSizeIndex = 0
-focusHighlight = true
-tracking = 0
-anchor = 30
-guideWidth = 30
-guideGap = 5
-
 [colors]
 background = "#2E3440"
 foreground = "#ECEFF4"

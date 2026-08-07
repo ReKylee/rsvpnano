@@ -12,6 +12,9 @@ namespace fs {
 
 namespace settings {
 
+    inline constexpr char kSettingsNvsNamespace[] = "rsvp_cfg2";
+    inline constexpr char kSettingsNvsKey[] = "settings";
+
     class SettingsStore {
     public:
         ~SettingsStore();

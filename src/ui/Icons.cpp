@@ -17,6 +17,9 @@ namespace ui {
         case Icon::Device:
             drawDeviceIcon(rect, ink);
             break;
+        case Icon::Language:
+            drawLanguageIcon(rect, ink);
+            break;
         case Icon::Hourglass:
             drawHourglassIcon(rect, ink);
             break;
@@ -65,6 +68,14 @@ namespace ui {
         const int16_t y = static_cast<int16_t>(rect.y + rect.h / 2 - 10);
         gfx_.drawRoundRect(x, y, 16, 20, 3, ink);
         gfx_.fillRect(static_cast<int16_t>(cx - 2), static_cast<int16_t>(y + 16), 4, 1, ink);
+    }
+
+    void Context::drawLanguageIcon(Rect rect, uint16_t ink) {
+        const int16_t cx = static_cast<int16_t>(rect.x + rect.w / 2);
+        const int16_t cy = static_cast<int16_t>(rect.y + rect.h / 2);
+        gfx_.drawCircle(cx, cy, 9, ink);
+        gfx_.drawFastVLine(cx, static_cast<int16_t>(cy - 8), 17, ink);
+        gfx_.drawFastHLine(static_cast<int16_t>(cx - 8), cy, 17, ink);
     }
 
     void Context::drawHourglassIcon(Rect rect, uint16_t ink) {

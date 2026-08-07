@@ -11,12 +11,15 @@
 #include <system_error>
 #include "board/BoardStorage.h"
 
+#include "text/LocaleTag.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 #include "storage/index/BufferedWriter.h"
 #include "storage/library/EpubCache.h"
 #include "text/RsvpDirectives.h"
 #include "text/RsvpTokenizer.h"
+#include "text/UnicodeText.h"
+#include "text/Utf8Text.h"
 
 #ifndef RSVP_ON_DEVICE_EPUB_CONVERSION
 #define RSVP_ON_DEVICE_EPUB_CONVERSION 0
@@ -27,6 +30,7 @@ namespace IndexedBook {
     using IndexHeader = IndexedBookStore::Header;
     using WordRecord = IndexedBookStore::WordRecord;
     using ChapterRecord = IndexedBookStore::ChapterRecord;
+    using TextRunRecord = IndexedBookStore::TextRunRecord;
 
     namespace {
 
@@ -48,6 +52,8 @@ namespace IndexedBook {
             BookMetadata* metadata = nullptr;
             uint32_t wordCount = 0;
             uint32_t dataSize = 0;
+            std::string locale;
+            BookDirection direction = BookDirection::automatic;
             bool failed = false;
             const char* failure = "";
         };
@@ -69,9 +75,11 @@ namespace IndexedBook {
             uint32_t recordsEnd = 0;
             uint32_t paragraphsEnd = 0;
             uint32_t chaptersEnd = 0;
+            uint32_t textRunsEnd = 0;
             if (header.wordCount > std::numeric_limits<uint32_t>::max() / sizeof(WordRecord)
                 || header.paragraphCount > std::numeric_limits<uint32_t>::max() / sizeof(uint32_t)
-                || header.chapterCount > std::numeric_limits<uint32_t>::max() / sizeof(ChapterRecord)) {
+                || header.chapterCount > std::numeric_limits<uint32_t>::max() / sizeof(ChapterRecord)
+                || header.textRunCount > std::numeric_limits<uint32_t>::max() / sizeof(TextRunRecord)) {
                 return false;
             }
 
@@ -79,8 +87,23 @@ namespace IndexedBook {
             return checkedAdd(header.recordsOffset, recordsBytes, recordsEnd)
                 && checkedAdd(header.paragraphsOffset, header.paragraphCount * sizeof(uint32_t), paragraphsEnd)
                 && checkedAdd(header.chaptersOffset, header.chapterCount * sizeof(ChapterRecord), chaptersEnd)
+                && checkedAdd(header.textRunsOffset, header.textRunCount * sizeof(TextRunRecord), textRunsEnd)
                 && header.recordsOffset >= sizeof(IndexHeader) && header.paragraphsOffset == recordsEnd
-                && header.chaptersOffset == paragraphsEnd && chaptersEnd <= indexBytes && header.dataSize <= dataBytes;
+                && header.chaptersOffset == paragraphsEnd && header.textRunsOffset == chaptersEnd
+                && textRunsEnd <= indexBytes && header.dataSize <= dataBytes
+                && header.baseDirection <= static_cast<uint8_t>(BookDirection::rtl);
+        }
+
+        template<size_t Size>
+        void storeFixedString(std::array<char, Size>& destination, std::string_view value) {
+            const size_t length = std::min(value.size(), Size - 1);
+            std::ranges::copy(value.substr(0, length), destination.begin());
+        }
+
+        template<size_t Size>
+        std::string loadFixedString(const std::array<char, Size>& source) {
+            const auto end = std::ranges::find(source, '\0');
+            return {source.begin(), end};
         }
 
         uint32_t fnv1aUpdate(uint32_t hash, const uint8_t* data, size_t bytes) {
@@ -181,6 +204,31 @@ namespace IndexedBook {
             buildContext.metadata->paragraphStarts.push_back(wordIndex);
         }
 
+        void addTextRun(IndexedBuildContext& buildContext) {
+            if (buildContext.metadata == nullptr)
+                return;
+            BookTextRun run{.wordIndex = buildContext.wordCount,
+                            .locale = buildContext.locale,
+                            .direction = buildContext.direction};
+            if (!buildContext.metadata->textRuns.empty()
+                && buildContext.metadata->textRuns.back().wordIndex == run.wordIndex) {
+                buildContext.metadata->textRuns.back() = std::move(run);
+            } else {
+                buildContext.metadata->textRuns.push_back(std::move(run));
+            }
+        }
+
+        uint32_t detectTokenRequirements(std::string_view token, BookMetadata& metadata) {
+            uint32_t scripts = 0;
+            uint32_t codepoint = 0;
+            while (Utf8Text::next(token, codepoint)) {
+                scripts |= UnicodeText::scriptMask(codepoint);
+                metadata.requiredCapabilities |= UnicodeText::capabilityMask(codepoint);
+            }
+            metadata.scriptMask |= scripts;
+            return scripts;
+        }
+
         bool pushWord(std::string token, IndexedBuildContext& buildContext, RsvpText::ParseStats* stats) {
             if (token.empty() || (!RsvpText::hasReadableText(token) && token != "-")) {
                 return true;
@@ -202,6 +250,10 @@ namespace IndexedBook {
                 buildContext.failure = "Memory limit reached";
                 return false;
             }
+
+            if (buildContext.metadata != nullptr && buildContext.metadata->textRuns.empty()
+                && !buildContext.locale.empty())
+                addTextRun(buildContext);
 
             WordRecord record;
             record.offset = buildContext.dataSize;
@@ -228,6 +280,9 @@ namespace IndexedBook {
             buildContext.dataSize += static_cast<uint32_t>(token.length());
             ++buildContext.wordCount;
             if (buildContext.metadata != nullptr) {
+                const uint32_t scripts = detectTokenRequirements(token, *buildContext.metadata);
+                if (!buildContext.metadata->textRuns.empty())
+                    buildContext.metadata->textRuns.back().scriptMask |= scripts;
                 buildContext.metadata->wordCount = buildContext.wordCount;
             }
             return true;
@@ -300,6 +355,34 @@ namespace IndexedBook {
                 }
                 if (buildContext.metadata != nullptr && RsvpText::prefixHasBoundary(trimmed, "@author")) {
                     buildContext.metadata->author = RsvpText::directiveValue(trimmed, "@author");
+                    return true;
+                }
+                if (buildContext.metadata != nullptr && RsvpText::prefixHasBoundary(trimmed, "@language")) {
+                    const std::string value = RsvpText::directiveValue(trimmed, "@language");
+                    if (value == "auto") {
+                        buildContext.locale.clear();
+                    } else if (auto locale = LocaleTag::normalize(value)) {
+                        buildContext.locale = std::move(*locale);
+                        if (buildContext.wordCount == 0 && buildContext.metadata->locale.empty())
+                            buildContext.metadata->locale = buildContext.locale;
+                    } else {
+                        ESP_LOGW("storage-index", "ignoring invalid @language: %s", value.c_str());
+                        return true;
+                    }
+                    addTextRun(buildContext);
+                    return true;
+                }
+                if (buildContext.metadata != nullptr && RsvpText::prefixHasBoundary(trimmed, "@direction")) {
+                    const std::string value = RsvpText::directiveValue(trimmed, "@direction");
+                    const auto direction = bookDirection(value);
+                    if (!direction) {
+                        ESP_LOGW("storage-index", "ignoring invalid @direction: %s", value.c_str());
+                        return true;
+                    }
+                    buildContext.direction = *direction;
+                    if (buildContext.wordCount == 0)
+                        buildContext.metadata->baseDirection = *direction;
+                    addTextRun(buildContext);
                     return true;
                 }
                 return true;
@@ -390,6 +473,19 @@ namespace IndexedBook {
             }
 
             metadata.wordCount = header.wordCount;
+            metadata.locale = loadFixedString(header.locale);
+            if (!metadata.locale.empty()) {
+                const auto normalized = LocaleTag::normalize(metadata.locale);
+                if (!normalized || *normalized != metadata.locale) {
+                    indexFile.close();
+                    metadata.clear();
+                    ESP_LOGW("storage-index", "index locale invalid: %s", indexPath.c_str());
+                    return false;
+                }
+            }
+            metadata.baseDirection = static_cast<BookDirection>(header.baseDirection);
+            metadata.scriptMask = header.scriptMask;
+            metadata.requiredCapabilities = header.requiredCapabilities;
             const RsvpText::RsvpDirectiveValues directives = RsvpText::readRsvpDirectiveValues(sourcePath);
             metadata.title = directives.title;
             metadata.author = directives.author;
@@ -442,6 +538,41 @@ namespace IndexedBook {
                     const uint32_t titleLength = std::min<uint32_t>(record.titleLength, sizeof(record.title));
                     marker.title.assign(record.title, titleLength);
                     metadata.chapters.push_back(marker);
+                }
+            }
+
+            if (header.textRunCount > 0) {
+                metadata.textRuns.reserve(header.textRunCount);
+                if (!indexFile.seek(header.textRunsOffset)) {
+                    indexFile.close();
+                    metadata.clear();
+                    ESP_LOGE("storage-index", "text run section seek failed: %s offset=%lu", indexPath.c_str(),
+                             static_cast<unsigned long>(header.textRunsOffset));
+                    return false;
+                }
+                for (uint32_t i = 0; i < header.textRunCount; ++i) {
+                    TextRunRecord record;
+                    if (!readExact(indexFile, &record, sizeof(record))) {
+                        indexFile.close();
+                        metadata.clear();
+                        ESP_LOGE("storage-index", "text run section read failed: %s item=%lu", indexPath.c_str(),
+                                 static_cast<unsigned long>(i));
+                        return false;
+                    }
+                    BookTextRun run{.wordIndex = record.wordIndex,
+                                    .locale = loadFixedString(record.locale),
+                                    .direction = static_cast<BookDirection>(record.direction),
+                                    .scriptMask = record.scriptMask};
+                    const auto normalized = LocaleTag::normalize(run.locale);
+                    if (run.wordIndex > header.wordCount || record.direction > static_cast<uint8_t>(BookDirection::rtl)
+                        || (!run.locale.empty() && (!normalized || *normalized != run.locale))) {
+                        indexFile.close();
+                        metadata.clear();
+                        ESP_LOGW("storage-index", "text run invalid: %s item=%lu", indexPath.c_str(),
+                                 static_cast<unsigned long>(i));
+                        return false;
+                    }
+                    metadata.textRuns.push_back(std::move(run));
                 }
             }
 
@@ -656,10 +787,16 @@ namespace IndexedBook {
                 header.wordCount = dataContext.wordCount;
                 header.paragraphCount = static_cast<uint32_t>(metadata.paragraphStarts.size());
                 header.chapterCount = static_cast<uint32_t>(metadata.chapters.size());
+                header.textRunCount = static_cast<uint32_t>(metadata.textRuns.size());
                 header.recordsOffset = sizeof(IndexHeader);
                 header.paragraphsOffset = header.recordsOffset + header.wordCount * sizeof(WordRecord);
                 header.chaptersOffset = header.paragraphsOffset + header.paragraphCount * sizeof(uint32_t);
+                header.textRunsOffset = header.chaptersOffset + header.chapterCount * sizeof(ChapterRecord);
                 header.dataSize = dataContext.dataSize;
+                header.scriptMask = metadata.scriptMask;
+                header.requiredCapabilities = metadata.requiredCapabilities;
+                storeFixedString(header.locale, metadata.locale);
+                header.baseDirection = static_cast<uint8_t>(metadata.baseDirection);
 
                 if (!dataWriter.flush()) {
                     ESP_LOGE("storage-index", "data sidecar flush failed: %s", tmpDataPath.c_str());
@@ -754,6 +891,19 @@ namespace IndexedBook {
                     }
                     if (!indexWriter.write(&record, sizeof(record))) {
                         ESP_LOGE("storage-index", "chapter table write failed: %s item=%u", tmpIndexPath.c_str(),
+                                 static_cast<unsigned int>(i));
+                        parseFailed = true;
+                    }
+                }
+
+                for (size_t i = 0; !parseFailed && i < metadata.textRuns.size(); ++i) {
+                    TextRunRecord record;
+                    record.wordIndex = static_cast<uint32_t>(metadata.textRuns[i].wordIndex);
+                    record.scriptMask = metadata.textRuns[i].scriptMask;
+                    storeFixedString(record.locale, metadata.textRuns[i].locale);
+                    record.direction = static_cast<uint8_t>(metadata.textRuns[i].direction);
+                    if (!indexWriter.write(&record, sizeof(record))) {
+                        ESP_LOGE("storage-index", "text run table write failed: %s item=%u", tmpIndexPath.c_str(),
                                  static_cast<unsigned int>(i));
                         parseFailed = true;
                     }

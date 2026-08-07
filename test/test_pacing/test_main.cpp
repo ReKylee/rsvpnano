@@ -2,6 +2,7 @@
 #include <vector>
 
 #include "reader/ReadingLoop.h"
+#include "text/RsvpTokenizer.h"
 #include "text/UnicodeText.h"
 
 static settings::ReadingSettings testSettings;
@@ -253,6 +254,49 @@ void test_unicode_classification_covers_supported_scripts(void) {
     TEST_ASSERT_TRUE(UnicodeText::isLetter(0x0167));
     TEST_ASSERT_EQUAL_HEX32(0x0451, UnicodeText::toLowercase(0x0401));
     TEST_ASSERT_TRUE(UnicodeText::isVowel(0x0451));
+    TEST_ASSERT_TRUE(UnicodeText::isLetter(0x65E5));
+    TEST_ASSERT_TRUE(UnicodeText::isLetter(0x3042));
+    TEST_ASSERT_TRUE(UnicodeText::isLetter(0x05D0));
+    TEST_ASSERT_TRUE(UnicodeText::isLetter(0x0627));
+    TEST_ASSERT_FALSE(UnicodeText::isLetter(0x060C));
+    TEST_ASSERT_FALSE(UnicodeText::isLetter(0x064E));
+    TEST_ASSERT_EQUAL_HEX32(UnicodeText::ScriptHan, UnicodeText::scriptMask(0x65E5));
+    TEST_ASSERT_EQUAL_HEX32(UnicodeText::CapabilityBidi | UnicodeText::CapabilityShaping,
+                            UnicodeText::capabilityMask(0x0627));
+    TEST_ASSERT_EQUAL_HEX32(UnicodeText::CapabilityMathSymbols, UnicodeText::capabilityMask(0x2211));
+    TEST_ASSERT_TRUE(UnicodeText::isUppercaseLetter(0x10400));
+    TEST_ASSERT_TRUE(UnicodeText::isLowercaseLetter(0x10428));
+    TEST_ASSERT_TRUE(UnicodeText::isDigit(0x0966));
+}
+
+void test_cjk_phrases_use_characters_per_minute(void) {
+    ReadingSession r = makeReader(300, {"吾輩", "猫"});
+    testSettings.pacing.punctuationDelayMs = 0;
+    TEST_ASSERT_EQUAL(settings::ReadingPacing::cjkPhrase, ReadingLoop::pacingMode(r));
+    TEST_ASSERT_EQUAL(400u, ReadingLoop::currentWordDurationMs(r, testSettings));
+
+    r.state.overrides.pacing = settings::ReadingPacing::words;
+    TEST_ASSERT_EQUAL(settings::ReadingPacing::words, ReadingLoop::pacingMode(r));
+    TEST_ASSERT_EQUAL(200u, ReadingLoop::currentWordDurationMs(r, testSettings));
+}
+
+void test_cjk_tokenizer_emits_small_punctuation_aware_phrases(void) {
+    std::vector<std::string> tokens;
+    size_t count = 0;
+    TEST_ASSERT_TRUE(RsvpText::appendLineWords(
+        "吾輩は猫である。名前はまだ無い。",
+        [&](const std::string& token) {
+            tokens.push_back(token);
+            ++count;
+            return true;
+        },
+        count, nullptr));
+
+    const std::vector<std::string> expected = {"吾輩", "は猫", "であ", "る。", "名前", "はま", "だ無", "い。"};
+    TEST_ASSERT_TRUE(tokens == expected);
+
+    ReadingSession r = makeReader(300, std::move(tokens));
+    TEST_ASSERT_EQUAL_STRING("吾輩は猫である。名前はまだ無い。", ReadingLoop::paragraphAt(r, 0).text.c_str());
 }
 
 void test_very_long_word_extra_tier(void) {
@@ -438,6 +482,8 @@ int main(void) {
     UNITY_BEGIN();
 
     RUN_TEST(test_wpm_base_interval);
+    RUN_TEST(test_cjk_phrases_use_characters_per_minute);
+    RUN_TEST(test_cjk_tokenizer_emits_small_punctuation_aware_phrases);
     RUN_TEST(test_wpm_clamped_low);
     RUN_TEST(test_wpm_clamped_high);
     RUN_TEST(test_adjust_wpm_steps_by_25);

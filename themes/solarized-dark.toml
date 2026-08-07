@@ -1,14 +1,5 @@
 name = "Solarized Dark"
 
-[typography]
-fontId = "literata"
-fontSizeIndex = 0
-focusHighlight = true
-tracking = 0
-anchor = 30
-guideWidth = 30
-guideGap = 5
-
 [colors]
 background = "#002B36"
 foreground = "#FDF6E3"

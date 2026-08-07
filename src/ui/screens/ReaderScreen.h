@@ -1,6 +1,10 @@
 #pragma once
 
 #include <Preferences.h>
+#include <functional>
+#include <optional>
+#include <span>
+#include <utility>
 #include "board/BoardPower.h"
 #include "fonts/AlphaFont.h"
 #include "fonts/FontCatalog.h"
@@ -9,6 +13,7 @@
 #include "settings/SettingsStore.h"
 #include "storage/index/IndexedBookStore.h"
 #include "storage/index/ReadingProgress.h"
+#include "text/BidiText.h"
 #include "ui/Ui.h"
 #include "ui/screens/PageReaderScreen.h"
 
@@ -40,8 +45,11 @@ namespace screens {
         void update(Preferences& preferences, uint32_t nowMs);
 
     private:
-        int focusIndex(std::string_view word) const;
+        int focusOffset(std::string_view word) const;
+        int16_t wordAdvance(std::span<const BidiText::Codepoint> word) const;
         void drawWord(std::string_view word, int16_t x, int16_t baseline, int focus, ui::Context& ui);
+        void drawWord(std::span<const BidiText::Codepoint> word, int16_t x, int16_t baseline,
+                      size_t wordOffset, int focus, ui::Context& ui);
         std::string phantomBefore(const ReadingSession& reader, uint8_t sizeIndex) const;
         std::string phantomAfter(const ReadingSession& reader, uint8_t sizeIndex) const;
         uint32_t frameSignature(std::string_view before, std::string_view word, std::string_view after,
@@ -62,13 +70,20 @@ namespace screens {
         void requestPause(Preferences& preferences, uint32_t nowMs);
         bool shouldFinishPause(uint32_t nowMs) const;
         void finishPause(Preferences& preferences, uint32_t nowMs);
+        size_t fontChoice(size_t wordIndex) const;
+        void activateFace(const FontCatalog::Face& face);
+        void refreshTypeface();
+        FontCatalog::Face pageTypeface(size_t wordIndex);
 
         Arduino_GFX& gfx_;
         mutable ui::fonts::AlphaTextRenderer<640> text_;
         settings::ReadingSettings& settings_;
-        const ui::fonts::AlphaFont* font_ = nullptr;
+        FontCatalog::Face face_;
+        size_t loadedWordIndex_ = SIZE_MAX;
+        size_t loadedFamilyIndex_ = SIZE_MAX;
+        uint8_t loadedFontSizeIndex_ = 0xFF;
         uint32_t fontRevision_ = 0;
-        settings::TypographySettings themeTypography_;
+        uint32_t typographyRevision_ = 0;
         settings::TypographySettings typography_;
         uint16_t background_ = 0;
         bool touching_ = false;
@@ -85,6 +100,10 @@ namespace screens {
         bool playLocked_ = false;
         bool pauseAtSentenceEndRequested_ = false;
         PageReader::State pageState_;
+        ReadingLoop::TextParagraph rsvpParagraph_;
+        BidiText::Analysis rsvpBidi_;
+        std::vector<BidiText::Codepoint> rsvpVisual_;
+        std::vector<ui::fonts::PositionedGlyph> rsvpGlyphs_;
         bool pagePreview_ = false;
         uint32_t paragraphTickMs_ = 0;
         int32_t paragraphRemainder_ = 0;

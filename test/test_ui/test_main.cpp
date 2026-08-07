@@ -1,13 +1,26 @@
 #include <unity.h>
 
+#include <array>
+#include <cstring>
+#include <fstream>
+#include <iterator>
+#include <span>
+#include <string>
+#include <vector>
+
+#include "fonts/AlphaFont.h"
+#include "fonts/UiFont6x9.h"
+#include "locales/LocalePack.h"
 #include "reader/ReadingLoop.h"
 #include "settings/SettingsRules.h"
+#include "text/UnicodeText.h"
 #include "text/Utf8Text.h"
 #include "ui/Localization.h"
 #include "ui/Ui.h"
 #include "ui/screens/PageReaderScreen.h"
 
 namespace {
+
 
     ui::TouchContact gContact;
     bool gTouchReadSucceeds;
@@ -25,6 +38,93 @@ namespace {
     ui::themes::Theme theme() {
         return ui::themes::defaultTheme();
     }
+
+    class FontRecordingGfx final : public Arduino_GFX {
+    public:
+        using Arduino_GFX::Arduino_GFX;
+
+        void setFont(const uint8_t* font) override {
+            lastFont = font;
+            ++fontSelections;
+        }
+
+        size_t write(uint8_t byte) override {
+            text.push_back(byte);
+            return Arduino_GFX::write(byte);
+        }
+
+        const uint8_t* externalFont = nullptr;
+        const uint8_t* lastFont = nullptr;
+        int fontSelections = 0;
+        std::vector<uint8_t> text;
+    };
+
+    void appendLe16(std::vector<uint8_t>& out, uint16_t value) {
+        out.push_back(static_cast<uint8_t>(value));
+        out.push_back(static_cast<uint8_t>(value >> 8U));
+    }
+
+    void appendLe32(std::vector<uint8_t>& out, uint32_t value) {
+        out.push_back(static_cast<uint8_t>(value));
+        out.push_back(static_cast<uint8_t>(value >> 8U));
+        out.push_back(static_cast<uint8_t>(value >> 16U));
+        out.push_back(static_cast<uint8_t>(value >> 24U));
+    }
+
+    locales::StringTable translatedChapters() {
+        constexpr std::string_view translation = "Capitulos externos";
+        const size_t count = static_cast<size_t>(UiText::Count);
+        std::vector<uint8_t> bytes{'R', 'S', 'L', '1'};
+        appendLe16(bytes, 1);
+        appendLe16(bytes, static_cast<uint16_t>(count));
+        appendLe32(bytes, translation.size());
+        uint32_t offset = 0;
+        for (size_t index = 0; index <= count; ++index) {
+            appendLe32(bytes, offset);
+            if (index == static_cast<size_t>(UiText::Chapters))
+                offset += translation.size();
+        }
+        bytes.insert(bytes.end(), translation.begin(), translation.end());
+        return *locales::decodeStringTable(std::move(bytes), count);
+    }
+
+    constexpr uint8_t kReaderBitmap[]{0xF0};
+    constexpr ui::fonts::AlphaGlyph kReaderGlyphs[]{
+        {' ', 0, 0, 0, 0, 0, 3, 0, 0, 0},
+        {'?', 0, 0, 1, 1, 1, 2, 0, -1, 0},
+        {'a', 0, 0, 1, 1, 1, 4, 0, -1, 0, 17},
+    };
+    constexpr ui::fonts::AlphaGlyphId kReaderGlyphIds[]{{17, 2}};
+    constexpr ui::fonts::AlphaFont kReaderFont{
+        .name = "test-reader",
+        .bitmap = kReaderBitmap,
+        .glyphs = kReaderGlyphs,
+        .glyphCount = std::size(kReaderGlyphs),
+        .yAdvance = 9,
+        .ascent = 7,
+        .descent = 2,
+        .wordInkTop = -1,
+        .wordInkBottom = -1,
+        .glyphIds = kReaderGlyphIds,
+        .glyphIdCount = std::size(kReaderGlyphIds),
+        .pixelsPerEm = 9,
+    };
+    constexpr ui::fonts::AlphaGlyph kWideReaderGlyphs[]{
+        {' ', 0, 0, 0, 0, 0, 8, 0, 0, 0},
+        {'?', 0, 0, 1, 1, 1, 20, 0, -1, 0},
+        {'a', 0, 0, 1, 1, 1, 20, 0, -1, 0},
+    };
+    constexpr ui::fonts::AlphaFont kWideReaderFont{
+        .name = "wide-reader",
+        .bitmap = kReaderBitmap,
+        .glyphs = kWideReaderGlyphs,
+        .glyphCount = std::size(kWideReaderGlyphs),
+        .yAdvance = 9,
+        .ascent = 7,
+        .descent = 2,
+        .wordInkTop = -1,
+        .wordInkBottom = -1,
+    };
 
 } // namespace
 
@@ -151,7 +251,6 @@ void test_tap_capture_tolerates_slow_release_just_outside() {
     context.beginFrame(1);
     TEST_ASSERT_FALSE(context.button(button, "Tap"));
     context.endFrame();
-
 }
 
 void test_tap_tolerates_one_coordinate_outlier() {
@@ -379,34 +478,139 @@ void test_layout_cursors_are_deterministic() {
     TEST_ASSERT_EQUAL_INT16(24, grid.next().y);
 }
 
-void test_page_reader_redraws_after_skipping_a_colliding_page_range() {
-    Arduino_GFX gfx(136, 26);
+void test_page_reader_uses_reader_typeface_after_skipping_a_colliding_page_range() {
+    Arduino_GFX gfx(136, 17);
     ui::Context context(gfx);
+    ui::fonts::AlphaTextRenderer<640> text(gfx);
+    TEST_ASSERT_TRUE(text.begin());
     auto colors = theme();
     context.setTheme(colors);
+    settings::TypographySettings typography;
     std::array<std::string, 12> words;
     words.fill("a");
     ReadingSession session;
     ReadingLoop::setWords(session, words, 0);
     session.metadata.paragraphStarts = {0, 4, 8};
     screens::PageReader::State state;
-    constexpr ui::Rect area{0, 0, 136, 26};
+    const auto typeface = [](size_t) -> FontCatalog::Face {
+        return {std::cref(kReaderFont), std::nullopt};
+    };
+    constexpr ui::Rect area{0, 0, 136, 17};
 
     context.beginFrame(1);
-    screens::PageReader::draw(state, context, session, area);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, area);
     context.endFrame();
     TEST_ASSERT_EQUAL(0, state.pageStart);
     TEST_ASSERT_EQUAL(4, state.pageEnd);
 
+    gfx.bitmapWrites = 0;
     gfx.textWrites = 0;
     ReadingLoop::seekTo(session, 8);
     context.beginFrame(1);
-    screens::PageReader::draw(state, context, session, area);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, area);
     context.endFrame();
 
     TEST_ASSERT_EQUAL(8, state.pageStart);
     TEST_ASSERT_EQUAL(12, state.pageEnd);
-    TEST_ASSERT_EQUAL(4, gfx.textWrites);
+    TEST_ASSERT_EQUAL(4, gfx.bitmapWrites);
+    TEST_ASSERT_EQUAL(0, gfx.textWrites);
+}
+
+void test_page_reader_uses_each_words_selected_typeface_for_layout() {
+    Arduino_GFX gfx(60, 17);
+    ui::Context context(gfx);
+    ui::fonts::AlphaTextRenderer<640> text(gfx);
+    TEST_ASSERT_TRUE(text.begin());
+    auto colors = theme();
+    context.setTheme(colors);
+    settings::TypographySettings typography;
+    const std::array<std::string, 3> words{"a", "a", "a"};
+    ReadingSession session;
+    ReadingLoop::setWords(session, words, 0);
+    screens::PageReader::State state;
+    std::array<bool, 3> selected{};
+    const auto typeface = [&](size_t index) -> FontCatalog::Face {
+        selected[index] = true;
+        return {std::cref(index == 1 ? kWideReaderFont : kReaderFont), std::nullopt};
+    };
+
+    context.beginFrame(1);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, {0, 0, 60, 17});
+    context.endFrame();
+
+    TEST_ASSERT_EQUAL(0, state.pageStart);
+    TEST_ASSERT_EQUAL(1, state.pageEnd);
+    TEST_ASSERT_TRUE(selected[0]);
+    TEST_ASSERT_TRUE(selected[1]);
+}
+
+void test_page_reader_caches_visual_bidi_layout() {
+    Arduino_GFX gfx(180, 40);
+    ui::Context context(gfx);
+    ui::fonts::AlphaTextRenderer<640> text(gfx);
+    TEST_ASSERT_TRUE(text.begin());
+    context.setTheme(theme());
+    settings::TypographySettings typography;
+    const std::array<std::string, 3> words{"abc", "\xD7\x90\xD7\x91\xD7\x92", "123"};
+    ReadingSession session;
+    ReadingLoop::setWords(session, words, 0);
+    session.metadata.baseDirection = BookDirection::rtl;
+    session.metadata.requiredCapabilities = UnicodeText::CapabilityBidi;
+    session.metadata.paragraphStarts = {0};
+    screens::PageReader::State state;
+    const auto typeface = [](size_t) -> FontCatalog::Face {
+        return {std::cref(kReaderFont), std::nullopt};
+    };
+
+    context.beginFrame(1);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, {0, 0, 180, 40});
+    context.endFrame();
+
+    TEST_ASSERT_TRUE(state.bidi);
+    TEST_ASSERT_TRUE(state.lines.front().rightToLeft);
+    TEST_ASSERT_GREATER_THAN(0, state.characters.size());
+    TEST_ASSERT_EQUAL_UINT32('1', state.characters.front().codepoint);
+}
+
+void test_page_reader_shapes_each_visible_word_once_and_caches_glyphs() {
+    Arduino_GFX gfx(80, 20);
+    ui::Context context(gfx);
+    context.setTheme(theme());
+    ui::fonts::AlphaTextRenderer<640> text(gfx);
+    TEST_ASSERT_TRUE(text.begin());
+
+    File file{std::string(4, '\0')};
+    RFont4::Header header{.unitsPerEm = 1000, .sourceGlyphCount = 18};
+    const RFont4::LayoutTableRecord table{.tag = HB_TAG('G', 'D', 'E', 'F'), .size = 4};
+    TextShaping::Shaper shaper;
+    auto opened = shaper.open(file, header, std::span{&table, 1});
+    TEST_ASSERT_TRUE_MESSAGE(opened.has_value(), opened ? "" : opened.error().c_str());
+
+    const std::array<std::string, 2> words{"a", "a"};
+    ReadingSession session;
+    ReadingLoop::setWords(session, words, 0);
+    session.metadata.requiredCapabilities = UnicodeText::CapabilityShaping;
+    settings::TypographySettings typography;
+    screens::PageReader::State state;
+    size_t selections = 0;
+    const auto typeface = [&](size_t) -> FontCatalog::Face {
+        ++selections;
+        return {std::cref(kReaderFont), std::ref(shaper)};
+    };
+
+    context.beginFrame(1);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, {0, 0, 80, 20});
+    context.endFrame();
+    TEST_ASSERT_TRUE(state.words.front().shaped);
+    TEST_ASSERT_EQUAL_UINT16(1, state.words.front().glyphCount);
+    TEST_ASSERT_EQUAL_UINT32(2, state.glyphs.front().glyphIndex);
+
+    const size_t afterLayout = selections;
+    ReadingLoop::seekTo(session, 1);
+    context.beginFrame(1);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, {0, 0, 80, 20});
+    context.endFrame();
+    TEST_ASSERT_EQUAL(afterLayout, selections);
 }
 
 void test_ui_font_measures_utf8_codepoints() {
@@ -417,24 +621,146 @@ void test_ui_font_measures_utf8_codepoints() {
     TEST_ASSERT_EQUAL(27, ui::Context::textHeight(3));
 }
 
-void test_localization_keeps_native_accents() {
-    TEST_ASSERT_EQUAL_STRING("Espa\xC3\xB1ol", std::string{Localization::languageName(UiLanguage::spanish)}.c_str());
-    TEST_ASSERT_EQUAL_STRING("Fran\xC3\xA7"
-                             "ais",
-                             std::string{Localization::languageName(UiLanguage::french)}.c_str());
-    TEST_ASSERT_EQUAL_STRING("Rom\xC3\xA2n\xC4\x83",
-                             std::string{Localization::languageName(UiLanguage::romanian)}.c_str());
-    TEST_ASSERT_EQUAL_STRING("Cap\xC3\xADtulos",
-                             std::string{Localization::text(UiLanguage::spanish, UiText::Chapters)}.c_str());
-    TEST_ASSERT_EQUAL_STRING("Biblioth\xC3\xA8que",
-                             std::string{Localization::text(UiLanguage::french, UiText::Library)}.c_str());
-    TEST_ASSERT_EQUAL_STRING("Komplexit\xC3\xA4t",
-                             std::string{Localization::text(UiLanguage::german, UiText::Complexity)}.c_str());
-    TEST_ASSERT_EQUAL_STRING("Afi\xC8\x99"
-                             "aj",
-                             std::string{Localization::text(UiLanguage::romanian, UiText::Display)}.c_str());
-    TEST_ASSERT_EQUAL_STRING("J\xC4\x99zyk",
-                             std::string{Localization::text(UiLanguage::polish, UiText::Language)}.c_str());
+void test_compiled_localization_is_the_english_rescue_table() {
+    TEST_ASSERT_EQUAL_STRING("Chapters", std::string{Localization::text(UiText::Chapters)}.c_str());
+    TEST_ASSERT_EQUAL_STRING("Library", std::string{Localization::text(UiText::Library)}.c_str());
+}
+
+void test_reader_font_resolves_opentype_glyph_ids() {
+    Arduino_GFX gfx;
+    ui::fonts::AlphaTextRenderer<16> renderer(gfx);
+    renderer.begin();
+    renderer.setFont(kReaderFont);
+    renderer.setTextColor(0xFFFF, 0);
+
+    TEST_ASSERT_EQUAL_INT16(4, renderer.glyphIdAdvance(17));
+    TEST_ASSERT_EQUAL_INT16(0, renderer.glyphIdAdvance(18));
+    uint32_t glyphIndex = 0;
+    TEST_ASSERT_TRUE(renderer.resolveGlyphId(17, glyphIndex));
+    TEST_ASSERT_EQUAL_UINT32(2, glyphIndex);
+    TEST_ASSERT_EQUAL_INT16(4, renderer.drawGlyphIndex(glyphIndex, 0, 1));
+    TEST_ASSERT_GREATER_THAN(0, gfx.writes);
+}
+
+void test_reader_streams_rfont4_glyphs_from_file() {
+    std::ifstream input("fonts/Andika/font.rfont4", std::ios::binary);
+    std::string bytes{std::istreambuf_iterator<char>{input}, {}};
+    TEST_ASSERT_GREATER_THAN(sizeof(RFont4::Header), bytes.size());
+
+    RFont4::Header header;
+    std::memcpy(&header, bytes.data(), sizeof(header));
+    std::array<RFont4::StrikeRecord, RFont4::kSizeCount> strikes;
+    std::memcpy(strikes.data(), bytes.data() + header.strikesOffset, sizeof(strikes));
+    std::array<RFont4::LayoutTableRecord, RFont4::kMaximumLayoutTableCount> tables{};
+    std::memcpy(tables.data(), bytes.data() + header.layoutTablesOffset,
+                static_cast<size_t>(header.layoutTableCount) * sizeof(tables.front()));
+    TEST_ASSERT_TRUE(RFont4::layoutValid(header, strikes,
+                                         std::span{tables}.first(header.layoutTableCount), bytes.size()));
+    const RFont4::StrikeRecord& strike = strikes.back();
+
+    std::array<uint8_t, RFont4::kPageMapBytes> pageMap;
+    std::memcpy(pageMap.data(), bytes.data() + strike.pageMapOffset, pageMap.size());
+    File file{std::move(bytes)};
+    const ui::fonts::AlphaFont font{
+        .name = "file-reader",
+        .glyphCount = strike.glyphCount,
+        .yAdvance = strike.yAdvance,
+        .ascent = strike.ascent,
+        .descent = strike.descent,
+        .pageMap = pageMap.data(),
+        .pageTableCount = strike.pageTableCount,
+        .kerningPairCount = strike.kerningPairCount,
+        .wordInkTop = strike.wordInkTop,
+        .wordInkBottom = strike.wordInkBottom,
+        .glyphIdCount = strike.glyphIdCount,
+        .scriptMask = header.scriptMask,
+        .file = std::ref(file),
+        .fileStrike = strike,
+    };
+    Arduino_GFX gfx(640, 172);
+    ui::fonts::AlphaTextRenderer<640> renderer(gfx);
+    TEST_ASSERT_TRUE(renderer.begin());
+    renderer.setFont(font);
+
+    TEST_ASSERT_TRUE(renderer.hasGlyph('a'));
+    TEST_ASSERT_FALSE(renderer.hasGlyph(0x10FFFF));
+    TEST_ASSERT_GREATER_THAN(0, renderer.glyphAdvance('a'));
+    TEST_ASSERT_GREATER_THAN(0, renderer.drawCodepoint('a', 10, 50));
+    TEST_ASSERT_GREATER_THAN(0, gfx.writes);
+
+    TEST_ASSERT_GREATER_THAN(0, renderer.glyphAdvance('A'));
+    TEST_ASSERT_GREATER_THAN(0, renderer.glyphAdvance('V'));
+    const size_t readsBeforeKerning = file.readCount();
+    const int16_t adjustment = renderer.kerningAdjust('A', 'V');
+    TEST_ASSERT_TRUE(adjustment != 0);
+    const size_t readsAfterKerning = file.readCount();
+    TEST_ASSERT_GREATER_THAN(readsBeforeKerning, readsAfterKerning);
+    TEST_ASSERT_EQUAL(adjustment, renderer.kerningAdjust('A', 'V'));
+    TEST_ASSERT_EQUAL_UINT32(readsAfterKerning, file.readCount());
+}
+
+void test_reader_uses_u8g2_only_for_glyphs_missing_from_rfont4() {
+    FontRecordingGfx gfx;
+    ui::fonts::AlphaTextRenderer<640> renderer(gfx);
+    TEST_ASSERT_TRUE(renderer.begin());
+    renderer.setFont(kReaderFont);
+    renderer.setTextColor(0xFFFF, 0);
+    const uint8_t* fallbackBytes = u8g2_font_rsvpnano_ui_6x9_tf;
+
+    TEST_ASSERT_EQUAL_INT16(16, renderer.textAdvance("a\xD0\x91\xD0\x92"));
+    TEST_ASSERT_EQUAL_INT16(16, renderer.drawString("a\xD0\x91\xD0\x92", 0, 8));
+    TEST_ASSERT_EQUAL_PTR(fallbackBytes, gfx.lastFont);
+    TEST_ASSERT_EQUAL(4, gfx.textWrites);
+    TEST_ASSERT_EQUAL(1, gfx.fontSelections);
+
+    gfx.textWrites = 0;
+    gfx.fontSelections = 0;
+    TEST_ASSERT_EQUAL_INT16(6, renderer.drawCodepoint(0x1F600, 0, 8));
+    TEST_ASSERT_EQUAL_PTR(fallbackBytes, gfx.lastFont);
+    TEST_ASSERT_EQUAL(4, gfx.textWrites);
+    TEST_ASSERT_EQUAL(1, gfx.fontSelections);
+}
+
+void test_external_ui_strings_fallback_by_key_and_keep_their_font_separate() {
+    FontRecordingGfx gfx(320, 172);
+    ui::Context context(gfx);
+    auto colors = theme();
+    context.setTheme(colors);
+    locales::UiAssets assets;
+    assets.strings = translatedChapters();
+    assets.font.assign(std::begin(u8g2_font_rsvpnano_ui_6x9_tf), std::end(u8g2_font_rsvpnano_ui_6x9_tf));
+    TEST_ASSERT_TRUE(locales::validateU8g2Font(assets.font).has_value());
+    const uint8_t* externalFont = assets.font.data();
+    gfx.externalFont = externalFont;
+    context.setLanguageAssets(std::move(assets));
+    context.setLocale("es");
+
+    TEST_ASSERT_EQUAL_STRING("Capitulos externos", std::string{context.text(UiText::Chapters)}.c_str());
+    TEST_ASSERT_EQUAL_STRING("Library", std::string{context.text(UiText::Library)}.c_str());
+
+    context.beginFrame(1);
+    context.label({0, 0, 180, 18}, context.text(UiText::Chapters));
+    context.endFrame();
+    TEST_ASSERT_EQUAL_PTR(externalFont, gfx.lastFont);
+
+    context.beginFrame(2);
+    context.label({0, 0, 180, 18}, "Book title");
+    context.endFrame();
+    TEST_ASSERT_TRUE(gfx.externalFont != gfx.lastFont);
+}
+
+void test_rtl_ui_text_uses_pack_direction_for_alignment_and_bidi() {
+    FontRecordingGfx gfx(320, 172);
+    ui::Context context(gfx);
+    locales::UiAssets assets;
+    assets.direction = locales::Direction::rtl;
+    context.setLanguageAssets(std::move(assets));
+
+    context.drawText({10, 0, 60, 18}, "\xD7\x90\xD7\x91", 1, 0xFFFF);
+
+    const std::vector<uint8_t> expected{0xD7, 0x91, 0xD7, 0x90};
+    TEST_ASSERT_EQUAL_INT16(58, gfx.cursorX);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expected.data(), gfx.text.data(), expected.size());
 }
 
 void test_utf8_text_decodes_and_keeps_codepoint_boundaries() {
@@ -448,6 +774,14 @@ void test_utf8_text_decodes_and_keeps_codepoint_boundaries() {
     uint32_t codepoint = 0;
     TEST_ASSERT_FALSE(Utf8Text::decode(malformed, codepoint));
     TEST_ASSERT_EQUAL(1, malformed.size());
+
+    std::string_view truncated = "\xE2\x82";
+    TEST_ASSERT_FALSE(Utf8Text::decode(truncated, codepoint));
+    TEST_ASSERT_EQUAL(1, truncated.size());
+
+    std::string_view supplementary = "\xF0\x9F\x99\x82";
+    TEST_ASSERT_TRUE(Utf8Text::decode(supplementary, codepoint));
+    TEST_ASSERT_EQUAL_UINT32(0x1F642, codepoint);
 }
 
 void test_ui_font_preserves_widget_background() {
@@ -802,6 +1136,9 @@ void test_hourglass_source_follows_glass_and_fallen_sand_settles_at_base() {
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_unchanged_widget_does_not_draw_or_flush);
+    RUN_TEST(test_reader_font_resolves_opentype_glyph_ids);
+    RUN_TEST(test_reader_streams_rfont4_glyphs_from_file);
+    RUN_TEST(test_reader_uses_u8g2_only_for_glyphs_missing_from_rfont4);
     RUN_TEST(test_changed_and_removed_widgets_redraw);
     RUN_TEST(test_button_and_slider_consume_touch);
     RUN_TEST(test_tap_capture_tolerates_slow_release_just_outside);
@@ -813,9 +1150,14 @@ int main(int, char**) {
     RUN_TEST(test_disabled_button_ignores_touch);
     RUN_TEST(test_tap_target_handles_touch_without_drawing);
     RUN_TEST(test_layout_cursors_are_deterministic);
-    RUN_TEST(test_page_reader_redraws_after_skipping_a_colliding_page_range);
+    RUN_TEST(test_page_reader_uses_reader_typeface_after_skipping_a_colliding_page_range);
+    RUN_TEST(test_page_reader_uses_each_words_selected_typeface_for_layout);
+    RUN_TEST(test_page_reader_caches_visual_bidi_layout);
+    RUN_TEST(test_page_reader_shapes_each_visible_word_once_and_caches_glyphs);
     RUN_TEST(test_ui_font_measures_utf8_codepoints);
-    RUN_TEST(test_localization_keeps_native_accents);
+    RUN_TEST(test_compiled_localization_is_the_english_rescue_table);
+    RUN_TEST(test_external_ui_strings_fallback_by_key_and_keep_their_font_separate);
+    RUN_TEST(test_rtl_ui_text_uses_pack_direction_for_alignment_and_bidi);
     RUN_TEST(test_utf8_text_decodes_and_keeps_codepoint_boundaries);
     RUN_TEST(test_ui_font_preserves_widget_background);
     RUN_TEST(test_centered_drag_rate_has_deadzone_and_signed_edges);

@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include "settings/SettingsModel.h"
+
 namespace companion::api {
 
     // Lower-case enumerators intentionally define the public JSON spelling once.
@@ -39,11 +41,22 @@ namespace companion::api {
         uint32_t wordIndex = 0;
     };
 
+    struct BookLanguage {
+        std::string locale;
+        uint32_t scriptMask = 0;
+    };
+
     struct BookMetadata {
         std::string title;
         std::string author;
         uint32_t wordCount = 0;
         uint32_t chapterCount = 0;
+        std::string locale;
+        std::string direction = "auto";
+        uint32_t scriptMask = 0;
+        std::vector<std::string> scripts;
+        std::vector<BookLanguage> languages;
+        std::vector<std::string> requiredCapabilities;
         std::vector<Chapter> chapters;
     };
 
@@ -63,6 +76,7 @@ namespace companion::api {
         uint32_t remainingWords = 0;
         uint32_t estimatedMinutes = 0;
         std::optional<CurrentChapter> currentChapter;
+        std::vector<settings::LanguageFont> languageFonts;
     };
 
     struct LibraryItem {
@@ -125,10 +139,45 @@ namespace companion::api {
     struct FontSummary {
         std::string id;
         std::string name;
+        std::vector<std::string> locales;
+        uint32_t scriptMask = 0;
+        bool shaping = false;
+    };
+
+    struct BookLanguageFontsUpdate {
+        std::optional<std::string> id;
+        std::vector<settings::LanguageFont> languageFonts;
     };
 
     struct FontsResponse {
         std::vector<FontSummary> fonts;
+    };
+
+    struct LocaleSummary {
+        std::string id;
+        std::string version;
+        std::string locale;
+        std::string nativeName;
+        std::string englishName;
+        std::string direction;
+        std::string translationStatus;
+        uint32_t scriptMask = 0;
+        std::vector<std::string> requiredCapabilities;
+        std::vector<std::string> scripts;
+    };
+
+    struct LocaleIssue {
+        std::string id;
+        std::string reason;
+    };
+
+    struct LocalesResponse {
+        std::vector<LocaleSummary> locales;
+        std::vector<LocaleIssue> rejected;
+    };
+
+    struct IdResponse {
+        std::string id;
     };
 
     struct ErrorEnvelope {

@@ -7,14 +7,13 @@
 #include <string>
 #include <utility>
 
+#include "text/LocaleTag.h"
 #include "settings/SettingsRules.h"
 #include "storage/fs/StoragePaths.h"
 
 namespace settings {
     namespace {
 
-        constexpr char kNamespace[] = "rsvp_cfg2";
-        constexpr char kSettingsKey[] = "settings";
         constexpr char kFileHashKey[] = "file_hash";
         constexpr char kSecretsKey[] = "secrets";
         constexpr uint32_t kPersistenceDelayMs = 1500;
@@ -92,6 +91,10 @@ namespace settings {
             if (value.interface.selectedThemeId.empty())
                 value.interface.selectedThemeId = "default";
             truncate(value.interface.selectedThemeId, rules::kThemeIdMaxLength);
+            if (auto locale = LocaleTag::normalize(value.interface.locale))
+                value.interface.locale = std::move(*locale);
+            else
+                value.interface.locale = "en";
             truncate(value.network.wifiSsid, rules::kWifiSsidMaxLength);
             truncate(value.updates.repositoryOwner, rules::kRepositoryOwnerMaxLength);
             truncate(value.updates.releaseTag, rules::kReleaseTagMaxLength);
@@ -115,7 +118,7 @@ namespace settings {
 
     SettingsResult<> SettingsStore::reopenNvsAndPersist() {
         closeNvs();
-        nvsOpen_ = preferences_.begin(kNamespace, false);
+        nvsOpen_ = preferences_.begin(kSettingsNvsNamespace, false);
         if (!nvsOpen_)
             return std::unexpected(error(SettingsErrorCategory::Io, SettingsSource::Nvs,
                                          "could not reopen settings NVS namespace"));
@@ -127,7 +130,7 @@ namespace settings {
     SettingsResult<> SettingsStore::begin(fs::FS* filesystem) {
         if (nvsOpen_)
             preferences_.end();
-        nvsOpen_ = preferences_.begin(kNamespace, false);
+        nvsOpen_ = preferences_.begin(kSettingsNvsNamespace, false);
         if (!nvsOpen_)
             return std::unexpected(error(SettingsErrorCategory::Io, SettingsSource::Nvs,
                                          "could not open settings NVS namespace"));
@@ -135,7 +138,7 @@ namespace settings {
         filesystem_ = filesystem;
         mirrorEnabled_ = filesystem != nullptr;
 
-        auto nvsContent = readBlob(preferences_, kSettingsKey, kMaxSettingsBytes, SettingsSource::Nvs);
+        auto nvsContent = readBlob(preferences_, kSettingsNvsKey, kMaxSettingsBytes, SettingsSource::Nvs);
         auto nvsSettings = nvsContent.and_then([](const std::string& content) {
             return codec::decodeToml(content, SettingsSource::Nvs);
         });
@@ -237,7 +240,7 @@ namespace settings {
     }
 
     SettingsResult<> SettingsStore::writeSettings(std::string_view canonicalToml) {
-        if (auto result = writeBlob(preferences_, kSettingsKey, canonicalToml, SettingsSource::Nvs); !result)
+        if (auto result = writeBlob(preferences_, kSettingsNvsKey, canonicalToml, SettingsSource::Nvs); !result)
             return result;
         if (!filesystem_ || !mirrorEnabled_)
             return {};

@@ -2,22 +2,14 @@
 
 #include <glaze/toml.hpp>
 
-#include <optional>
 #include <string>
 
 #include "drivers/power/BatteryCurve.h"
+#include "reader/ReadingSession.h"
 #include "settings/SettingsCodec.h"
 #include "settings/SettingsGlaze.h"
 #include "sync/CompanionSyncJson.h"
-
-namespace {
-
-    struct BookStateProbe {
-        uint32_t wordIndex = 0;
-        std::optional<settings::TypographySettings> bookTypographyOverride;
-    };
-
-} // namespace
+#include "text/UnicodeText.h"
 
 void setUp() {}
 void tearDown() {}
@@ -121,12 +113,37 @@ void test_companion_theme_list_uses_ids_and_names() {
 }
 
 void test_companion_font_list_uses_ids_and_names() {
-    const companion::api::FontsResponse response{{{"literata", "Literata"}, {"atkinson", "Atkinson Hyperlegible"}}};
+    const companion::api::FontsResponse response{
+        {{.id = "literata",
+          .name = "Literata",
+          .scriptMask = UnicodeText::ScriptLatin | UnicodeText::ScriptCyrillic},
+         {.id = "hebrew", .name = "Noto Serif Hebrew", .locales = {"he"},
+          .scriptMask = UnicodeText::ScriptHebrew, .shaping = true}}};
     std::string json;
     TEST_ASSERT_TRUE(companion::api::encodeData(response, json).has_value());
     TEST_ASSERT_EQUAL_STRING(
-        R"({"data":{"fonts":[{"id":"literata","name":"Literata"},{"id":"atkinson","name":"Atkinson Hyperlegible"}]}})",
+        R"({"data":{"fonts":[{"id":"literata","name":"Literata","locales":[],"scriptMask":3,"shaping":false},{"id":"hebrew","name":"Noto Serif Hebrew","locales":["he"],"scriptMask":8,"shaping":true}]}})",
         json.c_str());
+}
+
+void test_companion_locale_list_exposes_metadata_and_rejections() {
+    const companion::api::LocalesResponse response{
+        {{.id = "ja",
+          .version = "1.0.0",
+          .locale = "ja",
+          .nativeName = "Japanese",
+          .englishName = "Japanese",
+          .direction = "ltr",
+          .translationStatus = "preview",
+          .scriptMask = UnicodeText::ScriptHan | UnicodeText::ScriptHiragana | UnicodeText::ScriptKatakana,
+          .requiredCapabilities = {"bidi"}}},
+        {{.id = "broken", .reason = "manifest.toml is missing"}},
+    };
+    std::string json;
+    TEST_ASSERT_TRUE(companion::api::encodeData(response, json).has_value());
+    TEST_ASSERT_TRUE(json.contains(R"("id":"ja")"));
+    TEST_ASSERT_TRUE(json.contains(R"("locale":"ja")"));
+    TEST_ASSERT_TRUE(json.contains(R"("id":"broken")"));
 }
 
 void test_secrets_are_not_part_of_public_documents() {
@@ -140,34 +157,45 @@ void test_secrets_are_not_part_of_public_documents() {
     TEST_ASSERT_EQUAL(std::string::npos, json->find("wifiPassword"));
 }
 
-void test_book_typography_override_precedence_and_reset() {
-    settings::TypographySettings theme;
-    theme.fontId = "theme-font";
-    std::optional<settings::TypographySettings> book;
-
-    TEST_ASSERT_EQUAL_STRING("theme-font", settings::effectiveTypography(book, theme).fontId.c_str());
-
-    book = theme;
-    book->fontId = "book-font";
-    TEST_ASSERT_EQUAL_STRING("book-font", settings::effectiveTypography(book, theme).fontId.c_str());
-
-    book.reset();
-    TEST_ASSERT_EQUAL_STRING("theme-font", settings::effectiveTypography(book, theme).fontId.c_str());
+void test_book_language_font_selection_uses_global_fallback() {
+    settings::ReadingOverrides book;
+    TEST_ASSERT_EQUAL_STRING("global-font", settings::fontForLocale(book, "ja", "global-font").data());
+    book.languageFonts.push_back({"ja", "japanese-font"});
+    TEST_ASSERT_EQUAL_STRING("japanese-font", settings::fontForLocale(book, "ja", "global-font").data());
+    TEST_ASSERT_EQUAL_STRING("global-font", settings::fontForLocale(book, "en", "global-font").data());
 }
 
-void test_optional_book_typography_round_trips_through_toml() {
-    BookStateProbe state;
+void test_book_locale_follows_text_run_boundaries() {
+    BookMetadata metadata;
+    metadata.locale = "en";
+    metadata.textRuns = {{0, "en"}, {4, "ja"}, {7, "en"}};
+    TEST_ASSERT_EQUAL_STRING("en", metadata.localeAt(3).data());
+    TEST_ASSERT_EQUAL_STRING("ja", metadata.localeAt(4).data());
+    TEST_ASSERT_EQUAL_STRING("ja", metadata.localeAt(6).data());
+    TEST_ASSERT_EQUAL_STRING("en", metadata.localeAt(7).data());
+}
+
+void test_book_reading_overrides_round_trip_through_toml() {
+    ReadingSession::BookState state;
     state.wordIndex = 42;
-    state.bookTypographyOverride.emplace();
-    state.bookTypographyOverride->fontId = "book-font";
+    state.overrides.languageFonts.push_back({"ar", "arabic-font"});
+    state.overrides.locale = "ar";
+    state.overrides.direction = settings::TextDirection::rtl;
+    state.overrides.pacing = settings::ReadingPacing::cjkPhrase;
 
     std::string toml;
     TEST_ASSERT_FALSE(glz::write_toml(state, toml));
-    BookStateProbe decoded;
+    TEST_ASSERT_TRUE(toml.contains("direction = \"rtl\""));
+    TEST_ASSERT_TRUE(toml.contains("pacing = \"cjk-phrase\""));
+    ReadingSession::BookState decoded;
     TEST_ASSERT_FALSE(glz::read_toml(decoded, toml));
     TEST_ASSERT_EQUAL_UINT32(42, decoded.wordIndex);
-    TEST_ASSERT_TRUE(decoded.bookTypographyOverride.has_value());
-    TEST_ASSERT_EQUAL_STRING("book-font", decoded.bookTypographyOverride->fontId.c_str());
+    TEST_ASSERT_EQUAL_UINT32(1, decoded.overrides.languageFonts.size());
+    TEST_ASSERT_EQUAL_STRING("ar", decoded.overrides.languageFonts.front().locale.c_str());
+    TEST_ASSERT_EQUAL_STRING("arabic-font", decoded.overrides.languageFonts.front().fontId.c_str());
+    TEST_ASSERT_EQUAL_STRING("ar", decoded.overrides.locale->c_str());
+    TEST_ASSERT_EQUAL(settings::TextDirection::rtl, *decoded.overrides.direction);
+    TEST_ASSERT_EQUAL(settings::ReadingPacing::cjkPhrase, *decoded.overrides.pacing);
 }
 
 int main() {
@@ -183,8 +211,10 @@ int main() {
     RUN_TEST(test_companion_envelope_encodes_lvalue_without_owning_it);
     RUN_TEST(test_companion_theme_list_uses_ids_and_names);
     RUN_TEST(test_companion_font_list_uses_ids_and_names);
+    RUN_TEST(test_companion_locale_list_exposes_metadata_and_rejections);
     RUN_TEST(test_secrets_are_not_part_of_public_documents);
-    RUN_TEST(test_book_typography_override_precedence_and_reset);
-    RUN_TEST(test_optional_book_typography_round_trips_through_toml);
+    RUN_TEST(test_book_language_font_selection_uses_global_fallback);
+    RUN_TEST(test_book_locale_follows_text_run_boundaries);
+    RUN_TEST(test_book_reading_overrides_round_trip_through_toml);
     return UNITY_END();
 }

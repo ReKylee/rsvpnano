@@ -3,16 +3,14 @@
 #include <algorithm>
 
 namespace screens {
-    bool typographySettings(ui::Context& ui, std::optional<settings::TypographySettings>& bookOverride,
-                            const settings::TypographySettings& inherited, FontCatalog& fonts, Screen& screen) {
-        settings::TypographySettings config = bookOverride.value_or(inherited);
+    bool typographySettings(ui::Context& ui, settings::TypographySettings& config, FontCatalog& fonts,
+                            Screen& screen) {
         const auto families = fonts.families();
         const auto selected = std::ranges::find_if(families, [&config](const FontCatalog::Family& family) {
             return family.id == config.fontId;
         });
         size_t familyIndex = selected == families.end() ? 0 : selected - families.begin();
         bool changed = false;
-        bool reset = false;
         const ui::Rect content = detail::content(ui);
         constexpr int16_t headerHeight = 32;
         if (ui.button({content.x, content.y, 64, headerHeight}, "<<"))
@@ -23,10 +21,8 @@ namespace screens {
                   std::max<int16_t>(0, static_cast<int16_t>(resetX - content.x - 80)), headerHeight},
                  ui.text(UiText::Typography), 2);
         if (ui.button({resetX, content.y, resetWidth, headerHeight}, ui.text(UiText::Reset))) {
-            changed = bookOverride.has_value();
-            bookOverride.reset();
-            config = inherited;
-            reset = true;
+            changed = config != settings::TypographySettings{};
+            config = {};
             const auto inheritedFamily = std::ranges::find_if(families, [&config](const FontCatalog::Family& family) {
                 return family.id == config.fontId;
             });
@@ -69,8 +65,6 @@ namespace screens {
         changed |= ui.slider(geometry.next(), ui.text(UiText::Anchor), config.anchor, "%");
         changed |= ui.slider(geometry.next(), ui.text(UiText::GuideWidth), config.guideWidth, " px");
         changed |= ui.slider(geometry.next(), ui.text(UiText::GuideGap), config.guideGap, " px");
-        if (changed && !reset)
-            bookOverride = std::move(config);
         return changed;
     }
 

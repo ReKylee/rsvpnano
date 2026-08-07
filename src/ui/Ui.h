@@ -7,7 +7,10 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
+#include "locales/LocalePack.h"
+#include "text/BidiText.h"
 #include "ui/Localization.h"
 #include "ui/Theme.h"
 #include "ui/Touch.h"
@@ -95,6 +98,7 @@ namespace ui {
         Books,
         Edit,
         Device,
+        Language,
         Hourglass,
         Power,
     };
@@ -117,7 +121,8 @@ namespace ui {
         explicit Context(Arduino_GFX& gfx);
 
         void setTheme(const ui::themes::Theme& theme);
-        void setLanguage(UiLanguage language);
+        void setLanguageAssets(locales::UiAssets assets);
+        void setLocale(std::string_view locale);
         void setOrientation(Orientation orientation);
         Orientation orientation() const {
             return touchOrientation_;
@@ -253,6 +258,7 @@ namespace ui {
         void drawBooksIcon(Rect rect, uint16_t ink);
         void drawEditIcon(Rect rect, uint16_t ink);
         void drawDeviceIcon(Rect rect, uint16_t ink);
+        void drawLanguageIcon(Rect rect, uint16_t ink);
         void drawHourglassIcon(Rect rect, uint16_t ink);
         void drawPowerIcon(Rect rect, uint16_t ink, uint16_t surface);
         void drawBatteryIcon(Rect rect, uint8_t percent, bool charging, uint16_t ink, uint16_t surface);
@@ -263,12 +269,18 @@ namespace ui {
         bool stepperValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,
                           std::string_view suffix, ui::themes::ColorRole activeRole);
         void resetTouchGesture();
+        int16_t textWidthFor(std::string_view text, uint8_t size) const;
+        int16_t textHeightFor(std::string_view text, uint8_t size) const;
         TouchContact mapTouch(TouchContact contact) const;
         bool updateTouch(const TouchContact& contact, uint32_t nowMs);
 
         Arduino_GFX& gfx_;
         const ui::themes::Theme* theme_ = nullptr;
-        UiLanguage language_ = UiLanguage::english;
+        locales::UiAssets languageAssets_;
+        BidiText::Analysis bidiAnalysis_;
+        BidiText::Line bidiLine_;
+        std::vector<BidiText::Codepoint> bidiCodepoints_;
+        std::string locale_{Localization::kDefaultLocale};
         TouchSource touchSource_{};
         Touch touchEvent_{};
         Orientation touchOrientation_ = Orientation::Portrait;

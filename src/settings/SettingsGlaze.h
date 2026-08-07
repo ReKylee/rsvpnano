@@ -42,9 +42,15 @@ struct glz::meta<settings::BatteryLabel> {
 };
 
 template<>
-struct glz::meta<UiLanguage> {
-    using enum UiLanguage;
-    static constexpr auto value = glz::enumerate(english, spanish, french, german, romanian, polish, russian);
+struct glz::meta<settings::TextDirection> {
+    using enum settings::TextDirection;
+    static constexpr auto value = glz::enumerate(ltr, rtl);
+};
+
+template<>
+struct glz::meta<settings::ReadingPacing> {
+    using enum settings::ReadingPacing;
+    static constexpr auto value = glz::enumerate("words", words, "cjk-phrase", cjkPhrase);
 };
 
 template<>

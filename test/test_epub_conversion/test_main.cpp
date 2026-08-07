@@ -14,13 +14,14 @@ void tearDown() {}
 namespace {
 
     void test_package_parses_nav_metadata_and_encoded_manifest_paths() {
-        constexpr std::string_view opf = R"(<package version="3.0"><metadata><dc:title>Fixture</dc:title></metadata><manifest>
+        constexpr std::string_view opf = R"(<package version="3.0"><metadata><dc:title>Fixture</dc:title><dc:language>ja</dc:language></metadata><manifest>
             <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
             <item id="chapter" href="Text/Chapter%20One.xhtml" media-type="application/xhtml+xml"/>
             </manifest><spine><itemref idref="chapter"/></spine></package>)";
 
         const auto manifest = EpubPackage::parseManifestItems(opf, "OEBPS/");
         TEST_ASSERT_EQUAL_STRING("3.0", EpubPackage::parsePackageVersion(opf).c_str());
+        TEST_ASSERT_EQUAL_STRING("ja", EpubPackage::parseDcMetadata(opf, "language").c_str());
         TEST_ASSERT_EQUAL_UINT32(2, manifest.size());
         TEST_ASSERT_EQUAL_STRING("nav", manifest[0].properties.c_str());
         TEST_ASSERT_EQUAL_STRING("OEBPS/Text/Chapter One.xhtml", manifest[1].path.c_str());
@@ -95,6 +96,25 @@ namespace {
         TEST_ASSERT_EQUAL_STRING("@chapter Letter\nDear Reader ,\n", output.contents().c_str());
     }
 
+    void test_writer_preserves_nested_language_and_direction_changes() {
+        File output;
+        size_t wordCount = 0;
+        size_t chapterCount = 0;
+        std::string lastChapter;
+        constexpr std::string_view markup =
+            R"(<body lang="ja"><p>日本語 <span xml:lang="en" dir="ltr"><span>English</span></span> 続き</p><p lang="ar" dir="rtl">مرحبا 123</p></body>)";
+
+        EpubContent::RsvpContentWriter writer(output, wordCount, 0, lastChapter, chapterCount, {}, false, "Fixture",
+                                               "Fixture", "ja");
+        TEST_ASSERT_TRUE(writer.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
+        TEST_ASSERT_TRUE(writer.finish());
+
+        TEST_ASSERT_TRUE(output.contents().contains("日本語\n@language en\n@direction ltr\nEnglish\n"));
+        TEST_ASSERT_TRUE(output.contents().contains("@language ja\n@direction auto\n続き\n"));
+        TEST_ASSERT_TRUE(output.contents().contains("@language ar\n@direction rtl\n"));
+        TEST_ASSERT_TRUE(output.contents().contains("مرحبا 123\n@language ja\n@direction auto\n"));
+    }
+
 } // namespace
 
 int main(int, char**) {
@@ -104,5 +124,6 @@ int main(int, char**) {
     RUN_TEST(test_ncx_toc_ignores_non_content_labels);
     RUN_TEST(test_writer_uses_ordered_toc_labels_and_paragraph_markers);
     RUN_TEST(test_writer_preserves_punctuation_only_inline_fragments_without_counting_them_as_words);
+    RUN_TEST(test_writer_preserves_nested_language_and_direction_changes);
     return UNITY_END();
 }

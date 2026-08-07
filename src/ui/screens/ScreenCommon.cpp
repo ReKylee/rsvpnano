@@ -16,7 +16,8 @@ namespace screens::detail {
         const int16_t tabHeight = static_cast<int16_t>(ui.height() / 4);
         ui::Column tabs{{0, 0, kRailWidth, ui.height()}};
         if (ui.tab(tabs.next(tabHeight), ui.text(UiText::Read),
-                   active == Screen::Read || active == Screen::Library || active == Screen::Chapters,
+                   active == Screen::Read || active == Screen::Library || active == Screen::Chapters
+                       || active == Screen::BookFonts,
                    ui::Icon::Books)) {
             screen = Screen::Read;
         }

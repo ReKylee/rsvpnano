@@ -24,8 +24,13 @@ namespace ReadingProgress {
 
     std::expected<uint32_t, std::error_code> readBookStatePosition(std::string_view bookPath,
                                                                    const BookIdentity& identity);
+    std::expected<ReadingSession::BookState, std::error_code> readBookState(std::string_view bookPath,
+                                                                            const BookIdentity& identity);
     std::expected<void, std::error_code> writeBookStatePosition(std::string_view bookPath, const BookIdentity& identity,
                                                                 uint32_t wordIndex);
+    std::expected<void, std::error_code> writeBookLanguageFonts(std::string_view bookPath,
+                                                                const BookIdentity& identity,
+                                                                std::vector<settings::LanguageFont> languageFonts);
     void save(ReadingSession& session, Preferences& preferences, bool force, uint32_t nowMs);
     void cache(ReadingSession& session, Preferences& preferences, uint32_t wordIndex);
     void mirror(const ReadingSession& session, const IndexedBookStore& store);

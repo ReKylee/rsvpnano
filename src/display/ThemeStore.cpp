@@ -7,64 +7,17 @@
 #include <string>
 
 #include "board/BoardStorage.h"
-#include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 
 namespace {
 
     constexpr size_t kMaxThemeBytes = 4096;
 
-    struct Repair {
-        std::string path;
-        size_t themeIndex;
-    };
-
-    bool writeThemeFile(const char* path, const ui::themes::Theme& theme) {
-        if (!StorageFiles::ensureDirectory(StoragePaths::kThemesPath))
-            return false;
-        auto encoded = ui::themes::encodeToml(theme.definition);
-        if (!encoded) {
-            ESP_LOGE("theme", "encode failed: %s", encoded.error().message.c_str());
-            return false;
-        }
-        const std::string tmpPath = std::string{path} + ".tmp";
-        const std::string backupPath = std::string{path} + ".bak";
-        auto& filesystem = Board::Storage::filesystem();
-        filesystem.remove(tmpPath.c_str());
-        filesystem.remove(backupPath.c_str());
-
-        File file = filesystem.open(tmpPath.c_str(), FILE_WRITE);
-        if (!file)
-            return false;
-        const size_t count = file.write(reinterpret_cast<const uint8_t*>(encoded->data()), encoded->size());
-        const bool written = count == encoded->size() && file.getWriteError() == 0;
-        file.close();
-        if (!written) {
-            filesystem.remove(tmpPath.c_str());
-            return false;
-        }
-
-        const bool hadOriginal = StorageFiles::fileExists(path);
-        if (hadOriginal && !filesystem.rename(path, backupPath.c_str())) {
-            filesystem.remove(tmpPath.c_str());
-            return false;
-        }
-        if (filesystem.rename(tmpPath.c_str(), path)) {
-            if (hadOriginal)
-                filesystem.remove(backupPath.c_str());
-            return true;
-        }
-        if (hadOriginal)
-            filesystem.rename(backupPath.c_str(), path);
-        filesystem.remove(tmpPath.c_str());
-        return false;
-    }
-
 } // namespace
 
-void ThemeStore::loadFromSd(const FontCatalog& fonts, const settings::TypographySettings& defaults) {
+void ThemeStore::loadFromSd() {
     const std::string selectedId = selected().id;
-    themes_ = {ui::themes::defaultTheme(defaults)};
+    themes_ = {ui::themes::defaultTheme()};
     selectedIndex_ = 0;
 
     File dir = Board::Storage::filesystem().open(StoragePaths::kThemesPath);
@@ -77,7 +30,6 @@ void ThemeStore::loadFromSd(const FontCatalog& fonts, const settings::Typography
     }
 
     std::vector<ui::themes::Theme> loaded;
-    std::vector<Repair> repairs;
     while (true) {
         File entry = dir.openNextFile();
         if (!entry) {
@@ -106,27 +58,15 @@ void ThemeStore::loadFromSd(const FontCatalog& fonts, const settings::Typography
             ESP_LOGW("theme", "skipped %s: incomplete read", path.c_str());
             continue;
         }
-        auto parsed = ui::themes::decodeToml(text, ui::themes::themeIdFromPath(path), defaults);
+        auto parsed = ui::themes::decodeToml(text, ui::themes::themeIdFromPath(path));
         if (!parsed) {
             ESP_LOGW("theme", "skipped %s: %s", path.c_str(), parsed.error().message.c_str());
             continue;
         }
 
-        auto& fontId = parsed->definition.typography.fontId;
-        if (fonts.find(fontId) == nullptr && !fonts.families().empty()) {
-            ESP_LOGW("theme", "%s references missing font '%s'; using '%s'", path.c_str(), fontId.c_str(),
-                     fonts.families().front().id.c_str());
-            fontId = fonts.families().front().id;
-            repairs.push_back({path, loaded.size()});
-        }
         loaded.push_back(std::move(*parsed));
     }
     dir.close();
-
-    for (const Repair& repair: repairs) {
-        if (!writeThemeFile(repair.path.c_str(), loaded[repair.themeIndex]))
-            ESP_LOGE("theme", "could not repair typeface in %s", repair.path.c_str());
-    }
 
     std::ranges::sort(loaded, {}, &ui::themes::Theme::id);
     const auto duplicates = std::ranges::unique(loaded, {}, &ui::themes::Theme::id);

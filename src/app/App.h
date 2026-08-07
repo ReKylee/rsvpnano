@@ -11,6 +11,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "input/Input.h"
+#include "locales/LocaleCatalog.h"
 #include "rss/RssFeeds.h"
 #include "settings/SettingsStore.h"
 #include "storage/StorageManager.h"
@@ -48,6 +49,8 @@ private:
         int progressPercent = -1;
     };
 
+    void migrateSettingsLocale();
+    void migrateSettingsLocale(fs::FS& filesystem);
     void migrateLegacyStorage();
     void renderScreen(uint32_t nowMs);
     void handleScreenAction(screens::Action action, uint32_t nowMs);
@@ -63,6 +66,7 @@ private:
     void showTransientStatus(std::string_view title, std::string_view line1, std::string_view line2,
                              uint32_t durationMs, screens::Screen destination, int progressPercent = -1);
     void reloadSettings();
+    void reloadUiAssets();
     void enterUsbTransfer(uint32_t nowMs);
     void exitUsbTransfer(screens::Screen destination = screens::Screen::Reader);
     void runOtaCheck(bool install);
@@ -78,6 +82,7 @@ private:
 
     ui::Context immediateUi_{Board::Display::gfx()};
     settings::SettingsStore settingsStore_;
+    locales::Catalog localeCatalog_;
     Board::Power::BatteryState battery_;
     screens::ReaderScreen readerScreen_{Board::Display::gfx(), settingsStore_.settings().reading};
     screens::LibraryScreen libraryScreen_;
@@ -86,7 +91,7 @@ private:
     screens::NetworkScreen networkScreen_;
     StorageManager storage_;
     Preferences prefs_;
-    CompanionSyncManager sync_{settingsStore_};
+    CompanionSyncManager sync_{settingsStore_, localeCatalog_, readerScreen_.fonts};
     UsbMassStorageManager usbTransfer_;
     screens::FocusScreen focusScreen_;
     screens::StandbyScreen standbyScreen_;

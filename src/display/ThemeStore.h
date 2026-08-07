@@ -4,12 +4,11 @@
 #include <string_view>
 #include <vector>
 
-#include "fonts/FontCatalog.h"
 #include "ui/Theme.h"
 
 class ThemeStore {
 public:
-    void loadFromSd(const FontCatalog& fonts, const settings::TypographySettings& defaults);
+    void loadFromSd();
     bool selectById(std::string_view id);
     void selectNext();
     const ui::themes::Theme& selected() const;

@@ -7,6 +7,7 @@
 
 #include "converter/EpubPackage.h"
 #include "converter/EpubZip.h"
+#include "text/LocaleTag.h"
 #include "storage/fs/StoragePaths.h"
 #include "text/AsciiText.h"
 #include "text/TextNormalizer.h"
@@ -16,7 +17,7 @@ namespace {
     constexpr size_t kMaxOpfBytes = 256UL * 1024UL;
     constexpr size_t kMaxTocBytes = 256UL * 1024UL;
     constexpr size_t kMaxContainerBytes = 32UL * 1024UL;
-    constexpr const char* kConverterVersion = "stream-v8";
+    constexpr const char* kConverterVersion = "stream-v9";
 
     using EpubPackage::basenameWithoutExtension;
     using EpubPackage::directoryForPath;
@@ -223,6 +224,7 @@ namespace {
             return metadataTitle.empty() ? basenameWithoutExtension(epubPath) : metadataTitle;
         }();
         const std::string author = parseDcMetadata(opfXml, "creator");
+        const auto locale = LocaleTag::normalize(parseDcMetadata(opfXml, "language"));
 
         output.println("@rsvp 1");
         output.print("@title ");
@@ -230,6 +232,10 @@ namespace {
         if (!author.empty()) {
             output.print("@author ");
             output.println(RsvpText::normalizeDisplayText(author).c_str());
+        }
+        if (locale) {
+            output.print("@language ");
+            output.println(locale->c_str());
         }
         output.print("@source ");
         output.println(RsvpText::normalizeDisplayText(epubPath).c_str());
@@ -246,6 +252,7 @@ namespace {
 
     void streamReadingOrder(EpubZip::Archive& zip, File& output, const std::vector<std::string>& readingOrder,
                             const std::vector<TocEntry>& tocEntries, std::string_view bookTitle,
+                            std::string_view bookLocale,
                             const EpubConverter::Options& options, size_t& wordCount, size_t& chapterCount) {
         std::string lastChapterTitle;
         const bool hasToc = !tocEntries.empty();
@@ -274,7 +281,7 @@ namespace {
             const EpubZip::ContentExtractStatus extractStatus =
                 zip.extractContentToRsvp(readingOrder[i], output, wordCount, options.maxWords, lastChapterTitle,
                                          chapterCount, documentTocEntries, hasToc,
-                                         fallbackChapterTitle(readingOrder[i]), bookTitle, options, i,
+                                         fallbackChapterTitle(readingOrder[i]), bookTitle, bookLocale, options, i,
                                          readingOrder.size());
 
             reportItemProgress("Parsed content", i + 1);
@@ -344,6 +351,8 @@ namespace {
             const std::string metadataTitle = parseDcMetadata(documents.opfXml, "title");
             return metadataTitle.empty() ? basenameWithoutExtension(epubPath) : metadataTitle;
         }();
+        const auto normalizedBookLocale = LocaleTag::normalize(parseDcMetadata(documents.opfXml, "language"));
+        const std::string bookLocale = normalizedBookLocale ? std::move(*normalizedBookLocale) : "und";
         const std::vector<TocEntry> tocEntries = readToc(zip, documents.opfXml, documents.opfBaseDir, bookTitle);
         ESP_LOGD("epub", "Usable TOC entries: %u", static_cast<unsigned int>(tocEntries.size()));
 
@@ -358,7 +367,8 @@ namespace {
 
         size_t wordCount = 0;
         size_t chapterCount = 0;
-        streamReadingOrder(zip, output, readingOrder, tocEntries, bookTitle, options, wordCount, chapterCount);
+        streamReadingOrder(zip, output, readingOrder, tocEntries, bookTitle, bookLocale, options, wordCount,
+                           chapterCount);
 
         const std::string finishingDetail = wordCountDetail(wordCount);
         reportProgress(options, "Finishing EPUB", finishingDetail.c_str(), 96);

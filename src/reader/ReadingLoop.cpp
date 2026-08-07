@@ -487,6 +487,30 @@ namespace {
         }
     }
 
+    bool isIgnoredTrailingCodepoint(uint32_t codepoint) {
+        if (codepoint <= 0x7FU)
+            return isIgnoredTrailingChar(static_cast<char>(codepoint));
+        switch (codepoint) {
+        case 0x2019U:
+        case 0x201DU:
+        case 0x3009U:
+        case 0x300BU:
+        case 0x300DU:
+        case 0x300FU:
+        case 0x3011U:
+        case 0x3015U:
+        case 0x3017U:
+        case 0x3019U:
+        case 0x301BU:
+        case 0xFF09U:
+        case 0xFF3DU:
+        case 0xFF5DU:
+            return true;
+        default:
+            return false;
+        }
+    }
+
     int approximateSyllableGroupCount(std::string_view word) {
         int groups = 0;
         int letterCount = 0;
@@ -552,12 +576,27 @@ namespace {
         return -1;
     }
 
-    char trailingRhythmChar(std::string_view word) {
-        const int index = lastMeaningfulCharIndex(word);
-        if (index >= 0) {
-            return word[static_cast<size_t>(index)];
+    uint32_t trailingRhythmCodepoint(std::string_view word) {
+        while (!word.empty()) {
+            const size_t start = Utf8Text::lastCodepointStart(word);
+            std::string_view trailing = word.substr(start);
+            uint32_t codepoint = 0;
+            Utf8Text::next(trailing, codepoint);
+            word.remove_suffix(word.size() - start);
+            if (isIgnoredTrailingCodepoint(codepoint))
+                continue;
+            switch (codepoint) {
+            case 0x3001U:
+            case 0xFF0CU: return ',';
+            case 0x3002U: return '.';
+            case 0xFF01U: return '!';
+            case 0xFF1AU: return ':';
+            case 0xFF1BU: return ';';
+            case 0xFF1FU: return '?';
+            default: return codepoint;
+            }
         }
-        return '\0';
+        return 0;
     }
 
     int trailingRepeatedCharCount(std::string_view word, char target) {
@@ -573,7 +612,7 @@ namespace {
     }
 
     bool endsWithEllipsis(std::string_view word) {
-        return trailingRepeatedCharCount(word, '.') >= 3;
+        return trailingRhythmCodepoint(word) == 0x2026U || trailingRepeatedCharCount(word, '.') >= 3;
     }
 
     bool startsWithLowercaseLetter(std::string_view word) {
@@ -732,7 +771,7 @@ namespace {
             return kEllipsisPausePercent;
         }
 
-        switch (trailingRhythmChar(word)) {
+        switch (trailingRhythmCodepoint(word)) {
         case ',':
             return kCommaPausePercent;
         case '-':
@@ -797,7 +836,7 @@ namespace ReadingLoop {
             if (word.empty())
                 return false;
 
-            switch (trailingRhythmChar(word)) {
+            switch (trailingRhythmCodepoint(word)) {
             case '!':
             case '?':
                 return true;
@@ -903,11 +942,25 @@ namespace ReadingLoop {
         return changed;
     }
 
+    settings::ReadingPacing pacingMode(const ReadingSession& session) {
+        if (session.state.overrides.pacing)
+            return *session.state.overrides.pacing;
+        return UnicodeText::isCjkText(session.currentWord) ? settings::ReadingPacing::cjkPhrase
+                                                           : settings::ReadingPacing::words;
+    }
+
     uint32_t currentWordDurationMs(const ReadingSession& session, const settings::ReadingSettings& settings) {
         const size_t nextIndex = session.currentIndex + 1;
         const bool nextWordStartsLowercase =
             nextIndex < wordCount(session) && startsWithLowercaseLetter(wordAt(session, nextIndex));
 
+        if (pacingMode(session) == settings::ReadingPacing::cjkPhrase) {
+            const uint32_t characters = static_cast<uint32_t>(
+                std::max(1, codepointCount(session.currentWord, UnicodeText::isWordCharacter)));
+            const uint32_t base = (60'000UL * characters + settings.wpm - 1) / settings.wpm;
+            return base + scaledDelayMs(punctuationPausePercentForWord(session.currentWord, false),
+                                        settings.pacing.punctuationDelayMs);
+        }
         return durationForWord(session.currentWord, nextWordStartsLowercase, 60000UL / settings.wpm, settings.pacing);
     }
 
@@ -1011,6 +1064,32 @@ namespace ReadingLoop {
         if (!session.words.empty())
             return session.words[index];
         return kDemoWords[index];
+    }
+
+    TextParagraph paragraphAt(const ReadingSession& session, size_t wordIndex) {
+        TextParagraph result;
+        const size_t count = wordCount(session);
+        if (count == 0)
+            return result;
+
+        wordIndex = std::min(wordIndex, count - 1);
+        const auto next = std::ranges::upper_bound(session.metadata.paragraphStarts, wordIndex);
+        result.firstWord = next == session.metadata.paragraphStarts.begin() ? 0 : *std::prev(next);
+        result.lastWord = next == session.metadata.paragraphStarts.end() ? count : std::min(*next, count);
+        result.text.reserve((result.lastWord - result.firstWord) * 8);
+        result.wordOffsets.reserve(result.lastWord - result.firstWord + 1);
+        bool previousCjk = false;
+        for (size_t index = result.firstWord; index < result.lastWord; ++index) {
+            const std::string_view word = wordAt(session, index);
+            const bool cjk = UnicodeText::isCjkText(word);
+            if (index > result.firstWord && !(previousCjk && cjk))
+                result.text += ' ';
+            result.wordOffsets.push_back(result.text.size());
+            result.text += word;
+            previousCjk = cjk;
+        }
+        result.wordOffsets.push_back(result.text.size());
+        return result;
     }
 
 } // namespace ReadingLoop

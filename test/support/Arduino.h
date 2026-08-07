@@ -12,6 +12,30 @@
 #define PROGMEM
 #endif
 
+inline uint8_t pgm_read_byte(const void* address) {
+    uint8_t value = 0;
+    std::memcpy(&value, address, sizeof(value));
+    return value;
+}
+
+inline uint16_t pgm_read_word(const void* address) {
+    uint16_t value = 0;
+    std::memcpy(&value, address, sizeof(value));
+    return value;
+}
+
+inline uint32_t pgm_read_dword(const void* address) {
+    uint32_t value = 0;
+    std::memcpy(&value, address, sizeof(value));
+    return value;
+}
+
+inline const void* pgm_read_ptr(const void* address) {
+    const void* value = nullptr;
+    std::memcpy(&value, address, sizeof(value));
+    return value;
+}
+
 inline void yield() {}
 inline void delay(unsigned long) {}
 

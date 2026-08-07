@@ -2,19 +2,35 @@
 
 #include <algorithm>
 
+#include "locales/LocaleCatalog.h"
+
 namespace screens {
+    namespace {
+
+        std::string_view nextLocale(const locales::Catalog& catalog, std::string_view current) {
+            bool returnNext = current == Localization::kDefaultLocale;
+            for (const auto& pack: catalog.packs) {
+                if (returnNext)
+                    return pack.manifest.locale;
+                returnNext = pack.manifest.locale == current;
+            }
+            return Localization::kDefaultLocale;
+        }
+
+    } // namespace
+
     void InterfaceScreen::begin(ui::Context& ui, settings::InterfaceSettings& config,
-                                const settings::TypographySettings& typographyDefaults, const FontCatalog& fonts,
-                                void (*setBrightness)(uint8_t)) {
+                                const locales::Catalog& languages, void (*setBrightness)(uint8_t)) {
+        languages_ = std::cref(languages);
         if (setBrightness != nullptr)
             setBrightness(config.brightnessPercent);
 
-        themes.loadFromSd(fonts, typographyDefaults);
+        themes.loadFromSd();
         if (!themes.selectById(config.selectedThemeId)) {
             config.selectedThemeId = themes.selected().id;
         }
         ui.setTheme(themes.selected());
-        ui.setLanguage(config.language);
+        ui.setLocale(config.locale);
     }
 
     bool InterfaceScreen::draw(ui::Context& ui, settings::InterfaceSettings& config,
@@ -55,9 +71,12 @@ namespace screens {
         }
 
         if (ui.setting({content.x, secondRowY, halfWidth, 34}, ui.text(UiText::Language),
-                       Localization::languageName(config.language), ui::SettingLayout::Inline)) {
-            config.language = Localization::nextLanguage(config.language);
-            ui.setLanguage(config.language);
+                       languages_ ? locales::localeName(languages_->get(), config.locale)
+                                  : std::string_view{config.locale},
+                       ui::SettingLayout::Inline)) {
+            config.locale = !languages_ ? std::string{Localization::kDefaultLocale}
+                                        : std::string{nextLocale(languages_->get(), config.locale)};
+            ui.setLocale(config.locale);
             changed = true;
         }
 

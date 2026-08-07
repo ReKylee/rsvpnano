@@ -2,37 +2,89 @@
   {
     "id": "andika",
     "name": "Andika",
-    "files": {
-      "large": "Andika/large.rfont4",
-      "medium": "Andika/medium.rfont4",
-      "small": "Andika/small.rfont4"
-    }
+    "locales": [],
+    "scriptMask": 3,
+    "file": "Andika/font.rfont4",
+    "shaping": false
   },
   {
     "id": "atkinson-hyperlegible",
     "name": "Atkinson Hyperlegible",
-    "files": {
-      "large": "Atkinson Hyperlegible/large.rfont4",
-      "medium": "Atkinson Hyperlegible/medium.rfont4",
-      "small": "Atkinson Hyperlegible/small.rfont4"
-    }
+    "locales": [],
+    "scriptMask": 1,
+    "file": "Atkinson Hyperlegible/font.rfont4",
+    "shaping": false
   },
   {
     "id": "courier-prime",
     "name": "Courier Prime",
-    "files": {
-      "large": "Courier Prime/large.rfont4",
-      "medium": "Courier Prime/medium.rfont4",
-      "small": "Courier Prime/small.rfont4"
-    }
+    "locales": [],
+    "scriptMask": 1,
+    "file": "Courier Prime/font.rfont4",
+    "shaping": false
+  },
+  {
+    "id": "literata",
+    "name": "Literata",
+    "locales": [],
+    "scriptMask": 3,
+    "file": "Literata/font.rfont4",
+    "shaping": false
+  },
+  {
+    "id": "noto-naskh-arabic",
+    "name": "Noto Naskh Arabic",
+    "locales": [
+      "ar"
+    ],
+    "scriptMask": 16,
+    "file": "Noto Naskh Arabic/font.rfont4",
+    "shaping": true
+  },
+  {
+    "id": "noto-serif-hebrew",
+    "name": "Noto Serif Hebrew",
+    "locales": [
+      "he"
+    ],
+    "scriptMask": 8,
+    "file": "Noto Serif Hebrew/font.rfont4",
+    "shaping": true
+  },
+  {
+    "id": "noto-serif-japanese",
+    "name": "Noto Serif Japanese",
+    "locales": [
+      "ja"
+    ],
+    "scriptMask": 224,
+    "file": "Noto Serif Japanese/font.rfont4",
+    "shaping": false
+  },
+  {
+    "id": "noto-serif-simplified-chinese",
+    "name": "Noto Serif Simplified Chinese",
+    "locales": [
+      "zh-Hans"
+    ],
+    "scriptMask": 32,
+    "file": "Noto Serif Simplified Chinese/font.rfont4",
+    "shaping": false
   },
   {
     "id": "opendyslexic",
     "name": "OpenDyslexic",
-    "files": {
-      "large": "OpenDyslexic/large.rfont4",
-      "medium": "OpenDyslexic/medium.rfont4",
-      "small": "OpenDyslexic/small.rfont4"
-    }
+    "locales": [],
+    "scriptMask": 1,
+    "file": "OpenDyslexic/font.rfont4",
+    "shaping": false
+  },
+  {
+    "id": "stix-two-math",
+    "name": "STIX Two Math",
+    "locales": [],
+    "scriptMask": 512,
+    "file": "STIX Two Math/font.rfont4",
+    "shaping": false
   }
 ]

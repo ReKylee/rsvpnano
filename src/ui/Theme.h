@@ -6,15 +6,12 @@
 #include <string_view>
 
 #include "settings/SettingsCodec.h"
-#include "settings/SettingsModel.h"
 #include "ui/Rgb565.h"
 
 namespace ui::themes {
 
     inline constexpr std::string_view kDefaultThemeId = "default";
     inline constexpr std::string_view kThemeExtension = ".toml";
-    inline constexpr std::string_view kDefaultTypefaceId = "literata";
-
     struct ThemeColors {
         Rgb565 background = 0x0000;
         Rgb565 foreground = 0xFFFF;
@@ -38,7 +35,6 @@ namespace ui::themes {
 
     struct ThemeFile {
         std::string name = "Default";
-        settings::TypographySettings typography;
         ThemeColors colors;
 
         bool operator==(const ThemeFile&) const = default;
@@ -72,11 +68,10 @@ namespace ui::themes {
     };
 
     uint16_t color(const ThemeColors& colors, ColorRole role);
-    ThemeEntry defaultTheme(const settings::TypographySettings& typography = {});
+    ThemeEntry defaultTheme();
     bool hasThemeExtension(std::string_view path);
     std::string themeIdFromPath(std::string_view path);
-    settings::SettingsResult<ThemeEntry> decodeToml(std::string_view text, std::string_view id,
-                                                    const settings::TypographySettings& defaults = {});
+    settings::SettingsResult<ThemeEntry> decodeToml(std::string_view text, std::string_view id);
     settings::SettingsResult<std::string> encodeToml(const ThemeFile& theme);
 
 } // namespace ui::themes

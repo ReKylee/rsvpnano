@@ -10,8 +10,10 @@
 #include <cctype>
 #include <charconv>
 #include <cstdio>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "board/BoardStorage.h"
@@ -28,6 +30,52 @@
 
 namespace {
 
+    struct LegacyLocale {
+        std::string_view name;
+        std::string_view tag;
+    };
+
+    constexpr std::array kLegacyUiLocales{
+        LegacyLocale{"english", "en"}, LegacyLocale{"spanish", "es"},  LegacyLocale{"french", "fr"},
+        LegacyLocale{"german", "de"},  LegacyLocale{"romanian", "ro"}, LegacyLocale{"polish", "pl"},
+        LegacyLocale{"russian", "ru"},
+    };
+
+    std::string_view legacyUiLocale(uint64_t ordinal) {
+        return (ordinal < kLegacyUiLocales.size() ? kLegacyUiLocales[ordinal] : kLegacyUiLocales.front()).tag;
+    }
+
+    std::string_view legacyUiLocale(std::string_view name) {
+        const auto found = std::ranges::find(kLegacyUiLocales, name, &LegacyLocale::name);
+        return found == kLegacyUiLocales.end() ? std::string_view{} : found->tag;
+    }
+
+    struct LegacyLocaleInterface {
+        std::string language;
+        std::string locale;
+    };
+
+    struct LegacyLocaleSettings {
+        LegacyLocaleInterface interface;
+    };
+
+    std::optional<std::string> migrateLocaleDocument(std::string_view content, settings::SettingsSource source) {
+        constexpr glz::opts options{.format = glz::TOML, .error_on_unknown_keys = false};
+        LegacyLocaleSettings legacy;
+        if (glz::read<options>(legacy, content) || legacy.interface.language.empty()
+            || !legacy.interface.locale.empty())
+            return std::nullopt;
+        const std::string_view locale = legacyUiLocale(legacy.interface.language);
+        if (locale.empty())
+            return std::nullopt;
+        auto decoded = settings::codec::decodeToml(content, source);
+        if (!decoded)
+            return std::nullopt;
+        decoded->interface.locale = locale;
+        auto encoded = settings::codec::encodeToml(*decoded, source);
+        return encoded ? std::optional<std::string>{std::move(*encoded)} : std::nullopt;
+    }
+
     struct LegacyFocusTimer {
         std::string name;
         uint16_t focus_minutes = 25;
@@ -40,12 +88,81 @@ namespace {
         std::vector<LegacyFocusTimer> timer;
     };
 
+    struct LegacyBookState {
+        uint32_t sourceSize = 0;
+        uint32_t sourceFingerprint = 0;
+        uint32_t wordCount = 0;
+        uint32_t wordIndex = 0;
+        std::optional<settings::TypographySettings> bookTypographyOverride;
+    };
+
+    bool migrateBookStateOverrides(fs::FS& filesystem, const std::string& path) {
+        auto content = StorageFiles::readTextFile(filesystem, path.c_str(), 2048);
+        if (!content)
+            return false;
+        if (!content->contains("bookTypographyOverride"))
+            return true;
+
+        LegacyBookState legacy;
+        constexpr glz::opts options{.format = glz::TOML, .error_on_unknown_keys = false};
+        if (glz::read<options>(legacy, *content) || legacy.sourceSize == 0 || legacy.wordCount == 0)
+            return false;
+
+        ReadingSession::BookState migrated{
+            .sourceSize = legacy.sourceSize,
+            .sourceFingerprint = legacy.sourceFingerprint,
+            .wordCount = legacy.wordCount,
+            .wordIndex = legacy.wordIndex,
+        };
+        std::string output;
+        if (glz::write_toml(migrated, output))
+            return false;
+
+        const std::string temporary = path + ".tmp";
+        const std::string backup = path + ".bak";
+        return StorageFiles::writeFileAtomic(filesystem, path.c_str(), temporary.c_str(), backup.c_str(), output)
+            .has_value();
+    }
+
 } // namespace
+
+void App::migrateSettingsLocale() {
+    Preferences settingsPreferences;
+    if (settingsPreferences.begin(settings::kSettingsNvsNamespace, false)) {
+        const size_t size = settingsPreferences.getBytesLength(settings::kSettingsNvsKey);
+        if (size > 0 && size <= settings::kMaxSettingsBytes) {
+            std::string content(size, '\0');
+            if (settingsPreferences.getBytes(settings::kSettingsNvsKey, content.data(), content.size())
+                == content.size()) {
+                if (auto migrated = migrateLocaleDocument(content, settings::SettingsSource::Nvs);
+                    migrated
+                    && settingsPreferences.putBytes(settings::kSettingsNvsKey, migrated->data(), migrated->size())
+                           != migrated->size())
+                    ESP_LOGE("migration", "could not persist migrated NVS locale setting");
+            }
+        }
+        settingsPreferences.end();
+    }
+}
+
+void App::migrateSettingsLocale(fs::FS& filesystem) {
+    auto content =
+        StorageFiles::readTextFile(filesystem, StoragePaths::kSettingsConfigPath, settings::kMaxSettingsBytes);
+    if (!content)
+        return;
+    if (auto migrated = migrateLocaleDocument(*content, settings::SettingsSource::Sd)) {
+        if (auto written = StorageFiles::writeFileAtomic(filesystem, StoragePaths::kSettingsConfigPath,
+                                                         StoragePaths::kSettingsConfigTempPath,
+                                                         StoragePaths::kSettingsConfigBackupPath, *migrated);
+            !written)
+            ESP_LOGE("migration", "locale settings migration failed: %s", written.error().message().c_str());
+    }
+}
 
 void App::migrateLegacyStorage() {
     // This function is for migrating pre-Glaze settings, secrets, themes, RSS, focus timers, and book progress.
-    constexpr char kMigrationMarker[] = "cfg4_migrated";
-    constexpr std::array kPreviousMigrationMarkers{"cfg2_migrated", "cfg3_migrated"};
+    constexpr char kMigrationMarker[] = "cfg5_migrated";
+    constexpr std::array kPreviousMigrationMarkers{"cfg2_migrated", "cfg3_migrated", "cfg4_migrated"};
     constexpr char kLegacySettingsPath[] = "/config/settings.conf";
     constexpr char kLegacySettingsBackupPath[] = "/config/settings.conf.bak";
     constexpr char kLegacySettingsTempPath[] = "/config/settings.conf.tmp";
@@ -202,8 +319,7 @@ void App::migrateLegacyStorage() {
     });
     readStringKey("theme_id", candidate.interface.selectedThemeId);
     readU8("ui_lang", [&](uint8_t value) {
-        candidate.interface.language =
-            value < std::to_underlying(UiLanguage::Count) ? static_cast<UiLanguage>(value) : UiLanguage::english;
+        candidate.interface.locale = legacyUiLocale(value);
     });
     readBoolKey("handed", candidate.reading.leftHanded);
     readBoolKey("phantom_on", candidate.reading.phantomWords);
@@ -364,9 +480,7 @@ void App::migrateLegacyStorage() {
             if (key == "ui_lang") {
                 if (!parseUnsigned(value, enumValue))
                     return AssignResult::invalid;
-                parsed.interface.language = enumValue < std::to_underlying(UiLanguage::Count)
-                                              ? static_cast<UiLanguage>(enumValue)
-                                              : UiLanguage::english;
+                parsed.interface.locale = legacyUiLocale(enumValue);
                 return AssignResult::applied;
             }
             if (key == "prog_md") {
@@ -516,9 +630,7 @@ void App::migrateLegacyStorage() {
                 if (StorageFiles::fileExists(newPath.c_str())) {
                     std::string current;
                     converted = readFile(*filesystem, newPath.c_str(), kMaxLegacyThemeBytes, current)
-                             && ui::themes::decodeToml(current, ui::themes::themeIdFromPath(newPath),
-                                                       settingsStore_.settings().reading.typography)
-                                    .has_value();
+                             && ui::themes::decodeToml(current, ui::themes::themeIdFromPath(newPath)).has_value();
                     if (!converted) {
                         themesComplete = false;
                         ESP_LOGW("migration", "preserved %s beside invalid %s", legacyPath.c_str(), newPath.c_str());
@@ -529,7 +641,6 @@ void App::migrateLegacyStorage() {
                     std::string content;
                     ui::themes::ThemeFile theme;
                     theme.name.clear();
-                    theme.typography = settingsStore_.settings().reading.typography;
                     std::array<bool, 16> colorsSeen{};
                     bool magicSeen = false;
                     bool valid = readFile(*filesystem, legacyPath.c_str(), kMaxLegacyThemeBytes, content);
@@ -552,10 +663,6 @@ void App::migrateLegacyStorage() {
                         std::string_view value = AsciiText::trim(line.substr(separator + 1));
                         if (key == "name") {
                             theme.name.assign(value);
-                            continue;
-                        }
-                        if (key == "typeface") {
-                            theme.typography.fontId.assign(value);
                             continue;
                         }
 
@@ -748,6 +855,12 @@ void App::migrateLegacyStorage() {
             const std::string legacyPath = StoragePaths::siblingPathWithExtension(bookPath, kLegacyProgressExtension);
             const std::string newPath = StoragePaths::bookStatePathFor(bookPath);
             const bool legacyFileSeen = StorageFiles::fileExists(legacyPath.c_str());
+
+            if (StorageFiles::fileExists(newPath.c_str()) && !migrateBookStateOverrides(*filesystem, newPath)) {
+                booksComplete = false;
+                ESP_LOGW("migration", "preserved invalid book state %s", newPath.c_str());
+                continue;
+            }
 
             uint32_t pathHash = 2166136261UL;
             for (const unsigned char character: bookPath) {

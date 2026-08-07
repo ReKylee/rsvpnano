@@ -2,7 +2,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <span>
 #include <string>
 
@@ -16,7 +15,7 @@ struct ReadingSession {
         uint32_t sourceFingerprint = 0;
         uint32_t wordCount = 0;
         uint32_t wordIndex = 0;
-        std::optional<settings::TypographySettings> bookTypographyOverride;
+        settings::ReadingOverrides overrides;
 
         bool operator==(const BookState&) const = default;
     };

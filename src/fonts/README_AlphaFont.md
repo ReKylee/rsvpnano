@@ -17,7 +17,7 @@ The generator moves most font-dependent work out of runtime:
 - glyph cropping using final non-zero Alpha4 pixels
 - optional fallback-font glyph substitution for unsupported codepoints
 - per-row packed Alpha4 storage: `rowStride = (width + 1) / 2`
-- per-row visible span metadata, so runtime does not scan glyph rows
+- direct packed-row scanning for both compiled and SD-backed fonts, with no duplicate span indexes
 - Unicode page tables for O(1) glyph lookup by codepoint high/low byte
 - per-left-glyph kerning slices
 

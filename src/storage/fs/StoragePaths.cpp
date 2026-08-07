@@ -27,10 +27,6 @@ namespace StoragePaths {
         return hasExtension(path, kEpubExtension);
     }
 
-    bool hasFontExtension(std::string_view path) {
-        return hasExtension(path, kFontExtension);
-    }
-
     std::string parentDirectoryForPath(std::string_view path) {
         const size_t separator = path.find_last_of('/');
         if (separator == std::string_view::npos || separator == 0) {

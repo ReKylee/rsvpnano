@@ -5,17 +5,6 @@
 #include <cstdint>
 #include <string_view>
 
-enum class UiLanguage : uint8_t {
-    english = 0,
-    spanish,
-    french,
-    german,
-    romanian,
-    polish,
-    russian,
-    Count,
-};
-
 enum class UiText : uint8_t {
     Resume = 0,
     Chapters,
@@ -194,9 +183,8 @@ enum class UiText : uint8_t {
 
 namespace Localization {
 
-    UiLanguage sanitizeLanguage(uint8_t value);
-    UiLanguage nextLanguage(UiLanguage current);
-    std::string_view languageName(UiLanguage language);
-    std::string_view text(UiLanguage language, UiText key);
+    inline constexpr std::string_view kDefaultLocale = "en";
+
+    std::string_view text(UiText key);
 
 } // namespace Localization

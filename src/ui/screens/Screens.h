@@ -1,7 +1,9 @@
 #pragma once
 
 #include <Arduino.h>
+#include <FS.h>
 #include <array>
+#include <functional>
 #include <optional>
 #include <span>
 #include <string>
@@ -9,6 +11,7 @@
 #include "book/BookMetadata.h"
 #include "display/ThemeStore.h"
 #include "fonts/FontCatalog.h"
+#include "locales/LocaleCatalog.h"
 #include "reader/ReadingLoop.h"
 #include "settings/NvsSecurity.h"
 #include "settings/SettingsModel.h"
@@ -18,10 +21,6 @@
 #include "timer/FocusSession.h"
 #include "timer/FocusTimers.h"
 #include "ui/Ui.h"
-
-namespace fs {
-    class FS;
-}
 
 namespace screens {
 
@@ -34,6 +33,7 @@ namespace screens {
         InterfaceSettings,
         PacingSettings,
         TypographySettings,
+        BookFonts,
         ReaderSettings,
         NetworkSettings,
         WifiScan,
@@ -79,15 +79,19 @@ namespace screens {
     public:
         ThemeStore themes;
 
-        void begin(ui::Context& ui, settings::InterfaceSettings& settings,
-                   const settings::TypographySettings& typographyDefaults, const FontCatalog& fonts,
+        void begin(ui::Context& ui, settings::InterfaceSettings& settings, const locales::Catalog& languages,
                    void (*setBrightness)(uint8_t));
         bool draw(ui::Context& ui, settings::InterfaceSettings& settings, std::span<const uint32_t> standbyDurations,
                   void (*setBrightness)(uint8_t), Screen& screen);
+
+    private:
+        std::optional<std::reference_wrapper<const locales::Catalog>> languages_;
     };
     bool pacingSettings(ui::Context& ui, settings::PacingSettings& settings, Screen& screen);
-    bool typographySettings(ui::Context& ui, std::optional<settings::TypographySettings>& bookOverride,
-                            const settings::TypographySettings& inherited, FontCatalog& fonts, Screen& screen);
+    bool typographySettings(ui::Context& ui, settings::TypographySettings& config, FontCatalog& fonts,
+                            Screen& screen);
+    bool bookFonts(ui::Context& ui, const BookMetadata& metadata, settings::ReadingOverrides& overrides,
+                   const settings::TypographySettings& globalTypography, FontCatalog& fonts, Screen& screen);
     bool readerSettings(ui::Context& ui, settings::ReadingSettings& settings, Screen& screen);
     class NetworkScreen {
     public:
@@ -142,7 +146,8 @@ namespace screens {
     Action ota(ui::Context& ui, std::string_view firmwareVersion, Screen& screen);
     class FocusScreen {
     public:
-        void begin(fs::FS* filesystem);
+        void begin();
+        void begin(fs::FS& filesystem);
         bool update(uint32_t nowMs);
         Action draw(ui::Context& ui, uint32_t nowMs, Screen& screen);
         void close();
@@ -155,7 +160,7 @@ namespace screens {
         void edit(size_t index, bool creating, Screen& screen);
         bool persist(const focus::Timers& timers);
 
-        fs::FS* filesystem_ = nullptr;
+        std::optional<std::reference_wrapper<fs::FS>> filesystem_;
         focus::Timers timers_;
         focus::Timer draft_;
         focus::Session session_;

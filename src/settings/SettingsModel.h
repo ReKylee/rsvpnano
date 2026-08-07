@@ -2,13 +2,16 @@
 
 #include <cstdint>
 #include <optional>
+#include <ranges>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "settings/SettingsRules.h"
 #include "standby/ScreensaverTypes.h"
-#include "ui/Localization.h"
-
 namespace settings {
+
+    inline constexpr size_t kMaximumBookLanguages = 8;
 
     enum class ReadingMode : uint8_t {
         rsvp,
@@ -49,9 +52,36 @@ namespace settings {
         bool operator==(const TypographySettings&) const = default;
     };
 
-    inline const TypographySettings& effectiveTypography(const std::optional<TypographySettings>& bookOverride,
-                                                         const TypographySettings& theme) {
-        return bookOverride ? *bookOverride : theme;
+    enum class TextDirection : uint8_t {
+        ltr,
+        rtl,
+    };
+
+    enum class ReadingPacing : uint8_t {
+        words,
+        cjkPhrase,
+    };
+
+    struct LanguageFont {
+        std::string locale;
+        std::string fontId;
+
+        bool operator==(const LanguageFont&) const = default;
+    };
+
+    struct ReadingOverrides {
+        std::vector<LanguageFont> languageFonts;
+        std::optional<std::string> locale;
+        std::optional<TextDirection> direction;
+        std::optional<ReadingPacing> pacing;
+
+        bool operator==(const ReadingOverrides&) const = default;
+    };
+
+    inline std::string_view fontForLocale(const ReadingOverrides& overrides, std::string_view locale,
+                                          std::string_view fallback) {
+        const auto selected = std::ranges::find(overrides.languageFonts, locale, &LanguageFont::locale);
+        return selected == overrides.languageFonts.end() ? fallback : std::string_view{selected->fontId};
     }
 
     struct PacingSettings {
@@ -83,7 +113,7 @@ namespace settings {
 
     struct InterfaceSettings {
         BoundedValue<uint8_t, 5, 100, 5> brightnessPercent{70};
-        UiLanguage language = UiLanguage::english;
+        std::string locale = "en";
         BoundedValue<uint8_t, 0, 4> standbyTimerIndex{1};
         standby::Kind screensaver = standby::Kind::life;
         std::string selectedThemeId = "default";

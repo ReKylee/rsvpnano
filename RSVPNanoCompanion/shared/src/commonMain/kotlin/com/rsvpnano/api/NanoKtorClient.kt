@@ -15,6 +15,8 @@ import com.rsvpnano.models.NanoUploadResponse
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.NanoWifiUpdate
 import com.rsvpnano.models.FirmwareRelease
+import com.rsvpnano.models.NanoLocalesResponse
+import com.rsvpnano.models.NanoLanguageFont
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.onUpload
@@ -88,6 +90,9 @@ class NanoKtorClient(
 
     override suspend fun fetchFonts(baseUrl: String): List<NanoFontSummary> =
         requestData(baseUrl, "api/v1/appearance/fonts", NanoFontsResponse.serializer()).fonts
+
+    override suspend fun fetchLocales(baseUrl: String): NanoLocalesResponse =
+        requestData(baseUrl, "api/v1/locales", NanoLocalesResponse.serializer())
 
     override suspend fun updateSettings(baseUrl: String, settings: NanoSettings): NanoSettings {
         val response = httpClient.put(buildUrl(baseUrl, "api/v1/settings")) {
@@ -205,7 +210,6 @@ class NanoKtorClient(
     override suspend fun uploadFont(
         baseUrl: String,
         family: String,
-        size: String,
         name: String,
         data: ByteArray,
         onProgress: ((sent: Long, total: Long) -> Unit)?,
@@ -214,7 +218,7 @@ class NanoKtorClient(
             buildUrl(
                 baseUrl = baseUrl,
                 path = "api/v1/appearance/fonts",
-                query = listOf("family" to family, "size" to size, "name" to name),
+                query = listOf("family" to family),
             )
         ) {
             setBody(
@@ -270,6 +274,48 @@ class NanoKtorClient(
         return response.body()
     }
 
+    override suspend fun beginLocalePackStage(baseUrl: String, id: String): NanoUploadResponse {
+        val response = httpClient.post(buildUrl(baseUrl, "api/v1/locales/$id/stage"))
+        return decodeDeviceResponse(response.status, response.body<String>(), NanoUploadResponse.serializer())
+    }
+
+    override suspend fun uploadLocalePackFile(
+        baseUrl: String,
+        id: String,
+        path: String,
+        data: ByteArray,
+        onProgress: ((sent: Long, total: Long) -> Unit)?,
+    ): NanoUploadResponse {
+        val response = httpClient.post(
+            buildUrl(baseUrl, "api/v1/locales/$id/files", query = listOf("path" to path))
+        ) {
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append("file", data, headers = io.ktor.http.Headers.build {
+                            append(HttpHeaders.ContentDisposition, "form-data; name=\"file\"; filename=\"${path.substringAfterLast('/')}\"")
+                            append(HttpHeaders.ContentType, ContentType.Application.OctetStream.toString())
+                        })
+                    }
+                )
+            )
+            onProgress?.let { progress ->
+                onUpload { sent, total -> progress(sent, total ?: data.size.toLong()) }
+            }
+        }
+        return decodeDeviceResponse(response.status, response.body<String>(), NanoUploadResponse.serializer())
+    }
+
+    override suspend fun activateLocalePack(baseUrl: String, id: String): NanoUploadResponse {
+        val response = httpClient.post(buildUrl(baseUrl, "api/v1/locales/$id/activate"))
+        return decodeDeviceResponse(response.status, response.body<String>(), NanoUploadResponse.serializer())
+    }
+
+    override suspend fun deleteLocalePack(baseUrl: String, id: String): NanoUploadResponse {
+        val response = httpClient.delete(buildUrl(baseUrl, "api/v1/locales/$id"))
+        return decodeDeviceResponse(response.status, response.body<String>(), NanoUploadResponse.serializer())
+    }
+
     override suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse {
         val response = httpClient.delete(buildUrl(baseUrl, "api/v1/library", query = listOf("id" to id)))
         val body = response.body<String>()
@@ -292,6 +338,18 @@ class NanoKtorClient(
         }
         val body = response.body<String>()
         return decodeDeviceResponse(response.status, body, NanoUploadResponse.serializer())
+    }
+
+    override suspend fun setBookLanguageFonts(
+        baseUrl: String,
+        id: String,
+        languageFonts: List<NanoLanguageFont>,
+    ): NanoUploadResponse {
+        val response = httpClient.patch(buildUrl(baseUrl, "api/v1/library/language-fonts")) {
+            contentType(ContentType.Application.Json)
+            setBody(BookLanguageFontsUpdate(id, languageFonts))
+        }
+        return decodeDeviceResponse(response.status, response.body<String>(), NanoUploadResponse.serializer())
     }
 
     private suspend fun <T> requestData(
@@ -351,6 +409,12 @@ class NanoKtorClient(
     private data class BookPositionUpdate(
         val id: String,
         val wordIndex: Int,
+    )
+
+    @Serializable
+    private data class BookLanguageFontsUpdate(
+        val id: String,
+        val languageFonts: List<NanoLanguageFont>,
     )
 
     @Serializable

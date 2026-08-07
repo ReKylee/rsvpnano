@@ -8,6 +8,7 @@ import com.rsvpnano.models.NanoFontSummary
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoThemeSummary
 import com.rsvpnano.models.NanoWifiSettings
+import com.rsvpnano.models.NanoLocalesResponse
 
 /**
  * One snapshot of the device state, suitable for populating a SwiftUI or Compose view model.
@@ -18,6 +19,7 @@ data class NanoDeviceSnapshot(
     val settings: NanoSettings? = null,
     val themes: List<NanoThemeSummary> = emptyList(),
     val fonts: List<NanoFontSummary> = emptyList(),
+    val locales: NanoLocalesResponse = NanoLocalesResponse(),
     val wifiSettings: NanoWifiSettings? = null,
     val rssFeeds: NanoRssFeeds? = null,
     val focusTimers: NanoFocusTimers? = null,

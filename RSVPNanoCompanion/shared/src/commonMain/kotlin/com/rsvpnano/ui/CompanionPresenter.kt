@@ -17,6 +17,8 @@ import com.rsvpnano.app.rawContentUrl
 import com.rsvpnano.converters.ImportPreparation
 import com.rsvpnano.converters.RsvpConverter
 import com.rsvpnano.models.NanoBook
+import com.rsvpnano.models.NanoLanguageFont
+import com.rsvpnano.converters.ZipArchiveReader
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.RememberedNano
@@ -172,8 +174,6 @@ class CompanionPresenter(
     fun setSelectedCatalogThemeId(value: String) = updateState { it.copy(selectedCatalogThemeId = value) }
 
     fun setSelectedCatalogFontId(value: String) = updateState { it.copy(selectedCatalogFontId = value) }
-
-    fun setSelectedCatalogFontSize(value: String) = updateState { it.copy(selectedCatalogFontSize = value) }
 
     fun refresh() {
         scope.launch {
@@ -810,6 +810,28 @@ class CompanionPresenter(
         }
     }
 
+    fun setBookLanguageFonts(book: NanoBook, languageFonts: List<NanoLanguageFont>) {
+        scope.launch {
+            val state = current
+            if (!state.isConnected) {
+                setNotice(CompanionNotice.Error("Connect to your Nano before configuring book fonts."))
+                return@launch
+            }
+            val title = book.displayTitle
+            setNotice(CompanionNotice.Attention("Saving language fonts for $title..."))
+            if (!ensureReaderReachable("configuring book fonts")) return@launch
+            runCatching {
+                withNanoApi { companionController.setBookLanguageFonts(state.baseUrl, book, languageFonts) }
+            }.onSuccess { books ->
+                updateState {
+                    it.copy(books = books, notice = CompanionNotice.Success("Saved language fonts for $title."))
+                }
+            }.onFailure { error ->
+                markDisconnected(error.message ?: "Reader disconnected before saving book fonts.")
+            }
+        }
+    }
+
     fun uploadSelectedFile(displayName: String, data: ByteArray) {
         scope.launch {
             val state = current
@@ -969,7 +991,6 @@ class CompanionPresenter(
                 setNotice(CompanionNotice.Error("Font files must use the .rfont4 extension."))
                 return@launch
             }
-            val inferredSize = inferFontSize(displayName)
             val family = inferFontFamily(displayName)
             if (!ensureReaderReachable("uploading fonts")) return@launch
             setNotice(CompanionNotice.Attention("Uploading $displayName..."))
@@ -978,7 +999,6 @@ class CompanionPresenter(
                     companionController.uploadFont(
                         baseUrl = state.baseUrl,
                         family = family,
-                        size = inferredSize,
                         filename = displayName,
                         data = data,
                     )
@@ -988,7 +1008,7 @@ class CompanionPresenter(
                     it.copy(
                         settings = snapshot.settings,
                         availableFonts = snapshot.fonts,
-                        notice = CompanionNotice.Success("Uploaded $displayName as $family / $inferredSize."),
+                        notice = CompanionNotice.Success("Uploaded $displayName as $family."),
                     )
                 }
             }.onFailure { error ->
@@ -1010,28 +1030,21 @@ class CompanionPresenter(
                 setNotice(CompanionNotice.Error("Load the online font list first."))
                 return@launch
             }
-            val size = state.selectedCatalogFontSize
-            if (font.files[size].isNullOrBlank()) {
-                setNotice(CompanionNotice.Error("That font does not include the selected size."))
-                return@launch
-            }
-
-            setNotice(CompanionNotice.Attention("Downloading ${font.name} $size..."))
+            setNotice(CompanionNotice.Attention("Downloading ${font.name}..."))
             val catalogUrl = state.fontCatalogUrl.ifBlank { catalogUrl("fonts/index.json") }
             val fontFile = runCatching {
-                companionController.downloadFont(catalogUrl, font, size)
+                companionController.downloadFont(catalogUrl, font)
             }.onFailure { error ->
                 setNotice(CompanionNotice.Error(error.message ?: "Font download failed."))
             }.getOrNull() ?: return@launch
 
             if (!ensureReaderReachable("installing fonts")) return@launch
-            setNotice(CompanionNotice.Attention("Installing ${font.name} $size..."))
+            setNotice(CompanionNotice.Attention("Installing ${font.name}..."))
             runCatching {
                 withNanoApi {
                     companionController.uploadFont(
                         baseUrl = state.baseUrl,
                         family = fontFile.family,
-                        size = fontFile.size,
                         filename = fontFile.filename,
                         data = fontFile.data,
                     )
@@ -1042,11 +1055,87 @@ class CompanionPresenter(
                         settings = snapshot.settings,
                         availableFonts = snapshot.fonts,
                         selectedCatalogFontId = font.id,
-                        notice = CompanionNotice.Success("Installed ${font.name} $size."),
+                        notice = CompanionNotice.Success("Installed ${font.name}."),
                     )
                 }
             }.onFailure { error ->
                 setNotice(CompanionNotice.Error(fontUploadError(error)))
+            }
+        }
+    }
+
+    fun installLocalePackFile(displayName: String, data: ByteArray) {
+        scope.launch {
+            val state = current
+            if (!state.isConnected) {
+                setNotice(CompanionNotice.Error("Connect to your Nano before installing locale packs."))
+                return@launch
+            }
+            if (!displayName.endsWith(".zip", ignoreCase = true)) {
+                setNotice(CompanionNotice.Error("Locale packs must use the .zip extension."))
+                return@launch
+            }
+            val files = runCatching { ZipArchiveReader.readEntries(data) }
+                .getOrElse {
+                    setNotice(CompanionNotice.Error("Locale pack ZIP is invalid."))
+                    return@launch
+                }
+            val manifestEntry = files.entries.singleOrNull { (path, _) ->
+                path.startsWith("locales/") && path.endsWith("/manifest.toml")
+            }
+            if (manifestEntry == null) {
+                setNotice(CompanionNotice.Error("ZIP must contain one locales/<id>/manifest.toml."))
+                return@launch
+            }
+            val root = manifestEntry.key.substringBeforeLast('/') + "/"
+            val id = root.removePrefix("locales/").removeSuffix("/")
+            if (!id.matches(Regex("[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*"))) {
+                setNotice(CompanionNotice.Error("Locale pack ID is invalid."))
+                return@launch
+            }
+            val packFiles = files.filterKeys { it.startsWith(root) }.mapKeys { (path, _) -> path.removePrefix(root) }
+            if (packFiles.size != files.size) {
+                setNotice(CompanionNotice.Error("ZIP contains files outside its locale pack folder."))
+                return@launch
+            }
+            if (!ensureReaderReachable("installing a locale pack")) return@launch
+            setNotice(CompanionNotice.Attention("Installing locale pack $id..."))
+            runCatching {
+                withNanoApi {
+                    companionController.beginLocalePackInstall(state.baseUrl, id)
+                    packFiles.forEach { (path, bytes) ->
+                        companionController.uploadLocalePackFile(state.baseUrl, id, path, bytes)
+                    }
+                    companionController.activateLocalePack(state.baseUrl, id)
+                }
+            }.onSuccess { locales ->
+                updateState {
+                    it.copy(
+                        availableLocales = locales.locales,
+                        notice = CompanionNotice.Success("Installed locale pack $id."),
+                    )
+                }
+            }.onFailure { error ->
+                setNotice(CompanionNotice.Error(error.message ?: "Locale pack installation failed."))
+            }
+        }
+    }
+
+    fun removeLocalePack(id: String) {
+        scope.launch {
+            val state = current
+            if (!state.isConnected || !ensureReaderReachable("removing a locale pack")) return@launch
+            runCatching {
+                withNanoApi { companionController.removeLocalePack(state.baseUrl, id) }
+            }.onSuccess { locales ->
+                updateState {
+                    it.copy(
+                        availableLocales = locales.locales,
+                        notice = CompanionNotice.Success("Removed locale pack $id."),
+                    )
+                }
+            }.onFailure { error ->
+                setNotice(CompanionNotice.Error(error.message ?: "Locale pack removal failed."))
             }
         }
     }
@@ -1188,6 +1277,7 @@ class CompanionPresenter(
                 settings = device.settings,
                 availableThemes = device.themes,
                 availableFonts = device.fonts,
+                availableLocales = device.locales.locales,
                 firmwareVersion = device.info?.firmwareVersion.orEmpty(),
                 otaAsset = device.info?.otaAsset.orEmpty(),
                 wifiSettings = device.wifiSettings,
@@ -1281,18 +1371,8 @@ class CompanionPresenter(
         }
     }
 
-    private fun inferFontSize(filename: String): String {
-        val lower = filename.lowercase()
-        return when {
-            "small" in lower -> "small"
-            "medium" in lower -> "medium"
-            "large" in lower -> "large"
-            else -> "large"
-        }
-    }
-
     private fun inferFontFamily(filename: String): String =
-        filename.substringBeforeLast('.').replace(Regex("[-_ ]?(small|medium|large)$", RegexOption.IGNORE_CASE), "")
+        filename.substringBeforeLast('.')
             .ifBlank { "Custom Font" }
 
     private fun currentRememberableNano(): RememberedNano? {

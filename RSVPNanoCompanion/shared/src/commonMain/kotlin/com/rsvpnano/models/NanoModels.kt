@@ -9,6 +9,12 @@ data class NanoChapter(
 )
 
 @Serializable
+data class NanoBookLanguage(
+    val locale: String,
+    val scriptMask: Int = 0,
+)
+
+@Serializable
 data class NanoBook(
     val id: String,
     val name: String,
@@ -28,6 +34,12 @@ data class NanoBookMetadata(
     val author: String = "",
     val wordCount: Int = 0,
     val chapterCount: Int = 0,
+    val locale: String = "",
+    val direction: String = "auto",
+    val scriptMask: Int = 0,
+    val scripts: List<String> = emptyList(),
+    val languages: List<NanoBookLanguage> = emptyList(),
+    val requiredCapabilities: List<String> = emptyList(),
     val chapters: List<NanoChapter> = emptyList(),
 )
 
@@ -44,6 +56,13 @@ data class NanoReadingProgress(
     val remainingWords: Int,
     val estimatedMinutes: Int,
     val currentChapter: NanoCurrentChapter? = null,
+    val languageFonts: List<NanoLanguageFont> = emptyList(),
+)
+
+@Serializable
+data class NanoLanguageFont(
+    val locale: String,
+    val fontId: String,
 )
 
 @Serializable
@@ -113,14 +132,30 @@ data class NanoWifiUpdate(
 data class NanoFontCatalogItem(
     val id: String,
     val name: String,
-    val files: Map<String, String> = emptyMap(),
+    val locales: List<String> = emptyList(),
+    val scriptMask: Int = 0,
+    val file: String,
+    val shaping: Boolean = false,
 )
 
 @Serializable
 data class NanoFontSummary(
     val id: String,
     val name: String,
-)
+    val locales: List<String> = emptyList(),
+    val scriptMask: Int = 0,
+    val shaping: Boolean = false,
+) {
+    fun usableFor(locale: String, requiredScripts: Int): Boolean =
+        requiredScripts == 0 || (scriptMask and requiredScripts) == requiredScripts ||
+            (locales.any { locale == it || locale.startsWith("$it-") } &&
+                (scriptMask and requiredScripts) != 0) ||
+            (requiredScripts and SCRIPT_MATH) != 0 && (scriptMask and SCRIPT_MATH) != 0
+
+    private companion object {
+        const val SCRIPT_MATH = 1 shl 9
+    }
+}
 
 @Serializable
 data class NanoFontsResponse(
@@ -143,6 +178,32 @@ data class NanoThemeSummary(
 @Serializable
 data class NanoThemesResponse(
     val themes: List<NanoThemeSummary> = emptyList(),
+)
+
+@Serializable
+data class NanoLocaleSummary(
+    val id: String,
+    val version: String,
+    val locale: String = "",
+    val nativeName: String,
+    val englishName: String,
+    val direction: String,
+    val translationStatus: String,
+    val scriptMask: Int = 0,
+    val requiredCapabilities: List<String> = emptyList(),
+    val scripts: List<String> = emptyList(),
+)
+
+@Serializable
+data class NanoLocaleIssue(
+    val id: String,
+    val reason: String,
+)
+
+@Serializable
+data class NanoLocalesResponse(
+    val locales: List<NanoLocaleSummary> = emptyList(),
+    val rejected: List<NanoLocaleIssue> = emptyList(),
 )
 
 @Serializable
@@ -190,7 +251,7 @@ data class NanoSettings(
     @Serializable
     data class Interface(
         val brightnessPercent: Int = 70,
-        val language: String = NanoLanguages.DEFAULT,
+        val locale: String = NanoLocales.DEFAULT,
         val standbyTimerIndex: Int = NanoSettingsSchema.STANDBY_TIMER_NEVER,
         val screensaver: String = NanoSettingsSchema.SCREENSAVER_LIFE,
         val selectedThemeId: String = NanoSettingsSchema.THEME_DEFAULT,
@@ -269,8 +330,8 @@ data class NanoSettings(
     fun withStandbyTimerIndex(value: Int): NanoSettings =
         copy(`interface` = `interface`.copy(standbyTimerIndex = NanoSettingsSchema.coerceStandbyTimerIndex(value)))
 
-    fun withLanguage(value: String): NanoSettings =
-        copy(`interface` = `interface`.copy(language = NanoSettingsSchema.coerceLanguage(value)))
+    fun withLocale(value: String): NanoSettings =
+        copy(`interface` = `interface`.copy(locale = NanoSettingsSchema.coerceLocale(value)))
 
     fun withPhantomWords(value: Boolean): NanoSettings =
         copy(reading = reading.copy(phantomWords = value))
@@ -399,9 +460,8 @@ object NanoSettingsSchema {
     fun coerceStandbyTimerIndex(value: Int): Int =
         value.coerceIn(STANDBY_TIMER_NEVER, STANDBY_TIMER_30_MIN)
 
-    fun coerceLanguage(value: String): String =
-        value.takeIf { candidate -> NanoLanguages.OPTIONS.any { it.first == candidate } }
-            ?: NanoLanguages.DEFAULT
+    fun coerceLocale(value: String): String =
+        value.ifBlank { NanoLocales.DEFAULT }
 
     fun coerceFontSizeIndex(value: Int): Int =
         value.coerceIn(FONT_SIZE_MIN, FONT_SIZE_MAX)

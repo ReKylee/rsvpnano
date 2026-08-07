@@ -16,6 +16,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.SystemUpdate
@@ -35,7 +37,7 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,7 +53,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.rsvpnano.models.NanoLanguages
+import com.rsvpnano.models.NanoLocaleSummary
+import com.rsvpnano.models.NanoLocales
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoSettingsSchema
 
@@ -63,6 +66,8 @@ private enum class SettingsCategory(
     Reading("Reading", Icons.AutoMirrored.Outlined.MenuBook),
     Display("Display", Icons.Outlined.Palette),
     Typography("Typography", Icons.Outlined.TextFields),
+    Locales("Languages", Icons.Outlined.Language),
+    Fonts("Fonts", Icons.Outlined.CloudUpload),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -75,6 +80,7 @@ fun SettingsTab(
     onGrantPermissions: () -> Unit,
     onUploadTheme: () -> Unit,
     onUploadFont: () -> Unit,
+    onUploadLocalePack: () -> Unit,
 ) {
     var category by remember { mutableStateOf(SettingsCategory.Device) }
     val content: @Composable (Modifier) -> Unit = { modifier ->
@@ -87,6 +93,7 @@ fun SettingsTab(
             onGrantPermissions = onGrantPermissions,
             onUploadTheme = onUploadTheme,
             onUploadFont = onUploadFont,
+            onUploadLocalePack = onUploadLocalePack,
             modifier = modifier,
         )
     }
@@ -96,38 +103,38 @@ fun SettingsTab(
         onRefresh = presenter::refresh,
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                if (maxWidth >= 720.dp) {
-                    Row(modifier = Modifier.fillMaxSize()) {
-                        SettingsRail(
-                            selected = category,
-                            onSelected = { category = it },
-                        )
-                        VerticalDivider()
-                        content(Modifier.weight(1f))
-                    }
-                } else {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        PrimaryTabRow(selectedTabIndex = category.ordinal) {
-                            SettingsCategory.entries.forEach { option ->
-                                Tab(
-                                    selected = category == option,
-                                    onClick = { category = option },
-                                    icon = { Icon(imageVector = option.icon, contentDescription = null) },
-                                    text = {
-                                        Text(
-                                            text = option.label,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Clip,
-                                            softWrap = false,
-                                        )
-                                    },
-                                )
-                            }
-                        }
-                        content(Modifier.weight(1f))
-                    }
+            if (maxWidth >= 720.dp) {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    SettingsRail(
+                        selected = category,
+                        onSelected = { category = it },
+                    )
+                    VerticalDivider()
+                    content(Modifier.weight(1f))
                 }
+            } else {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    PrimaryScrollableTabRow(selectedTabIndex = category.ordinal, edgePadding = 0.dp) {
+                        SettingsCategory.entries.forEach { option ->
+                            Tab(
+                                selected = category == option,
+                                onClick = { category = option },
+                                icon = { Icon(imageVector = option.icon, contentDescription = null) },
+                                text = {
+                                    Text(
+                                        text = option.label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Clip,
+                                        softWrap = false,
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    content(Modifier.weight(1f))
+                }
+            }
         }
     }
 }
@@ -159,6 +166,7 @@ private fun SettingsContent(
     onGrantPermissions: () -> Unit,
     onUploadTheme: () -> Unit,
     onUploadFont: () -> Unit,
+    onUploadLocalePack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -194,9 +202,20 @@ private fun SettingsContent(
             SettingsCategory.Typography -> TypographySettings(
                 uiState = uiState,
                 onUpdateSettings = presenter::updateSettings,
+            )
+
+            SettingsCategory.Locales -> LocaleSettings(
+                uiState = uiState,
+                onUpdateSettings = presenter::updateSettings,
+                onUploadLocalePack = onUploadLocalePack,
+                onRemoveLocalePack = presenter::removeLocalePack,
+            )
+
+            SettingsCategory.Fonts -> FontSettings(
+                uiState = uiState,
+                onUpdateSettings = presenter::updateSettings,
                 onRefreshFontCatalog = presenter::refreshFontCatalog,
                 onSelectCatalogFont = presenter::setSelectedCatalogFontId,
-                onSelectCatalogFontSize = presenter::setSelectedCatalogFontSize,
                 onInstallOnlineFont = presenter::installSelectedOnlineFont,
                 onUploadFont = onUploadFont,
             )
@@ -616,12 +635,6 @@ private fun DisplaySettings(
                     }
                 },
             )
-            DropdownRow(
-                label = "Language",
-                selected = settings.`interface`.language,
-                options = NanoLanguages.OPTIONS,
-                onSelected = { language -> onUpdateSettings { it.withLanguage(language) } },
-            )
         }
 
         SettingsSection(
@@ -669,11 +682,6 @@ private fun DisplaySettings(
 private fun TypographySettings(
     uiState: CompanionUiState,
     onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
-    onRefreshFontCatalog: () -> Unit,
-    onSelectCatalogFont: (String) -> Unit,
-    onSelectCatalogFontSize: (String) -> Unit,
-    onInstallOnlineFont: () -> Unit,
-    onUploadFont: () -> Unit,
 ) {
     SettingsPage {
         val settings = uiState.settings
@@ -684,17 +692,8 @@ private fun TypographySettings(
 
         SettingsSection(
             title = "Text",
-            subtitle = "Typeface and spacing for the current theme.",
+            subtitle = "Reader text size and spacing.",
         ) {
-            DropdownRow(
-                label = "Typeface",
-                description = "Changing this updates only the selected theme.",
-                selected = settings.reading.typography.fontId,
-                options = uiState.availableFonts
-                    .map { font -> font.id to font.name }
-                    .ifEmpty { listOf(settings.reading.typography.fontId to settings.reading.typography.fontId) },
-                onSelected = { typeface -> onUpdateSettings { it.withTypeface(typeface) } },
-            )
             SegmentedChoiceRow(
                 label = "Font size",
                 selected = settings.reading.typography.fontSizeIndex.toString(),
@@ -755,51 +754,129 @@ private fun TypographySettings(
             )
         }
 
+    }
+}
+
+@Composable
+private fun LocaleSettings(
+    uiState: CompanionUiState,
+    onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
+    onUploadLocalePack: () -> Unit,
+    onRemoveLocalePack: (String) -> Unit,
+) {
+    SettingsPage {
+        val settings = uiState.settings
+        if (settings == null) {
+            UnavailableSettings(uiState.isConnected)
+            return@SettingsPage
+        }
+        SettingsSection(
+            title = "Interface locale",
+            subtitle = "Reader language support comes from installed fonts.",
+        ) {
+            DropdownRow(
+                label = "Interface language",
+                selected = settings.`interface`.locale,
+                options = buildList {
+                    add(NanoLocales.DEFAULT to "English")
+                    uiState.availableLocales.filter { it.locale.isNotBlank() }
+                        .forEach { add(it.locale to it.nativeName) }
+                }.distinctBy { it.first },
+                onSelected = { locale -> onUpdateSettings { it.withLocale(locale) } },
+            )
+        }
+        SettingsSection(
+            title = "Installed locale packs",
+            subtitle = "These affect only interface text and its compact UI font.",
+        ) {
+            if (uiState.availableLocales.isEmpty()) {
+                Text("No external locale packs installed.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            uiState.availableLocales.forEach { localePack ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(localePack.nativeName, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            listOf(localePack.locale, localePack.direction.uppercase(), localePack.scripts.joinToString())
+                                .filter(String::isNotBlank)
+                                .joinToString(" · "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(onClick = { onRemoveLocalePack(localePack.id) }) {
+                        Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
+                        Text("Remove")
+                    }
+                }
+                HorizontalDivider()
+            }
+            OutlinedButton(onClick = onUploadLocalePack, modifier = Modifier.fillMaxWidth()) {
+                Icon(imageVector = Icons.Outlined.UploadFile, contentDescription = null)
+                Text("Install locale pack ZIP")
+            }
+        }
+    }
+}
+
+@Composable
+private fun FontSettings(
+    uiState: CompanionUiState,
+    onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
+    onRefreshFontCatalog: () -> Unit,
+    onSelectCatalogFont: (String) -> Unit,
+    onInstallOnlineFont: () -> Unit,
+    onUploadFont: () -> Unit,
+) {
+    SettingsPage {
+        val settings = uiState.settings
+        if (settings == null) {
+            UnavailableSettings(uiState.isConnected)
+            return@SettingsPage
+        }
+        SettingsSection(
+            title = "Global reader font",
+            subtitle = "Used for every book unless that book selects a compatible font for a language.",
+        ) {
+            DropdownRow(
+                label = "Typeface",
+                selected = settings.reading.typography.fontId,
+                options = uiState.availableFonts.map { it.id to it.name }
+                    .ifEmpty { listOf(settings.reading.typography.fontId to settings.reading.typography.fontId) },
+                onSelected = { typeface -> onUpdateSettings { it.withTypeface(typeface) } },
+            )
+        }
         SettingsSection(
             title = "Font library",
-            subtitle = "Install from the online catalog or a local .rfont4 file.",
+            subtitle = "Install shared .rfont4 reader fonts from the catalog or a local file.",
             action = {
                 IconButton(onClick = onRefreshFontCatalog) {
                     Icon(imageVector = Icons.Outlined.Sync, contentDescription = "Refresh font catalog")
                 }
             },
         ) {
-            Text(text = "From catalog", style = MaterialTheme.typography.labelLarge)
             if (uiState.fontCatalog.isNotEmpty()) {
-                val selectedFont = uiState.fontCatalog.firstOrNull { it.id == uiState.selectedCatalogFontId }
-                    ?: uiState.fontCatalog.firstOrNull()
                 DropdownRow(
                     label = "Font",
                     selected = uiState.selectedCatalogFontId,
-                    options = uiState.fontCatalog.map { font -> font.id to font.name },
+                    options = uiState.fontCatalog.map { it.id to it.name },
                     onSelected = onSelectCatalogFont,
                 )
-                SegmentedChoiceRow(
-                    label = "Font size to install",
-                    selected = uiState.selectedCatalogFontSize,
-                    options = listOf("large" to "Large", "medium" to "Medium", "small" to "Small")
-                        .filter { (size, _) -> selectedFont?.files?.containsKey(size) ?: true },
-                    onSelected = onSelectCatalogFontSize,
-                )
-                Button(
-                    onClick = onInstallOnlineFont,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
+                Button(onClick = onInstallOnlineFont, modifier = Modifier.fillMaxWidth()) {
                     Icon(imageVector = Icons.Outlined.CloudUpload, contentDescription = null)
-                    Text(text = "Install font")
+                    Text("Install font")
                 }
             } else {
-                Text(
-                    text = "The online catalog is unavailable. Use refresh to try again.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                Text("The online catalog is unavailable.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            Text(text = "From file", style = MaterialTheme.typography.labelLarge)
             OutlinedButton(onClick = onUploadFont, modifier = Modifier.fillMaxWidth()) {
                 Icon(imageVector = Icons.Outlined.UploadFile, contentDescription = null)
-                Text(text = "Choose .rfont4 file")
+                Text("Choose .rfont4 file")
             }
         }
     }

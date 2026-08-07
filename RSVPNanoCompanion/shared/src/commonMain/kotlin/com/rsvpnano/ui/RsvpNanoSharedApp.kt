@@ -112,6 +112,15 @@ fun RsvpNanoSharedApp(
                 }
             }
         }
+        val localePackPicker = rememberFilePickerLauncher(
+            type = FileKitType.File(extensions = listOf("zip")),
+        ) { file ->
+            if (file != null) {
+                scope.launch {
+                    presenter.installLocalePackFile(file.name, file.readBytes())
+                }
+            }
+        }
 
         LaunchedEffect(uiState.notice) {
             if (uiState.notice.showTransient) {
@@ -206,6 +215,7 @@ fun RsvpNanoSharedApp(
                         onSyncArticles = presenter::syncSavedArticles,
                         onDeleteBook = presenter::deleteDeviceBook,
                         onSetBookPosition = presenter::setBookPosition,
+                        onSetBookLanguageFonts = presenter::setBookLanguageFonts,
                         onShowUpload = { showAddPicker = true },
                     )
 
@@ -217,6 +227,7 @@ fun RsvpNanoSharedApp(
                         onGrantPermissions = onGrantPermissions,
                         onUploadTheme = { themePicker.launch() },
                         onUploadFont = { fontPicker.launch() },
+                        onUploadLocalePack = { localePackPicker.launch() },
                     )
                 }
             }

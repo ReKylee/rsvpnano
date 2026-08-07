@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Newspaper
 import androidx.compose.material.icons.outlined.RssFeed
 import androidx.compose.material.icons.outlined.Sync
@@ -72,6 +73,9 @@ import com.rsvpnano.app.CompanionNotice.Error
 import com.rsvpnano.app.CompanionNotice.Success
 import com.rsvpnano.converters.RsvpSupportedFileTypes
 import com.rsvpnano.models.NanoBook
+import com.rsvpnano.models.NanoBookLanguage
+import com.rsvpnano.models.NanoFontSummary
+import com.rsvpnano.models.NanoLanguageFont
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.PendingUpload
 import kotlin.math.roundToInt
@@ -93,6 +97,7 @@ fun LibraryTab(
     onSyncArticles: () -> Unit,
     onDeleteBook: (NanoBook) -> Unit,
     onSetBookPosition: (NanoBook, Int) -> Unit,
+    onSetBookLanguageFonts: (NanoBook, List<NanoLanguageFont>) -> Unit,
     onShowUpload: () -> Unit,
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -220,6 +225,12 @@ fun LibraryTab(
             onSetPosition = { wordIndex ->
                 selectedBook = null
                 onSetBookPosition(book, wordIndex)
+            },
+            availableFonts = uiState.availableFonts,
+            globalFontId = uiState.settings?.reading?.typography?.fontId.orEmpty(),
+            onSetLanguageFonts = { selections ->
+                selectedBook = null
+                onSetBookLanguageFonts(book, selections)
             },
         )
     }
@@ -423,12 +434,24 @@ private fun LibraryBookDialog(
     book: NanoBook,
     onDismiss: () -> Unit,
     onSetPosition: (Int) -> Unit,
+    availableFonts: List<NanoFontSummary>,
+    globalFontId: String,
+    onSetLanguageFonts: (List<NanoLanguageFont>) -> Unit,
 ) {
     var showPositionDialog by remember(book.id) { mutableStateOf(false) }
+    var showLanguageFonts by remember(book.id) { mutableStateOf(false) }
     val metadata = book.metadata
     val reading = book.reading
 
-    if (!showPositionDialog) {
+    if (showLanguageFonts) {
+        BookLanguageFontsDialog(
+            book = book,
+            availableFonts = availableFonts,
+            globalFontId = globalFontId,
+            onDismiss = { showLanguageFonts = false },
+            onSave = onSetLanguageFonts,
+        )
+    } else if (!showPositionDialog) {
         AlertDialog(
             onDismissRequest = onDismiss,
             icon = {
@@ -444,6 +467,11 @@ private fun LibraryBookDialog(
                     reading?.currentChapter?.let { MetadataField("Current chapter", "${it.number}. ${it.title}") }
                     MetadataField("Word count", metadata.wordCount.toString())
                     MetadataField("Chapters", metadata.chapterCount.toString())
+                    metadata.locale.takeIf { it.isNotBlank() }?.let { MetadataField("Language", it) }
+                    metadata.scripts.takeIf { it.isNotEmpty() }?.let { MetadataField("Scripts", it.joinToString()) }
+                    metadata.direction.takeIf { it != "auto" }?.let { MetadataField("Direction", it.uppercase()) }
+                    metadata.requiredCapabilities.takeIf { it.isNotEmpty() }
+                        ?.let { MetadataField("Language support", it.joinToString()) }
                     reading?.let {
                         MetadataField("Progress", "${it.percent}%")
                         MetadataField("Remaining", "${it.remainingWords} words")
@@ -452,6 +480,10 @@ private fun LibraryBookDialog(
                     MetadataField("File size", book.byteLabel)
                     MetadataField("Filename", book.name)
                     if (book.source != null && metadata.wordCount > 0) {
+                        FilledTonalButton(onClick = { showLanguageFonts = true }) {
+                            Icon(imageVector = Icons.Outlined.Language, contentDescription = null)
+                            Text("Language fonts")
+                        }
                         FilledTonalButton(onClick = { showPositionDialog = true }) {
                             Text("Change reading position")
                         }
@@ -479,6 +511,72 @@ private fun LibraryBookDialog(
             onSave = onSetPosition,
         )
     }
+}
+
+@Composable
+private fun BookLanguageFontsDialog(
+    book: NanoBook,
+    availableFonts: List<NanoFontSummary>,
+    globalFontId: String,
+    onDismiss: () -> Unit,
+    onSave: (List<NanoLanguageFont>) -> Unit,
+) {
+    var selections by remember(book.id) { mutableStateOf(book.reading?.languageFonts.orEmpty()) }
+    val languages = book.metadata.languages.ifEmpty {
+        listOfNotNull(
+            book.metadata.locale.takeIf(String::isNotBlank)?.let {
+                NanoBookLanguage(it, book.metadata.scriptMask)
+            },
+        )
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(imageVector = Icons.Outlined.Language, contentDescription = null) },
+        title = { Text("Language fonts") },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                items(languages, key = { it.locale }) { bookLanguage ->
+                    val locale = bookLanguage.locale
+                    val requiredScripts = bookLanguage.scriptMask
+                    val compatible = availableFonts.filter { it.usableFor(locale, requiredScripts) }
+                    val selectedId = selections.firstOrNull { it.locale == locale }?.fontId
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(locale, style = MaterialTheme.typography.titleSmall)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            FilterChip(
+                                selected = selectedId == null,
+                                onClick = { selections = selections.filterNot { it.locale == locale } },
+                                label = {
+                                    val globalName = availableFonts.firstOrNull { it.id == globalFontId }?.name
+                                        ?: globalFontId.ifBlank { "default" }
+                                    Text("Global ($globalName)")
+                                },
+                            )
+                            compatible.forEach { font ->
+                                FilterChip(
+                                    selected = selectedId == font.id,
+                                    onClick = {
+                                        selections = selections.filterNot { it.locale == locale } +
+                                            NanoLanguageFont(locale, font.id)
+                                    },
+                                    label = { Text(font.name) },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSave(selections) }) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
 
 @Composable

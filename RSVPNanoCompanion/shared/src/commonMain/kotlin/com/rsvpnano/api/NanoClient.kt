@@ -12,6 +12,8 @@ import com.rsvpnano.models.NanoFontSummary
 import com.rsvpnano.models.NanoUploadResponse
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.FirmwareRelease
+import com.rsvpnano.models.NanoLocalesResponse
+import com.rsvpnano.models.NanoLanguageFont
 
 /**
  * Lightweight API client interface for device interactions. Implement with Ktor in commonMain
@@ -49,7 +51,6 @@ interface NanoClient {
     suspend fun uploadFont(
         baseUrl: String,
         family: String,
-        size: String,
         name: String,
         data: ByteArray,
         onProgress: ((sent: Long, total: Long) -> Unit)? = null,
@@ -66,10 +67,30 @@ interface NanoClient {
         throw NanoClientError("Font listing is not supported by this client.")
     suspend fun downloadFont(url: String): ByteArray =
         throw NanoClientError("Font download is not supported by this client.")
+    suspend fun fetchLocales(baseUrl: String): NanoLocalesResponse =
+        throw NanoClientError("Locale-pack listing is not supported by this client.")
+    suspend fun beginLocalePackStage(baseUrl: String, id: String): NanoUploadResponse =
+        throw NanoClientError("Locale-pack installation is not supported by this client.")
+    suspend fun uploadLocalePackFile(
+        baseUrl: String,
+        id: String,
+        path: String,
+        data: ByteArray,
+        onProgress: ((sent: Long, total: Long) -> Unit)? = null,
+    ): NanoUploadResponse = throw NanoClientError("Locale-pack installation is not supported by this client.")
+    suspend fun activateLocalePack(baseUrl: String, id: String): NanoUploadResponse =
+        throw NanoClientError("Locale-pack activation is not supported by this client.")
+    suspend fun deleteLocalePack(baseUrl: String, id: String): NanoUploadResponse =
+        throw NanoClientError("Locale-pack removal is not supported by this client.")
     suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse
     suspend fun setBookPosition(
         baseUrl: String,
         id: String,
         wordIndex: Int,
     ): NanoUploadResponse
+    suspend fun setBookLanguageFonts(
+        baseUrl: String,
+        id: String,
+        languageFonts: List<NanoLanguageFont>,
+    ): NanoUploadResponse = throw NanoClientError("Book language fonts are not supported by this client.")
 }

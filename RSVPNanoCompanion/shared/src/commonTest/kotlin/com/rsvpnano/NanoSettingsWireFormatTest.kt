@@ -1,6 +1,7 @@
 package com.rsvpnano
 
-import com.rsvpnano.models.NanoLanguages
+import com.rsvpnano.models.NanoLocales
+import com.rsvpnano.models.NanoFontSummary
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoSettingsSchema
 import kotlinx.serialization.encodeToString
@@ -40,10 +41,10 @@ class NanoSettingsWireFormatTest {
     @Test
     fun decodesStableEnumNamesFromFirmware() {
         val settings = json.decodeFromString<NanoSettings>(
-            """{"obsolete":true,"interface":{"language":"russian","screensaver":"screenOff"},"reading":{"pauseMode":"sentenceEnd","footerMetric":"bookTime","batteryLabel":"timeRemaining"}}""",
+            """{"obsolete":true,"interface":{"locale":"ru","screensaver":"screenOff"},"reading":{"pauseMode":"sentenceEnd","footerMetric":"bookTime","batteryLabel":"timeRemaining"}}""",
         )
 
-        assertEquals("russian", settings.`interface`.language)
+        assertEquals("ru", settings.`interface`.locale)
         assertEquals("screenOff", settings.`interface`.screensaver)
         assertEquals("sentenceEnd", settings.reading.pauseMode)
         assertEquals("bookTime", settings.reading.footerMetric)
@@ -52,10 +53,23 @@ class NanoSettingsWireFormatTest {
     }
 
     @Test
-    fun acceptsEveryGeneratedFirmwareLanguage() {
-        NanoLanguages.OPTIONS.forEach { (value, _) ->
-            assertEquals(value, NanoSettingsSchema.coerceLanguage(value))
-        }
-        assertEquals(NanoLanguages.DEFAULT, NanoSettingsSchema.coerceLanguage("unknown"))
+    fun acceptsExternalLocaleTags() {
+        assertEquals("es", NanoSettingsSchema.coerceLocale("es"))
+        assertEquals("zh-Hans", NanoSettingsSchema.coerceLocale("zh-Hans"))
+        assertEquals("ja", NanoSettingsSchema.coerceLocale("ja"))
+        assertEquals(NanoLocales.DEFAULT, NanoSettingsSchema.coerceLocale(""))
+    }
+
+    @Test
+    fun localeAffinityKeepsMixedScriptFontsSelectable() {
+        val font = NanoFontSummary("hebrew", "Noto Serif Hebrew", listOf("he"), scriptMask = 8)
+
+        assertTrue(font.usableFor("he", 9))
+        assertTrue(font.usableFor("he-IL", 9))
+        assertFalse(font.usableFor("en", 9))
+
+        val math = NanoFontSummary("math", "STIX Two Math", scriptMask = 1 shl 9)
+        assertTrue(math.usableFor("en", (1 shl 9) or 1))
+        assertFalse(math.usableFor("en", 1))
     }
 }

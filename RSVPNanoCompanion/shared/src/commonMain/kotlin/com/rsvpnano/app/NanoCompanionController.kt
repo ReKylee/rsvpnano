@@ -11,6 +11,8 @@ import com.rsvpnano.models.NanoThemeSummary
 import com.rsvpnano.models.NanoFontCatalogItem
 import com.rsvpnano.models.NanoFontSummary
 import com.rsvpnano.models.NanoWifiSettings
+import com.rsvpnano.models.NanoLocalesResponse
+import com.rsvpnano.models.NanoLanguageFont
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.needsArticleFetch
 import com.rsvpnano.sync.RssFeedNormalizer
@@ -35,6 +37,7 @@ class NanoCompanionController(
             settings = runCatching { client.fetchSettings(baseUrl) }.getOrNull(),
             themes = runCatching { client.fetchThemes(baseUrl) }.getOrDefault(emptyList()),
             fonts = runCatching { client.fetchFonts(baseUrl) }.getOrDefault(emptyList()),
+            locales = runCatching { client.fetchLocales(baseUrl) }.getOrDefault(NanoLocalesResponse()),
             wifiSettings = runCatching { client.fetchWifiSettings(baseUrl) }.getOrNull(),
             rssFeeds = runCatching { client.fetchRssFeeds(baseUrl) }.getOrNull(),
             focusTimers = runCatching { client.fetchFocusTimers(baseUrl) }.getOrNull(),
@@ -155,17 +158,15 @@ class NanoCompanionController(
         )
     }
 
-    suspend fun downloadFont(catalogUrl: String, font: NanoFontCatalogItem, size: String): CompanionFontFile {
-        val file = font.files[size].orEmpty()
-        require(isSafeFontCatalogPath(file)) {
+    suspend fun downloadFont(catalogUrl: String, font: NanoFontCatalogItem): CompanionFontFile {
+        require(isSafeFontCatalogPath(font.file)) {
             "Font catalog file path is invalid."
         }
         return CompanionFontFile(
             id = font.id,
             family = font.name,
-            size = size,
-            filename = file.substringAfterLast('/'),
-            data = client.downloadFont(catalogFileUrl(catalogUrl, file)),
+            filename = font.file.substringAfterLast('/'),
+            data = client.downloadFont(catalogFileUrl(catalogUrl, font.file)),
         )
     }
 
@@ -196,7 +197,6 @@ class NanoCompanionController(
     suspend fun uploadFont(
         baseUrl: String,
         family: String,
-        size: String,
         filename: String,
         data: ByteArray,
         onProgress: ((sent: Long, total: Long) -> Unit)? = null,
@@ -205,7 +205,6 @@ class NanoCompanionController(
         client.uploadFont(
             baseUrl = baseUrl,
             family = family,
-            size = size,
             name = filename,
             data = data,
             onProgress = onProgress,
@@ -215,6 +214,39 @@ class NanoCompanionController(
             wifiSettings = null,
             fonts = client.fetchFonts(baseUrl),
         )
+    }
+
+    suspend fun refreshLocales(baseUrl: String): NanoLocalesResponse {
+        verifyReachable(baseUrl)
+        return client.fetchLocales(baseUrl)
+    }
+
+    suspend fun beginLocalePackInstall(baseUrl: String, id: String) {
+        verifyReachable(baseUrl)
+        client.beginLocalePackStage(baseUrl, id)
+    }
+
+    suspend fun uploadLocalePackFile(
+        baseUrl: String,
+        id: String,
+        path: String,
+        data: ByteArray,
+        onProgress: ((sent: Long, total: Long) -> Unit)? = null,
+    ) {
+        verifyReachable(baseUrl)
+        client.uploadLocalePackFile(baseUrl, id, path, data, onProgress)
+    }
+
+    suspend fun activateLocalePack(baseUrl: String, id: String): NanoLocalesResponse {
+        verifyReachable(baseUrl)
+        client.activateLocalePack(baseUrl, id)
+        return client.fetchLocales(baseUrl)
+    }
+
+    suspend fun removeLocalePack(baseUrl: String, id: String): NanoLocalesResponse {
+        verifyReachable(baseUrl)
+        client.deleteLocalePack(baseUrl, id)
+        return client.fetchLocales(baseUrl)
     }
 
     suspend fun deleteBooks(baseUrl: String, bookIds: List<String>): List<NanoBook> {
@@ -236,6 +268,17 @@ class NanoCompanionController(
             id = book.id,
             wordIndex = wordIndex.coerceIn(0, wordCount - 1),
         )
+        return client.listBooks(baseUrl)
+    }
+
+    suspend fun setBookLanguageFonts(
+        baseUrl: String,
+        book: NanoBook,
+        languageFonts: List<NanoLanguageFont>,
+    ): List<NanoBook> {
+        require(book.source != null) { "Book language settings are unavailable." }
+        verifyReachable(baseUrl)
+        client.setBookLanguageFonts(baseUrl, book.id, languageFonts)
         return client.listBooks(baseUrl)
     }
 
@@ -341,7 +384,6 @@ data class CompanionThemeFile(
 data class CompanionFontFile(
     val id: String,
     val family: String,
-    val size: String,
     val filename: String,
     val data: ByteArray,
 )

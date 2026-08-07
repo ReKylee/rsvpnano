@@ -1,0 +1,16 @@
+{
+  "name": "SheenBidi",
+  "version": "3.0.0",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Tehreer/SheenBidi.git"
+  },
+  "build": {
+    "flags": [
+      "-DSB_CONFIG_DISABLE_SCRATCH_MEMORY"
+    ],
+    "srcDir": "upstream/Source",
+    "includeDir": "upstream/Headers"
+  }
+}

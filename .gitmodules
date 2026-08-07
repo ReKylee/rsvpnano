@@ -1,0 +1,6 @@
+[submodule "lib/SheenBidi/upstream"]
+	path = lib/SheenBidi/upstream
+	url = https://github.com/Tehreer/SheenBidi.git
+[submodule "lib/HarfBuzz/upstream"]
+	path = lib/HarfBuzz/upstream
+	url = https://github.com/harfbuzz/harfbuzz.git

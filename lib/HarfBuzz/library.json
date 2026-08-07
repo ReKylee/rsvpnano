@@ -1,0 +1,20 @@
+{
+  "name": "HarfBuzz",
+  "version": "14.3.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/harfbuzz/harfbuzz.git"
+  },
+  "build": {
+    "flags": [
+      "-DHB_TINY",
+      "-Os"
+    ],
+    "srcDir": "upstream/src",
+    "includeDir": "upstream/src",
+    "srcFilter": [
+      "+<harfbuzz.cc>"
+    ]
+  }
+}

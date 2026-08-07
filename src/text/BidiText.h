@@ -11,7 +11,7 @@
 
 #include <SheenBidi/SheenBidi.h>
 
-#include "book/BookMetadata.h"
+#include "text/TextDirection.h"
 
 namespace BidiText {
 
@@ -44,7 +44,7 @@ namespace BidiText {
         Analysis& operator=(Analysis&&) = delete;
 
         void clear();
-        std::expected<void, std::string> reset(std::string_view text, BookDirection baseDirection);
+        std::expected<void, std::string> reset(std::string_view text, TextDirection baseDirection);
         std::expected<void, std::string> resolve(LineRange line, Line& output);
         std::expected<void, std::string> resolve(std::span<const LineRange> lines,
                                                  std::vector<Line>& output);

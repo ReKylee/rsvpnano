@@ -53,7 +53,7 @@ namespace IndexedBook {
             uint32_t wordCount = 0;
             uint32_t dataSize = 0;
             std::string locale;
-            BookDirection direction = BookDirection::automatic;
+            TextDirection direction = TextDirection::automatic;
             bool failed = false;
             const char* failure = "";
         };
@@ -91,7 +91,7 @@ namespace IndexedBook {
                 && header.recordsOffset >= sizeof(IndexHeader) && header.paragraphsOffset == recordsEnd
                 && header.chaptersOffset == paragraphsEnd && header.textRunsOffset == chaptersEnd
                 && textRunsEnd <= indexBytes && header.dataSize <= dataBytes
-                && header.baseDirection <= static_cast<uint8_t>(BookDirection::rtl);
+                && header.baseDirection <= static_cast<uint8_t>(TextDirection::rtl);
         }
 
         template<size_t Size>
@@ -374,7 +374,7 @@ namespace IndexedBook {
                 }
                 if (buildContext.metadata != nullptr && RsvpText::prefixHasBoundary(trimmed, "@direction")) {
                     const std::string value = RsvpText::directiveValue(trimmed, "@direction");
-                    const auto direction = bookDirection(value);
+                    const auto direction = textDirection(value);
                     if (!direction) {
                         ESP_LOGW("storage-index", "ignoring invalid @direction: %s", value.c_str());
                         return true;
@@ -483,7 +483,7 @@ namespace IndexedBook {
                     return false;
                 }
             }
-            metadata.baseDirection = static_cast<BookDirection>(header.baseDirection);
+            metadata.baseDirection = static_cast<TextDirection>(header.baseDirection);
             metadata.scriptMask = header.scriptMask;
             metadata.requiredCapabilities = header.requiredCapabilities;
             const RsvpText::RsvpDirectiveValues directives = RsvpText::readRsvpDirectiveValues(sourcePath);
@@ -561,10 +561,10 @@ namespace IndexedBook {
                     }
                     BookTextRun run{.wordIndex = record.wordIndex,
                                     .locale = loadFixedString(record.locale),
-                                    .direction = static_cast<BookDirection>(record.direction),
+                                    .direction = static_cast<TextDirection>(record.direction),
                                     .scriptMask = record.scriptMask};
                     const auto normalized = LocaleTag::normalize(run.locale);
-                    if (run.wordIndex > header.wordCount || record.direction > static_cast<uint8_t>(BookDirection::rtl)
+                    if (run.wordIndex > header.wordCount || record.direction > static_cast<uint8_t>(TextDirection::rtl)
                         || (!run.locale.empty() && (!normalized || *normalized != run.locale))) {
                         indexFile.close();
                         metadata.clear();

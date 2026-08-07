@@ -180,12 +180,10 @@ void test_book_reading_overrides_round_trip_through_toml() {
     state.wordIndex = 42;
     state.overrides.languageFonts.push_back({"ar", "arabic-font"});
     state.overrides.locale = "ar";
-    state.overrides.direction = settings::TextDirection::rtl;
     state.overrides.pacing = settings::ReadingPacing::cjkPhrase;
 
     std::string toml;
     TEST_ASSERT_FALSE(glz::write_toml(state, toml));
-    TEST_ASSERT_TRUE(toml.contains("direction = \"rtl\""));
     TEST_ASSERT_TRUE(toml.contains("pacing = \"cjk-phrase\""));
     ReadingSession::BookState decoded;
     TEST_ASSERT_FALSE(glz::read_toml(decoded, toml));
@@ -194,7 +192,6 @@ void test_book_reading_overrides_round_trip_through_toml() {
     TEST_ASSERT_EQUAL_STRING("ar", decoded.overrides.languageFonts.front().locale.c_str());
     TEST_ASSERT_EQUAL_STRING("arabic-font", decoded.overrides.languageFonts.front().fontId.c_str());
     TEST_ASSERT_EQUAL_STRING("ar", decoded.overrides.locale->c_str());
-    TEST_ASSERT_EQUAL(settings::TextDirection::rtl, *decoded.overrides.direction);
     TEST_ASSERT_EQUAL(settings::ReadingPacing::cjkPhrase, *decoded.overrides.pacing);
 }
 

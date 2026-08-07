@@ -556,7 +556,7 @@ void test_page_reader_caches_visual_bidi_layout() {
     const std::array<std::string, 3> words{"abc", "\xD7\x90\xD7\x91\xD7\x92", "123"};
     ReadingSession session;
     ReadingLoop::setWords(session, words, 0);
-    session.metadata.baseDirection = BookDirection::rtl;
+    session.metadata.baseDirection = TextDirection::rtl;
     session.metadata.requiredCapabilities = UnicodeText::CapabilityBidi;
     session.metadata.paragraphStarts = {0};
     screens::PageReader::State state;
@@ -587,9 +587,9 @@ void test_page_reader_only_runs_bidi_for_pages_that_need_it() {
     session.metadata.requiredCapabilities = UnicodeText::CapabilityBidi;
     session.metadata.paragraphStarts = {0, 2};
     session.metadata.textRuns = {
-        {.wordIndex = 0, .locale = "en", .direction = BookDirection::ltr,
+        {.wordIndex = 0, .locale = "en", .direction = TextDirection::ltr,
          .scriptMask = UnicodeText::ScriptLatin},
-        {.wordIndex = 2, .locale = "he", .direction = BookDirection::rtl,
+        {.wordIndex = 2, .locale = "he", .direction = TextDirection::rtl,
          .scriptMask = UnicodeText::ScriptHebrew},
     };
     screens::PageReader::State state;
@@ -798,7 +798,7 @@ void test_rtl_ui_text_uses_pack_direction_for_alignment_and_bidi() {
     FontRecordingGfx gfx(320, 172);
     ui::Context context(gfx);
     locales::UiAssets assets;
-    assets.direction = locales::Direction::rtl;
+    assets.direction = TextDirection::rtl;
     context.setLanguageAssets(std::move(assets));
 
     context.drawText({10, 0, 60, 18}, "\xD7\x90\xD7\x91", 1, 0xFFFF);

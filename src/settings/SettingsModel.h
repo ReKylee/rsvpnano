@@ -52,11 +52,6 @@ namespace settings {
         bool operator==(const TypographySettings&) const = default;
     };
 
-    enum class TextDirection : uint8_t {
-        ltr,
-        rtl,
-    };
-
     enum class ReadingPacing : uint8_t {
         words,
         cjkPhrase,
@@ -72,7 +67,6 @@ namespace settings {
     struct ReadingOverrides {
         std::vector<LanguageFont> languageFonts;
         std::optional<std::string> locale;
-        std::optional<TextDirection> direction;
         std::optional<ReadingPacing> pacing;
 
         bool operator==(const ReadingOverrides&) const = default;

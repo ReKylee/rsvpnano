@@ -913,7 +913,7 @@ namespace ui {
         gfx_.setTextSize(size);
         gfx_.setTextWrap(false);
         gfx_.setTextColor(textColor);
-        const bool rightToLeft = languageAssets_.direction == locales::Direction::rtl;
+        const bool rightToLeft = languageAssets_.direction == TextDirection::rtl;
         if (rightToLeft) {
             if (align == TextAlign::Left)
                 align = TextAlign::Right;
@@ -955,7 +955,7 @@ namespace ui {
                     gfx_.write(static_cast<uint8_t>(byte));
             };
             const auto drawVisual = [&](std::string_view value) {
-                if (!rightToLeft || !bidiAnalysis_.reset(value, BookDirection::rtl)
+                if (!rightToLeft || !bidiAnalysis_.reset(value, TextDirection::rtl)
                     || !bidiAnalysis_.resolve({0, value.size()}, bidiLine_)) {
                     drawBytes(value);
                     return;

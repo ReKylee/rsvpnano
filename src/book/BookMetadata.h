@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "text/TextDirection.h"
 #include "text/UnicodeText.h"
 
 struct ChapterMarker {
@@ -15,37 +16,10 @@ struct ChapterMarker {
     size_t wordIndex = 0;
 };
 
-enum class BookDirection : uint8_t {
-    automatic,
-    ltr,
-    rtl,
-};
-
-constexpr std::string_view toString(BookDirection direction) {
-    switch (direction) {
-    case BookDirection::ltr:
-        return "ltr";
-    case BookDirection::rtl:
-        return "rtl";
-    default:
-        return "auto";
-    }
-}
-
-constexpr std::optional<BookDirection> bookDirection(std::string_view value) {
-    if (value == "auto")
-        return BookDirection::automatic;
-    if (value == "ltr")
-        return BookDirection::ltr;
-    if (value == "rtl")
-        return BookDirection::rtl;
-    return std::nullopt;
-}
-
 struct BookTextRun {
     size_t wordIndex = 0;
     std::string locale;
-    BookDirection direction = BookDirection::automatic;
+    TextDirection direction = TextDirection::automatic;
     uint32_t scriptMask = 0;
 };
 
@@ -53,7 +27,7 @@ struct BookMetadata {
     std::string title;
     std::string author;
     std::string locale;
-    BookDirection baseDirection = BookDirection::automatic;
+    TextDirection baseDirection = TextDirection::automatic;
     uint32_t scriptMask = 0;
     uint32_t requiredCapabilities = 0;
     size_t wordCount = 0;
@@ -70,7 +44,7 @@ struct BookMetadata {
         title.clear();
         author.clear();
         locale.clear();
-        baseDirection = BookDirection::automatic;
+        baseDirection = TextDirection::automatic;
         scriptMask = 0;
         requiredCapabilities = 0;
         wordCount = 0;
@@ -87,12 +61,12 @@ struct BookMetadata {
         return runLocale.empty() ? std::string_view{locale} : std::string_view{runLocale};
     }
 
-    BookDirection directionAt(size_t wordIndex) const {
+    TextDirection directionAt(size_t wordIndex) const {
         const auto next = std::ranges::upper_bound(textRuns, wordIndex, {}, &BookTextRun::wordIndex);
         if (next == textRuns.begin())
             return baseDirection;
-        const BookDirection runDirection = std::prev(next)->direction;
-        return runDirection == BookDirection::automatic ? baseDirection : runDirection;
+        const TextDirection runDirection = std::prev(next)->direction;
+        return runDirection == TextDirection::automatic ? baseDirection : runDirection;
     }
 
     uint32_t scriptMaskAt(size_t wordIndex) const {
@@ -114,14 +88,14 @@ struct BookMetadata {
             return false;
         if (textRuns.empty())
             return (requiredCapabilities & UnicodeText::CapabilityBidi) != 0
-                || baseDirection == BookDirection::rtl;
+                || baseDirection == TextDirection::rtl;
 
         const auto needsBidi = [this](const BookTextRun* run) {
-            const BookDirection direction = run != nullptr && run->direction != BookDirection::automatic
+            const TextDirection direction = run != nullptr && run->direction != TextDirection::automatic
                                               ? run->direction
                                               : baseDirection;
             const uint32_t scripts = run != nullptr ? run->scriptMask : scriptMask;
-            return direction == BookDirection::rtl
+            return direction == TextDirection::rtl
                 || (scripts & (UnicodeText::ScriptHebrew | UnicodeText::ScriptArabic)) != 0;
         };
         auto next = std::ranges::upper_bound(textRuns, firstWord, {}, &BookTextRun::wordIndex);

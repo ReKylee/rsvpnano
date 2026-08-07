@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "locales/LocaleUiFont.h"
+#include "text/TextDirection.h"
 
 namespace locales {
 
@@ -19,11 +20,6 @@ namespace locales {
     inline constexpr uint32_t kMaximumAssetBytes = 16 * 1024 * 1024;
     inline constexpr uint32_t kMaximumUiFontBytes = 64 * 1024;
     inline constexpr uint32_t kMaximumResidentUiBytes = 96 * 1024;
-
-    enum class Direction : uint8_t {
-        ltr,
-        rtl,
-    };
 
     enum class TranslationStatus : uint8_t {
         preview,
@@ -49,7 +45,7 @@ namespace locales {
         std::string locale;
         std::string nativeName;
         std::string englishName;
-        Direction direction = Direction::ltr;
+        TextDirection direction = TextDirection::ltr;
         std::vector<std::string> scripts;
         std::string unicodeVersion;
         TranslationStatus translationStatus = TranslationStatus::preview;
@@ -70,7 +66,7 @@ namespace locales {
     struct UiAssets {
         std::string packId;
         std::string locale;
-        Direction direction = Direction::ltr;
+        TextDirection direction = TextDirection::ltr;
         StringTable strings;
         UiFont font;
 
@@ -89,7 +85,6 @@ namespace locales {
 
     bool isValidPackId(std::string_view id);
     bool isValidPackFilePath(std::string_view path);
-    std::string_view toString(Direction value);
     std::string_view toString(TranslationStatus value);
     std::expected<StringTable, std::string> decodeStringTable(std::vector<uint8_t> bytes, size_t expectedEntries);
     std::expected<void, std::string> validateU8g2Font(std::span<const uint8_t> bytes);

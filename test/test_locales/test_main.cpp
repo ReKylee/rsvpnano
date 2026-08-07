@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "book/BookMetadata.h"
 #include "fonts/UiFont6x9.h"
 #include "fonts/FontCatalog.h"
 #include "locales/LocaleCatalog.h"
@@ -84,6 +85,13 @@ void test_manifest_rejects_untrusted_paths_and_identity_mismatches() {
     TEST_ASSERT_FALSE(locales::decodeManifest(unknownCapability, "ja").has_value());
 }
 
+void test_manifest_rejects_automatic_locale_direction() {
+    std::string contents = manifest();
+    contents.replace(contents.find("direction = \"ltr\""), std::string_view{"direction = \"ltr\""}.size(),
+                     "direction = \"auto\"");
+    TEST_ASSERT_FALSE(locales::decodeManifest(contents, "test-pack").has_value());
+}
+
 void test_manifest_rejects_reader_capabilities_in_locale_packs() {
     std::string reader = manifest() + "[reader]\nfonts = [\"noto-serif-cjk\"]\n";
     TEST_ASSERT_FALSE(locales::decodeManifest(reader, "ja").has_value());
@@ -151,22 +159,22 @@ void test_reader_font_selection_uses_requested_then_font_affinity_then_terminal_
 
 void test_bidi_resolves_metadata_direction_visual_runs_and_mirroring() {
     BookMetadata metadata;
-    metadata.baseDirection = BookDirection::ltr;
-    metadata.textRuns = {{0, "en", BookDirection::automatic}, {3, "he", BookDirection::rtl},
-                         {5, "en", BookDirection::automatic}};
+    metadata.baseDirection = TextDirection::ltr;
+    metadata.textRuns = {{0, "en", TextDirection::automatic}, {3, "he", TextDirection::rtl},
+                         {5, "en", TextDirection::automatic}};
     metadata.textRuns[0].scriptMask = UnicodeText::ScriptLatin;
     metadata.textRuns[1].scriptMask = UnicodeText::ScriptHebrew;
     metadata.textRuns[2].scriptMask = UnicodeText::ScriptLatin;
-    TEST_ASSERT_EQUAL(BookDirection::ltr, metadata.directionAt(2));
-    TEST_ASSERT_EQUAL(BookDirection::rtl, metadata.directionAt(3));
-    TEST_ASSERT_EQUAL(BookDirection::ltr, metadata.directionAt(5));
+    TEST_ASSERT_EQUAL(TextDirection::ltr, metadata.directionAt(2));
+    TEST_ASSERT_EQUAL(TextDirection::rtl, metadata.directionAt(3));
+    TEST_ASSERT_EQUAL(TextDirection::ltr, metadata.directionAt(5));
     TEST_ASSERT_EQUAL_HEX32(UnicodeText::ScriptLatin, metadata.scriptMaskAt(2));
     TEST_ASSERT_EQUAL_HEX32(UnicodeText::ScriptHebrew, metadata.scriptMaskAt(3));
 
     const std::string_view text = "(\xD7\x90\xD7\x91\xD7\x92 123)";
     const std::array lines{BidiText::LineRange{0, text.size()}};
     BidiText::Analysis analysis;
-    auto analyzed = analysis.reset(text, BookDirection::rtl);
+    auto analyzed = analysis.reset(text, TextDirection::rtl);
     TEST_ASSERT_TRUE_MESSAGE(analyzed.has_value(), analyzed ? "" : analyzed.error().c_str());
     std::vector<BidiText::Line> resolved;
     auto result = analysis.resolve(lines, resolved);
@@ -197,6 +205,7 @@ int main() {
     UNITY_BEGIN();
     RUN_TEST(test_manifest_decodes_the_pack_contract);
     RUN_TEST(test_manifest_rejects_untrusted_paths_and_identity_mismatches);
+    RUN_TEST(test_manifest_rejects_automatic_locale_direction);
     RUN_TEST(test_manifest_rejects_reader_capabilities_in_locale_packs);
     RUN_TEST(test_locale_normalization_is_stable);
     RUN_TEST(test_binary_ui_assets_are_bounded_before_runtime_use);

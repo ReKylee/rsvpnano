@@ -1069,7 +1069,7 @@ void CompanionSyncManager::handleLocales() {
             .locale = manifest.locale,
             .nativeName = manifest.nativeName,
             .englishName = manifest.englishName,
-            .direction = std::string{locales::toString(manifest.direction)},
+            .direction = std::string{toString(manifest.direction)},
             .translationStatus = std::string{locales::toString(manifest.translationStatus)},
             .scriptMask = pack.scriptMask,
             .requiredCapabilities = manifest.requiredCapabilities,

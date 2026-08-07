@@ -12,9 +12,9 @@
 #include "text/UnicodeText.h"
 
 template<>
-struct glz::meta<locales::Direction> {
-    using enum locales::Direction;
-    static constexpr auto value = glz::enumerate(ltr, rtl);
+struct glz::meta<TextDirection> {
+    using enum TextDirection;
+    static constexpr auto value = glz::enumerate("auto", automatic, "ltr", ltr, "rtl", rtl);
 };
 
 template<>
@@ -177,10 +177,6 @@ namespace locales {
             || (validRelativePath(path) && path.starts_with("ui/") && !path.ends_with(".rfont4"));
     }
 
-    std::string_view toString(Direction value) {
-        return value == Direction::ltr ? "ltr" : "rtl";
-    }
-
     std::string_view toString(TranslationStatus value) {
         return value == TranslationStatus::preview ? "preview" : "reviewed";
     }
@@ -257,6 +253,8 @@ namespace locales {
             return std::unexpected("unsupported engine ABI");
         if (manifest.nativeName.empty() || manifest.englishName.empty() || manifest.unicodeVersion.empty())
             return std::unexpected("manifest is missing required metadata");
+        if (manifest.direction == TextDirection::automatic)
+            return std::unexpected("locale direction must be ltr or rtl");
         if (std::ranges::any_of(manifest.requiredCapabilities, std::not_fn(validCapability)))
             return std::unexpected("manifest has invalid engine capabilities");
         if (hasDuplicates(manifest.requiredCapabilities))

@@ -20,10 +20,10 @@ namespace BidiText {
         rightToLeft_ = false;
     }
 
-    std::expected<void, std::string> Analysis::reset(std::string_view text, BookDirection baseDirection) {
+    std::expected<void, std::string> Analysis::reset(std::string_view text, TextDirection baseDirection) {
         clear();
         text_ = text;
-        rightToLeft_ = baseDirection == BookDirection::rtl;
+        rightToLeft_ = baseDirection == TextDirection::rtl;
         if (text.empty())
             return {};
         if (text.size() > std::numeric_limits<SBUInteger>::max()) {
@@ -38,8 +38,8 @@ namespace BidiText {
             return std::unexpected("bidi analysis allocation failed");
         }
 
-        const SBLevel level = baseDirection == BookDirection::ltr ? 0
-                            : baseDirection == BookDirection::rtl ? 1
+        const SBLevel level = baseDirection == TextDirection::ltr ? 0
+                            : baseDirection == TextDirection::rtl ? 1
                                                                   : SBLevelDefaultLTR;
         paragraph_ = SBAlgorithmCreateParagraph(algorithm_, 0, text.size(), level);
         if (!paragraph_) {

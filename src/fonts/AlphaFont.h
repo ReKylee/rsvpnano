@@ -788,7 +788,8 @@ namespace ui::fonts {
             if (font_ == nullptr || !font_->file)
                 return false;
             File& file = font_->file->get();
-            return file.seek(offset) && file.read(static_cast<uint8_t*>(out), bytes) == bytes;
+            return (file.position() == offset || file.seek(offset))
+                && file.read(static_cast<uint8_t*>(out), bytes) == bytes;
         }
 
         const AlphaGlyph* fileGlyph(uint32_t index) const {

@@ -44,6 +44,7 @@ namespace screens::PageReader {
             int16_t y = 0;
             int16_t width = 0;
             bool paragraphStart = false;
+            bool bidi = false;
             bool rightToLeft = false;
         };
 

@@ -19,9 +19,12 @@ class File {
 
   bool seek(size_t position) {
     if (position > data_->size()) return false;
+    ++seekCount_;
     position_ = position;
     return true;
   }
+
+  size_t position() const { return position_; }
 
   size_t read(uint8_t *out, size_t size) {
     ++readCount_;
@@ -49,11 +52,13 @@ class File {
 
   const std::string &contents() const { return *data_; }
   size_t readCount() const { return readCount_; }
+  size_t seekCount() const { return seekCount_; }
 
  private:
   std::shared_ptr<std::string> data_;
   size_t position_ = 0;
   size_t readCount_ = 0;
+  size_t seekCount_ = 0;
   bool open_ = true;
 };
 

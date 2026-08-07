@@ -72,6 +72,7 @@ namespace screens {
         loadedWordIndex_ = SIZE_MAX;
         loadedFamilyIndex_ = SIZE_MAX;
         rsvpBidi_.clear();
+        rsvpLine_.clear();
         rsvpParagraph_ = {};
         ++typographyRevision_;
     }
@@ -234,9 +235,7 @@ namespace screens {
                                ui.color(ui::themes::ColorRole::Background));
 
             const std::string& word = session.currentWord;
-            const uint32_t scripts = session.metadata.scriptMaskAt(session.currentIndex);
-            const bool bidi = (scripts & (UnicodeText::ScriptHebrew | UnicodeText::ScriptArabic)) != 0
-                           || session.metadata.directionAt(session.currentIndex) == BookDirection::rtl;
+            const bool bidi = session.metadata.requiresBidi(session.currentIndex, session.currentIndex + 1);
             const bool shaping = face_.shaper.has_value();
             size_t wordOffset = 0;
             bool shaped = false;
@@ -255,25 +254,25 @@ namespace screens {
                 const size_t localWord = session.currentIndex - rsvpParagraph_.firstWord;
                 wordOffset = rsvpParagraph_.wordOffsets[localWord];
 
-                BidiText::Line line;
+                rsvpLine_.clear();
                 if (bidi) {
                     if (const auto direction = rsvpBidi_.uniformRightToLeft(wordOffset, word.size())) {
-                        line.push_back({wordOffset, word.size(), *direction});
+                        rsvpLine_.push_back({wordOffset, word.size(), *direction});
                     } else {
-                        if (auto resolved = rsvpBidi_.resolve({wordOffset, word.size()}, line); !resolved) {
+                        if (auto resolved = rsvpBidi_.resolve({wordOffset, word.size()}, rsvpLine_); !resolved) {
                             ESP_LOGW("reader", "bidi layout failed: %s", resolved.error().c_str());
-                            line.push_back({wordOffset, word.size(), false});
+                            rsvpLine_.push_back({wordOffset, word.size(), false});
                         }
                     }
                 } else {
-                    line.push_back({wordOffset, word.size(), false});
+                    rsvpLine_.push_back({wordOffset, word.size(), false});
                 }
 
                 rsvpGlyphs_.clear();
                 if (shaping) {
                     shaped = true;
                     const std::string_view locale = session.metadata.localeAt(session.currentIndex);
-                    for (const BidiText::Run& run: line) {
+                    for (const BidiText::Run& run: rsvpLine_) {
                         auto result = face_.shaper->get().shape(
                             rsvpParagraph_.text, run.offset, run.length, run.rightToLeft, locale,
                             face_.raster.get().pixelsPerEm, text_, rsvpGlyphs_);
@@ -286,7 +285,7 @@ namespace screens {
                     }
                 }
                 if (!shaped)
-                    BidiText::visualCodepoints(rsvpParagraph_.text, line, rsvpVisual_);
+                    BidiText::visualCodepoints(rsvpParagraph_.text, rsvpLine_, rsvpVisual_);
             }
             const int focus = focusOffset(word);
             uint32_t shapedFocusCluster = UINT32_MAX;

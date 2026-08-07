@@ -20,15 +20,20 @@ namespace screens::PageReader {
         const int16_t kOverlayTextHeight = ui::Context::textHeight(kOverlayTextSize);
         constexpr int16_t kLineGap = 2;
 
-        void invalidate(State& state) {
-            state.pageStart = kInvalidIndex;
-            state.pageEnd = 0;
+        void clearPage(State& state) {
             state.lineCount = 0;
             state.faces.clear();
             state.words.clear();
             state.glyphs.clear();
             state.characters.clear();
             state.highlighted = kInvalidIndex;
+            state.bidi = false;
+        }
+
+        void invalidate(State& state) {
+            clearPage(state);
+            state.pageStart = kInvalidIndex;
+            state.pageEnd = 0;
         }
 
         bool paragraphStart(const ReadingSession& session, size_t index) {
@@ -73,7 +78,7 @@ namespace screens::PageReader {
                                  ui::fonts::AlphaTextRenderer<640>& text, const FontCatalog::Face& face,
                                  const settings::TypographySettings& typography,
                                  const ReadingSession& session, ReadingLoop::TextParagraph& paragraph,
-                                 BidiText::Analysis& bidiAnalysis, bool bidiReady,
+                                 BidiText::Analysis& bidiAnalysis, bool paragraphBidi, bool bidiReady,
                                  BidiText::Line& bidiLine) {
             const size_t localIndex = index - state.pageStart;
             if (localIndex < state.words.size())
@@ -89,7 +94,7 @@ namespace screens::PageReader {
                 const std::string_view locale = session.metadata.localeAt(index);
                 const size_t glyphStart = state.glyphs.size();
                 bool shaped = false;
-                if (state.bidi && bidiReady) {
+                if (paragraphBidi && bidiReady) {
                     if (const auto direction = bidiAnalysis.uniformRightToLeft(offset, word.size())) {
                         shaped = face.shaper->get()
                                      .shape(paragraph.text, offset, word.size(), *direction, locale,
@@ -147,6 +152,7 @@ namespace screens::PageReader {
                                  std::vector<BidiText::Codepoint>& visual, std::vector<BidiText::Line>& bidiLines) {
             if (firstLine == lastLine)
                 return;
+            state.bidi = true;
             std::array<BidiText::LineRange, State::kMaximumLines> ranges{};
             for (size_t lineIndex = firstLine; lineIndex < lastLine; ++lineIndex) {
                 const State::Line& line = state.lines[lineIndex];
@@ -165,6 +171,7 @@ namespace screens::PageReader {
                 State::Line& line = state.lines[lineIndex];
                 const BidiText::LineRange range = ranges[lineIndex - firstLine];
                 line.characterStart = state.characters.size();
+                line.bidi = true;
                 line.rightToLeft = resolved && analysis.rightToLeft();
                 if (resolved) {
                     BidiText::visualCodepoints(paragraph.text, bidiLines[lineIndex - firstLine], visual);
@@ -198,17 +205,16 @@ namespace screens::PageReader {
                     size_t start) {
             const size_t wordCount = ReadingLoop::wordCount(session);
             size_t index = std::min(start, wordCount);
+            clearPage(state);
             state.pageStart = index;
-            state.lineCount = 0;
-            state.bidi = (session.metadata.requiredCapabilities & UnicodeText::CapabilityBidi) != 0
-                      || session.metadata.baseDirection == BookDirection::rtl;
             const int16_t maximumWidth = std::max<int16_t>(1, static_cast<int16_t>(area.w - kMarginX * 2));
             const int16_t bottom = static_cast<int16_t>(area.y + area.h - kMarginY);
             int16_t top = static_cast<int16_t>(area.y + kMarginY);
             int16_t previousLineHeight = 0;
             ReadingLoop::TextParagraph shapingParagraph;
             BidiText::Analysis shapingBidi;
-            bool shapingBidiReady = !state.bidi;
+            bool paragraphBidi = false;
+            bool shapingBidiReady = true;
             BidiText::Line shapingBidiLine;
             std::vector<BidiText::Codepoint> visual;
             std::vector<BidiText::Line> bidiLines;
@@ -217,13 +223,15 @@ namespace screens::PageReader {
 
             while (index < wordCount && state.lineCount < state.lines.size()) {
                 if (index < shapingParagraph.firstWord || index >= shapingParagraph.lastWord) {
-                    if (state.bidi && shapingParagraph.lastWord > shapingParagraph.firstWord)
+                    if (paragraphBidi && shapingParagraph.lastWord > shapingParagraph.firstWord)
                         appendBidiParagraph(state, session, shapingParagraph, shapingBidi, shapingBidiReady,
                                             bidiFirstLine,
                                             state.lineCount, visual, bidiLines);
                     shapingParagraph = ReadingLoop::paragraphAt(session, index);
                     bidiFirstLine = state.lineCount;
-                    if (state.bidi)
+                    paragraphBidi = session.metadata.requiresBidi(shapingParagraph.firstWord,
+                                                                  shapingParagraph.lastWord);
+                    if (paragraphBidi)
                         shapingBidiReady = shapingBidi
                                                .reset(shapingParagraph.text,
                                                       session.metadata.directionAt(shapingParagraph.firstWord))
@@ -234,8 +242,7 @@ namespace screens::PageReader {
                     top = static_cast<int16_t>(top + std::max<int16_t>(4, previousLineHeight / 3));
 
                 State::Line& line = state.lines[state.lineCount];
-                line.start = index;
-                line.paragraphStart = startsParagraph;
+                line = {.start = index, .paragraphStart = startsParagraph};
                 int16_t width = 0;
                 uint8_t ascent = 0;
                 uint8_t descent = 0;
@@ -249,7 +256,8 @@ namespace screens::PageReader {
                     const ui::fonts::AlphaFont& font = face.raster.get();
                     activateFace(text, face);
                     State::Word& prepared = prepareWord(state, index, faceIndex, text, face, typography, session,
-                                                        shapingParagraph, shapingBidi, shapingBidiReady,
+                                                        shapingParagraph, shapingBidi, paragraphBidi,
+                                                        shapingBidiReady,
                                                         shapingBidiLine);
                     const int16_t spaceWidth = std::max<int16_t>(1, text.glyphAdvance(' '));
                     const bool joinsCjk = index > line.start && prepared.cjk && wordAt(state, index - 1).cjk;
@@ -280,7 +288,7 @@ namespace screens::PageReader {
                 previousLineHeight = std::max<int16_t>(yAdvance, textHeight) + kLineGap;
                 top = static_cast<int16_t>(top + previousLineHeight);
             }
-            if (state.bidi && shapingParagraph.lastWord > shapingParagraph.firstWord)
+            if (paragraphBidi && shapingParagraph.lastWord > shapingParagraph.firstWord)
                 appendBidiParagraph(state, session, shapingParagraph, shapingBidi, shapingBidiReady, bidiFirstLine,
                                     state.lineCount, visual, bidiLines);
             state.pageEnd = index;
@@ -291,9 +299,12 @@ namespace screens::PageReader {
                 state.glyphs.resize(glyphEnd);
             }
             if (state.bidi) {
-                for (size_t lineIndex = 0; lineIndex < state.lineCount; ++lineIndex)
+                for (size_t lineIndex = 0; lineIndex < state.lineCount; ++lineIndex) {
+                    if (!state.lines[lineIndex].bidi)
+                        continue;
                     state.lines[lineIndex].width =
                         lineAdvance(state, state.lines[lineIndex], text, typography);
+                }
             }
         }
 
@@ -442,47 +453,60 @@ namespace screens::PageReader {
         if (!ui.redraw(area, signature)) {
             if (state.highlighted == current)
                 return;
-            if (!state.bidi) {
+            const auto end = state.lines.begin() + state.lineCount;
+            const auto previousLine = std::ranges::find_if(state.lines.begin(), end,
+                                                           [&](const State::Line& line) {
+                                                               return state.highlighted >= line.start
+                                                                   && state.highlighted < line.end;
+                                                           });
+            const auto currentLine = std::ranges::find_if(state.lines.begin(), end,
+                                                          [&](const State::Line& line) {
+                                                              return current >= line.start && current < line.end;
+                                                          });
+            if (previousLine != end) {
+                if (previousLine->bidi) {
+                    drawLine(state, *previousLine, ui, text, typography, area, current);
+                } else {
+                    int16_t x = 0;
+                    int16_t y = 0;
+                    if (logicalWordPosition(state, state.highlighted, x, y)) {
+                        activateFace(text, faceAt(state, state.highlighted));
+                        drawWord(state, ui, text, typography, session, state.highlighted, x, y,
+                                 ui::themes::ColorRole::Foreground);
+                    }
+                }
+            }
+            if (currentLine != end && currentLine != previousLine) {
+                if (currentLine->bidi) {
+                    drawLine(state, *currentLine, ui, text, typography, area, current);
+                } else {
+                    int16_t x = 0;
+                    int16_t y = 0;
+                    if (logicalWordPosition(state, current, x, y)) {
+                        activateFace(text, faceAt(state, current));
+                        drawWord(state, ui, text, typography, session, current, x, y,
+                                 ui::themes::ColorRole::Accent);
+                    }
+                }
+            } else if (currentLine != end && !currentLine->bidi) {
                 int16_t x = 0;
                 int16_t y = 0;
-                if (logicalWordPosition(state, state.highlighted, x, y)) {
-                    activateFace(text, faceAt(state, state.highlighted));
-                    drawWord(state, ui, text, typography, session, state.highlighted, x, y,
-                             ui::themes::ColorRole::Foreground);
-                }
                 if (logicalWordPosition(state, current, x, y)) {
                     activateFace(text, faceAt(state, current));
                     drawWord(state, ui, text, typography, session, current, x, y,
                              ui::themes::ColorRole::Accent);
                 }
-                state.highlighted = current;
-                ui.markDrawn();
-                return;
             }
-            const auto previousLine = std::ranges::find_if(state.lines.begin(), state.lines.begin() + state.lineCount,
-                                                           [&](const State::Line& line) {
-                                                               return state.highlighted >= line.start
-                                                                   && state.highlighted < line.end;
-                                                           });
-            const auto currentLine = std::ranges::find_if(state.lines.begin(), state.lines.begin() + state.lineCount,
-                                                          [&](const State::Line& line) {
-                                                              return current >= line.start && current < line.end;
-                                                          });
-            if (previousLine != state.lines.begin() + state.lineCount)
-                drawLine(state, *previousLine, ui, text, typography, area, current);
-            if (currentLine != state.lines.begin() + state.lineCount && currentLine != previousLine)
-                drawLine(state, *currentLine, ui, text, typography, area, current);
             state.highlighted = current;
             ui.markDrawn();
             return;
         }
 
-        if (state.bidi) {
-            for (size_t lineIndex = 0; lineIndex < state.lineCount; ++lineIndex)
-                drawLine(state, state.lines[lineIndex], ui, text, typography, area, current);
-        } else {
-            for (size_t lineIndex = 0; lineIndex < state.lineCount; ++lineIndex) {
-                const State::Line& line = state.lines[lineIndex];
+        for (size_t lineIndex = 0; lineIndex < state.lineCount; ++lineIndex) {
+            const State::Line& line = state.lines[lineIndex];
+            if (line.bidi) {
+                drawLine(state, line, ui, text, typography, area, current);
+            } else {
                 for (size_t index = line.start; index < line.end; ++index) {
                     activateFace(text, faceAt(state, index));
                     const State::Word& word = wordAt(state, index);

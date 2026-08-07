@@ -8,6 +8,8 @@
 #include <string_view>
 #include <vector>
 
+#include "text/UnicodeText.h"
+
 struct ChapterMarker {
     std::string title;
     size_t wordIndex = 0;
@@ -105,5 +107,32 @@ struct BookMetadata {
                 result |= run.scriptMask;
         }
         return result != 0 || (!textRuns.empty() && value != locale) ? result : scriptMask;
+    }
+
+    bool requiresBidi(size_t firstWord, size_t lastWord) const {
+        if (firstWord >= lastWord)
+            return false;
+        if (textRuns.empty())
+            return (requiredCapabilities & UnicodeText::CapabilityBidi) != 0
+                || baseDirection == BookDirection::rtl;
+
+        const auto needsBidi = [this](const BookTextRun* run) {
+            const BookDirection direction = run != nullptr && run->direction != BookDirection::automatic
+                                              ? run->direction
+                                              : baseDirection;
+            const uint32_t scripts = run != nullptr ? run->scriptMask : scriptMask;
+            return direction == BookDirection::rtl
+                || (scripts & (UnicodeText::ScriptHebrew | UnicodeText::ScriptArabic)) != 0;
+        };
+        auto next = std::ranges::upper_bound(textRuns, firstWord, {}, &BookTextRun::wordIndex);
+        const BookTextRun* run = next == textRuns.begin() ? nullptr : &*std::prev(next);
+        if (needsBidi(run))
+            return true;
+        while (next != textRuns.end() && next->wordIndex < lastWord) {
+            if (needsBidi(&*next))
+                return true;
+            ++next;
+        }
+        return false;
     }
 };

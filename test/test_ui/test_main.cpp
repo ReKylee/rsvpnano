@@ -488,6 +488,7 @@ void test_page_reader_uses_reader_typeface_after_skipping_a_colliding_page_range
     settings::TypographySettings typography;
     std::array<std::string, 12> words;
     words.fill("a");
+    words[8] = "aa";
     ReadingSession session;
     ReadingLoop::setWords(session, words, 0);
     session.metadata.paragraphStarts = {0, 4, 8};
@@ -512,7 +513,8 @@ void test_page_reader_uses_reader_typeface_after_skipping_a_colliding_page_range
 
     TEST_ASSERT_EQUAL(8, state.pageStart);
     TEST_ASSERT_EQUAL(12, state.pageEnd);
-    TEST_ASSERT_EQUAL(4, gfx.bitmapWrites);
+    TEST_ASSERT_EQUAL_INT16(8, state.words.front().width);
+    TEST_ASSERT_EQUAL(5, gfx.bitmapWrites);
     TEST_ASSERT_EQUAL(0, gfx.textWrites);
 }
 
@@ -570,6 +572,47 @@ void test_page_reader_caches_visual_bidi_layout() {
     TEST_ASSERT_TRUE(state.lines.front().rightToLeft);
     TEST_ASSERT_GREATER_THAN(0, state.characters.size());
     TEST_ASSERT_EQUAL_UINT32('1', state.characters.front().codepoint);
+}
+
+void test_page_reader_only_runs_bidi_for_pages_that_need_it() {
+    Arduino_GFX gfx(180, 20);
+    ui::Context context(gfx);
+    ui::fonts::AlphaTextRenderer<640> text(gfx);
+    TEST_ASSERT_TRUE(text.begin());
+    context.setTheme(theme());
+    settings::TypographySettings typography;
+    const std::array<std::string, 3> words{"abc", "def", "\xD7\x90\xD7\x91\xD7\x92"};
+    ReadingSession session;
+    ReadingLoop::setWords(session, words, 0);
+    session.metadata.requiredCapabilities = UnicodeText::CapabilityBidi;
+    session.metadata.paragraphStarts = {0, 2};
+    session.metadata.textRuns = {
+        {.wordIndex = 0, .locale = "en", .direction = BookDirection::ltr,
+         .scriptMask = UnicodeText::ScriptLatin},
+        {.wordIndex = 2, .locale = "he", .direction = BookDirection::rtl,
+         .scriptMask = UnicodeText::ScriptHebrew},
+    };
+    screens::PageReader::State state;
+    const auto typeface = [](size_t) -> FontCatalog::Face {
+        return {std::cref(kReaderFont), std::nullopt};
+    };
+
+    context.beginFrame(1);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, {0, 0, 180, 20});
+    context.endFrame();
+    TEST_ASSERT_EQUAL(0, state.pageStart);
+    TEST_ASSERT_EQUAL(2, state.pageEnd);
+    TEST_ASSERT_FALSE(state.bidi);
+    TEST_ASSERT_TRUE(state.characters.empty());
+
+    ReadingLoop::seekTo(session, 2);
+    context.beginFrame(1);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, {0, 0, 180, 20});
+    context.endFrame();
+    TEST_ASSERT_EQUAL(2, state.pageStart);
+    TEST_ASSERT_TRUE(state.bidi);
+    TEST_ASSERT_TRUE(state.lines.front().bidi);
+    TEST_ASSERT_GREATER_THAN(0, state.characters.size());
 }
 
 void test_page_reader_shapes_each_visible_word_once_and_caches_glyphs() {
@@ -685,7 +728,9 @@ void test_reader_streams_rfont4_glyphs_from_file() {
     TEST_ASSERT_TRUE(renderer.hasGlyph('a'));
     TEST_ASSERT_FALSE(renderer.hasGlyph(0x10FFFF));
     TEST_ASSERT_GREATER_THAN(0, renderer.glyphAdvance('a'));
+    const size_t seeksBeforeDraw = file.seekCount();
     TEST_ASSERT_GREATER_THAN(0, renderer.drawCodepoint('a', 10, 50));
+    TEST_ASSERT_EQUAL_UINT32(seeksBeforeDraw + 1, file.seekCount());
     TEST_ASSERT_GREATER_THAN(0, gfx.writes);
 
     TEST_ASSERT_GREATER_THAN(0, renderer.glyphAdvance('A'));
@@ -1153,6 +1198,7 @@ int main(int, char**) {
     RUN_TEST(test_page_reader_uses_reader_typeface_after_skipping_a_colliding_page_range);
     RUN_TEST(test_page_reader_uses_each_words_selected_typeface_for_layout);
     RUN_TEST(test_page_reader_caches_visual_bidi_layout);
+    RUN_TEST(test_page_reader_only_runs_bidi_for_pages_that_need_it);
     RUN_TEST(test_page_reader_shapes_each_visible_word_once_and_caches_glyphs);
     RUN_TEST(test_ui_font_measures_utf8_codepoints);
     RUN_TEST(test_compiled_localization_is_the_english_rescue_table);

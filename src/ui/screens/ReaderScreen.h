@@ -102,6 +102,7 @@ namespace screens {
         PageReader::State pageState_;
         ReadingLoop::TextParagraph rsvpParagraph_;
         BidiText::Analysis rsvpBidi_;
+        BidiText::Line rsvpLine_;
         std::vector<BidiText::Codepoint> rsvpVisual_;
         std::vector<ui::fonts::PositionedGlyph> rsvpGlyphs_;
         bool pagePreview_ = false;

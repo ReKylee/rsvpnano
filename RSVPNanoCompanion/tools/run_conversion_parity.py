@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 VECTORS = ROOT / "RSVPNanoCompanion" / "testdata" / "conversion"
+MULTILINGUAL = ROOT / "RSVPNanoCompanion" / "testdata" / "multilingual"
 LOCAL_GRADLE = ROOT / ".local" / "run_local_gradle.ps1"
 
 TEXT_CASES = [
@@ -91,6 +92,8 @@ def run_python_vector(tmp: Path, input_name: str, expected_name: str, title: str
     for kind, value in events:
         if kind == "chapter":
             writer.add_chapter(value)
+        elif kind in {"language", "direction"}:
+            writer.add_directive(kind, value)
         else:
             writer.begin_paragraph()
             writer.add_text(value)
@@ -167,6 +170,26 @@ def run_python_epub_toc() -> None:
             raise AssertionError("Python TCOMC kept generated contents/title-page chapters")
 
 
+def run_multilingual_format_parity() -> None:
+    module = load_python_converter()
+    names = (
+        "multilingual.txt",
+        "multilingual.md",
+        "multilingual.html",
+        "multilingual.xhtml",
+        "multilingual-epub2.epub",
+        "multilingual-epub3.epub",
+    )
+    content_events = lambda path: [
+        event for event in module.events_for_file(path)[2] if event[0] in {"chapter", "text"}
+    ]
+    expected = content_events(MULTILINGUAL / names[0])
+    for name in names[1:]:
+        actual = content_events(MULTILINGUAL / name)
+        if actual != expected:
+            raise AssertionError(f"Multilingual content events differed for {name}")
+
+
 def run_web_vector(tmp: Path, command: str, input_name: str, expected_name: str, title: str, label: str) -> None:
     node = shutil.which("node")
     if node is None:
@@ -213,6 +236,7 @@ def main() -> int:
         run_python_text(tmp)
         run_python_html(tmp)
         run_python_epub_toc()
+        run_multilingual_format_parity()
         run_web_text(tmp)
         run_web_html(tmp)
         run_web_epub(tmp)

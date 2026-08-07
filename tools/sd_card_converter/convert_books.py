@@ -247,6 +247,14 @@ class RsvpWriter:
                 self.lines.append("")
             self.lines.append("@para")
 
+    def add_directive(self, name: str, value: str) -> None:
+        self.flush_line()
+        directive = f"@{name} {directive_text(value)}"
+        if self.word_count == 0:
+            self.lines.insert(self.lines.index(""), directive)
+        else:
+            self.lines.append(directive)
+
     def add_text(self, text: str) -> bool:
         readable_words = list(iter_clean_words(text))
         readable_index = 0
@@ -394,11 +402,12 @@ def container_rootfile(epub: zipfile.ZipFile) -> str:
 
 def parse_package(
     epub: zipfile.ZipFile, opf_path: str
-) -> tuple[str, str, list[str], dict[str, list[tuple[str, str]]]]:
+) -> tuple[str, str, str, list[str], dict[str, list[tuple[str, str]]]]:
     package_xml = read_zip_text(epub, opf_path)
     root = ET.fromstring(package_xml)
     title = first_child_text(root, "title")
     author = first_child_text(root, "creator")
+    language = first_child_text(root, "language").strip().replace("_", "-")
 
     manifest: dict[str, tuple[str, str]] = {}
     nav_paths: list[str] = []
@@ -435,7 +444,7 @@ def parse_package(
         raise ValueError("EPUB spine does not contain readable XHTML/HTML documents")
 
     package_version = root.attrib.get("version", "")
-    return title, author, spine_paths, toc_titles_by_path(epub, title, package_version, nav_paths, ncx_paths)
+    return title, author, language, spine_paths, toc_titles_by_path(epub, title, package_version, nav_paths, ncx_paths)
 
 
 def toc_titles_by_path(
@@ -592,7 +601,9 @@ def epub_events_and_metadata(path: Path) -> tuple[str, str, list[tuple[str, str]
         if any(normalize_zip_path(name).lower() == "meta-inf/encryption.xml" for name in epub.namelist()):
             raise ValueError("This EPUB could not be converted locally")
         opf_path = container_rootfile(epub)
-        title, author, spine_paths, toc_titles = parse_package(epub, opf_path)
+        title, author, language, spine_paths, toc_titles = parse_package(epub, opf_path)
+        if language:
+            events.append(("language", language))
 
         for index, spine_path in enumerate(spine_paths, start=1):
             toc_entries = toc_titles.get(normalize_zip_path(spine_path).lower(), [])
@@ -809,6 +820,9 @@ def convert_one(path: Path, force: bool, max_words: int) -> tuple[str, str]:
     for kind, value in events:
         if kind == "chapter":
             writer.add_chapter(value)
+            continue
+        if kind in {"language", "direction"}:
+            writer.add_directive(kind, value)
             continue
         writer.begin_paragraph()
         if not writer.add_text(value):

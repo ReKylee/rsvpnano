@@ -39,9 +39,11 @@ object RsvpConverter {
             when (event) {
                 is RsvpEvent.Chapter -> writer.addChapter(event.title)
                 is RsvpEvent.Text -> {
-                    writer.beginParagraph()
+                    if (event.startsParagraph) writer.beginParagraph()
                     writer.addText(event.text)
                 }
+                is RsvpEvent.Language -> writer.setLanguage(event.locale)
+                is RsvpEvent.Direction -> writer.setDirection(event.value)
             }
         }
         return writer.finalize(fallbackChapterTitle = title)

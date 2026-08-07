@@ -49,16 +49,24 @@ internal class RsvpWriter(
         }
     }
 
+    fun setLanguage(locale: String) = addDirective("language", locale)
+
+    fun setDirection(direction: String) = addDirective("direction", direction)
+
     fun addText(text: String) {
         val readableTokens = RsvpTextUtils.cleanWordTokens(text)
         var readableIndex = 0
         RsvpTextUtils.outputTokens(text).forEach { word ->
-            val projected = if (lineWords.isEmpty()) word.length else lineLength + 1 + word.length
+            val separated = lineWords.isNotEmpty()
+                && !(RsvpTextUtils.isCjkToken(lineWords.last()) && RsvpTextUtils.isCjkToken(word))
+            val projected = if (lineWords.isEmpty()) word.length else lineLength + (if (separated) 1 else 0) + word.length
             if (lineWords.isNotEmpty() && projected > RsvpConverter.wrapWidth) {
                 flushLine()
             }
+            val appendSpace = lineWords.isNotEmpty()
+                && !(RsvpTextUtils.isCjkToken(lineWords.last()) && RsvpTextUtils.isCjkToken(word))
             lineWords += word
-            lineLength = if (lineWords.size == 1) word.length else lineLength + 1 + word.length
+            lineLength = if (lineWords.size == 1) word.length else lineLength + (if (appendSpace) 1 else 0) + word.length
             if (readableIndex < readableTokens.size && word == readableTokens[readableIndex]) {
                 wordCount += 1
                 readableIndex += 1
@@ -95,12 +103,35 @@ internal class RsvpWriter(
         if (lineWords.isEmpty()) {
             return
         }
-        var line = lineWords.joinToString(" ")
+        var line = buildString(lineLength) {
+            lineWords.forEachIndexed { index, word ->
+                if (index > 0 && !(RsvpTextUtils.isCjkToken(lineWords[index - 1]) && RsvpTextUtils.isCjkToken(word)))
+                    append(' ')
+                append(word)
+            }
+        }
         if (line.startsWith("@")) {
             line = "@$line"
         }
         lines += line
         lineWords = mutableListOf()
         lineLength = 0
+    }
+
+    private fun addDirective(name: String, value: String) {
+        flushLine()
+        val directive = "@$name ${RsvpTextUtils.directiveValue(value)}"
+        for (index in lines.indices.reversed()) {
+            if (!lines[index].startsWith("@language ") && !lines[index].startsWith("@direction ")) break
+            if (lines[index].startsWith("@$name ")) {
+                lines[index] = directive
+                return
+            }
+        }
+        if (wordCount == 0) {
+            lines.add(lines.indexOf(""), directive)
+        } else {
+            lines += directive
+        }
     }
 }

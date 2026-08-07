@@ -1,6 +1,6 @@
 package com.rsvpnano.converters
 
-internal object ZipArchiveReader {
+object ZipArchiveReader {
     private const val LOCAL_FILE_HEADER = 0x04034b50
     private const val CENTRAL_DIRECTORY_HEADER = 0x02014b50
     private const val END_OF_CENTRAL_DIRECTORY = 0x06054b50
@@ -29,7 +29,7 @@ internal object ZipArchiveReader {
 
             val name = data.decodeUtf8Slice(nameStart, nameEnd)
             if (!name.endsWith('/')) {
-                entries[EpubUtils.normalizeZipPath(name).lowercase()] = readEntry(
+                entries[EpubUtils.normalizeZipPath(name)] = readEntry(
                     data = data,
                     localHeaderOffset = localHeaderOffset,
                     method = method,

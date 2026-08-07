@@ -63,6 +63,15 @@ class RsvpParityTest {
     }
 
     @Test
+    fun cjkTextKeepsLogicalSpacingAndCountsReaderPhrases() {
+        val text = "吾輩は猫である。名前はまだ無い。"
+        val file = RsvpConverter.rsvpFile(title = "猫", source = "cat.txt", text = text)
+
+        assertEquals(8, file.wordCount)
+        assertEquals(true, file.data.decodeToString().contains("\n$text\n"))
+    }
+
+    @Test
     fun textToRsvpMatchesReferenceVector() {
         val file = RsvpConverter.rsvpFile(
             title = "Basic Text Vector",

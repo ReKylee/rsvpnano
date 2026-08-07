@@ -188,7 +188,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <label>Interface language</label><select id="interfaceLocale"><option value="en">English</option></select>
 <div id="localesList" class="muted">Loading...</div>
 <label>Locale-pack folder</label><input id="localePackFiles" type="file" webkitdirectory multiple>
-<p class="muted">Choose a folder containing <code>manifest.toml</code> and its <code>ui</code>/<code>reader</code> files.</p>
+<p class="muted">Choose an extracted locale-pack folder containing <code>manifest.toml</code> and its optional <code>ui</code> files.</p>
 <div class="row"><button class="primary" id="installLocalePackButton">Install locale pack</button><button id="refreshLocalesButton">Refresh</button></div>
 </div>
 <div class="card"><h2>Typography</h2>
@@ -273,7 +273,7 @@ function setFontOptions(){const id=(settings&&settings.reading&&settings.reading
 function setLocaleOptions(){const current=(settings&&settings.interface&&settings.interface.locale)||'en';const locales=new Map([['en','English']]);(deviceLocales.locales||[]).filter(p=>p.locale).forEach(p=>locales.set(p.locale,p.nativeName||p.englishName||p.locale));if(!locales.has(current))locales.set(current,current);$('interfaceLocale').innerHTML=[...locales].map(([id,name])=>`<option value="${html(id)}">${html(name)}</option>`).join('');setVal('interfaceLocale',current)}
 function renderLocales(){const packs=deviceLocales.locales||[],rejected=deviceLocales.rejected||[];let out=packs.map(p=>`<div class="item"><div class="item-title">${html(p.nativeName||p.englishName||p.id)}</div><div class="item-meta">${html([p.id,p.version,p.locale,p.direction].filter(Boolean).join(' - '))}</div><p><button class="danger" data-delete-locale="${html(encodeURIComponent(p.id))}">Remove</button></p></div>`).join('');if(!out)out='<span class="muted">No external locale packs installed.</span>';if(rejected.length)out+=`<p class="muted">Rejected: ${rejected.map(i=>html(i.id+': '+i.reason)).join('; ')}</p>`;$('localesList').innerHTML=out;document.querySelectorAll('[data-delete-locale]').forEach(b=>b.onclick=()=>removeLocalePack(decodeURIComponent(b.dataset.deleteLocale)));setLocaleOptions()}
 async function loadLocales(){try{deviceLocales=await api('/api/v1/locales');renderLocales()}catch(e){status('Locale packs load failed: '+e.message)}}
-function selectedPackFiles(){const files=[...$('localePackFiles').files];return files.map(file=>{let path=file.webkitRelativePath||file.name;const slash=path.indexOf('/');if(slash>=0)path=path.slice(slash+1);return {file,path}}).filter(x=>x.path==='manifest.toml'||x.path.startsWith('ui/')||x.path.startsWith('reader/'))}
+function selectedPackFiles(){const files=[...$('localePackFiles').files];return files.map(file=>{let path=file.webkitRelativePath||file.name;const slash=path.indexOf('/');if(slash>=0)path=path.slice(slash+1);return {file,path}}).filter(x=>x.path==='manifest.toml'||x.path.startsWith('ui/'))}
 async function installLocalePack(){const files=selectedPackFiles(),manifest=files.find(x=>x.path==='manifest.toml');if(!manifest){status('Choose a locale-pack folder containing manifest.toml.');return}try{const match=(await manifest.file.text()).match(/^id\s*=\s*"([A-Za-z0-9-]+)"\s*$/m);if(!match)throw new Error('manifest.toml has no valid pack id');const id=match[1];await api('/api/v1/locales/'+encodeURIComponent(id)+'/stage',{method:'POST'});for(let index=0;index<files.length;index++){const item=files[index],fd=new FormData();fd.append('file',item.file,item.file.name);status('Uploading locale pack '+(index+1)+'/'+files.length+'...');await api('/api/v1/locales/'+encodeURIComponent(id)+'/files?path='+encodeURIComponent(item.path),{method:'POST',body:fd})}await api('/api/v1/locales/'+encodeURIComponent(id)+'/activate',{method:'POST'});$('localePackFiles').value='';await loadLocales();status('Installed locale pack '+id)}catch(e){status('Locale pack install failed: '+e.message)}}
 async function removeLocalePack(id){if(!confirm('Remove locale pack '+id+'?'))return;try{await api('/api/v1/locales/'+encodeURIComponent(id),{method:'DELETE'});await loadLocales();status('Removed locale pack '+id)}catch(e){status('Locale pack removal failed: '+e.message)}}
 function snapWpm(v){v=Math.max(10,Math.min(1000,Math.round(+v||300)));return Math.round(v/10)*10}
@@ -402,7 +402,7 @@ bool CompanionSyncManager::begin() {
 
     statusLine1_ = "Starting sync";
     statusLine2_ = "Preparing Wi-Fi";
-    settingsChanged_ = false;
+    changes_ = 0;
     jsonBuffer_.clear();
 
     const bool networkReady = startStation() || startAccessPoint();
@@ -427,14 +427,14 @@ bool CompanionSyncManager::begin() {
     return true;
 }
 
-bool CompanionSyncManager::update() {
+uint8_t CompanionSyncManager::update() {
     if (!active_ || !serverStarted_) {
         return false;
     }
     server_.handleClient();
-    const bool changed = settingsChanged_;
-    settingsChanged_ = false;
-    return changed;
+    const uint8_t changes = changes_;
+    changes_ = 0;
+    return changes;
 }
 
 void CompanionSyncManager::end() {
@@ -449,7 +449,7 @@ void CompanionSyncManager::end() {
     networkMode_ = NetworkMode::None;
     networkSsid_.clear();
     active_ = false;
-    settingsChanged_ = false;
+    changes_ = 0;
     statusLine1_ = "Idle";
     statusLine2_ = "";
 }
@@ -713,7 +713,6 @@ void CompanionSyncManager::handleSettings() {
         return;
     }
 
-    fontCatalog_.loadFromSd();
     ThemeStore themeStore;
     themeStore.loadFromSd();
 
@@ -743,7 +742,7 @@ void CompanionSyncManager::handleSettings() {
         return;
     }
 
-    settingsChanged_ = true;
+    changes_ |= Settings;
     sendData(server_, jsonBuffer_, 200, settingsStore_.settings());
 }
 
@@ -758,7 +757,7 @@ void CompanionSyncManager::handleWifi() {
         settingsStore_.secrets().wifiPassword.clear();
         settingsStore_.acceptChanges();
         settingsStore_.acceptSecretChanges();
-        settingsChanged_ = true;
+        changes_ |= Network;
         statusLine1_ = "Wi-Fi cleared";
         statusLine2_ = "";
         sendData(server_, jsonBuffer_, 200, makeNetworkResponse(settingsStore_.secrets()));
@@ -796,7 +795,7 @@ void CompanionSyncManager::handleWifi() {
     settingsStore_.secrets().wifiPassword = password;
     settingsStore_.acceptChanges();
     settingsStore_.acceptSecretChanges();
-    settingsChanged_ = true;
+    changes_ |= Network;
     statusLine1_ = "Wi-Fi saved";
     statusLine2_ = settingsStore_.settings().network.wifiSsid;
     sendData(server_, jsonBuffer_, 200, makeNetworkResponse(settingsStore_.secrets()));
@@ -968,8 +967,6 @@ void CompanionSyncManager::handleThemes() {
 
 void CompanionSyncManager::handleFonts() {
     if (server_.method() == HTTP_GET) {
-        fontCatalog_.loadFromSd();
-
         api::FontsResponse response;
         response.fonts.reserve(fontCatalog_.families().size());
         std::ranges::transform(fontCatalog_.families(), std::back_inserter(response.fonts), [](const auto& family) {
@@ -1016,16 +1013,23 @@ void CompanionSyncManager::handleFonts() {
         Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
-        sendError(422, "invalid_size", "Font file must be between 1 byte and 64 MB", "file");
+        sendError(422, "invalid_size", "Font file must be between 1 byte and 96 MB", "file");
         return;
     }
 
-    auto validated = FontCatalog::validateFontFile(uploadTmpPath_);
+    auto validated = FontCatalog::inspectFontFile(uploadTmpPath_);
     if (!validated) {
         Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         uploadTmpPath_ = "";
         uploadFinalPath_ = "";
         sendError(422, "invalid_font", validated.error().c_str(), "file");
+        return;
+    }
+    if (fontCatalog_.find(validated->id)) {
+        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
+        uploadTmpPath_ = "";
+        uploadFinalPath_ = "";
+        sendError(409, "already_exists", "Font family already exists", "family");
         return;
     }
 
@@ -1050,15 +1054,15 @@ void CompanionSyncManager::handleFonts() {
     statusLine1_ = "Font received";
     statusLine2_ = uploadFinalPath_.c_str();
     ESP_LOGI("sync", "font ready %s", uploadFinalPath_.c_str());
+    validated->path = uploadFinalPath_.c_str();
+    fontCatalog_.addFamily(std::move(*validated));
     sendData(server_, jsonBuffer_, 201, api::UploadResponse{uploadFinalPath_});
-    fontCatalog_.loadFromSd();
-    settingsChanged_ = true;
+    changes_ |= Fonts;
     uploadTmpPath_ = "";
     uploadFinalPath_ = "";
 }
 
 void CompanionSyncManager::handleLocales() {
-    localeCatalog_ = locales::scanInstalled(Board::Storage::filesystem());
     api::LocalesResponse response;
     response.locales.reserve(localeCatalog_.packs.size());
     std::ranges::transform(localeCatalog_.packs, std::back_inserter(response.locales), [](const auto& pack) {
@@ -1198,7 +1202,8 @@ void CompanionSyncManager::handleLocaleFileUpload() {
 
 void CompanionSyncManager::handleLocaleActivate() {
     const String id = server_.pathArg(0);
-    auto activated = locales::activateStaged(Board::Storage::filesystem(), {id.c_str(), id.length()});
+    auto activated = locales::activateStaged(Board::Storage::filesystem(), localeCatalog_,
+                                              {id.c_str(), id.length()});
     if (!activated) {
         const int status = activated.error().contains("another pack") ? 409
                          : activated.error().contains("could not")    ? 500
@@ -1206,8 +1211,7 @@ void CompanionSyncManager::handleLocaleActivate() {
         sendError(status, "activation_failed", activated.error(), "id");
         return;
     }
-    localeCatalog_ = locales::scanInstalled(Board::Storage::filesystem());
-    settingsChanged_ = true;
+    changes_ |= Locales;
     statusLine1_ = "Locale installed";
     statusLine2_ = id.c_str();
     sendData(server_, jsonBuffer_, 200, api::IdResponse{std::string{id.c_str()}});
@@ -1215,13 +1219,13 @@ void CompanionSyncManager::handleLocaleActivate() {
 
 void CompanionSyncManager::handleLocaleDelete() {
     const String id = server_.pathArg(0);
-    auto removed = locales::removeInstalled(Board::Storage::filesystem(), {id.c_str(), id.length()});
+    auto removed = locales::removeInstalled(Board::Storage::filesystem(), localeCatalog_,
+                                             {id.c_str(), id.length()});
     if (!removed) {
         sendError(removed.error() == "invalid pack ID" ? 400 : 500, "remove_failed", removed.error(), "id");
         return;
     }
-    localeCatalog_ = locales::scanInstalled(Board::Storage::filesystem());
-    settingsChanged_ = true;
+    changes_ |= Locales;
     statusLine1_ = "Locale removed";
     statusLine2_ = id.c_str();
     sendData(server_, jsonBuffer_, 200, api::DeleteResponse{std::string{id.c_str()}, true});
@@ -1429,7 +1433,6 @@ void CompanionSyncManager::handleBookLanguageFonts() {
     for (const BookTextRun& run: metadata.textRuns)
         addLanguage(run.locale);
 
-    fontCatalog_.loadFromSd();
     for (size_t index = 0; index < update->languageFonts.size(); ++index) {
         auto& selection = update->languageFonts[index];
         auto locale = LocaleTag::normalize(selection.locale);

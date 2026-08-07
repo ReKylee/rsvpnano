@@ -60,8 +60,8 @@ namespace locales {
     std::expected<std::string, std::string> prepareStagedFile(fs::FS& filesystem, std::string_view id,
                                                               std::string_view relativePath);
     std::expected<void, std::string> validatePackFiles(fs::FS& filesystem, const InstalledPack& pack);
-    std::expected<InstalledPack, std::string> activateStaged(fs::FS& filesystem, std::string_view id);
-    std::expected<void, std::string> removeInstalled(fs::FS& filesystem, std::string_view id);
+    std::expected<void, std::string> activateStaged(fs::FS& filesystem, Catalog& catalog, std::string_view id);
+    std::expected<void, std::string> removeInstalled(fs::FS& filesystem, Catalog& catalog, std::string_view id);
     void recoverInterrupted(fs::FS& filesystem);
     std::string_view localeName(const Catalog& catalog, std::string_view locale);
 } // namespace locales

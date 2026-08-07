@@ -138,8 +138,21 @@ void App::update(uint32_t nowMs) {
 
     Board::Power::updateBattery(battery_, nowMs);
     readerScreen_.update(prefs_, nowMs);
-    if (sync_.active() && sync_.update())
-        reloadSettings();
+    if (sync_.active()) {
+        const uint8_t changes = sync_.update();
+        if ((changes & CompanionSyncManager::Settings) != 0) {
+            applySettings();
+        } else {
+            if ((changes & CompanionSyncManager::Locales) != 0)
+                reloadUiAssets();
+            if ((changes & CompanionSyncManager::Fonts) != 0)
+                readerScreen_.refreshTypography();
+            if ((changes & CompanionSyncManager::Network) != 0) {
+                networkScreen_.begin(settingsStore_);
+                networkScreen_.startupCheckPending = false;
+            }
+        }
+    }
     if (screen_ == screens::Screen::FocusSession) {
         if (focusScreen_.update(nowMs))
             Board::Audio::beep();
@@ -406,7 +419,6 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
         } else {
             if (sync_.active()) {
                 sync_.end();
-                reloadSettings();
             }
             if (screen_ == screens::Screen::FocusSession)
                 focusScreen_.close();
@@ -436,7 +448,6 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
     if (Input::hasAction(event.actions, Input::ActionBack)) {
         if (sync_.active()) {
             sync_.end();
-            reloadSettings();
             screen_ = screens::Screen::Device;
             renderScreen(nowMs);
         } else if (screen_ != screens::Screen::Reader) {
@@ -677,16 +688,16 @@ void App::enterUsbTransfer(uint32_t nowMs) {
 void App::exitUsbTransfer(screens::Screen destination) {
     usbTransfer_.end();
     storage_.refreshBooks();
+    localeCatalog_ = locales::scanInstalled(Board::Storage::filesystem());
+    readerScreen_.fonts.loadFromSd();
+    applySettings();
     libraryScreen_.invalidate();
     screen_ = destination;
     renderScreen(millis());
 }
 
-void App::reloadSettings() {
-    if (storage_.mounted())
-        localeCatalog_ = locales::scanInstalled(Board::Storage::filesystem());
+void App::applySettings() {
     reloadUiAssets();
-    readerScreen_.fonts.loadFromSd();
     interfaceScreen_.begin(immediateUi_, settingsStore_.settings().interface, localeCatalog_,
                            &Board::Display::setBrightness);
     readerScreen_.begin(interfaceScreen_.themes.selected());

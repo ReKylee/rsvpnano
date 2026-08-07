@@ -307,7 +307,7 @@ namespace locales {
         return inspectPackFiles(filesystem, pack, true);
     }
 
-    std::expected<InstalledPack, std::string> activateStaged(fs::FS& filesystem, std::string_view id) {
+    std::expected<void, std::string> activateStaged(fs::FS& filesystem, Catalog& catalog, std::string_view id) {
         if (!isValidPackId(id))
             return std::unexpected("invalid pack ID");
         const std::string current = installedDirectory(id);
@@ -319,8 +319,7 @@ namespace locales {
         if (!staged)
             return std::unexpected(staged.error());
 
-        const Catalog installed = scanInstalled(filesystem);
-        if (std::ranges::any_of(installed.packs, [&](const InstalledPack& pack) {
+        if (std::ranges::any_of(catalog.packs, [&](const InstalledPack& pack) {
                 return pack.manifest.id != id && pack.manifest.locale == staged->manifest.locale;
             }))
             return std::unexpected("another pack already provides this locale");
@@ -334,26 +333,31 @@ namespace locales {
             return std::unexpected("could not activate the staged pack");
         }
 
-        auto active = loadPack(filesystem, current, id, false);
-        if (!active) {
-            removeTree(filesystem, current);
-            if (hadCurrent)
-                filesystem.rename(backup.c_str(), current.c_str());
-            return std::unexpected("activated pack could not be reopened");
-        }
         if (hadCurrent)
             removeTree(filesystem, backup);
-        return active;
+        staged->directory = current;
+        const auto existing = std::ranges::find(catalog.packs, id, [](const InstalledPack& pack) {
+            return std::string_view{pack.manifest.id};
+        });
+        if (existing == catalog.packs.end())
+            catalog.packs.push_back(std::move(*staged));
+        else
+            *existing = std::move(*staged);
+        std::erase_if(catalog.rejected, [id](const CatalogIssue& issue) { return issue.id == id; });
+        std::ranges::sort(catalog.packs, {}, [](const InstalledPack& pack) {
+            return pack.manifest.englishName;
+        });
+        return {};
     }
 
-    std::expected<void, std::string> removeInstalled(fs::FS& filesystem, std::string_view id) {
+    std::expected<void, std::string> removeInstalled(fs::FS& filesystem, Catalog& catalog, std::string_view id) {
         if (!isValidPackId(id))
             return std::unexpected("invalid pack ID");
         const std::string directory = installedDirectory(id);
-        if (!directoryExists(filesystem, directory))
-            return {};
-        if (!removeTree(filesystem, directory))
+        if (directoryExists(filesystem, directory) && !removeTree(filesystem, directory))
             return std::unexpected("could not remove the installed pack");
+        std::erase_if(catalog.packs, [id](const InstalledPack& pack) { return pack.manifest.id == id; });
+        std::erase_if(catalog.rejected, [id](const CatalogIssue& issue) { return issue.id == id; });
         return {};
     }
 

@@ -65,7 +65,7 @@ private:
     void enqueueJobUpdate(JobUpdate update, bool mustSucceed = false);
     void showTransientStatus(std::string_view title, std::string_view line1, std::string_view line2,
                              uint32_t durationMs, screens::Screen destination, int progressPercent = -1);
-    void reloadSettings();
+    void applySettings();
     void reloadUiAssets();
     void enterUsbTransfer(uint32_t nowMs);
     void exitUsbTransfer(screens::Screen destination = screens::Screen::Reader);

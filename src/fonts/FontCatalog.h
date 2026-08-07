@@ -75,6 +75,9 @@ public:
         return families_;
     }
     std::optional<std::reference_wrapper<const Family>> find(std::string_view id) const;
+    void addFamily(Family family) {
+        families_.push_back(std::move(family));
+    }
     Face loadFace(size_t familyIndex, size_t sizeIndex);
     void clearLoaded();
     static size_t selectFamily(std::span<const Family> families, std::string_view requested,
@@ -105,7 +108,7 @@ public:
         return selected == families.end() ? 0 : static_cast<size_t>(selected - families.begin());
     }
 
-    static std::expected<void, std::string> validateFontFile(std::string_view path);
+    static std::expected<Family, std::string> inspectFontFile(std::string_view path);
 
 private:
     struct LoadedStrike {

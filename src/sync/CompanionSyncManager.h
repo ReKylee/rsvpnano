@@ -13,12 +13,19 @@
 
 class CompanionSyncManager {
 public:
+    enum Change : uint8_t {
+        Settings = 1U << 0U,
+        Network = 1U << 1U,
+        Fonts = 1U << 2U,
+        Locales = 1U << 3U,
+    };
+
     CompanionSyncManager(settings::SettingsStore& settingsStore, locales::Catalog& localeCatalog,
                          FontCatalog& fontCatalog)
         : settingsStore_(settingsStore), localeCatalog_(localeCatalog), fontCatalog_(fontCatalog) {}
 
     bool begin();
-    bool update();
+    uint8_t update();
     void end();
     bool active() const;
     std::string_view statusLine1() const;
@@ -89,6 +96,6 @@ private:
     NetworkMode networkMode_ = NetworkMode::None;
     bool active_ = false;
     bool serverStarted_ = false;
-    bool settingsChanged_ = false;
+    uint8_t changes_ = 0;
     bool mdnsStarted_ = false;
 };

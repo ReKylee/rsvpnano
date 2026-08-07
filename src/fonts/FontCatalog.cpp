@@ -106,31 +106,9 @@ void FontCatalog::loadFromSd() {
             continue;
         }
 
-        const std::string assetPath = std::string{entry.path()} + "/" + RFont4::kFilename;
-        File asset = Board::Storage::filesystem().open(assetPath.c_str(), FILE_READ);
-        if (!asset) {
-            entry.close();
-            continue;
-        }
-
-        auto header = readHeader(asset);
-        auto label = header && RFont4::headerValid(*header, asset.size()) ? readName(asset, *header)
-                                                                          : std::expected<std::string, std::string>{
-                                                                                std::unexpected("Invalid font")};
-        auto locales = header && label ? readLocales(asset, *header)
-                                       : std::expected<std::string, std::string>{std::unexpected("Invalid font")};
-        if (header && label && locales) {
-            const std::string id = normalizeId(*label);
-            if (!id.empty() && id != kFallbackId && !find(id)) {
-                families_.push_back({.id = id,
-                                     .label = std::move(*label),
-                                     .locales = std::move(*locales),
-                                     .path = asset.path(),
-                                     .shaping = header->layoutTableCount != 0,
-                                     .scriptMask = header->scriptMask});
-            }
-        }
-        asset.close();
+        auto family = inspectFontFile(std::string{entry.path()} + "/" + RFont4::kFilename);
+        if (family && family->id != kFallbackId && !find(family->id))
+            families_.push_back(std::move(*family));
         entry.close();
     }
     root.close();
@@ -266,7 +244,7 @@ std::string FontCatalog::normalizeId(std::string_view value) {
     return out;
 }
 
-std::expected<void, std::string> FontCatalog::validateFontFile(std::string_view path) {
+std::expected<FontCatalog::Family, std::string> FontCatalog::inspectFontFile(std::string_view path) {
     const std::string ownedPath{path};
     File file = Board::Storage::filesystem().open(ownedPath.c_str(), FILE_READ);
     if (!file || file.isDirectory()) {
@@ -275,8 +253,25 @@ std::expected<void, std::string> FontCatalog::validateFontFile(std::string_view 
         return std::unexpected("Font file unavailable");
     }
     auto directory = readDirectory(file);
-    auto result = directory ? std::expected<void, std::string>{}
-                            : std::expected<void, std::string>{std::unexpected(directory.error())};
+    if (!directory) {
+        file.close();
+        return std::unexpected(directory.error());
+    }
+    auto label = readName(file, directory->header);
+    auto locales = label ? readLocales(file, directory->header)
+                         : std::expected<std::string, std::string>{std::unexpected(label.error())};
     file.close();
-    return result;
+    if (!label)
+        return std::unexpected(label.error());
+    if (!locales)
+        return std::unexpected(locales.error());
+    std::string id = normalizeId(*label);
+    if (id.empty())
+        return std::unexpected("Font name is invalid");
+    return Family{.id = std::move(id),
+                  .label = std::move(*label),
+                  .locales = std::move(*locales),
+                  .path = std::string{path},
+                  .shaping = directory->header.layoutTableCount != 0,
+                  .scriptMask = directory->header.scriptMask};
 }

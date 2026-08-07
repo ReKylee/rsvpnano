@@ -75,12 +75,7 @@ public:
         return families_;
     }
     std::optional<std::reference_wrapper<const Family>> find(std::string_view id) const;
-    const ui::fonts::AlphaFont& load(size_t familyIndex, size_t sizeIndex);
-    std::optional<std::reference_wrapper<TextShaping::Shaper>> loadShaper(size_t familyIndex);
-    Face loadFace(size_t familyIndex, size_t sizeIndex) {
-        return {.raster = std::cref(load(familyIndex, sizeIndex)),
-                .shaper = loadShaper(familyIndex)};
-    }
+    Face loadFace(size_t familyIndex, size_t sizeIndex);
     void clearLoaded();
     static size_t selectFamily(std::span<const Family> families, std::string_view requested,
                                std::string_view locale, uint32_t requiredScripts) {
@@ -121,11 +116,11 @@ private:
 
     struct LoadedFamily {
         size_t familyIndex = 0;
-        std::string name;
         File file;
         RFont4::Directory directory;
         std::optional<LoadedStrike> loadedStrike;
         TextShaping::Shaper shaper;
+        bool shapingFailed = false;
     };
 
     void reset();

@@ -51,9 +51,11 @@ namespace TextShaping {
         std::optional<std::reference_wrapper<File>> file_;
         std::span<const RFont4::LayoutTableRecord> tables_;
         std::array<hb_blob_t*, RFont4::kMaximumLayoutTableCount> tableBlobs_{};
+        std::optional<std::reference_wrapper<ui::fonts::AlphaTextRenderer<640>>> renderer_;
         hb_face_t* face_ = nullptr;
         hb_font_t* font_ = nullptr;
         hb_buffer_t* buffer_ = nullptr;
+        uint8_t pixelsPerEm_ = 0;
     };
 
 } // namespace TextShaping

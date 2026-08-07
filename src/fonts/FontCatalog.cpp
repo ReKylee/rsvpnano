@@ -151,38 +151,37 @@ std::optional<std::reference_wrapper<const FontCatalog::Family>> FontCatalog::fi
                                     : std::optional<std::reference_wrapper<const Family>>{std::cref(*found)};
 }
 
-const ui::fonts::AlphaFont& FontCatalog::load(size_t familyIndex, size_t sizeIndex) {
+FontCatalog::Face FontCatalog::loadFace(size_t familyIndex, size_t sizeIndex) {
     const size_t safeFamily = std::min(familyIndex, families_.size() - 1);
     const size_t safeSize = std::min(sizeIndex, RFont4::kSizeCount - 1);
     if (!families_[safeFamily].builtIn) {
         auto family = loadRuntimeFamily(safeFamily);
         if (family) {
-            auto strike = loadRuntimeStrike(family->get(), safeSize);
-            if (strike)
-                return strike->get();
+            LoadedFamily& loaded = family->get();
+            auto strike = loadRuntimeStrike(loaded, safeSize);
+            if (strike) {
+                std::optional<std::reference_wrapper<TextShaping::Shaper>> shaper;
+                if (families_[safeFamily].shaping && !loaded.shapingFailed) {
+                    if (!loaded.shaper.ready()) {
+                        const auto tables = std::span{loaded.directory.layoutTables}
+                                                .first(loaded.directory.header.layoutTableCount);
+                        if (auto opened = loaded.shaper.open(loaded.file, loaded.directory.header, tables); !opened) {
+                            loaded.shapingFailed = true;
+                            ESP_LOGE("font", "shaping failed %s: %s", families_[safeFamily].path.c_str(),
+                                     opened.error().c_str());
+                        }
+                    }
+                    if (loaded.shaper.ready())
+                        shaper = std::ref(loaded.shaper);
+                }
+                return {.raster = *strike, .shaper = shaper};
+            }
             ESP_LOGE("font", "load failed %s: %s", families_[safeFamily].path.c_str(), strike.error().c_str());
         } else {
             ESP_LOGE("font", "load failed %s: %s", families_[safeFamily].path.c_str(), family.error().c_str());
         }
     }
-    return *kFallbackFonts[safeSize];
-}
-
-std::optional<std::reference_wrapper<TextShaping::Shaper>> FontCatalog::loadShaper(size_t familyIndex) {
-    if (familyIndex >= families_.size() || !families_[familyIndex].shaping)
-        return std::nullopt;
-    auto family = loadRuntimeFamily(familyIndex);
-    if (!family)
-        return std::nullopt;
-    LoadedFamily& loaded = family->get();
-    if (!loaded.shaper.ready()) {
-        auto tables = std::span{loaded.directory.layoutTables}.first(loaded.directory.header.layoutTableCount);
-        if (auto opened = loaded.shaper.open(loaded.file, loaded.directory.header, tables); !opened) {
-            ESP_LOGE("font", "shaping failed %s: %s", families_[familyIndex].path.c_str(), opened.error().c_str());
-            return std::nullopt;
-        }
-    }
-    return std::ref(loaded.shaper);
+    return {.raster = std::cref(*kFallbackFonts[safeSize])};
 }
 
 void FontCatalog::clearLoaded() {
@@ -209,10 +208,6 @@ FontCatalog::loadRuntimeFamily(size_t familyIndex) {
     auto directory = readDirectory(loaded.file);
     if (!directory)
         return fail(directory.error());
-    auto name = readName(loaded.file, directory->header);
-    if (!name)
-        return fail(name.error());
-    loaded.name = std::move(*name);
     loaded.directory = std::move(*directory);
     return std::ref(loaded);
 }
@@ -230,7 +225,7 @@ FontCatalog::loadRuntimeStrike(LoadedFamily& family, size_t sizeIndex) {
         return std::unexpected(read.error());
     }
     loaded.font = {
-        .name = family.name,
+        .name = families_[family.familyIndex].label,
         .glyphCount = strike.glyphCount,
         .yAdvance = strike.yAdvance,
         .ascent = strike.ascent,

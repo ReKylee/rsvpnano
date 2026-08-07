@@ -7,11 +7,6 @@
 namespace TextShaping {
     namespace {
 
-        constexpr bool knownTag(uint32_t tag) {
-            return tag == HB_TAG('G', 'D', 'E', 'F') || tag == HB_TAG('G', 'S', 'U', 'B')
-                || tag == HB_TAG('G', 'P', 'O', 'S');
-        }
-
         constexpr int16_t fromFixed26_6(hb_position_t value) {
             const int64_t rounded = value < 0 ? -(-static_cast<int64_t>(value) + 32) / 64
                                               : (static_cast<int64_t>(value) + 32) / 64;
@@ -29,14 +24,6 @@ namespace TextShaping {
         close();
         if (!file || file.isDirectory() || tables.empty() || tables.size() > RFont4::kMaximumLayoutTableCount)
             return std::unexpected("Font shaping data unavailable");
-        for (size_t index = 0; index < tables.size(); ++index) {
-            const RFont4::LayoutTableRecord& table = tables[index];
-            if (!knownTag(table.tag)
-                || std::ranges::any_of(tables.first(index), [&](const RFont4::LayoutTableRecord& prior) {
-                       return prior.tag == table.tag;
-                   }))
-                return std::unexpected("Font layout table directory is invalid");
-        }
 
         file_ = std::ref(file);
         tables_ = tables;
@@ -68,9 +55,11 @@ namespace TextShaping {
                 hb_blob_destroy(blob);
         }
         file_.reset();
+        renderer_.reset();
         buffer_ = nullptr;
         font_ = nullptr;
         face_ = nullptr;
+        pixelsPerEm_ = 0;
         tables_ = {};
         tableBlobs_ = {};
     }
@@ -88,8 +77,14 @@ namespace TextShaping {
             || length > static_cast<size_t>(std::numeric_limits<int>::max()))
             return std::unexpected("Text run is too large to shape");
 
-        hb_font_set_funcs(font_, fontFunctions(), &renderer, nullptr);
-        hb_font_set_scale(font_, static_cast<int>(pixelsPerEm) * 64, static_cast<int>(pixelsPerEm) * 64);
+        if (!renderer_ || &renderer_->get() != &renderer) {
+            hb_font_set_funcs(font_, fontFunctions(), &renderer, nullptr);
+            renderer_ = std::ref(renderer);
+        }
+        if (pixelsPerEm_ != pixelsPerEm) {
+            hb_font_set_scale(font_, static_cast<int>(pixelsPerEm) * 64, static_cast<int>(pixelsPerEm) * 64);
+            pixelsPerEm_ = pixelsPerEm;
+        }
         hb_buffer_clear_contents(buffer_);
         hb_buffer_set_direction(buffer_, rightToLeft ? HB_DIRECTION_RTL : HB_DIRECTION_LTR);
         if (!language.empty())

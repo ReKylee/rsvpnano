@@ -22,6 +22,17 @@ namespace RFont4 {
     constexpr size_t kSizeCount = 3;
     constexpr size_t kMaximumLayoutTableCount = 3;
     constexpr uint32_t kShapedGlyphCodepoint = UINT32_MAX;
+    constexpr uint32_t layoutTag(char a, char b, char c, char d) {
+        return static_cast<uint32_t>(static_cast<uint8_t>(a)) << 24U
+             | static_cast<uint32_t>(static_cast<uint8_t>(b)) << 16U
+             | static_cast<uint32_t>(static_cast<uint8_t>(c)) << 8U
+             | static_cast<uint8_t>(d);
+    }
+    constexpr std::array kLayoutTags = {
+        layoutTag('G', 'D', 'E', 'F'),
+        layoutTag('G', 'S', 'U', 'B'),
+        layoutTag('G', 'P', 'O', 'S'),
+    };
     constexpr std::array<const char*, kSizeCount> kSizeIds = {"large", "medium", "small"};
     constexpr std::array<const char*, kSizeCount> kSizeLabels = {"Large", "Medium", "Small"};
     constexpr uint32_t kKnownScriptMask = UnicodeText::ScriptLatin | UnicodeText::ScriptCyrillic
@@ -172,7 +183,13 @@ namespace RFont4 {
         if (header.layoutTablesOffset != cursor)
             return false;
         cursor += tables.size_bytes();
-        for (const LayoutTableRecord& table: tables) {
+        for (size_t index = 0; index < tables.size(); ++index) {
+            const LayoutTableRecord& table = tables[index];
+            if (std::ranges::find(kLayoutTags, table.tag) == kLayoutTags.end()
+                || std::ranges::any_of(tables.first(index), [&](const LayoutTableRecord& prior) {
+                       return prior.tag == table.tag;
+                   }))
+                return false;
             cursor = (cursor + 3U) & ~uint64_t{3U};
             if (table.size == 0 || !section(table.offset, table.size))
                 return false;

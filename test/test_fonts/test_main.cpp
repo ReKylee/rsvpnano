@@ -128,6 +128,18 @@ void test_all_rfont4_assets_are_fully_validated_off_device() {
     auto unknownScript = header;
     unknownScript.scriptMask |= 1UL << 31U;
     TEST_ASSERT_FALSE(RFont4::layoutValid(unknownScript, strikes, tableSpan, bytes.size()));
+
+    const auto shapedBytes = readFont("fonts/Noto Serif Hebrew/font.rfont4");
+    const auto shapedHeader = recordAt<RFont4::Header>(shapedBytes, 0);
+    const auto shapedStrikes = readStrikes(shapedBytes, shapedHeader);
+    auto shapedTables = readTables(shapedBytes, shapedHeader);
+    const auto shapedTableSpan = std::span{shapedTables}.first(shapedHeader.layoutTableCount);
+    TEST_ASSERT_GREATER_THAN(1, shapedTableSpan.size());
+    shapedTables.front().tag = 0;
+    TEST_ASSERT_FALSE(RFont4::layoutValid(shapedHeader, shapedStrikes, shapedTableSpan, shapedBytes.size()));
+    shapedTables = readTables(shapedBytes, shapedHeader);
+    shapedTables[1].tag = shapedTables[0].tag;
+    TEST_ASSERT_FALSE(RFont4::layoutValid(shapedHeader, shapedStrikes, shapedTableSpan, shapedBytes.size()));
 }
 
 void test_shaper_reuses_rfont4_nominal_glyphs_and_advances() {
@@ -171,6 +183,10 @@ void test_shaper_reuses_rfont4_nominal_glyphs_and_advances() {
     TEST_ASSERT_EQUAL_UINT32(1, output[1].glyphIndex);
     TEST_ASSERT_EQUAL_UINT32(2, output[1].cluster);
     TEST_ASSERT_EQUAL_INT32(8, output[1].xAdvance);
+
+    shaped = shaping.shape("xABy", 1, 2, false, "en", font.pixelsPerEm, renderer, output);
+    TEST_ASSERT_TRUE_MESSAGE(shaped.has_value(), shaped ? "" : shaped.error().c_str());
+    TEST_ASSERT_EQUAL_UINT32(4, output.size());
 }
 
 int main(int, char**) {

@@ -248,6 +248,7 @@ fun RsvpNanoSharedApp(
                         onDeleteBook = presenter::deleteDeviceBook,
                         onSetBookPosition = presenter::setBookPosition,
                         onSetBookLanguageFonts = presenter::setBookLanguageFonts,
+                        onAddContent = { showAddPicker = true },
                     )
 
                     CompanionTab.Settings -> SettingsTab(

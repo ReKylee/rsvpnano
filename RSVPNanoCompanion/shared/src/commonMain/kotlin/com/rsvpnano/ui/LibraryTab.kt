@@ -1,12 +1,5 @@
 package com.rsvpnano.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,22 +17,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Newspaper
-import androidx.compose.material.icons.outlined.RssFeed
 import androidx.compose.material.icons.outlined.Sync
-import androidx.compose.material.icons.outlined.WarningAmber
-import androidx.compose.material.icons.outlined.Wifi
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -49,32 +37,21 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SnackbarDefaults
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import com.rsvpnano.app.CompanionNotice
-import com.rsvpnano.app.CompanionNotice.Attention
-import com.rsvpnano.app.CompanionNotice.Error
-import com.rsvpnano.app.CompanionNotice.Success
-import com.rsvpnano.converters.RsvpSupportedFileTypes
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoBookLanguage
 import com.rsvpnano.models.NanoFontSummary
 import com.rsvpnano.models.NanoLanguageFont
-import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.PendingUpload
 import kotlin.math.roundToInt
 
@@ -96,9 +73,11 @@ fun LibraryTab(
     onDeleteBook: (NanoBook) -> Unit,
     onSetBookPosition: (NanoBook, Int) -> Unit,
     onSetBookLanguageFonts: (NanoBook, List<NanoLanguageFont>) -> Unit,
+    onAddContent: () -> Unit,
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-    var filter by remember { mutableStateOf(LibraryFilter.All) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var filterName by rememberSaveable { mutableStateOf(LibraryFilter.All.name) }
+    val filter = LibraryFilter.valueOf(filterName)
     var selectedBook by remember { mutableStateOf<NanoBook?>(null) }
     var bookToDelete by remember { mutableStateOf<NanoBook?>(null) }
     var draftToDelete by remember { mutableStateOf<PendingUpload?>(null) }
@@ -147,7 +126,7 @@ fun LibraryTab(
                         LibraryFilter.entries.forEach { option ->
                             FilterChip(
                                 selected = filter == option,
-                                onClick = { filter = option },
+                                onClick = { filterName = option.name },
                                 label = { Text(option.label) },
                             )
                         }
@@ -159,7 +138,7 @@ fun LibraryTab(
             if (visibleDrafts.isNotEmpty()) {
                 item {
                     Text(
-                        text = "Pending articles",
+                        text = "Queued articles",
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -185,12 +164,14 @@ fun LibraryTab(
 
             if (visibleBooks.isEmpty()) {
                 item {
-                    EmptyCard(
+                    LibraryEmptyState(
                         text = when {
-                            !uiState.isConnected -> "Reader library unavailable while disconnected."
-                            visibleDrafts.isNotEmpty() -> "No matching reader items."
-                            else -> "No library items on the reader."
+                            !uiState.isConnected -> "Connect to view the reader library."
+                            searchQuery.isNotBlank() || filter != LibraryFilter.All -> "No items match this search."
+                            visibleDrafts.isNotEmpty() -> "No other items are on the reader yet."
+                            else -> "Your reader library is empty."
                         },
+                        onAddContent = onAddContent.takeIf { searchQuery.isBlank() && filter == LibraryFilter.All },
                     )
                 }
             } else {
@@ -297,51 +278,71 @@ private fun PendingArticleRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    var menuExpanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onEdit)
+            .padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(
-                    imageVector = Icons.Outlined.Newspaper,
-                    contentDescription = null,
-                    tint = if (needsFetch) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+        Icon(
+            imageVector = Icons.Outlined.Newspaper,
+            contentDescription = null,
+            tint = if (needsFetch) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = draft.title, style = MaterialTheme.typography.titleSmall)
+            Text(
+                text = listOfNotNull(
+                    if (needsFetch) "Queued for download" else "Ready to sync",
+                    draft.sourceUrl?.takeIf(String::isNotBlank)?.substringAfter("://")?.substringBefore('/'),
+                ).joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Box {
+            IconButton(onClick = { menuExpanded = true }) {
+                Icon(Icons.Outlined.MoreVert, contentDescription = "Article actions")
+            }
+            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                DropdownMenuItem(
+                    text = { Text("Edit") },
+                    onClick = {
+                        menuExpanded = false
+                        onEdit()
+                    },
                 )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = draft.title, style = MaterialTheme.typography.titleSmall)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        MetadataField("Status", if (needsFetch) "Needs article text" else "Ready to sync")
-                        MetadataField("Size", draft.body.encodeToByteArray().size.toByteLabel())
-                        draft.sourceUrl
-                            ?.takeIf { it.isNotBlank() }
-                            ?.substringAfter("://")
-                            ?.substringBefore("/")
-                            ?.let { MetadataField("Source", it) }
-                    }
-                }
+                DropdownMenuItem(
+                    text = { Text("Delete") },
+                    onClick = {
+                        menuExpanded = false
+                        onDelete()
+                    },
+                )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onEdit) {
-                    Icon(imageVector = Icons.Outlined.Edit, contentDescription = null)
-                    Text("Edit")
-                }
-                FilledTonalButton(
-                    onClick = onDelete,
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                    ),
-                ) {
-                    Text("Delete")
-                }
-            }
+        }
+    }
+    HorizontalDivider()
+}
+
+@Composable
+private fun LibraryEmptyState(text: String, onAddContent: (() -> Unit)?) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp, horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            Icons.AutoMirrored.Outlined.MenuBook,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (onAddContent != null) {
+            TextButton(onClick = onAddContent) { Text("Add content") }
         }
     }
 }
@@ -352,14 +353,18 @@ private fun LibraryBookRow(
     onOpenBook: () -> Unit,
     onDeleteBook: (NanoBook) -> Unit,
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onOpenBook)
             .padding(vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Icon(
                 imageVector = if (book.isArticle) Icons.Outlined.Newspaper else Icons.AutoMirrored.Outlined.MenuBook,
                 contentDescription = null,
@@ -367,31 +372,45 @@ private fun LibraryBookRow(
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = book.displayTitle, style = MaterialTheme.typography.titleSmall)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    book.metadata.author.takeIf { it.isNotBlank() }?.let { MetadataField("Author", it) }
-                    book.metadata.wordCount.takeIf { it > 0 }?.let { MetadataField("Words", it.toString()) }
-                    book.metadata.chapterCount.takeIf { it > 0 }?.let { MetadataField("Chapters", it.toString()) }
-                    MetadataField("Size", book.byteLabel)
+                Text(
+                    text = book.librarySubtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = "Book actions")
+                }
+                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Delete from reader") },
+                        onClick = {
+                            menuExpanded = false
+                            onDeleteBook(book)
+                        },
+                    )
                 }
             }
-            DestructiveIconButton(
-                contentDescription = "Delete",
-                onClick = { onDeleteBook(book) },
-            )
         }
         book.reading?.percent?.let { progress ->
             LinearProgressIndicator(
                 progress = { (progress.coerceIn(0, 100) / 100f) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(2.dp),
             )
-            Text(text = "$progress% read", style = MaterialTheme.typography.labelSmall)
         }
         HorizontalDivider()
     }
 }
+
+internal val NanoBook.librarySubtitle: String
+    get() = buildList {
+        metadata.author.takeIf(String::isNotBlank)?.let(::add)
+        metadata.wordCount.takeIf { it > 0 }?.let { add("$it words") }
+        if (!isArticle) metadata.chapterCount.takeIf { it > 0 }?.let { add("$it chapters") }
+        reading?.percent?.let { add("$it% read") }
+    }.joinToString(" · ")
 
 @Composable
 private fun LibraryBookDialog(

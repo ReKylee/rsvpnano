@@ -229,6 +229,11 @@ void test_text_normalizer_preserves_utf8_and_rejects_malformed_bytes() {
     TEST_ASSERT_EQUAL(1, stats.malformedUtf8);
 }
 
+void test_ui_metadata_replaces_scripts_the_builtin_font_cannot_show() {
+    TEST_ASSERT_EQUAL_STRING("Alice ??? - Алиса",
+                             RsvpText::uiSafeMetadata("Alice 愛麗絲 - Алиса").c_str());
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_parses_rss_item_fields);
@@ -247,5 +252,6 @@ int main(void) {
     RUN_TEST(test_rss_config_round_trip_and_normalization);
     RUN_TEST(test_standard_error_codes_are_preserved);
     RUN_TEST(test_text_normalizer_preserves_utf8_and_rejects_malformed_bytes);
+    RUN_TEST(test_ui_metadata_replaces_scripts_the_builtin_font_cannot_show);
     return UNITY_END();
 }

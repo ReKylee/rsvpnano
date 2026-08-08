@@ -8,6 +8,7 @@
 #include "book/BookMetadata.h"
 #include "storage/fs/SdCard.h"
 #include "storage/index/IndexedBook.h"
+#include "text/TextNormalizer.h"
 
 #ifndef RSVP_ON_DEVICE_EPUB_CONVERSION
 #define RSVP_ON_DEVICE_EPUB_CONVERSION 0
@@ -16,6 +17,13 @@
 namespace {
 
     constexpr uint64_t kBytesPerMegabyte = 1024ULL * 1024ULL;
+
+    void prepareUiMetadata(BookMetadata& metadata) {
+        metadata.title = RsvpText::uiSafeMetadata(metadata.title);
+        metadata.author = RsvpText::uiSafeMetadata(metadata.author);
+        for (ChapterMarker& chapter: metadata.chapters)
+            chapter.title = RsvpText::uiSafeMetadata(chapter.title);
+    }
 
 } // namespace
 
@@ -105,7 +113,10 @@ bool StorageManager::loadIndexedBook(size_t index, IndexedBookStore& store, Book
     request.allowEpubConversion = options.allowEpubConversion;
     request.statusCallback = statusCallback_;
     request.statusContext = statusContext_;
-    return IndexedBook::load(index, library_, store, metadata, request);
+    if (!IndexedBook::load(index, library_, store, metadata, request))
+        return false;
+    prepareUiMetadata(metadata);
+    return true;
 }
 
 void StorageManager::refreshBookPaths(bool includeMetadata) {

@@ -145,7 +145,6 @@ namespace BookLibrary {
 
     } // namespace
 
-    using RsvpText::normalizeDisplayText;
     using namespace StoragePaths;
 
     void clear(Listing& listing) {
@@ -185,11 +184,11 @@ namespace BookLibrary {
 
                 if (hasRsvpExtension(storedPath)) {
                     const RsvpDirectiveValues values = readRsvpDirectiveValues(storedPath);
-                    title = values.title;
-                    author = values.author;
+                    title = RsvpText::uiSafeMetadata(values.title);
+                    author = RsvpText::uiSafeMetadata(values.author);
                     ++rsvpMetadataCount;
                 } else if (hasEpubExtension(storedPath)) {
-                    author = EpubCache::libraryLabel(storedPath);
+                    author = RsvpText::uiSafeMetadata(EpubCache::libraryLabel(storedPath));
                 }
 
                 listing.titles.push_back(std::move(title));
@@ -238,7 +237,7 @@ namespace BookLibrary {
             return listing.titles[index];
         }
 
-        return normalizeDisplayText(displayNameWithoutExtension(path));
+        return RsvpText::uiSafeMetadata(displayNameWithoutExtension(path));
     }
 
     std::string authorName(const Listing& listing, size_t index) {
@@ -252,11 +251,11 @@ namespace BookLibrary {
         }
 
         if (hasEpubExtension(path)) {
-            return EpubCache::libraryLabel(path);
+            return RsvpText::uiSafeMetadata(EpubCache::libraryLabel(path));
         }
 
         const RsvpDirectiveValues values = readRsvpDirectiveValues(path.c_str());
-        return values.author;
+        return RsvpText::uiSafeMetadata(values.author);
     }
 
     int indexOfPath(const Listing& listing, std::string_view target) {

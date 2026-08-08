@@ -216,6 +216,22 @@ namespace RsvpText {
         return normalized;
     }
 
+    std::string uiSafeMetadata(std::string_view text) {
+        const std::string normalized = normalizeDisplayText(text);
+        std::string safe;
+        safe.reserve(normalized.size());
+        std::string_view remaining = normalized;
+        uint32_t codepoint = 0;
+        while (Utf8Text::next(remaining, codepoint)) {
+            const uint32_t script = UnicodeText::scriptMask(codepoint);
+            if (codepoint <= 0x7FU || (script & (UnicodeText::ScriptLatin | UnicodeText::ScriptCyrillic)) != 0)
+                Utf8Text::append(safe, codepoint);
+            else
+                safe.push_back('?');
+        }
+        return safe;
+    }
+
     std::string readableKey(std::string_view text) {
         const std::string normalized = normalizeDisplayText(text);
         std::string key;

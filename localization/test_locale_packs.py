@@ -65,12 +65,20 @@ class LocalePackTest(unittest.TestCase):
 			with self.subTest(language=language.code), zipfile.ZipFile(
 				DEFAULT_OUTPUT / f"{language.code}.zip"
 			) as archive:
+				expected = [f"{prefix}/manifest.toml", f"{prefix}/ui/strings.bin"]
+				if language.ui_font is not None:
+					expected.insert(1, f"{prefix}/ui/font.u8g2")
 				self.assertEqual(
 					archive.namelist(),
-					[f"{prefix}/manifest.toml", f"{prefix}/ui/strings.bin"],
+					expected,
 				)
 				manifest = tomllib.loads(archive.read(f"{prefix}/manifest.toml").decode())
 				strings = archive.read(f"{prefix}/ui/strings.bin")
+				font = (
+					archive.read(f"{prefix}/ui/font.u8g2")
+					if language.ui_font is not None
+					else None
+				)
 				generated_at = datetime(*archive.infolist()[0].date_time).timestamp()
 				self.assertTrue(
 					all(
@@ -95,7 +103,13 @@ class LocalePackTest(unittest.TestCase):
 			self.assertEqual(
 				manifest["ui"]["strings"]["sha256"], hashlib.sha256(strings).hexdigest()
 			)
-			self.assertNotIn("font", manifest["ui"])
+			if font is None:
+				self.assertNotIn("font", manifest["ui"])
+			else:
+				self.assertEqual(manifest["ui"]["font"]["bytes"], len(font))
+				self.assertEqual(
+					manifest["ui"]["font"]["sha256"], hashlib.sha256(font).hexdigest()
+				)
 
 			magic, version, count, text_bytes = struct.unpack_from("<4sHHI", strings)
 			self.assertEqual(magic, b"RSL1")

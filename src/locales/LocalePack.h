@@ -9,7 +9,6 @@
 #include <string_view>
 #include <vector>
 
-#include "locales/LocaleUiFont.h"
 #include "text/TextDirection.h"
 
 namespace locales {
@@ -20,6 +19,14 @@ namespace locales {
     inline constexpr uint32_t kMaximumAssetBytes = 16 * 1024 * 1024;
     inline constexpr uint32_t kMaximumUiFontBytes = 64 * 1024;
     inline constexpr uint32_t kMaximumResidentUiBytes = 96 * 1024;
+
+    inline uint8_t uiFontCellWidth(std::span<const uint8_t> font) {
+        return font[9];
+    }
+
+    inline uint8_t uiFontHeight(std::span<const uint8_t> font) {
+        return font[10];
+    }
 
     enum class TranslationStatus : uint8_t {
         preview,
@@ -68,7 +75,7 @@ namespace locales {
         std::string locale;
         TextDirection direction = TextDirection::ltr;
         StringTable strings;
-        UiFont font;
+        std::vector<uint8_t> font;
 
         std::string_view text(size_t key) const {
             return strings.at(key);

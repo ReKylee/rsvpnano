@@ -176,7 +176,8 @@ namespace locales {
             return bytes;
         }
 
-        std::expected<UiFont, std::string> readUiFont(fs::FS& filesystem, const InstalledPack& pack) {
+        std::expected<std::vector<uint8_t>, std::string> readUiFont(fs::FS& filesystem,
+                                                                    const InstalledPack& pack) {
             if (!pack.manifest.ui || !pack.manifest.ui->font)
                 return std::unexpected("locale pack has no UI font");
             auto bytes = readAsset(filesystem, pack.directory, *pack.manifest.ui->font);

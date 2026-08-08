@@ -130,7 +130,7 @@ void test_binary_ui_assets_are_bounded_before_runtime_use() {
     const std::span font{u8g2_font_rsvpnano_ui_6x9_tf};
     auto valid = locales::validateU8g2Font(font);
     TEST_ASSERT_TRUE_MESSAGE(valid.has_value(), valid ? "" : valid.error().c_str());
-    locales::UiFont loaded{font.begin(), font.end()};
+    std::vector<uint8_t> loaded{font.begin(), font.end()};
     TEST_ASSERT_EQUAL_UINT8(6, locales::uiFontCellWidth(loaded));
     TEST_ASSERT_EQUAL_UINT8(9, locales::uiFontHeight(loaded));
 }

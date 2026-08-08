@@ -200,17 +200,28 @@ fun RsvpNanoSharedApp(
             topBar = {
                 TopAppBar(
                     title = {
-                        Text(
-                            text = if (!wide && selectedScreen == CompanionScreen.Settings) {
-                                settingsDestination?.label ?: "Settings"
-                            } else if (openBook != null) {
-                                openBook.displayTitle
-                            } else {
-                                selectedScreen.label
-                            },
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = if (!wide && selectedScreen == CompanionScreen.Settings) {
+                                    settingsDestination?.label ?: "Settings"
+                                } else if (openBook != null) {
+                                    openBook.displayTitle
+                                } else {
+                                    selectedScreen.label
+                                },
+                                modifier = Modifier.weight(1f, fill = false),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            ConnectionButton(
+                                uiState = uiState,
+                                onConnect = onConnect,
+                                onOpenControls = { showConnectionDialog = true },
+                            )
+                        }
                     },
                     navigationIcon = {
                         if (viewingBook || (!wide && selectedScreen == CompanionScreen.Settings)) {
@@ -227,18 +238,13 @@ fun RsvpNanoSharedApp(
                         }
                     },
                     actions = {
+                        IconButton(onClick = { showHelpDialog = true }) {
+                            Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help")
+                        }
                         if (!wide && selectedScreen == CompanionScreen.Library && !viewingBook) {
                             IconButton(onClick = { selectedScreenName = CompanionScreen.Settings.name }) {
                                 Icon(Icons.Outlined.Settings, contentDescription = "Settings")
                             }
-                        }
-                        ConnectionButton(
-                            uiState = uiState,
-                            onConnect = onConnect,
-                            onOpenControls = { showConnectionDialog = true },
-                        )
-                        IconButton(onClick = { showHelpDialog = true }) {
-                            Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),

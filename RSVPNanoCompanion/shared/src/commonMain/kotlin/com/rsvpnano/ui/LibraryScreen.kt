@@ -419,6 +419,7 @@ internal fun BookDetailScreen(
         ) {
             item {
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.Top,
                 ) {
@@ -427,7 +428,10 @@ internal fun BookDetailScreen(
                         contentDescription = null,
                         tint = if (book.isArticle) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary,
                     )
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
                         Text(
                             text = metadata.author.ifBlank { if (book.isArticle) "Saved article" else "Unknown author" },
                             style = MaterialTheme.typography.titleMedium,
@@ -439,6 +443,12 @@ internal fun BookDetailScreen(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
+                    }
+                    if (canSetProgress) {
+                        OutlinedButton(onClick = { showLanguageFonts = true }) {
+                            Icon(imageVector = Icons.Outlined.Language, contentDescription = null)
+                            Text("Language fonts")
+                        }
                     }
                 }
             }
@@ -467,23 +477,8 @@ internal fun BookDetailScreen(
                     Text("Reading progress", style = MaterialTheme.typography.titleMedium)
                     if (canSetProgress) {
                         Text(
-                            text = if (targetIndex == currentIndex) {
-                                "$targetPercent% read"
-                            } else {
-                                "Move from ${percentForIndex(currentIndex)}% to $targetPercent%"
-                            },
+                            text = "${percentForIndex(currentIndex)}% read",
                             style = MaterialTheme.typography.headlineSmall,
-                        )
-                        Slider(
-                            value = targetPercent.toFloat(),
-                            onValueChange = { targetIndex = indexForPercent(it.roundToInt()) },
-                            valueRange = 0f..100f,
-                            steps = 99,
-                        )
-                        Text(
-                            text = "Word ${targetIndex + 1} of $wordCount",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(28.dp),
@@ -544,30 +539,47 @@ internal fun BookDetailScreen(
                 }
             }
 
-            if (book.source != null && metadata.wordCount > 0) {
-                item {
-                    OutlinedButton(onClick = { showLanguageFonts = true }) {
-                        Icon(imageVector = Icons.Outlined.Language, contentDescription = null)
-                        Text("Language fonts")
-                    }
-                }
-            }
         }
 
         if (canSetProgress) {
-            Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
-                Row(
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                tonalElevation = 3.dp,
+            ) {
+                Column(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    Button(
-                        onClick = { onSetPosition(targetIndex) },
-                        enabled = targetIndex != currentIndex,
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Outlined.MyLocation, contentDescription = null)
-                        Text(if (targetIndex == currentIndex) "Progress unchanged" else "Update to $targetPercent%")
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                if (targetIndex == currentIndex) "Current position" else "New position: $targetPercent%",
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                            Text(
+                                "Word ${targetIndex + 1} of $wordCount",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Button(
+                            onClick = { onSetPosition(targetIndex) },
+                            enabled = targetIndex != currentIndex,
+                        ) {
+                            Icon(Icons.Outlined.MyLocation, contentDescription = null)
+                            Text(if (targetIndex == currentIndex) "Unchanged" else "Update")
+                        }
                     }
+                    Slider(
+                        value = targetPercent.toFloat(),
+                        onValueChange = { targetIndex = indexForPercent(it.roundToInt()) },
+                        valueRange = 0f..100f,
+                        steps = 99,
+                    )
                 }
             }
         }

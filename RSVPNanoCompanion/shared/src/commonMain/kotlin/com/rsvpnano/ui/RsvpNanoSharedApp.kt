@@ -1,22 +1,27 @@
 package com.rsvpnano.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FabPosition
@@ -24,18 +29,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,15 +47,17 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rsvpnano.app.CompanionNotice
+import com.rsvpnano.app.NanoConnectionTransport
 import com.rsvpnano.app.NanoEndpoint
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.needsArticleFetch
@@ -61,7 +67,7 @@ import io.github.vinceglb.filekit.dialogs.FileKitType
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
 import kotlinx.coroutines.launch
 
-enum class CompanionTab(val label: String, val icon: ImageVector) {
+private enum class CompanionTab(val label: String, val icon: ImageVector) {
     Library("Library", Icons.AutoMirrored.Outlined.LibraryBooks),
     Settings("Settings", Icons.Outlined.Settings),
 }
@@ -76,15 +82,17 @@ fun RsvpNanoSharedApp(
     onFirmwareNotificationsChange: (Boolean) -> Unit,
     onGrantPermissions: () -> Unit,
 ) {
-    val colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
-    MaterialTheme(colorScheme = colorScheme) {
+    RsvpNanoTheme {
         val snackbarHostState = remember { SnackbarHostState() }
         val snackbarNotices = remember { mutableStateMapOf<String, CompanionNotice>() }
         val scope = rememberCoroutineScope()
-        var selectedTab by remember { mutableStateOf(CompanionTab.Library) }
-        var showAddPicker by remember { mutableStateOf(false) }
-        var showArticleDialog by remember { mutableStateOf(false) }
-        var showRssDialog by remember { mutableStateOf(false) }
+        var selectedTabName by rememberSaveable { mutableStateOf(CompanionTab.Library.name) }
+        val selectedTab = CompanionTab.valueOf(selectedTabName)
+        var showAddPicker by rememberSaveable { mutableStateOf(false) }
+        var showArticleDialog by rememberSaveable { mutableStateOf(false) }
+        var showRssDialog by rememberSaveable { mutableStateOf(false) }
+        var showConnectionDialog by rememberSaveable { mutableStateOf(false) }
+        var showHelpDialog by rememberSaveable { mutableStateOf(false) }
         val filePicker = rememberFilePickerLauncher(
             type = FileKitType.File(extensions = listOf("epub", "txt", "html", "htm", "rsvp")),
         ) { file ->
@@ -141,25 +149,50 @@ fun RsvpNanoSharedApp(
             }
         }
 
-        Scaffold(
-            topBar = {
-                Column {
-                    TopAppBar(
-                        title = { Text(text = "RSVP Nano") },
-                        actions = {
-                            IconButton(onClick = presenter::showHelpNotice) {
-                                Icon(imageVector = Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help")
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.background,
-                        ),
-                    )
-                    SharedConnectionBar(
-                        uiState = uiState,
-                        onRememberCurrentNano = presenter::rememberCurrentNano,
-                    )
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val wide = maxWidth >= 840.dp
+            Row(modifier = Modifier.fillMaxSize()) {
+                if (wide) {
+                    NavigationRail {
+                        CompanionTab.entries.forEach { tab ->
+                            NavigationRailItem(
+                                selected = selectedTab == tab,
+                                onClick = { selectedTabName = tab.name },
+                                icon = { Icon(imageVector = tab.icon, contentDescription = null) },
+                                label = { Text(tab.label) },
+                            )
+                        }
+                    }
                 }
+                Scaffold(
+                    modifier = Modifier.weight(1f),
+            topBar = {
+                TopAppBar(
+                    title = { Text(selectedTab.label) },
+                    navigationIcon = {
+                        if (!wide && selectedTab == CompanionTab.Settings) {
+                            IconButton(onClick = { selectedTabName = CompanionTab.Library.name }) {
+                                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back to library")
+                            }
+                        }
+                    },
+                    actions = {
+                        if (!wide && selectedTab == CompanionTab.Library) {
+                            IconButton(onClick = { selectedTabName = CompanionTab.Settings.name }) {
+                                Icon(Icons.Outlined.Settings, contentDescription = "Settings")
+                            }
+                        }
+                        ConnectionButton(
+                            uiState = uiState,
+                            onConnect = onConnect,
+                            onOpenControls = { showConnectionDialog = true },
+                        )
+                        IconButton(onClick = { showHelpDialog = true }) {
+                            Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                )
             },
             snackbarHost = {
                 val bookJob = uiState.bookJob
@@ -179,33 +212,25 @@ fun RsvpNanoSharedApp(
                 }
             },
             floatingActionButton = {
-                ExtendedFloatingActionButton(
-                    onClick = onConnect,
-                    icon = { Icon(imageVector = Icons.Outlined.Wifi, contentDescription = null) },
-                    text = { Text(if (uiState.isConnected) "Reconnect" else "Connect") },
-                )
-            },
-            floatingActionButtonPosition = FabPosition.End,
-            bottomBar = {
-                NavigationBar {
-                    CompanionTab.entries.forEach { tab ->
-                        NavigationBarItem(
-                            selected = selectedTab == tab,
-                            onClick = { selectedTab = tab },
-                            icon = { Icon(imageVector = tab.icon, contentDescription = null) },
-                            label = { Text(text = tab.label) },
-                        )
-                    }
+                if (selectedTab == CompanionTab.Library) {
+                    ExtendedFloatingActionButton(
+                        onClick = { showAddPicker = true },
+                        icon = { Icon(Icons.Outlined.Add, contentDescription = null) },
+                        text = { Text("Add content") },
+                    )
                 }
             },
+            floatingActionButtonPosition = FabPosition.End,
         ) { contentPadding ->
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(contentPadding)
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                contentAlignment = Alignment.TopCenter,
             ) {
-                when (selectedTab) {
+                Box(modifier = Modifier.fillMaxSize().widthIn(max = 840.dp)) {
+                    when (selectedTab) {
                     CompanionTab.Library -> LibraryTab(
                         uiState = uiState,
                         onRefresh = presenter::refresh,
@@ -219,7 +244,6 @@ fun RsvpNanoSharedApp(
                         onDeleteBook = presenter::deleteDeviceBook,
                         onSetBookPosition = presenter::setBookPosition,
                         onSetBookLanguageFonts = presenter::setBookLanguageFonts,
-                        onShowUpload = { showAddPicker = true },
                     )
 
                     CompanionTab.Settings -> SettingsTab(
@@ -232,6 +256,7 @@ fun RsvpNanoSharedApp(
                         onUploadFont = { fontPicker.launch() },
                         onUploadLocalePack = { localePackPicker.launch() },
                     )
+                }
                 }
             }
 
@@ -292,62 +317,119 @@ fun RsvpNanoSharedApp(
                     onDeleteFeed = presenter::deleteRssFeed,
                 )
             }
+
+            if (showConnectionDialog) {
+                ConnectionDialog(
+                    uiState = uiState,
+                    onDismiss = { showConnectionDialog = false },
+                    onReconnect = {
+                        showConnectionDialog = false
+                        onConnect()
+                    },
+                    onRememberCurrentNano = presenter::rememberCurrentNano,
+                )
+            }
+
+            if (showHelpDialog) {
+                HelpDialog(
+                    tab = selectedTab,
+                    onDismiss = { showHelpDialog = false },
+                )
+            }
+        }
+            }
         }
     }
 }
 
 @Composable
-private fun SharedConnectionBar(
+private fun ConnectionButton(
     uiState: CompanionUiState,
+    onConnect: () -> Unit,
+    onOpenControls: () -> Unit,
+) {
+    val busy = uiState.isCheckingReader || uiState.isRequestingNanoNetwork
+    TextButton(
+        onClick = if (uiState.isConnected) onOpenControls else onConnect,
+        enabled = !busy,
+    ) {
+        if (busy) {
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+        } else if (uiState.isConnected) {
+            ConnectionDot()
+        } else {
+            Icon(Icons.Outlined.Wifi, contentDescription = null)
+        }
+        Text(
+            text = when {
+                busy -> "Connecting"
+                uiState.isConnected -> uiState.currentNano?.ssid ?: "Nano"
+                else -> "Connect"
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun ConnectionDot() {
+    Box(
+        Modifier
+            .padding(end = 6.dp)
+            .size(8.dp)
+            .clip(MaterialTheme.shapes.extraSmall)
+            .background(Color(0xFF3C8C69)),
+    )
+}
+
+@Composable
+private fun ConnectionDialog(
+    uiState: CompanionUiState,
+    onDismiss: () -> Unit,
+    onReconnect: () -> Unit,
     onRememberCurrentNano: () -> Unit,
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = if (uiState.isConnected) Icons.Outlined.CheckCircle else Icons.Outlined.Wifi,
-                    contentDescription = null,
-                )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
+        title = { Text(uiState.currentNano?.ssid ?: "RSVP Nano") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Connected", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    text = uiState.status,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium,
+                    when (uiState.connectionState.transport) {
+                        NanoConnectionTransport.LocalNetwork -> "Using the local network"
+                        NanoConnectionTransport.AccessPoint -> "Using the Nano's direct Wi-Fi"
+                        null -> uiState.baseUrl
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (uiState.isCheckingReader || uiState.isRefreshing) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                }
-            }
-            if (uiState.canRememberCurrentNano) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Remember ${uiState.nanoSsid} for direct connection when regular Wi-Fi is unavailable?",
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                if (uiState.canRememberCurrentNano) {
                     TextButton(onClick = onRememberCurrentNano) {
-                        Text("Remember")
+                        Text("Remember this Nano")
                     }
                 }
             }
-        }
+        },
+        confirmButton = { TextButton(onClick = onReconnect) { Text("Reconnect") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+@Composable
+private fun HelpDialog(tab: CompanionTab, onDismiss: () -> Unit) {
+    val body = when (tab) {
+        CompanionTab.Library -> "Add books, saved articles, or RSS feeds here. Connect to sync them with your reader."
+        CompanionTab.Settings -> "Reader settings are saved directly on the connected Nano. Language packs change the interface; reader fonts add book-language support."
     }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = null) },
+        title = { Text("${tab.label} help") },
+        text = { Text(body) },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Got it") } },
+    )
 }
 
 @Composable

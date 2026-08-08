@@ -150,10 +150,6 @@ class CompanionPresenter(
         setNotice(CompanionNotice.Attention("Grant Wi-Fi permission so the app can find your RSVP Nano."))
     }
 
-    fun showHelpNotice() {
-        setNotice(CompanionNotice.Neutral("Open Companion Sync on the reader, then connect from this app.", showTransient = true))
-    }
-
     fun wifiPermissionsBlocked() {
         setNotice(CompanionNotice.Error("Wi-Fi permission is blocked. Enable it in app settings to let the app find your RSVP Nano."))
     }

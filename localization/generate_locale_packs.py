@@ -11,11 +11,13 @@ import json
 import re
 import struct
 import sys
+import unicodedata
 import zipfile
 from datetime import datetime
 from pathlib import Path
 
 from generate_localization import DEFAULT_TOML, Language, LocalizationModel, load_model
+from u8g2_font import encode_bdf, encode_outline
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT = REPO_ROOT / "locale-packs"
@@ -78,13 +80,88 @@ def u8g2_codepoints(font: bytes) -> set[int]:
 		position += size
 
 
-def required_ui_codepoints(model: LocalizationModel, language: Language) -> set[int]:
-	text = ".?" + language.label + "".join(entry.values.get(language.name, "") for entry in model.texts)
+def source_path(value: str) -> Path:
+	path = Path(value)
+	return path if path.is_absolute() else REPO_ROOT / path
+
+
+def _shape_arabic_strings(strings: list[str], font_path: Path, language: str) -> list[str]:
+	try:
+		import uharfbuzz as hb
+		from fontTools.ttLib import TTFont
+	except ImportError as exc:
+		raise RuntimeError("Arabic UI generation requires uharfbuzz and fonttools") from exc
+
+	font_bytes = font_path.read_bytes()
+	face = hb.Face(font_bytes)
+	font = hb.Font(face)
+	font.scale = face.upem, face.upem
+	tt_font = TTFont(font_path, lazy=True)
+	reverse_cmap: dict[int, set[int]] = {}
+	for table in tt_font["cmap"].tables:
+		if table.isUnicode():
+			for codepoint, glyph_name in table.cmap.items():
+				reverse_cmap.setdefault(tt_font.getGlyphID(glyph_name), set()).add(codepoint)
+	tt_font.close()
+
+	def mapped_codepoint(glyph_id: int) -> int:
+		candidates = reverse_cmap.get(glyph_id, set())
+		bmp = [codepoint for codepoint in candidates if codepoint <= 0xFFFF]
+		if not bmp:
+			raise ValueError(f"{font_path} shaped glyph {glyph_id} has no BMP Unicode mapping")
+		return min(
+			bmp,
+			key=lambda codepoint: (
+				0 if 0xFB50 <= codepoint <= 0xFDFF or 0xFE70 <= codepoint <= 0xFEFF else 1,
+				codepoint,
+			),
+		)
+
+	def shape_run(run: str) -> str:
+		buffer = hb.Buffer()
+		buffer.add_str(run)
+		buffer.direction = "rtl"
+		buffer.script = "arab"
+		buffer.language = language
+		hb.shape(font, buffer)
+		positions = buffer.glyph_positions
+		if any(position.x_offset or position.y_offset for position in positions):
+			raise ValueError("Arabic UI text uses positioned marks that U8g2 cannot preserve")
+		return "".join(chr(mapped_codepoint(info.codepoint)) for info in reversed(buffer.glyph_infos))
+
+	result: list[str] = []
+	for text in strings:
+		shaped: list[str] = []
+		index = 0
+		while index < len(text):
+			if unicodedata.bidirectional(text[index]) != "AL":
+				shaped.append(text[index])
+				index += 1
+				continue
+			end = index + 1
+			while end < len(text) and unicodedata.bidirectional(text[end]) in {"AL", "NSM", "BN"}:
+				end += 1
+			shaped.append(shape_run(text[index:end]))
+			index = end
+		result.append("".join(shaped))
+	return result
+
+
+def ui_strings(model: LocalizationModel, language: Language) -> list[str]:
+	strings = [entry.values.get(language.name, "") for entry in model.texts]
+	if "Arab" not in language.scripts:
+		return strings
+	if language.ui_font is None or language.ui_font.shaping_source is None:
+		raise ValueError(f"{language.name} requires ui_font.shaping_source")
+	return _shape_arabic_strings(strings, source_path(language.ui_font.shaping_source), language.code)
+
+
+def required_ui_codepoints(strings: list[str]) -> set[int]:
+	text = ".?" + "".join(strings)
 	return {ord(character) for character in text if character not in "\r\n"}
 
 
-def ui_font(model: LocalizationModel, language: Language, built_in: set[int]) -> tuple[bytes, str] | None:
-	required = required_ui_codepoints(model, language)
+def ui_font(language: Language, required: set[int], built_in: set[int]) -> tuple[bytes, str] | None:
 	if language.ui_font is None:
 		missing = required - built_in
 		if missing:
@@ -92,10 +169,16 @@ def ui_font(model: LocalizationModel, language: Language, built_in: set[int]) ->
 			raise ValueError(f"{language.name} needs ui_font for {formatted}")
 		return None
 
-	source = Path(language.ui_font.source)
-	if not source.is_absolute():
-		source = REPO_ROOT / source
-	font = source.read_bytes()
+	source = source_path(language.ui_font.source)
+	suffix = source.suffix.lower()
+	if suffix == ".bdf":
+		font = encode_bdf(source, required)
+	elif suffix in {".ttf", ".otf"}:
+		if language.ui_font.pixel_size is None:
+			raise ValueError(f"{language.name} outline UI font requires pixel_size")
+		font = encode_outline(source, required, language.ui_font.pixel_size)
+	else:
+		font = source.read_bytes()
 	codepoints = u8g2_codepoints(font)
 	missing = required - codepoints
 	if missing:
@@ -104,13 +187,13 @@ def ui_font(model: LocalizationModel, language: Language, built_in: set[int]) ->
 	return font, language.ui_font.license
 
 
-def string_table(model: LocalizationModel, language: Language) -> bytes:
+def string_table(strings: list[str]) -> bytes:
 	text = bytearray()
 	offsets = [0]
-	for entry in model.texts:
-		text.extend(entry.values.get(language.name, "").encode("utf-8"))
+	for value in strings:
+		text.extend(value.encode("utf-8"))
 		offsets.append(len(text))
-	header = b"RSL1" + struct.pack("<HHI", 1, len(model.texts), len(text))
+	header = b"RSL1" + struct.pack("<HHI", 1, len(strings), len(text))
 	return header + struct.pack(f"<{len(offsets)}I", *offsets) + text
 
 
@@ -118,8 +201,6 @@ def engine_requirements(language: Language) -> list[str]:
 	requires: list[str] = []
 	if language.direction == "rtl":
 		requires.append("bidi")
-	if "Arab" in language.scripts:
-		requires.append("shaping.opentype")
 	return requires
 
 
@@ -185,8 +266,10 @@ def outputs(
 	for language in model.languages:
 		if language.name == model.default_language:
 			continue
-		strings = string_table(model, language)
-		font = ui_font(model, language, built_in)
+		prepared_strings = ui_strings(model, language)
+		required = required_ui_codepoints(prepared_strings)
+		strings = string_table(prepared_strings)
+		font = ui_font(language, required, built_in)
 		files = {
 			f"locales/{language.code}/manifest.toml": manifest(language, strings, font).encode("utf-8"),
 			f"locales/{language.code}/ui/strings.bin": strings,

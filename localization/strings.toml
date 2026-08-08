@@ -11,10 +11,24 @@ language_order = [
 	"Romanian",
 	"Polish",
 	"Russian",
+	"Hebrew",
+	"Arabic",
+	"Japanese",
+	"Korean",
+	"ChineseSimplified",
+	"ChineseTraditional",
 ]
 
 # Add ui_font = { source = "localization/fonts/<locale>.u8g2", license = "..." }
-# to a language only when the compiled UI font does not cover it.
+# to a language only when the compiled UI font does not cover it. CJK locales use
+# third_party/ark-pixel-font/10px-proportional/ark-pixel-10px-proportional-<variant>.bdf;
+# generation emits only the locale's glyphs.
+# Hebrew uses ui_font = { source = "third_party/able-font/Able5.ttf",
+# pixel_size = 8, license = "Able license; credit Joseph Fatula" }.
+# Arabic uses ui_font = { source = "third_party/pixel-ae/PixelAE-Regular.ttf",
+# pixel_size = 10, shaping_source = "third_party/pixel-ae/PixelAE-Regular.ttf",
+# license = "CC0-1.0; credit Ahmed Essam" }. Generation shapes the logical
+# translations here before deriving the U8g2 subset.
 # Reader capability is installed independently through RFont4 files under /fonts.
 
 [languages.English]
@@ -65,6 +79,54 @@ name = "Русский"
 scripts = ["Cyrl"]
 direction = "ltr"
 translation_status = "preview"
+
+[languages.Hebrew]
+code = "he"
+name = "עברית"
+scripts = ["Hebr"]
+direction = "rtl"
+translation_status = "preview"
+ui_font = { source = "third_party/able-font/Able5.ttf", pixel_size = 8, license = "Able license; credit Joseph Fatula" }
+
+[languages.Arabic]
+code = "ar"
+name = "العربية"
+scripts = ["Arab"]
+direction = "rtl"
+translation_status = "preview"
+ui_font = { source = "third_party/pixel-ae/PixelAE-Regular.ttf", pixel_size = 10, shaping_source = "third_party/pixel-ae/PixelAE-Regular.ttf", license = "CC0-1.0; credit Ahmed Essam" }
+
+[languages.Japanese]
+code = "ja"
+name = "日本語"
+scripts = ["Hani", "Hira", "Kana"]
+direction = "ltr"
+translation_status = "preview"
+ui_font = { source = "third_party/ark-pixel-font/10px-proportional/ark-pixel-10px-proportional-ja.bdf", license = "OFL-1.1; credit TakWolf" }
+
+[languages.Korean]
+code = "ko"
+name = "한국어"
+scripts = ["Hang"]
+direction = "ltr"
+translation_status = "preview"
+ui_font = { source = "third_party/ark-pixel-font/10px-proportional/ark-pixel-10px-proportional-ko.bdf", license = "OFL-1.1; credit TakWolf" }
+
+[languages.ChineseSimplified]
+code = "zh-Hans"
+name = "简体中文"
+scripts = ["Hani"]
+direction = "ltr"
+translation_status = "preview"
+ui_font = { source = "third_party/ark-pixel-font/10px-proportional/ark-pixel-10px-proportional-zh_cn.bdf", license = "OFL-1.1; credit TakWolf" }
+
+[languages.ChineseTraditional]
+code = "zh-Hant"
+name = "繁體中文"
+scripts = ["Hani"]
+direction = "ltr"
+translation_status = "preview"
+ui_font = { source = "third_party/ark-pixel-font/10px-proportional/ark-pixel-10px-proportional-zh_tw.bdf", license = "OFL-1.1; credit TakWolf" }
 
 # Main menu
 [[strings]]

@@ -1,0 +1,12 @@
+Pixel AE Regular
+Copyright and design: Ahmed Essam (Essssam)
+Source: https://essssam.itch.io/pixel-ae
+Version: 1.000
+SHA-256: f96f39daf6e13e85771ab7385c1481f6400e5094b0b549b3dbfa9c2ead4396ae
+
+Pixel AE is dedicated to the public domain under the Creative Commons CC0 1.0
+Universal declaration:
+https://creativecommons.org/publicdomain/zero/1.0/
+
+RSVP Nano credits Ahmed Essam as the font's designer and uses Pixel AE Regular
+as the offline source for generated Arabic UI-font subsets.

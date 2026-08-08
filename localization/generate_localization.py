@@ -55,6 +55,8 @@ class LocalizationError(ValueError):
 class UiFont:
 	source: str
 	license: str
+	pixel_size: int | None = None
+	shaping_source: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,6 +216,14 @@ def load_languages(data: TomlTable) -> list[Language]:
 			ui_font = UiFont(
 				source=as_string(font.get("source"), f"languages.{name}.ui_font.source"),
 				license=as_string(font.get("license"), f"languages.{name}.ui_font.license"),
+				pixel_size=as_positive_int_or_none(
+					font.get("pixel_size"), f"languages.{name}.ui_font.pixel_size"
+				),
+				shaping_source=(
+					as_string(font.get("shaping_source"), f"languages.{name}.ui_font.shaping_source")
+					if font.get("shaping_source") is not None
+					else None
+				),
 			)
 		direction = as_string(table.get("direction"), f"languages.{name}.direction")
 		if direction not in {"ltr", "rtl"}:

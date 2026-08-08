@@ -87,16 +87,6 @@ namespace BidiText {
         return {};
     }
 
-    std::expected<void, std::string> Analysis::resolve(std::span<const LineRange> lines,
-                                                       std::vector<Line>& output) {
-        output.resize(lines.size());
-        for (size_t index = 0; index < lines.size(); ++index) {
-            if (auto result = resolve(lines[index], output[index]); !result)
-                return result;
-        }
-        return {};
-    }
-
     void visualCodepoints(std::string_view text, const Line& line, std::vector<Codepoint>& output) {
         output.clear();
         for (const Run& run: line) {

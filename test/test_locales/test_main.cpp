@@ -172,16 +172,13 @@ void test_bidi_resolves_metadata_direction_visual_runs_and_mirroring() {
     TEST_ASSERT_EQUAL_HEX32(UnicodeText::ScriptHebrew, metadata.scriptMaskAt(3));
 
     const std::string_view text = "(\xD7\x90\xD7\x91\xD7\x92 123)";
-    const std::array lines{BidiText::LineRange{0, text.size()}};
     BidiText::Analysis analysis;
     auto analyzed = analysis.reset(text, TextDirection::rtl);
     TEST_ASSERT_TRUE_MESSAGE(analyzed.has_value(), analyzed ? "" : analyzed.error().c_str());
-    std::vector<BidiText::Line> resolved;
-    auto result = analysis.resolve(lines, resolved);
+    BidiText::Line line;
+    auto result = analysis.resolve({0, text.size()}, line);
     TEST_ASSERT_TRUE_MESSAGE(result.has_value(), result ? "" : result.error().c_str());
     TEST_ASSERT_TRUE(analysis.rightToLeft());
-    TEST_ASSERT_EQUAL_UINT32(1, resolved.size());
-    const auto& line = resolved.front();
     TEST_ASSERT_EQUAL_UINT32(3, line.size());
     TEST_ASSERT_TRUE(line.front().rightToLeft);
     TEST_ASSERT_FALSE(line[1].rightToLeft);

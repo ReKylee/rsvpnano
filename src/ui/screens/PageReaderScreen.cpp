@@ -149,36 +149,25 @@ namespace screens::PageReader {
         void appendBidiParagraph(State& state, const ReadingSession& session,
                                  const ReadingLoop::TextParagraph& paragraph, BidiText::Analysis& analysis,
                                  bool bidiReady, size_t firstLine, size_t lastLine,
-                                 std::vector<BidiText::Codepoint>& visual, std::vector<BidiText::Line>& bidiLines) {
+                                 BidiText::Line& bidiLine, std::vector<BidiText::Codepoint>& visual) {
             if (firstLine == lastLine)
                 return;
             state.bidi = true;
-            std::array<BidiText::LineRange, State::kMaximumLines> ranges{};
             for (size_t lineIndex = firstLine; lineIndex < lastLine; ++lineIndex) {
-                const State::Line& line = state.lines[lineIndex];
+                State::Line& line = state.lines[lineIndex];
                 const size_t localStart = line.start - paragraph.firstWord;
                 const size_t localEnd = line.end - paragraph.firstWord;
                 const size_t offset = paragraph.wordOffsets[localStart];
                 const size_t end = paragraph.wordOffsets[localEnd - 1]
                                  + ReadingLoop::wordAt(session, line.end - 1).size();
-                ranges[lineIndex - firstLine] = {offset, end - offset};
-            }
-
-            const auto lineRanges = std::span{ranges}.subspan(0, lastLine - firstLine);
-            const bool resolved = bidiReady && analysis.resolve(lineRanges, bidiLines).has_value();
-            BidiText::Line logical;
-            for (size_t lineIndex = firstLine; lineIndex < lastLine; ++lineIndex) {
-                State::Line& line = state.lines[lineIndex];
-                const BidiText::LineRange range = ranges[lineIndex - firstLine];
+                const BidiText::LineRange range{offset, end - offset};
                 line.characterStart = state.characters.size();
                 line.bidi = true;
+                const bool resolved = bidiReady && analysis.resolve(range, bidiLine).has_value();
                 line.rightToLeft = resolved && analysis.rightToLeft();
-                if (resolved) {
-                    BidiText::visualCodepoints(paragraph.text, bidiLines[lineIndex - firstLine], visual);
-                } else {
-                    logical.assign(1, {range.offset, range.length, false});
-                    BidiText::visualCodepoints(paragraph.text, logical, visual);
-                }
+                if (!resolved)
+                    bidiLine.assign(1, {range.offset, range.length, false});
+                BidiText::visualCodepoints(paragraph.text, bidiLine, visual);
                 for (const BidiText::Codepoint& codepoint: visual) {
                     const auto next = std::ranges::upper_bound(paragraph.wordOffsets, codepoint.offset);
                     const size_t localWord = static_cast<size_t>(next - paragraph.wordOffsets.begin() - 1);
@@ -217,7 +206,6 @@ namespace screens::PageReader {
             bool shapingBidiReady = true;
             BidiText::Line shapingBidiLine;
             std::vector<BidiText::Codepoint> visual;
-            std::vector<BidiText::Line> bidiLines;
             size_t bidiFirstLine = 0;
             state.characters.clear();
 
@@ -225,8 +213,7 @@ namespace screens::PageReader {
                 if (index < shapingParagraph.firstWord || index >= shapingParagraph.lastWord) {
                     if (paragraphBidi && shapingParagraph.lastWord > shapingParagraph.firstWord)
                         appendBidiParagraph(state, session, shapingParagraph, shapingBidi, shapingBidiReady,
-                                            bidiFirstLine,
-                                            state.lineCount, visual, bidiLines);
+                                            bidiFirstLine, state.lineCount, shapingBidiLine, visual);
                     shapingParagraph = ReadingLoop::paragraphAt(session, index);
                     bidiFirstLine = state.lineCount;
                     paragraphBidi = session.metadata.requiresBidi(shapingParagraph.firstWord,
@@ -290,7 +277,7 @@ namespace screens::PageReader {
             }
             if (paragraphBidi && shapingParagraph.lastWord > shapingParagraph.firstWord)
                 appendBidiParagraph(state, session, shapingParagraph, shapingBidi, shapingBidiReady, bidiFirstLine,
-                                    state.lineCount, visual, bidiLines);
+                                    state.lineCount, shapingBidiLine, visual);
             state.pageEnd = index;
             const size_t visibleWords = state.pageEnd - state.pageStart;
             if (state.words.size() > visibleWords) {

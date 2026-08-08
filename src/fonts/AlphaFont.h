@@ -733,18 +733,18 @@ namespace ui::fonts {
                 if (spanWidth > MaxRowWidth) {
                     return;
                 }
-                renderSpan(packedRow, clippedX0, spanWidth);
-                output_.draw16bitRGBBitmap(static_cast<int16_t>(dstX + clippedX0), dstY, row_, spanWidth, 1);
+                renderSpan(packedRow, clippedX0, spanWidth, strip_[0]);
+                output_.draw16bitRGBBitmap(static_cast<int16_t>(dstX + clippedX0), dstY, strip_[0], spanWidth, 1);
             });
         }
 
-        void renderSpan(const uint8_t* packedRow, int16_t srcStart, int16_t spanWidth) {
+        void renderSpan(const uint8_t* packedRow, int16_t srcStart, int16_t spanWidth, uint16_t* output) {
             int16_t src = srcStart;
             int16_t out = 0;
 
             if ((src & 1) != 0 && out < spanWidth) {
                 const uint8_t coverage = coverageAt(packedRow, static_cast<uint8_t>(src));
-                row_[out++] = blend_[coverage];
+                output[out++] = blend_[coverage];
                 ++src;
             }
 
@@ -752,11 +752,11 @@ namespace ui::fonts {
                 const uint8_t packed = pgm_read_byte(packedRow + (src >> 1));
                 const AlphaByteInfo info = kAlphaByteInfo[packed];
                 if (info.isSolid) {
-                    row_[out] = fg_;
-                    row_[out + 1] = fg_;
+                    output[out] = fg_;
+                    output[out + 1] = fg_;
                 } else {
-                    row_[out] = blendPair_[packed][0];
-                    row_[out + 1] = blendPair_[packed][1];
+                    output[out] = blendPair_[packed][0];
+                    output[out + 1] = blendPair_[packed][1];
                 }
                 src = static_cast<int16_t>(src + 2);
                 out = static_cast<int16_t>(out + 2);
@@ -764,7 +764,7 @@ namespace ui::fonts {
 
             if (out < spanWidth) {
                 const uint8_t coverage = coverageAt(packedRow, static_cast<uint8_t>(src));
-                row_[out] = blend_[coverage];
+                output[out] = blend_[coverage];
             }
         }
 
@@ -993,7 +993,6 @@ namespace ui::fonts {
         mutable std::array<uint64_t, 16> fileKerningKeys_{};
         mutable std::array<int8_t, 16> fileKerningValues_{};
         std::array<uint8_t, (MaxRowWidth + 1) / 2> packedRow_{};
-        uint16_t row_[MaxRowWidth]{};
         uint16_t strip_[MaxStripRows][MaxRowWidth]{};
         uint8_t stripInk_[MaxStripRows][MaxRowWidth]{};
         uint16_t blend_[16]{};

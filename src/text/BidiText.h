@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <expected>
 #include <optional>
-#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -46,8 +45,6 @@ namespace BidiText {
         void clear();
         std::expected<void, std::string> reset(std::string_view text, TextDirection baseDirection);
         std::expected<void, std::string> resolve(LineRange line, Line& output);
-        std::expected<void, std::string> resolve(std::span<const LineRange> lines,
-                                                 std::vector<Line>& output);
         bool rightToLeft() const {
             return rightToLeft_;
         }

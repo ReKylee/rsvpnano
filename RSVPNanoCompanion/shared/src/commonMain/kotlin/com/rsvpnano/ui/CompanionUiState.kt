@@ -52,10 +52,8 @@ data class CompanionUiState(
     val selectedCatalogThemeId: String = "",
     val fontCatalog: List<NanoFontCatalogItem> = emptyList(),
     val fontCatalogUrl: String = "",
-    val selectedCatalogFontId: String = "",
     val localeCatalog: List<NanoLocaleCatalogItem> = emptyList(),
     val localeCatalogUrl: String = "",
-    val selectedCatalogLocaleId: String = "",
     val notice: CompanionNotice = CompanionNotice.Neutral("Ready"),
 ) {
     val status: String

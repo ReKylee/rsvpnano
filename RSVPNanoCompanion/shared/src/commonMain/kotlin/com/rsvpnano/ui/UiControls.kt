@@ -1,5 +1,6 @@
 package com.rsvpnano.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,29 +51,38 @@ fun DropdownRow(
     var expanded by remember { mutableStateOf(false) }
     val selectedLabel = options.firstOrNull { it.first == selected }?.second ?: selected
 
-    SettingControl(label = label, description = description) {
-        Box {
-            OutlinedButton(
-                onClick = { expanded = true },
-                enabled = enabled && options.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(text = selectedLabel.ifEmpty { "Not available" }, modifier = Modifier.weight(1f))
-                Icon(imageVector = Icons.Outlined.ArrowDropDown, contentDescription = null)
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled && options.isNotEmpty()) { expanded = true }
+                .padding(vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = label, style = MaterialTheme.typography.labelLarge)
+                if (description != null) SettingsDescription(description)
+                Text(
+                    text = selectedLabel.ifEmpty { "Not available" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-            ) {
-                options.forEach { (value, title) ->
-                    DropdownMenuItem(
-                        text = { Text(text = title) },
-                        onClick = {
-                            expanded = false
-                            onSelected(value)
-                        },
-                    )
-                }
+            Icon(imageVector = Icons.Outlined.ArrowDropDown, contentDescription = null)
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            options.forEach { (value, title) ->
+                DropdownMenuItem(
+                    text = { Text(text = title) },
+                    onClick = {
+                        expanded = false
+                        onSelected(value)
+                    },
+                )
             }
         }
     }

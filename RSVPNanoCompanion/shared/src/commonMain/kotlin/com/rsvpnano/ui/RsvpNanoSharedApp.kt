@@ -93,6 +93,10 @@ fun RsvpNanoSharedApp(
         var showRssDialog by rememberSaveable { mutableStateOf(false) }
         var showConnectionDialog by rememberSaveable { mutableStateOf(false) }
         var showHelpDialog by rememberSaveable { mutableStateOf(false) }
+        var settingsHelpTitle by rememberSaveable { mutableStateOf("Settings") }
+        var settingsHelpBody by rememberSaveable {
+            mutableStateOf("Choose a section to configure your reader, its display, languages, or fonts.")
+        }
         val filePicker = rememberFilePickerLauncher(
             type = FileKitType.File(extensions = listOf("epub", "txt", "html", "htm", "rsvp")),
         ) { file ->
@@ -255,6 +259,10 @@ fun RsvpNanoSharedApp(
                         onUploadTheme = { themePicker.launch() },
                         onUploadFont = { fontPicker.launch() },
                         onUploadLocalePack = { localePackPicker.launch() },
+                        onHelpChanged = { title, body ->
+                            settingsHelpTitle = title
+                            settingsHelpBody = body
+                        },
                     )
                 }
                 }
@@ -331,8 +339,14 @@ fun RsvpNanoSharedApp(
             }
 
             if (showHelpDialog) {
+                val help = if (selectedTab == CompanionTab.Library) {
+                    "Library" to "Add books, saved articles, or RSS feeds here. Connect to sync them with your reader."
+                } else {
+                    settingsHelpTitle to settingsHelpBody
+                }
                 HelpDialog(
-                    tab = selectedTab,
+                    title = help.first,
+                    body = help.second,
                     onDismiss = { showHelpDialog = false },
                 )
             }
@@ -418,15 +432,11 @@ private fun ConnectionDialog(
 }
 
 @Composable
-private fun HelpDialog(tab: CompanionTab, onDismiss: () -> Unit) {
-    val body = when (tab) {
-        CompanionTab.Library -> "Add books, saved articles, or RSS feeds here. Connect to sync them with your reader."
-        CompanionTab.Settings -> "Reader settings are saved directly on the connected Nano. Language packs change the interface; reader fonts add book-language support."
-    }
+private fun HelpDialog(title: String, body: String, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = null) },
-        title = { Text("${tab.label} help") },
+        title = { Text("$title help") },
         text = { Text(body) },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Got it") } },
     )

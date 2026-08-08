@@ -168,10 +168,6 @@ class CompanionPresenter(
 
     fun setSelectedCatalogThemeId(value: String) = updateState { it.copy(selectedCatalogThemeId = value) }
 
-    fun setSelectedCatalogFontId(value: String) = updateState { it.copy(selectedCatalogFontId = value) }
-
-    fun setSelectedCatalogLocaleId(value: String) = updateState { it.copy(selectedCatalogLocaleId = value) }
-
     fun refresh() {
         scope.launch {
             val startedAt = currentTimeMillis()
@@ -234,12 +230,9 @@ class CompanionPresenter(
             }
                 .onSuccess { (catalogUrl, fonts) ->
                     updateState {
-                        val selected = it.selectedCatalogFontId.takeIf { id -> fonts.any { font -> font.id == id } }
-                            ?: fonts.firstOrNull()?.id.orEmpty()
                         it.copy(
                             fontCatalog = fonts,
                             fontCatalogUrl = catalogUrl,
-                            selectedCatalogFontId = selected,
                         )
                     }
                 }
@@ -815,13 +808,9 @@ class CompanionPresenter(
             }
                 .onSuccess { (catalogUrl, locales) ->
                     updateState {
-                        val selected = it.selectedCatalogLocaleId
-                            .takeIf { id -> locales.any { locale -> locale.id == id } }
-                            ?: locales.firstOrNull()?.id.orEmpty()
                         it.copy(
                             localeCatalog = locales,
                             localeCatalogUrl = catalogUrl,
-                            selectedCatalogLocaleId = selected,
                         )
                     }
                 }
@@ -1038,15 +1027,14 @@ class CompanionPresenter(
         }
     }
 
-    fun installSelectedOnlineFont() {
+    fun installOnlineFont(id: String) {
         scope.launch {
             val state = current
             if (!state.isConnected) {
                 setNotice(CompanionNotice.Error("Connect to your Nano before installing fonts."))
                 return@launch
             }
-            val font = state.fontCatalog.firstOrNull { it.id == state.selectedCatalogFontId }
-                ?: state.fontCatalog.firstOrNull()
+            val font = state.fontCatalog.firstOrNull { it.id == id }
             if (font == null) {
                 setNotice(CompanionNotice.Error("Load the online font list first."))
                 return@launch
@@ -1075,7 +1063,6 @@ class CompanionPresenter(
                     it.copy(
                         settings = snapshot.settings,
                         availableFonts = snapshot.fonts,
-                        selectedCatalogFontId = font.id,
                         notice = CompanionNotice.Success("Installed ${font.name}."),
                     )
                 }
@@ -1111,15 +1098,14 @@ class CompanionPresenter(
         }
     }
 
-    fun installSelectedOnlineLocalePack() {
+    fun installOnlineLocalePack(id: String) {
         scope.launch {
             val state = current
             if (!state.isConnected) {
                 setNotice(CompanionNotice.Error("Connect to your Nano before installing locale packs."))
                 return@launch
             }
-            val pack = state.localeCatalog.firstOrNull { it.id == state.selectedCatalogLocaleId }
-                ?: state.localeCatalog.firstOrNull()
+            val pack = state.localeCatalog.firstOrNull { it.id == id }
             if (pack == null) {
                 setNotice(CompanionNotice.Error("Load the online locale list first."))
                 return@launch

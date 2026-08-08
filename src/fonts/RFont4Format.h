@@ -167,7 +167,8 @@ namespace RFont4 {
                                       && strike.pageTableSize
                                              == static_cast<uint32_t>(strike.pageTableCount * kPageTableEntries
                                                                       * sizeof(uint16_t));
-            if (strike.glyphCount == 0 || strike.yAdvance == 0 || strike.pixelsPerEm == 0
+            if (strike.glyphCount == 0 || strike.glyphCount > UINT16_MAX || strike.yAdvance == 0
+                || strike.pixelsPerEm == 0
                 || strike.glyphIdCount > strike.glyphCount || !validPageTables
                 || !section(strike.bitmapOffset, strike.bitmapSize)
                 || !section(strike.glyphsOffset,

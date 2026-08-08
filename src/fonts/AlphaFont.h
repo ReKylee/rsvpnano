@@ -26,13 +26,13 @@ namespace ui::fonts {
     using AlphaGlyphId = RFont4::GlyphIdRecord;
 
     struct PositionedGlyph {
-        uint32_t glyphIndex = 0;
         uint32_t cluster = 0;
+        uint16_t glyphIndex = 0;
         int16_t xAdvance = 0;
         int16_t xOffset = 0;
         int16_t yOffset = 0;
     };
-    static_assert(sizeof(PositionedGlyph) == 16);
+    static_assert(sizeof(PositionedGlyph) == 12);
 
     struct AlphaFont {
         std::string_view name;
@@ -162,24 +162,37 @@ namespace ui::fonts {
             return metrics.xAdvance;
         }
 
+        int16_t drawGlyphs(std::span<const PositionedGlyph> glyphs, int16_t x, int16_t baseline) {
+            if (!ready_ || font_ == nullptr)
+                return -1;
+            Bounds bounds;
+            measure(glyphs, x, baseline, bounds);
+            if (bounds.w == 0 || bounds.h == 0)
+                return bounds.advance;
+            if (!drawGlyphsToStrips(glyphs, x, baseline, bounds)) {
+                int16_t cursor = x;
+                for (const PositionedGlyph& positioned: glyphs) {
+                    drawGlyphIndex(positioned.glyphIndex, static_cast<int16_t>(cursor + positioned.xOffset),
+                                   static_cast<int16_t>(baseline - positioned.yOffset));
+                    cursor = static_cast<int16_t>(cursor + positioned.xAdvance);
+                }
+            }
+            return bounds.advance;
+        }
+
         int16_t glyphIdAdvance(uint32_t glyphId) const {
             const AlphaGlyph* glyph = findGlyphId(glyphId);
             return glyph == nullptr ? 0 : readGlyph(*glyph).xAdvance;
         }
 
-        int16_t glyphIndexAdvance(uint32_t glyphIndex) const {
-            const AlphaGlyph* glyph = glyphAt(glyphIndex);
-            return glyph == nullptr ? 0 : readGlyph(*glyph).xAdvance;
-        }
-
-        bool resolveGlyphId(uint32_t glyphId, uint32_t& glyphIndex) const {
+        bool resolveGlyphId(uint32_t glyphId, uint16_t& glyphIndex) const {
             if (font_ == nullptr || font_->glyphIdCount == 0
                 || (!font_->file && (font_->glyphs == nullptr || font_->glyphIds == nullptr)))
                 return false;
             if (font_->file) {
                 for (const FileGlyphCacheEntry& cached: fileGlyphCache_) {
                     if (cached.index != UINT32_MAX && cached.glyph.glyphId == glyphId) {
-                        glyphIndex = cached.index;
+                        glyphIndex = static_cast<uint16_t>(cached.index);
                         return true;
                     }
                 }
@@ -201,7 +214,7 @@ namespace ui::fonts {
                                  sizeof(record))
                     || record.glyphId != glyphId || record.glyphIndex >= font_->glyphCount)
                     return false;
-                glyphIndex = record.glyphIndex;
+                glyphIndex = static_cast<uint16_t>(record.glyphIndex);
                 return fileGlyph(glyphIndex) != nullptr;
             }
             const std::span ids{font_->glyphIds, static_cast<size_t>(font_->glyphIdCount)};
@@ -213,8 +226,10 @@ namespace ui::fonts {
             const AlphaGlyphId resolved = readPacked(*record);
             if (resolved.glyphId != glyphId)
                 return false;
-            glyphIndex = resolved.glyphIndex;
-            return glyphIndex < font_->glyphCount;
+            if (resolved.glyphIndex >= font_->glyphCount)
+                return false;
+            glyphIndex = static_cast<uint16_t>(resolved.glyphIndex);
+            return true;
         }
 
         uint8_t pixelsPerEm() const {
@@ -460,6 +475,34 @@ namespace ui::fonts {
             return true;
         }
 
+        void measure(std::span<const PositionedGlyph> glyphs, int16_t x, int16_t baseline, Bounds& bounds) const {
+            int16_t cursorX = x;
+            int16_t minX = INT16_MAX;
+            int16_t minY = INT16_MAX;
+            int16_t maxX = INT16_MIN;
+            int16_t maxY = INT16_MIN;
+            for (const PositionedGlyph& positioned: glyphs) {
+                const AlphaGlyph* glyph = glyphAt(positioned.glyphIndex);
+                if (glyph != nullptr) {
+                    const AlphaGlyph metrics = readGlyph(*glyph);
+                    if (metrics.width > 0 && metrics.height > 0) {
+                        const int16_t x1 = static_cast<int16_t>(cursorX + positioned.xOffset + metrics.xOffset);
+                        const int16_t y1 = static_cast<int16_t>(baseline - positioned.yOffset + metrics.yOffset);
+                        minX = std::min(minX, x1);
+                        minY = std::min(minY, y1);
+                        maxX = std::max<int16_t>(maxX, static_cast<int16_t>(x1 + metrics.width - 1));
+                        maxY = std::max<int16_t>(maxY, static_cast<int16_t>(y1 + metrics.height - 1));
+                    }
+                }
+                cursorX = static_cast<int16_t>(cursorX + positioned.xAdvance);
+            }
+            bounds = {.x1 = minX,
+                      .y1 = minY,
+                      .w = maxX >= minX ? static_cast<uint16_t>(maxX - minX + 1) : uint16_t{0},
+                      .h = maxY >= minY ? static_cast<uint16_t>(maxY - minY + 1) : uint16_t{0},
+                      .advance = static_cast<int16_t>(cursorX - x)};
+        }
+
         void drawGlyphs(std::string_view text, int16_t x, int16_t baseline, int8_t tracking) {
             if (font_ == nullptr) {
                 return;
@@ -500,10 +543,22 @@ namespace ui::fonts {
 
         bool drawGlyphsToStrips(std::string_view text, int16_t x, int16_t baseline, const Bounds& bounds,
                                 int8_t tracking) {
-            if (font_ == nullptr || bounds.w == 0 || bounds.h == 0) {
-                return false;
-            }
+            return drawToStrips(bounds, [&](int16_t stripX, int16_t stripY, uint16_t stripWidth, uint8_t stripRows) {
+                compositeGlyphsIntoStrip(text, x, baseline, stripX, stripY, stripWidth, stripRows, tracking);
+            });
+        }
 
+        bool drawGlyphsToStrips(std::span<const PositionedGlyph> glyphs, int16_t x, int16_t baseline,
+                                const Bounds& bounds) {
+            return drawToStrips(bounds, [&](int16_t stripX, int16_t stripY, uint16_t stripWidth, uint8_t stripRows) {
+                compositeGlyphsIntoStrip(glyphs, x, baseline, stripX, stripY, stripWidth, stripRows);
+            });
+        }
+
+        template<typename Composite>
+        bool drawToStrips(const Bounds& bounds, Composite&& composite) {
+            if (font_ == nullptr || bounds.w == 0 || bounds.h == 0)
+                return false;
             const int16_t displayW = output_.width();
             const int16_t displayH = output_.height();
             const int16_t boundsX2 = static_cast<int16_t>(bounds.x1 + bounds.w);
@@ -527,7 +582,7 @@ namespace ui::fonts {
                     static_cast<uint8_t>(std::min<int16_t>(MaxStripRows, static_cast<int16_t>(visibleY1 - stripY)));
 
                 clearStrip(stripWidth, stripRows);
-                compositeGlyphsIntoStrip(text, x, baseline, visibleX0, stripY, stripWidth, stripRows, tracking);
+                composite(visibleX0, stripY, stripWidth, stripRows);
                 flushStrip(visibleX0, stripY, stripWidth, stripRows);
 
                 stripY = static_cast<int16_t>(stripY + stripRows);
@@ -571,6 +626,22 @@ namespace ui::fonts {
 
                 previousCodepoint = codepoint;
                 hasPrevious = true;
+            }
+        }
+
+        void compositeGlyphsIntoStrip(std::span<const PositionedGlyph> glyphs, int16_t x, int16_t baseline,
+                                      int16_t stripX, int16_t stripY, uint16_t stripWidth, uint8_t stripRows) {
+            int16_t cursorX = x;
+            for (const PositionedGlyph& positioned: glyphs) {
+                const AlphaGlyph* glyph = glyphAt(positioned.glyphIndex);
+                if (glyph != nullptr) {
+                    const AlphaGlyph metrics = readGlyph(*glyph);
+                    compositeGlyphIntoStrip(metrics,
+                                            static_cast<int16_t>(cursorX + positioned.xOffset + metrics.xOffset),
+                                            static_cast<int16_t>(baseline - positioned.yOffset + metrics.yOffset),
+                                            stripX, stripY, stripWidth, stripRows);
+                }
+                cursorX = static_cast<int16_t>(cursorX + positioned.xAdvance);
             }
         }
 
@@ -924,7 +995,7 @@ namespace ui::fonts {
         }
 
         const AlphaGlyph* findGlyphId(uint32_t glyphId) const {
-            uint32_t index = 0;
+            uint16_t index = 0;
             return resolveGlyphId(glyphId, index) ? glyphAt(index) : nullptr;
         }
 

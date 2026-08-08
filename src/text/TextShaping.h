@@ -34,11 +34,10 @@ namespace TextShaping {
         bool ready() const {
             return font_ != nullptr;
         }
-        std::expected<void, std::string> shape(std::string_view paragraph, size_t offset, size_t length,
-                                               bool rightToLeft,
-                                               std::string_view language, uint8_t pixelsPerEm,
-                                               ui::fonts::AlphaTextRenderer<640>& renderer,
-                                               std::vector<ui::fonts::PositionedGlyph>& output);
+        std::expected<int16_t, std::string> shape(std::string_view paragraph, size_t offset, size_t length,
+                                                  bool rightToLeft, std::string_view language,
+                                                  ui::fonts::AlphaTextRenderer<640>& renderer,
+                                                  std::vector<ui::fonts::PositionedGlyph>& output);
 
     private:
         static hb_blob_t* referenceTable(hb_face_t*, hb_tag_t tag, void* userData);

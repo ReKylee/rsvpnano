@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
-#include <numeric>
 
 #include "board/BoardPower.h"
 #include "settings/SettingsRules.h"
@@ -239,6 +238,7 @@ namespace screens {
             const bool shaping = face_.shaper.has_value();
             size_t wordOffset = 0;
             bool shaped = false;
+            int32_t shapedWidth = 0;
             if (bidi || shaping) {
                 if (session.currentIndex < rsvpParagraph_.firstWord
                     || session.currentIndex >= rsvpParagraph_.lastWord) {
@@ -270,19 +270,30 @@ namespace screens {
 
                 rsvpGlyphs_.clear();
                 if (shaping) {
-                    shaped = true;
                     const std::string_view locale = session.metadata.localeAt(session.currentIndex);
-                    for (const BidiText::Run& run: rsvpLine_) {
-                        auto result = face_.shaper->get().shape(
-                            rsvpParagraph_.text, run.offset, run.length, run.rightToLeft, locale,
-                            face_.raster.get().pixelsPerEm, text_, rsvpGlyphs_);
-                        if (!result) {
+                    if (!bidi) {
+                        const auto result = face_.shaper->get().shape(rsvpParagraph_.text, wordOffset, word.size(),
+                                                                    false, locale, text_, rsvpGlyphs_);
+                        shaped = result.has_value();
+                        if (result)
+                            shapedWidth = *result;
+                        if (!result)
                             ESP_LOGW("reader", "shaping failed: %s", result.error().c_str());
-                            shaped = false;
-                            rsvpGlyphs_.clear();
-                            break;
+                    } else {
+                        shaped = true;
+                        for (const BidiText::Run& run: rsvpLine_) {
+                            const auto result = face_.shaper->get().shape(rsvpParagraph_.text, run.offset, run.length,
+                                                                        run.rightToLeft, locale, text_, rsvpGlyphs_);
+                            if (!result) {
+                                ESP_LOGW("reader", "shaping failed: %s", result.error().c_str());
+                                shaped = false;
+                                break;
+                            }
+                            shapedWidth += *result;
                         }
                     }
+                    if (!shaped)
+                        rsvpGlyphs_.clear();
                 }
                 if (!shaped)
                     BidiText::visualCodepoints(rsvpParagraph_.text, rsvpLine_, rsvpVisual_);
@@ -290,13 +301,7 @@ namespace screens {
             const int focus = focusOffset(word);
             uint32_t shapedFocusCluster = UINT32_MAX;
             const int16_t wordWidth = shaped
-                                        ? static_cast<int16_t>(std::clamp<int32_t>(
-                                              std::accumulate(rsvpGlyphs_.begin(), rsvpGlyphs_.end(), int32_t{0},
-                                                              [](int32_t width,
-                                                                 const ui::fonts::PositionedGlyph& glyph) {
-                                                                  return width + glyph.xAdvance;
-                                                              }),
-                                              0, INT16_MAX))
+                                        ? static_cast<int16_t>(std::clamp<int32_t>(shapedWidth, 0, INT16_MAX))
                                         : bidi ? wordAdvance(rsvpVisual_)
                                                : text_.textAdvance(word, typography_.tracking);
             int16_t focusCenter = wordWidth / 2;
@@ -311,8 +316,7 @@ namespace screens {
                     }
                     for (const auto& glyph: rsvpGlyphs_) {
                         if (glyph.cluster == shapedFocusCluster) {
-                            focusCenter = static_cast<int16_t>(cursor + glyph.xOffset
-                                                               + text_.glyphIndexAdvance(glyph.glyphIndex) / 2);
+                            focusCenter = static_cast<int16_t>(cursor + glyph.xOffset + glyph.xAdvance / 2);
                             break;
                         }
                         cursor = static_cast<int16_t>(cursor + glyph.xAdvance);
@@ -376,14 +380,21 @@ namespace screens {
             }
             if (shaped) {
                 int16_t cursor = x;
-                for (const auto& glyph: rsvpGlyphs_) {
-                    text_.setTextColor(typography_.focusHighlight && glyph.cluster == shapedFocusCluster
-                                           ? ui.color(ui::themes::ColorRole::Accent)
-                                           : ui.color(ui::themes::ColorRole::Foreground),
+                size_t first = 0;
+                while (first < rsvpGlyphs_.size()) {
+                    const bool highlighted = typography_.focusHighlight
+                                          && rsvpGlyphs_[first].cluster == shapedFocusCluster;
+                    size_t last = first + 1;
+                    while (last < rsvpGlyphs_.size()
+                           && (typography_.focusHighlight
+                               && rsvpGlyphs_[last].cluster == shapedFocusCluster) == highlighted)
+                        ++last;
+                    text_.setTextColor(ui.color(highlighted ? ui::themes::ColorRole::Accent
+                                                            : ui::themes::ColorRole::Foreground),
                                        background_);
-                    text_.drawGlyphIndex(glyph.glyphIndex, static_cast<int16_t>(cursor + glyph.xOffset),
-                                         static_cast<int16_t>(baseline - glyph.yOffset));
-                    cursor = static_cast<int16_t>(cursor + glyph.xAdvance);
+                    cursor = static_cast<int16_t>(cursor + text_.drawGlyphs(
+                        std::span{rsvpGlyphs_}.subspan(first, last - first), cursor, baseline));
+                    first = last;
                 }
             } else if (bidi)
                 drawWord(rsvpVisual_, x, baseline, wordOffset, focus, ui);
@@ -775,29 +786,25 @@ namespace screens {
     }
 
     int ReaderScreen::focusOffset(std::string_view word) const {
+        std::array<size_t, 5> offsets{};
         int characters = 0;
-        std::string_view remaining = word;
-        while (!remaining.empty()) {
-            uint32_t codepoint = 0;
-            Utf8Text::next(remaining, codepoint);
-            if (UnicodeText::isWordCharacter(codepoint))
-                ++characters;
-        }
-        if (characters == 0)
-            return word.empty() ? -1 : 0;
-        const int target = std::min(focusOrdinal(characters), characters - 1);
-        int ordinal = 0;
         size_t offset = 0;
-        remaining = word;
+        std::string_view remaining = word;
         while (!remaining.empty()) {
             const size_t bytes = remaining.size();
             uint32_t codepoint = 0;
             Utf8Text::next(remaining, codepoint);
-            if (UnicodeText::isWordCharacter(codepoint) && ordinal++ == target)
-                return static_cast<int>(offset);
+            if (UnicodeText::isWordCharacter(codepoint)) {
+                if (characters < static_cast<int>(offsets.size()))
+                    offsets[characters] = offset;
+                ++characters;
+            }
             offset += bytes - remaining.size();
         }
-        return 0;
+        if (characters == 0)
+            return word.empty() ? -1 : 0;
+        const int target = std::min(focusOrdinal(characters), characters - 1);
+        return static_cast<int>(offsets[target]);
     }
 
     int16_t ReaderScreen::wordAdvance(std::span<const BidiText::Codepoint> word) const {
@@ -826,8 +833,7 @@ namespace screens {
                                    ? ui.color(ui::themes::ColorRole::Accent)
                                    : ui.color(ui::themes::ColorRole::Foreground),
                                ui.color(ui::themes::ColorRole::Background));
-            text_.drawCodepoint(codepoint, x, baseline);
-            x = static_cast<int16_t>(x + text_.glyphAdvance(codepoint) + typography_.tracking);
+            x = static_cast<int16_t>(x + text_.drawCodepoint(codepoint, x, baseline) + typography_.tracking);
             offset += bytes - word.size();
         }
     }

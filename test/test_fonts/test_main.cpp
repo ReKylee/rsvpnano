@@ -174,8 +174,9 @@ void test_shaper_reuses_rfont4_nominal_glyphs_and_advances() {
     auto opened = shaping.open(file, header, std::span{&table, 1});
     TEST_ASSERT_TRUE_MESSAGE(opened.has_value(), opened ? "" : opened.error().c_str());
     std::vector<ui::fonts::PositionedGlyph> output;
-    auto shaped = shaping.shape("xABy", 1, 2, false, "en", font.pixelsPerEm, renderer, output);
+    auto shaped = shaping.shape("xABy", 1, 2, false, "en", renderer, output);
     TEST_ASSERT_TRUE_MESSAGE(shaped.has_value(), shaped ? "" : shaped.error().c_str());
+    TEST_ASSERT_EQUAL_INT16(15, *shaped);
     TEST_ASSERT_EQUAL_UINT32(2, output.size());
     TEST_ASSERT_EQUAL_UINT32(0, output[0].glyphIndex);
     TEST_ASSERT_EQUAL_UINT32(1, output[0].cluster);
@@ -184,8 +185,9 @@ void test_shaper_reuses_rfont4_nominal_glyphs_and_advances() {
     TEST_ASSERT_EQUAL_UINT32(2, output[1].cluster);
     TEST_ASSERT_EQUAL_INT32(8, output[1].xAdvance);
 
-    shaped = shaping.shape("xABy", 1, 2, false, "en", font.pixelsPerEm, renderer, output);
+    shaped = shaping.shape("xABy", 1, 2, false, "en", renderer, output);
     TEST_ASSERT_TRUE_MESSAGE(shaped.has_value(), shaped ? "" : shaped.error().c_str());
+    TEST_ASSERT_EQUAL_INT16(15, *shaped);
     TEST_ASSERT_EQUAL_UINT32(4, output.size());
 }
 

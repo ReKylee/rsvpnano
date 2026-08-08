@@ -64,11 +64,11 @@ namespace TextShaping {
         tableBlobs_ = {};
     }
 
-    std::expected<void, std::string> Shaper::shape(std::string_view paragraph, size_t offset, size_t length,
-                                                 bool rightToLeft,
-                                                 std::string_view language, uint8_t pixelsPerEm,
-                                                 ui::fonts::AlphaTextRenderer<640>& renderer,
-                                                 std::vector<ui::fonts::PositionedGlyph>& output) {
+    std::expected<int16_t, std::string> Shaper::shape(std::string_view paragraph, size_t offset, size_t length,
+                                                     bool rightToLeft, std::string_view language,
+                                                     ui::fonts::AlphaTextRenderer<640>& renderer,
+                                                     std::vector<ui::fonts::PositionedGlyph>& output) {
+        const uint8_t pixelsPerEm = renderer.pixelsPerEm();
         if (!ready() || pixelsPerEm == 0)
             return std::unexpected("Font shaping is unavailable");
         if (offset > paragraph.size() || length > paragraph.size() - offset
@@ -101,21 +101,24 @@ namespace TextShaping {
         const hb_glyph_position_t* positions = hb_buffer_get_glyph_positions(buffer_, &count);
         const size_t firstGlyph = output.size();
         output.reserve(firstGlyph + count);
+        int32_t advance = 0;
         for (unsigned index = 0; index < count; ++index) {
-            uint32_t glyphIndex = 0;
+            uint16_t glyphIndex = 0;
             if (!renderer.resolveGlyphId(info[index].codepoint, glyphIndex)) {
                 output.resize(firstGlyph);
                 return std::unexpected("Shaped glyph is absent from RFont4");
             }
+            const int16_t xAdvance = fromFixed26_6(positions[index].x_advance);
             output.push_back({
-                .glyphIndex = glyphIndex,
                 .cluster = info[index].cluster,
-                .xAdvance = fromFixed26_6(positions[index].x_advance),
+                .glyphIndex = glyphIndex,
+                .xAdvance = xAdvance,
                 .xOffset = fromFixed26_6(positions[index].x_offset),
                 .yOffset = fromFixed26_6(positions[index].y_offset),
             });
+            advance += xAdvance;
         }
-        return {};
+        return static_cast<int16_t>(std::clamp<int32_t>(advance, 0, INT16_MAX));
     }
 
     hb_blob_t* Shaper::referenceTable(hb_face_t*, hb_tag_t tag, void* userData) {

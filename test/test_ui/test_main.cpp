@@ -678,11 +678,26 @@ void test_reader_font_resolves_opentype_glyph_ids() {
 
     TEST_ASSERT_EQUAL_INT16(4, renderer.glyphIdAdvance(17));
     TEST_ASSERT_EQUAL_INT16(0, renderer.glyphIdAdvance(18));
-    uint32_t glyphIndex = 0;
+    uint16_t glyphIndex = 0;
     TEST_ASSERT_TRUE(renderer.resolveGlyphId(17, glyphIndex));
     TEST_ASSERT_EQUAL_UINT32(2, glyphIndex);
     TEST_ASSERT_EQUAL_INT16(4, renderer.drawGlyphIndex(glyphIndex, 0, 1));
     TEST_ASSERT_GREATER_THAN(0, gfx.writes);
+}
+
+void test_reader_batches_adjacent_shaped_glyphs() {
+    Arduino_GFX gfx(16, 8);
+    ui::fonts::AlphaTextRenderer<16> renderer(gfx);
+    renderer.begin();
+    renderer.setFont(kReaderFont);
+    renderer.setTextColor(0xFFFF, 0);
+    const std::array glyphs{
+        ui::fonts::PositionedGlyph{.glyphIndex = 2, .xAdvance = 1},
+        ui::fonts::PositionedGlyph{.glyphIndex = 2, .xAdvance = 1},
+    };
+
+    TEST_ASSERT_EQUAL_INT16(2, renderer.drawGlyphs(glyphs, 0, 1));
+    TEST_ASSERT_EQUAL(1, gfx.bitmapWrites);
 }
 
 void test_reader_streams_rfont4_glyphs_from_file() {
@@ -1182,6 +1197,7 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_unchanged_widget_does_not_draw_or_flush);
     RUN_TEST(test_reader_font_resolves_opentype_glyph_ids);
+    RUN_TEST(test_reader_batches_adjacent_shaped_glyphs);
     RUN_TEST(test_reader_streams_rfont4_glyphs_from_file);
     RUN_TEST(test_reader_uses_u8g2_only_for_glyphs_missing_from_rfont4);
     RUN_TEST(test_changed_and_removed_widgets_redraw);

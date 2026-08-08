@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <iterator>
-#include <numeric>
 
 #include "reader/ReadingLoop.h"
 #include "text/BidiText.h"
@@ -85,49 +84,51 @@ namespace screens::PageReader {
                 return state.words[localIndex];
 
             const std::string_view word = ReadingLoop::wordAt(session, index);
-            State::Word prepared{.glyphStart = static_cast<uint32_t>(state.glyphs.size()),
-                                 .faceIndex = faceIndex,
+            State::Word prepared{.faceIndex = faceIndex,
                                  .cjk = UnicodeText::isCjkText(word)};
             if (face.shaper) {
                 const size_t paragraphWord = index - paragraph.firstWord;
                 const size_t offset = paragraph.wordOffsets[paragraphWord];
                 const std::string_view locale = session.metadata.localeAt(index);
                 const size_t glyphStart = state.glyphs.size();
+                if (glyphStart > UINT16_MAX) {
+                    prepared.width = text.textAdvance(word, typography.tracking);
+                    state.words.push_back(prepared);
+                    return state.words.back();
+                }
+                prepared.glyphStart = static_cast<uint16_t>(glyphStart);
                 bool shaped = false;
+                int32_t width = 0;
                 if (paragraphBidi && bidiReady) {
                     if (const auto direction = bidiAnalysis.uniformRightToLeft(offset, word.size())) {
-                        shaped = face.shaper->get()
-                                     .shape(paragraph.text, offset, word.size(), *direction, locale,
-                                            face.raster.get().pixelsPerEm, text, state.glyphs)
-                                     .has_value();
+                        const auto result = face.shaper->get().shape(paragraph.text, offset, word.size(), *direction,
+                                                                    locale, text, state.glyphs);
+                        shaped = result.has_value();
+                        if (result)
+                            width = *result;
                     } else if (bidiAnalysis.resolve({offset, word.size()}, bidiLine)) {
                         shaped = true;
                         for (const BidiText::Run& run: bidiLine) {
-                            if (!face.shaper->get().shape(paragraph.text, run.offset, run.length,
-                                                          run.rightToLeft, locale,
-                                                          face.raster.get().pixelsPerEm, text,
-                                                          state.glyphs)) {
+                            const auto result = face.shaper->get().shape(
+                                paragraph.text, run.offset, run.length, run.rightToLeft, locale, text, state.glyphs);
+                            if (!result) {
                                 shaped = false;
                                 break;
                             }
+                            width += *result;
                         }
                     }
                 } else {
-                    shaped = face.shaper->get()
-                                 .shape(paragraph.text, offset, word.size(), false, locale,
-                                        face.raster.get().pixelsPerEm, text, state.glyphs)
-                                 .has_value();
+                    const auto result = face.shaper->get().shape(paragraph.text, offset, word.size(), false, locale,
+                                                                text, state.glyphs);
+                    shaped = result.has_value();
+                    if (result)
+                        width = *result;
                 }
                 const size_t glyphCount = state.glyphs.size() - glyphStart;
-                if (shaped && glyphCount > 0 && glyphCount <= std::numeric_limits<uint16_t>::max()) {
+                if (shaped && glyphCount > 0 && state.glyphs.size() <= UINT16_MAX) {
                     prepared.glyphCount = static_cast<uint16_t>(glyphCount);
-                    const auto glyphs = std::span{state.glyphs}.subspan(glyphStart, glyphCount);
-                    prepared.width = static_cast<int16_t>(std::clamp<int32_t>(
-                        std::accumulate(glyphs.begin(), glyphs.end(), int32_t{0},
-                                        [](int32_t width, const ui::fonts::PositionedGlyph& glyph) {
-                                            return width + glyph.xAdvance;
-                                        }),
-                        0, INT16_MAX));
+                    prepared.width = static_cast<int16_t>(std::clamp<int32_t>(width, 0, INT16_MAX));
                     prepared.shaped = true;
                 } else
                     state.glyphs.resize(glyphStart);
@@ -309,11 +310,7 @@ namespace screens::PageReader {
             text.setTextColor(ui.color(role), ui.color(ui::themes::ColorRole::Background));
             const State::Word& word = wordAt(state, index);
             const auto glyphs = std::span{state.glyphs}.subspan(word.glyphStart, word.glyphCount);
-            for (const auto& glyph: glyphs) {
-                text.drawGlyphIndex(glyph.glyphIndex, static_cast<int16_t>(x + glyph.xOffset),
-                                    static_cast<int16_t>(baseline - glyph.yOffset));
-                x = static_cast<int16_t>(x + glyph.xAdvance);
-            }
+            text.drawGlyphs(glyphs, x, baseline);
         }
 
         void drawWord(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,

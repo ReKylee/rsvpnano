@@ -18,16 +18,16 @@ namespace screens::PageReader {
 
     struct State {
         struct Word {
-            uint32_t glyphStart = 0;
+            uint16_t glyphStart = 0;
             uint16_t glyphCount = 0;
             int16_t width = 0;
             int16_t x = 0;
             int16_t y = 0;
             uint8_t faceIndex = 0;
-            bool shaped = false;
-            bool cjk = false;
+            bool shaped : 1 = false;
+            bool cjk : 1 = false;
         };
-        static_assert(sizeof(Word) == 16);
+        static_assert(sizeof(Word) == 12);
 
         struct Character {
             uint32_t codepoint = 0;

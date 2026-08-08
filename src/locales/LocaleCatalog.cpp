@@ -304,10 +304,6 @@ namespace locales {
         return staging + "/" + std::string{relativePath};
     }
 
-    std::expected<void, std::string> validatePackFiles(fs::FS& filesystem, const InstalledPack& pack) {
-        return inspectPackFiles(filesystem, pack, true);
-    }
-
     std::expected<void, std::string> activateStaged(fs::FS& filesystem, Catalog& catalog, std::string_view id) {
         if (!isValidPackId(id))
             return std::unexpected("invalid pack ID");
@@ -393,7 +389,7 @@ namespace locales {
         if (locale == "en")
             return "English";
         const auto pack = detail::findPackForLocale(catalog, locale);
-        return pack ? std::string_view{pack->get().manifest.nativeName} : locale;
+        return pack ? std::string_view{pack->get().manifest.englishName} : locale;
     }
 
 } // namespace locales

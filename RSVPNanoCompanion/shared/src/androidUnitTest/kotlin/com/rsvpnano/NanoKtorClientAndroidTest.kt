@@ -67,7 +67,7 @@ class NanoKtorClientAndroidTest {
                 "/api/v1/feeds" -> """{"data":{"feeds":["https://example.com/feed"]}}"""
                 "/api/v1/focus" -> """{"data":{"timers":[{"name":"Pomodoro","focusMinutes":25,"breakMinutes":5,"rounds":4}]}}"""
                 "/api/v1/appearance/themes" -> """{"data":{"themes":[{"id":"default","name":"Default"},{"id":"night","name":"Night"}]}}"""
-                "/api/v1/appearance/fonts" -> """{"data":{"fonts":[{"id":"literata","name":"Literata"},{"id":"atkinson","name":"Atkinson Hyperlegible"}]}}"""
+                "/api/v1/appearance/fonts" -> """{"data":{"fonts":[{"id":"literata","name":"Literata","scripts":["Latn","Cyrl"],"builtIn":true},{"id":"atkinson","name":"Atkinson Hyperlegible","scripts":["Latn"]}]}}"""
                 else -> error("Unexpected request: ${request.url}")
             }
         })
@@ -87,7 +87,10 @@ class NanoKtorClientAndroidTest {
         assertEquals(listOf("https://example.com/feed"), client.fetchRssFeeds("http://device.local").feeds)
         assertEquals("Pomodoro", client.fetchFocusTimers("http://device.local").timers.single().name)
         assertEquals(listOf("default", "night"), client.fetchThemes("http://device.local").map { it.id })
-        assertEquals(listOf("literata", "atkinson"), client.fetchFonts("http://device.local").map { it.id })
+        val fonts = client.fetchFonts("http://device.local")
+        assertEquals(listOf("literata", "atkinson"), fonts.map { it.id })
+        assertEquals(listOf("Latn", "Cyrl"), fonts.first().scripts)
+        assertEquals(true, fonts.first().builtIn)
         assertEquals(
             listOf(
                 "GET /api/v1/device",
@@ -326,10 +329,15 @@ class NanoKtorClientAndroidTest {
                     """{"data":{"path":"/themes/night.toml","id":"night"}}"""
                 }
                 "/api/v1/appearance/fonts" -> {
-                    assertEquals(HttpMethod.Post, request.method)
-                    assertEquals("atkinson", request.url.parameters["family"])
-                    assertIs<MultiPartFormDataContent>(request.body)
-                    """{"data":{"path":"/fonts/atkinson/font.rfont4"}}"""
+                    if (request.method == HttpMethod.Delete) {
+                        assertEquals("atkinson", request.url.parameters["id"])
+                        """{"data":{"id":"atkinson","deleted":true}}"""
+                    } else {
+                        assertEquals(HttpMethod.Post, request.method)
+                        assertEquals("atkinson", request.url.parameters["family"])
+                        assertIs<MultiPartFormDataContent>(request.body)
+                        """{"data":{"path":"/fonts/atkinson/font.rfont4"}}"""
+                    }
                 }
                 else -> error("Unexpected request: ${request.url}")
             }
@@ -366,6 +374,7 @@ class NanoKtorClientAndroidTest {
                 "font-data".encodeToByteArray(),
             ).path,
         )
+        assertEquals(true, client.deleteFont("http://device.local", "atkinson").deleted)
         assertEquals(
             listOf(
                 "GET /themes/catalog.json?",
@@ -376,6 +385,7 @@ class NanoKtorClientAndroidTest {
                 "GET /locale-packs/ja.zip?",
                 "POST /api/v1/appearance/themes?name=night.toml",
                 "POST /api/v1/appearance/fonts?family=atkinson",
+                "DELETE /api/v1/appearance/fonts?id=atkinson",
             ),
             seen,
         )

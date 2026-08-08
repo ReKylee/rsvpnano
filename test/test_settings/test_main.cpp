@@ -116,13 +116,15 @@ void test_companion_font_list_uses_ids_and_names() {
     const companion::api::FontsResponse response{
         {{.id = "literata",
           .name = "Literata",
-          .scriptMask = UnicodeText::ScriptLatin | UnicodeText::ScriptCyrillic},
-         {.id = "hebrew", .name = "Noto Serif Hebrew", .locales = {"he"},
+          .scripts = {"Latn", "Cyrl"},
+          .scriptMask = UnicodeText::ScriptLatin | UnicodeText::ScriptCyrillic,
+          .builtIn = true},
+         {.id = "hebrew", .name = "Noto Serif Hebrew", .locales = {"he"}, .scripts = {"Hebr"},
           .scriptMask = UnicodeText::ScriptHebrew, .shaping = true}}};
     std::string json;
     TEST_ASSERT_TRUE(companion::api::encodeData(response, json).has_value());
     TEST_ASSERT_EQUAL_STRING(
-        R"({"data":{"fonts":[{"id":"literata","name":"Literata","locales":[],"scriptMask":3,"shaping":false},{"id":"hebrew","name":"Noto Serif Hebrew","locales":["he"],"scriptMask":8,"shaping":true}]}})",
+        R"({"data":{"fonts":[{"id":"literata","name":"Literata","locales":[],"scripts":["Latn","Cyrl"],"scriptMask":3,"builtIn":true,"shaping":false},{"id":"hebrew","name":"Noto Serif Hebrew","locales":["he"],"scripts":["Hebr"],"scriptMask":8,"builtIn":false,"shaping":true}]}})",
         json.c_str());
 }
 

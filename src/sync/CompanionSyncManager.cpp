@@ -175,6 +175,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <label>Font family</label><input id="fontFamilyName" placeholder="Font folder name">
 <label>Font file</label><input id="fontFileInput" type="file" accept=".rfont4">
 <div class="row"><button id="uploadFontButton">Upload font file</button></div>
+<div id="fontsList" class="muted">Loading...</div>
 <label>Brightness <span id="brightnessValue"></span></label><input id="brightnessPercent" type="range" min="5" max="100" step="5">
 <label>Reader hand</label><select id="handedness"><option value="right">Right</option><option value="left">Left</option></select>
 <label>Footer label</label><select id="footerMetric"><option value="percentage">Percentage</option><option value="chapterTime">Chapter time</option><option value="bookTime">Book time</option></select>
@@ -270,6 +271,8 @@ function val(id){const e=$(id);return e.type==='checkbox'?e.checked:e.value}
 function setVal(id,v){const e=$(id);if(e.type==='checkbox')e.checked=!!v;else e.value=v}
 function setThemeOptions(){const id=(settings&&settings.interface&&settings.interface.selectedThemeId)||'default';const themes=deviceThemes.some(t=>t.id===id)?deviceThemes:[...deviceThemes,{id,name:id}];$('themeId').innerHTML=themes.map(t=>`<option value="${html(t.id)}">${html(t.name||t.id)}</option>`).join('');setVal('themeId',id)}
 function setFontOptions(){const id=(settings&&settings.reading&&settings.reading.typography&&settings.reading.typography.fontId)||'literata';const fonts=deviceFonts.some(f=>f.id===id)?deviceFonts:[...deviceFonts,{id,name:id}];$('typeface').innerHTML=fonts.map(f=>`<option value="${html(f.id)}">${html(f.name||f.id)}</option>`).join('');setVal('typeface',id)}
+function renderFonts(){$('fontsList').innerHTML=deviceFonts.map(f=>`<div class="item"><div class="item-title">${html(f.name||f.id)}</div><div class="item-meta">${html([...(f.locales||[]),...(f.scripts||[]),f.builtIn?'Built in':''].filter(Boolean).join(' - '))}</div>${f.builtIn?'':`<p><button class="danger" data-delete-font="${html(encodeURIComponent(f.id))}">Remove</button></p>`}</div>`).join('');document.querySelectorAll('[data-delete-font]').forEach(b=>b.onclick=()=>removeFont(decodeURIComponent(b.dataset.deleteFont)))}
+async function removeFont(id){if(!confirm('Remove font '+id+'?'))return;try{await api('/api/v1/appearance/fonts?id='+encodeURIComponent(id),{method:'DELETE'});await loadSettings();status('Removed font '+id)}catch(e){status('Font removal failed: '+e.message)}}
 function setLocaleOptions(){const current=(settings&&settings.interface&&settings.interface.locale)||'en';const locales=new Map([['en','English']]);(deviceLocales.locales||[]).filter(p=>p.locale).forEach(p=>locales.set(p.locale,p.nativeName||p.englishName||p.locale));if(!locales.has(current))locales.set(current,current);$('interfaceLocale').innerHTML=[...locales].map(([id,name])=>`<option value="${html(id)}">${html(name)}</option>`).join('');setVal('interfaceLocale',current)}
 function renderLocales(){const packs=deviceLocales.locales||[],rejected=deviceLocales.rejected||[];let out=packs.map(p=>`<div class="item"><div class="item-title">${html(p.nativeName||p.englishName||p.id)}</div><div class="item-meta">${html([p.id,p.version,p.locale,p.direction].filter(Boolean).join(' - '))}</div><p><button class="danger" data-delete-locale="${html(encodeURIComponent(p.id))}">Remove</button></p></div>`).join('');if(!out)out='<span class="muted">No external locale packs installed.</span>';if(rejected.length)out+=`<p class="muted">Rejected: ${rejected.map(i=>html(i.id+': '+i.reason)).join('; ')}</p>`;$('localesList').innerHTML=out;document.querySelectorAll('[data-delete-locale]').forEach(b=>b.onclick=()=>removeLocalePack(decodeURIComponent(b.dataset.deleteLocale)));setLocaleOptions()}
 async function loadLocales(){try{deviceLocales=await api('/api/v1/locales');renderLocales()}catch(e){status('Locale packs load failed: '+e.message)}}
@@ -278,7 +281,7 @@ async function installLocalePack(){const files=selectedPackFiles(),manifest=file
 async function removeLocalePack(id){if(!confirm('Remove locale pack '+id+'?'))return;try{await api('/api/v1/locales/'+encodeURIComponent(id),{method:'DELETE'});await loadLocales();status('Removed locale pack '+id)}catch(e){status('Locale pack removal failed: '+e.message)}}
 function snapWpm(v){v=Math.max(10,Math.min(1000,Math.round(+v||300)));return Math.round(v/10)*10}
 function updateLabels(){['wpm','longWordMs','complexWordMs','punctuationMs','brightnessPercent','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>{const l=$(id+'Value')||$(id.replace('Percent','')+'Value')||$(id.replace('Index','')+'Value');if(l)l.textContent=$(id).value+(id==='wpm'?' WPM':id.includes('Ms')?' ms':id==='brightnessPercent'?'%':'')})}
-async function loadSettings(){try{[settings,{themes:deviceThemes=[]},{fonts:deviceFonts=[]},deviceLocales]=await Promise.all([api('/api/v1/settings'),api('/api/v1/appearance/themes'),api('/api/v1/appearance/fonts'),api('/api/v1/locales')]);setThemeOptions();setFontOptions();renderLocales();if(!themeCatalog.length)loadThemeCatalog();if(!fontCatalog.length)loadFontCatalog();const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;setVal('readingMode',r.mode||'rsvp');setVal('pauseMode',r.pauseMode);setVal('wpm',snapWpm(r.wpm));setVal('longWordMs',p.longWordDelayMs);setVal('complexWordMs',p.complexWordDelayMs);setVal('punctuationMs',p.punctuationDelayMs);setVal('themeId',i.selectedThemeId||'default');setVal('interfaceLocale',i.locale||'en');setVal('brightnessPercent',i.brightnessPercent);setVal('handedness',r.leftHanded?'left':'right');setVal('footerMetric',r.footerMetric);setVal('batteryLabel',r.batteryLabel);setVal('batteryIcon',r.batteryIconVisible);setVal('readingBattery',r.batteryVisibleWhileReading);setVal('readingChapter',r.chapterVisibleWhileReading);setVal('readingProgress',r.progressVisibleWhileReading);setVal('typeface',t.fontId);setVal('fontSizeIndex',t.fontSizeIndex);setVal('tracking',t.tracking);setVal('anchorPercent',t.anchor);setVal('guideWidth',t.guideWidth);setVal('guideGap',t.guideGap);setVal('focusHighlight',t.focusHighlight);setVal('phantomWords',r.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
+async function loadSettings(){try{[settings,{themes:deviceThemes=[]},{fonts:deviceFonts=[]},deviceLocales]=await Promise.all([api('/api/v1/settings'),api('/api/v1/appearance/themes'),api('/api/v1/appearance/fonts'),api('/api/v1/locales')]);setThemeOptions();setFontOptions();renderFonts();renderLocales();if(!themeCatalog.length)loadThemeCatalog();if(!fontCatalog.length)loadFontCatalog();const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;setVal('readingMode',r.mode||'rsvp');setVal('pauseMode',r.pauseMode);setVal('wpm',snapWpm(r.wpm));setVal('longWordMs',p.longWordDelayMs);setVal('complexWordMs',p.complexWordDelayMs);setVal('punctuationMs',p.punctuationDelayMs);setVal('themeId',i.selectedThemeId||'default');setVal('interfaceLocale',i.locale||'en');setVal('brightnessPercent',i.brightnessPercent);setVal('handedness',r.leftHanded?'left':'right');setVal('footerMetric',r.footerMetric);setVal('batteryLabel',r.batteryLabel);setVal('batteryIcon',r.batteryIconVisible);setVal('readingBattery',r.batteryVisibleWhileReading);setVal('readingChapter',r.chapterVisibleWhileReading);setVal('readingProgress',r.progressVisibleWhileReading);setVal('typeface',t.fontId);setVal('fontSizeIndex',t.fontSizeIndex);setVal('tracking',t.tracking);setVal('anchorPercent',t.anchor);setVal('guideWidth',t.guideWidth);setVal('guideGap',t.guideGap);setVal('focusHighlight',t.focusHighlight);setVal('phantomWords',r.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
 async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;r.wpm=+val('wpm');r.mode=val('readingMode');r.pauseMode=val('pauseMode');p.longWordDelayMs=+val('longWordMs');p.complexWordDelayMs=+val('complexWordMs');p.punctuationDelayMs=+val('punctuationMs');i.selectedThemeId=val('themeId');i.locale=val('interfaceLocale');i.brightnessPercent=+val('brightnessPercent');r.leftHanded=val('handedness')==='left';r.footerMetric=val('footerMetric');r.batteryLabel=val('batteryLabel');r.batteryIconVisible=val('batteryIcon');r.batteryVisibleWhileReading=val('readingBattery');r.chapterVisibleWhileReading=val('readingChapter');r.progressVisibleWhileReading=val('readingProgress');r.phantomWords=val('phantomWords');t.fontId=val('typeface');t.fontSizeIndex=+val('fontSizeIndex');t.focusHighlight=val('focusHighlight');t.tracking=+val('tracking');t.anchor=+val('anchorPercent');t.guideWidth=+val('guideWidth');t.guideGap=+val('guideGap');try{settings=await api('/api/v1/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});status('Settings saved and applied.')}catch(e){status('Settings save failed: '+e.message)}}
 async function loadWifi(){try{await api('/api/v1/network');const ssid=(settings&&settings.network&&settings.network.wifiSsid)||'';$('wifiSsid').value=ssid;$('wifiPassword').value='';$('wifiCurrent').textContent=ssid?'Saved network: '+ssid:'No home Wi-Fi saved.'}catch(e){status('Wi-Fi load failed: '+e.message)}}
 async function saveWifi(){const ssid=$('wifiSsid').value.trim();if(!ssid){status('Enter a Wi-Fi SSID first.');return}try{await api('/api/v1/network',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password:$('wifiPassword').value})});settings.network.wifiSsid=ssid;$('wifiPassword').value='';$('wifiCurrent').textContent='Saved network: '+ssid;status('Wi-Fi saved for RSS and OTA.')}catch(e){status('Wi-Fi save failed: '+e.message)}}
@@ -550,6 +553,7 @@ bool CompanionSyncManager::startServer() {
     server_.on("/api/v1/appearance/themes", HTTP_POST, [this] { handleThemes(); }, [this] { handleThemeUpload(); });
     server_.on("/api/v1/appearance/fonts", HTTP_GET, [this] { handleFonts(); });
     server_.on("/api/v1/appearance/fonts", HTTP_POST, [this] { handleFonts(); }, [this] { handleFontUpload(); });
+    server_.on("/api/v1/appearance/fonts", HTTP_DELETE, [this] { handleFonts(); });
     server_.on("/api/v1/locales", HTTP_GET, [this] { handleLocales(); });
     server_.on(UriBraces("/api/v1/locales/{}/stage"), HTTP_POST, [this] { handleLocaleStage(); });
     server_.on(UriBraces("/api/v1/locales/{}/files"), HTTP_POST, [this] { handleLocaleFile(); },
@@ -973,15 +977,65 @@ void CompanionSyncManager::handleFonts() {
             api::FontSummary summary{.id = family.id,
                                      .name = family.label,
                                      .scriptMask = family.scriptMask,
+                                     .builtIn = family.builtIn,
                                      .shaping = family.shaping};
             for (size_t offset = 0; offset < family.locales.size();) {
                 const std::string_view locale{family.locales.data() + offset};
                 summary.locales.emplace_back(locale);
                 offset += locale.size() + 1;
             }
+            for (const auto& script: UnicodeText::SupportedScripts) {
+                if ((family.scriptMask & script.mask) != 0)
+                    summary.scripts.emplace_back(script.tag);
+            }
             return summary;
         });
         sendData(server_, jsonBuffer_, 200, response);
+        return;
+    }
+
+    if (server_.method() == HTTP_DELETE) {
+        const String id = server_.arg("id");
+        if (id.isEmpty()) {
+            sendError(400, "missing_field", "Font id is required", "id");
+            return;
+        }
+        const auto family = fontCatalog_.find({id.c_str(), id.length()});
+        if (!family) {
+            sendError(404, "font_not_found", "Font not found", "id");
+            return;
+        }
+        if (family->get().builtIn) {
+            sendError(422, "builtin_font", "The built-in font cannot be removed", "id");
+            return;
+        }
+
+        const std::string fontId = family->get().id;
+        const std::string path = family->get().path;
+        if (settingsStore_.settings().reading.typography.fontId == fontId) {
+            settingsStore_.settings().reading.typography.fontId = settings::TypographySettings{}.fontId;
+            if (auto accepted = settingsStore_.acceptChanges(); !accepted) {
+                sendError(500, "storage_error", "Default font selection could not be saved");
+                return;
+            }
+            changes_ |= Settings;
+        }
+
+        fontCatalog_.clearLoaded();
+        if (!Board::Storage::filesystem().remove(path.c_str())) {
+            fontCatalog_.loadFromSd();
+            sendError(500, "storage_error", "Font could not be removed");
+            return;
+        }
+        const size_t separator = path.rfind('/');
+        if (separator != std::string::npos)
+            Board::Storage::filesystem().rmdir(path.substr(0, separator).c_str());
+        fontCatalog_.loadFromSd();
+        changes_ |= Fonts;
+        statusLine1_ = "Font removed";
+        statusLine2_ = fontId.c_str();
+        ESP_LOGI("sync", "removed font %s", path.c_str());
+        sendData(server_, jsonBuffer_, 200, api::DeleteResponse{fontId, true});
         return;
     }
 

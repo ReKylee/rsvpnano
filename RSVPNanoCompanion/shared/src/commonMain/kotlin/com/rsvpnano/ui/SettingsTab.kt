@@ -221,6 +221,7 @@ private fun SettingsContent(
                 onSelectCatalogFont = presenter::setSelectedCatalogFontId,
                 onInstallOnlineFont = presenter::installSelectedOnlineFont,
                 onUploadFont = onUploadFont,
+                onRemoveFont = presenter::removeFont,
             )
         }
     }
@@ -862,12 +863,43 @@ private fun FontSettings(
     onSelectCatalogFont: (String) -> Unit,
     onInstallOnlineFont: () -> Unit,
     onUploadFont: () -> Unit,
+    onRemoveFont: (String) -> Unit,
 ) {
     SettingsPage {
         val settings = uiState.settings
         if (settings == null) {
             UnavailableSettings(uiState.isConnected)
             return@SettingsPage
+        }
+        SettingsSection(
+            title = "Installed reader fonts",
+            subtitle = "Each font declares the scripts and locales it can render.",
+        ) {
+            uiState.availableFonts.forEach { font ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(font.name, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            (font.locales + font.scripts).joinToString(" · ").ifBlank {
+                                if (font.builtIn) "Built in" else "Script capability embedded in RFont4"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (!font.builtIn) {
+                        TextButton(onClick = { onRemoveFont(font.id) }) {
+                            Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
+                            Text("Remove")
+                        }
+                    }
+                }
+                HorizontalDivider()
+            }
         }
         SettingsSection(
             title = "Global reader font",

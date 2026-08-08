@@ -220,6 +220,16 @@ class NanoCompanionController(
         )
     }
 
+    suspend fun removeFont(baseUrl: String, id: String): CompanionSettingsSnapshot {
+        verifyReachable(baseUrl)
+        client.deleteFont(baseUrl, id)
+        return CompanionSettingsSnapshot(
+            settings = client.fetchSettings(baseUrl),
+            wifiSettings = null,
+            fonts = client.fetchFonts(baseUrl),
+        )
+    }
+
     suspend fun downloadLocalePack(catalogUrl: String, pack: NanoLocaleCatalogItem): CompanionLocalePackFile {
         require(pack.file.isNotBlank() && '/' !in pack.file && '\\' !in pack.file &&
             pack.file.endsWith(".zip", ignoreCase = true)) {

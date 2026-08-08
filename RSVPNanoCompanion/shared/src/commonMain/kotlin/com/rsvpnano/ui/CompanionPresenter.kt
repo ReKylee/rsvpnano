@@ -1096,6 +1096,26 @@ class CompanionPresenter(
         }
     }
 
+    fun removeFont(id: String) {
+        scope.launch {
+            val state = current
+            if (!state.isConnected || !ensureReaderReachable("removing a font")) return@launch
+            runCatching {
+                withNanoApi { companionController.removeFont(state.baseUrl, id) }
+            }.onSuccess { snapshot ->
+                updateState {
+                    it.copy(
+                        settings = snapshot.settings,
+                        availableFonts = snapshot.fonts,
+                        notice = CompanionNotice.Success("Removed font $id."),
+                    )
+                }
+            }.onFailure { error ->
+                setNotice(CompanionNotice.Error(error.message ?: "Font removal failed."))
+            }
+        }
+    }
+
     fun installSelectedOnlineLocalePack() {
         scope.launch {
             val state = current

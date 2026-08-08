@@ -66,6 +66,8 @@ interface NanoClient {
         throw NanoClientError("Font catalog download is not supported by this client.")
     suspend fun fetchFonts(baseUrl: String): List<NanoFontSummary> =
         throw NanoClientError("Font listing is not supported by this client.")
+    suspend fun deleteFont(baseUrl: String, id: String): NanoUploadResponse =
+        throw NanoClientError("Font removal is not supported by this client.")
     suspend fun downloadFont(url: String): ByteArray =
         throw NanoClientError("Font download is not supported by this client.")
     suspend fun fetchLocales(baseUrl: String): NanoLocalesResponse =

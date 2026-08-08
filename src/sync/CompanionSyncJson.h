@@ -140,7 +140,9 @@ namespace companion::api {
         std::string id;
         std::string name;
         std::vector<std::string> locales;
+        std::vector<std::string> scripts;
         uint32_t scriptMask = 0;
+        bool builtIn = false;
         bool shaping = false;
     };
 

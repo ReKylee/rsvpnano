@@ -143,7 +143,9 @@ data class NanoFontSummary(
     val id: String,
     val name: String,
     val locales: List<String> = emptyList(),
+    val scripts: List<String> = emptyList(),
     val scriptMask: Int = 0,
+    val builtIn: Boolean = false,
     val shaping: Boolean = false,
 ) {
     fun usableFor(locale: String, requiredScripts: Int): Boolean =

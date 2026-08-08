@@ -92,6 +92,13 @@ class NanoKtorClient(
     override suspend fun fetchFonts(baseUrl: String): List<NanoFontSummary> =
         requestData(baseUrl, "api/v1/appearance/fonts", NanoFontsResponse.serializer()).fonts
 
+    override suspend fun deleteFont(baseUrl: String, id: String): NanoUploadResponse {
+        val response = httpClient.delete(
+            buildUrl(baseUrl, "api/v1/appearance/fonts", query = listOf("id" to id))
+        )
+        return decodeDeviceResponse(response.status, response.body<String>(), NanoUploadResponse.serializer())
+    }
+
     override suspend fun fetchLocales(baseUrl: String): NanoLocalesResponse =
         requestData(baseUrl, "api/v1/locales", NanoLocalesResponse.serializer())
 

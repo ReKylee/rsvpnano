@@ -16,6 +16,7 @@ import com.rsvpnano.models.NanoFontCatalogItem
 import com.rsvpnano.models.NanoFontSummary
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.NanoLocaleSummary
+import com.rsvpnano.models.NanoLocaleCatalogItem
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.RememberedNano
 
@@ -52,6 +53,9 @@ data class CompanionUiState(
     val fontCatalog: List<NanoFontCatalogItem> = emptyList(),
     val fontCatalogUrl: String = "",
     val selectedCatalogFontId: String = "",
+    val localeCatalog: List<NanoLocaleCatalogItem> = emptyList(),
+    val localeCatalogUrl: String = "",
+    val selectedCatalogLocaleId: String = "",
     val notice: CompanionNotice = CompanionNotice.Neutral("Ready"),
 ) {
     val status: String

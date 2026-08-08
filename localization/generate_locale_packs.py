@@ -262,6 +262,7 @@ def outputs(
 	generated_at: tuple[int, int, int, int, int, int],
 ) -> dict[Path, bytes]:
 	result: dict[Path, bytes] = {}
+	catalog: list[dict[str, object]] = []
 	built_in = u8g2_codepoints(compiled_u8g2_font(DEFAULT_BUILTIN_UI_FONT))
 	for language in model.languages:
 		if language.name == model.default_language:
@@ -277,12 +278,30 @@ def outputs(
 		if font:
 			files[f"locales/{language.code}/ui/font.u8g2"] = font[0]
 		result[root / f"{language.code}.zip"] = zip_overlay(files, generated_at)
+		catalog.append(
+			{
+				"id": language.code,
+				"name": language.label,
+				"englishName": language.name,
+				"version": "1.0.0",
+				"locale": language.code,
+				"direction": language.direction,
+				"scripts": list(language.scripts),
+				"translationStatus": language.translation_status,
+				"file": f"{language.code}.zip",
+			}
+		)
+	result[root / "index.json"] = (
+		json.dumps(catalog, ensure_ascii=False, indent=2) + "\n"
+	).encode("utf-8")
 	return result
 
 
 def same_output(path: Path, expected: bytes) -> bool:
 	if not path.exists():
 		return False
+	if path.suffix != ".zip":
+		return path.read_bytes() == expected
 	try:
 		with zipfile.ZipFile(path) as actual, zipfile.ZipFile(io.BytesIO(expected)) as wanted:
 			return actual.namelist() == wanted.namelist() and all(

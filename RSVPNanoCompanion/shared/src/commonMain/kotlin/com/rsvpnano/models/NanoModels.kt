@@ -195,6 +195,19 @@ data class NanoLocaleSummary(
 )
 
 @Serializable
+data class NanoLocaleCatalogItem(
+    val id: String,
+    val name: String,
+    val englishName: String,
+    val version: String,
+    val locale: String,
+    val direction: String,
+    val scripts: List<String> = emptyList(),
+    val translationStatus: String,
+    val file: String,
+)
+
+@Serializable
 data class NanoLocaleIssue(
     val id: String,
     val reason: String,

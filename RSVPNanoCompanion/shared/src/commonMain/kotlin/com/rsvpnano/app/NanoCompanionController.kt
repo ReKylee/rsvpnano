@@ -12,6 +12,7 @@ import com.rsvpnano.models.NanoFontCatalogItem
 import com.rsvpnano.models.NanoFontSummary
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.NanoLocalesResponse
+import com.rsvpnano.models.NanoLocaleCatalogItem
 import com.rsvpnano.models.NanoLanguageFont
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.needsArticleFetch
@@ -147,6 +148,9 @@ class NanoCompanionController(
 
     suspend fun fetchFontCatalog(catalogUrl: String): List<NanoFontCatalogItem> = client.fetchFontCatalog(catalogUrl)
 
+    suspend fun fetchLocaleCatalog(catalogUrl: String): List<NanoLocaleCatalogItem> =
+        client.fetchLocaleCatalog(catalogUrl)
+
     suspend fun downloadTheme(catalogUrl: String, theme: NanoThemeCatalogItem): CompanionThemeFile {
         require(theme.file.isNotBlank() && '/' !in theme.file && '\\' !in theme.file) {
             "Theme catalog file path is invalid."
@@ -213,6 +217,18 @@ class NanoCompanionController(
             settings = client.fetchSettings(baseUrl),
             wifiSettings = null,
             fonts = client.fetchFonts(baseUrl),
+        )
+    }
+
+    suspend fun downloadLocalePack(catalogUrl: String, pack: NanoLocaleCatalogItem): CompanionLocalePackFile {
+        require(pack.file.isNotBlank() && '/' !in pack.file && '\\' !in pack.file &&
+            pack.file.endsWith(".zip", ignoreCase = true)) {
+            "Locale-pack catalog file path is invalid."
+        }
+        return CompanionLocalePackFile(
+            id = pack.id,
+            filename = pack.file,
+            data = client.downloadLocalePack(catalogFileUrl(catalogUrl, pack.file)),
         )
     }
 
@@ -384,6 +400,12 @@ data class CompanionThemeFile(
 data class CompanionFontFile(
     val id: String,
     val family: String,
+    val filename: String,
+    val data: ByteArray,
+)
+
+data class CompanionLocalePackFile(
+    val id: String,
     val filename: String,
     val data: ByteArray,
 )

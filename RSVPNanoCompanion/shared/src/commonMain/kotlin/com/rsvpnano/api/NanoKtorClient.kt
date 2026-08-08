@@ -16,6 +16,7 @@ import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.NanoWifiUpdate
 import com.rsvpnano.models.FirmwareRelease
 import com.rsvpnano.models.NanoLocalesResponse
+import com.rsvpnano.models.NanoLocaleCatalogItem
 import com.rsvpnano.models.NanoLanguageFont
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -93,6 +94,22 @@ class NanoKtorClient(
 
     override suspend fun fetchLocales(baseUrl: String): NanoLocalesResponse =
         requestData(baseUrl, "api/v1/locales", NanoLocalesResponse.serializer())
+
+    override suspend fun fetchLocaleCatalog(url: String): List<NanoLocaleCatalogItem> {
+        val response = httpClient.get(url)
+        if (!response.status.isSuccess()) {
+            throw NanoClientError("Locale-pack catalog returned HTTP ${response.status}")
+        }
+        return json.decodeFromString(ListSerializer(NanoLocaleCatalogItem.serializer()), response.body<String>())
+    }
+
+    override suspend fun downloadLocalePack(url: String): ByteArray {
+        val response = httpClient.get(url)
+        if (!response.status.isSuccess()) {
+            throw NanoClientError("Locale-pack download returned HTTP ${response.status}")
+        }
+        return response.body()
+    }
 
     override suspend fun updateSettings(baseUrl: String, settings: NanoSettings): NanoSettings {
         val response = httpClient.put(buildUrl(baseUrl, "api/v1/settings")) {

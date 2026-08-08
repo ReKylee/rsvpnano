@@ -316,6 +316,9 @@ class NanoKtorClientAndroidTest {
                 "/fonts/catalog.json" ->
                     """[{"id":"atkinson","name":"Atkinson Hyperlegible","file":"atkinson/font.rfont4"}]"""
                 "/fonts/atkinson/font.rfont4" -> "font-data"
+                "/locale-packs/index.json" ->
+                    """[{"id":"ja","name":"日本語","englishName":"Japanese","version":"1.0.0","locale":"ja","direction":"ltr","scripts":["Hani","Hira","Kana"],"translationStatus":"preview","file":"ja.zip"}]"""
+                "/locale-packs/ja.zip" -> "locale-pack-data"
                 "/api/v1/appearance/themes" -> {
                     assertEquals(HttpMethod.Post, request.method)
                     assertEquals("night.toml", request.url.parameters["name"])
@@ -334,8 +337,10 @@ class NanoKtorClientAndroidTest {
 
         val theme = client.fetchThemeCatalog("https://catalog.example/themes/catalog.json").single()
         val font = client.fetchFontCatalog("https://catalog.example/fonts/catalog.json").single()
+        val locale = client.fetchLocaleCatalog("https://catalog.example/locale-packs/index.json").single()
         assertEquals("night", theme.id)
         assertEquals("atkinson/font.rfont4", font.file)
+        assertEquals("ja.zip", locale.file)
         assertContentEquals(
             "theme-data".encodeToByteArray(),
             client.downloadTheme("https://catalog.example/themes/night.toml"),
@@ -343,6 +348,10 @@ class NanoKtorClientAndroidTest {
         assertContentEquals(
             "font-data".encodeToByteArray(),
             client.downloadFont("https://catalog.example/fonts/atkinson/font.rfont4"),
+        )
+        assertContentEquals(
+            "locale-pack-data".encodeToByteArray(),
+            client.downloadLocalePack("https://catalog.example/locale-packs/ja.zip"),
         )
         assertEquals(
             "night",
@@ -361,8 +370,10 @@ class NanoKtorClientAndroidTest {
             listOf(
                 "GET /themes/catalog.json?",
                 "GET /fonts/catalog.json?",
+                "GET /locale-packs/index.json?",
                 "GET /themes/night.toml?",
                 "GET /fonts/atkinson/font.rfont4?",
+                "GET /locale-packs/ja.zip?",
                 "POST /api/v1/appearance/themes?name=night.toml",
                 "POST /api/v1/appearance/fonts?family=atkinson",
             ),

@@ -209,6 +209,9 @@ private fun SettingsContent(
                 onUpdateSettings = presenter::updateSettings,
                 onUploadLocalePack = onUploadLocalePack,
                 onRemoveLocalePack = presenter::removeLocalePack,
+                onRefreshLocaleCatalog = presenter::refreshLocaleCatalog,
+                onSelectCatalogLocale = presenter::setSelectedCatalogLocaleId,
+                onInstallOnlineLocale = presenter::installSelectedOnlineLocalePack,
             )
 
             SettingsCategory.Fonts -> FontSettings(
@@ -763,6 +766,9 @@ private fun LocaleSettings(
     onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
     onUploadLocalePack: () -> Unit,
     onRemoveLocalePack: (String) -> Unit,
+    onRefreshLocaleCatalog: () -> Unit,
+    onSelectCatalogLocale: (String) -> Unit,
+    onInstallOnlineLocale: () -> Unit,
 ) {
     SettingsPage {
         val settings = uiState.settings
@@ -784,6 +790,35 @@ private fun LocaleSettings(
                 }.distinctBy { it.first },
                 onSelected = { locale -> onUpdateSettings { it.withLocale(locale) } },
             )
+        }
+        SettingsSection(
+            title = "Locale pack library",
+            subtitle = "Install interface translations from the online catalog or a local ZIP.",
+            action = {
+                IconButton(onClick = onRefreshLocaleCatalog) {
+                    Icon(imageVector = Icons.Outlined.Sync, contentDescription = "Refresh locale catalog")
+                }
+            },
+        ) {
+            if (uiState.localeCatalog.isNotEmpty()) {
+                DropdownRow(
+                    label = "Language",
+                    selected = uiState.selectedCatalogLocaleId,
+                    options = uiState.localeCatalog.map { it.id to it.name },
+                    onSelected = onSelectCatalogLocale,
+                )
+                Button(onClick = onInstallOnlineLocale, modifier = Modifier.fillMaxWidth()) {
+                    Icon(imageVector = Icons.Outlined.CloudUpload, contentDescription = null)
+                    Text("Install locale pack")
+                }
+            } else {
+                Text("The online locale catalog is unavailable.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            OutlinedButton(onClick = onUploadLocalePack, modifier = Modifier.fillMaxWidth()) {
+                Icon(imageVector = Icons.Outlined.UploadFile, contentDescription = null)
+                Text("Choose locale pack ZIP")
+            }
         }
         SettingsSection(
             title = "Installed locale packs",
@@ -814,10 +849,6 @@ private fun LocaleSettings(
                     }
                 }
                 HorizontalDivider()
-            }
-            OutlinedButton(onClick = onUploadLocalePack, modifier = Modifier.fillMaxWidth()) {
-                Icon(imageVector = Icons.Outlined.UploadFile, contentDescription = null)
-                Text("Install locale pack ZIP")
             }
         }
     }

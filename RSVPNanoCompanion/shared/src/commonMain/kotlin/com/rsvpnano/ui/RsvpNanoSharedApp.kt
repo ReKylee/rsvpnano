@@ -136,6 +136,9 @@ fun RsvpNanoSharedApp(
             if (selectedTab == CompanionTab.Settings && uiState.fontCatalog.isEmpty()) {
                 presenter.refreshFontCatalog()
             }
+            if (selectedTab == CompanionTab.Settings && uiState.localeCatalog.isEmpty()) {
+                presenter.refreshLocaleCatalog()
+            }
         }
 
         Scaffold(

@@ -13,6 +13,7 @@ import com.rsvpnano.models.NanoUploadResponse
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.FirmwareRelease
 import com.rsvpnano.models.NanoLocalesResponse
+import com.rsvpnano.models.NanoLocaleCatalogItem
 import com.rsvpnano.models.NanoLanguageFont
 
 /**
@@ -69,6 +70,10 @@ interface NanoClient {
         throw NanoClientError("Font download is not supported by this client.")
     suspend fun fetchLocales(baseUrl: String): NanoLocalesResponse =
         throw NanoClientError("Locale-pack listing is not supported by this client.")
+    suspend fun fetchLocaleCatalog(url: String): List<NanoLocaleCatalogItem> =
+        throw NanoClientError("Locale-pack catalog download is not supported by this client.")
+    suspend fun downloadLocalePack(url: String): ByteArray =
+        throw NanoClientError("Locale-pack download is not supported by this client.")
     suspend fun beginLocalePackStage(baseUrl: String, id: String): NanoUploadResponse =
         throw NanoClientError("Locale-pack installation is not supported by this client.")
     suspend fun uploadLocalePackFile(

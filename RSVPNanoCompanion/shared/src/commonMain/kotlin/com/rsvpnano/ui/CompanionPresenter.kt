@@ -175,6 +175,8 @@ class CompanionPresenter(
 
     fun setSelectedCatalogFontId(value: String) = updateState { it.copy(selectedCatalogFontId = value) }
 
+    fun setSelectedCatalogLocaleId(value: String) = updateState { it.copy(selectedCatalogLocaleId = value) }
+
     fun refresh() {
         scope.launch {
             val startedAt = currentTimeMillis()
@@ -810,6 +812,30 @@ class CompanionPresenter(
         }
     }
 
+    fun refreshLocaleCatalog() {
+        scope.launch {
+            runCatching {
+                val catalogUrl = catalogUrl("locale-packs/index.json")
+                catalogUrl to companionController.fetchLocaleCatalog(catalogUrl)
+            }
+                .onSuccess { (catalogUrl, locales) ->
+                    updateState {
+                        val selected = it.selectedCatalogLocaleId
+                            .takeIf { id -> locales.any { locale -> locale.id == id } }
+                            ?: locales.firstOrNull()?.id.orEmpty()
+                        it.copy(
+                            localeCatalog = locales,
+                            localeCatalogUrl = catalogUrl,
+                            selectedCatalogLocaleId = selected,
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    setNotice(CompanionNotice.Error(error.message ?: "Online locale catalog could not be loaded."))
+                }
+        }
+    }
+
     fun setBookLanguageFonts(book: NanoBook, languageFonts: List<NanoLanguageFont>) {
         scope.launch {
             val state = current
@@ -1066,58 +1092,89 @@ class CompanionPresenter(
 
     fun installLocalePackFile(displayName: String, data: ByteArray) {
         scope.launch {
+            installLocalePack(displayName, data)
+        }
+    }
+
+    fun installSelectedOnlineLocalePack() {
+        scope.launch {
             val state = current
             if (!state.isConnected) {
                 setNotice(CompanionNotice.Error("Connect to your Nano before installing locale packs."))
                 return@launch
             }
-            if (!displayName.endsWith(".zip", ignoreCase = true)) {
-                setNotice(CompanionNotice.Error("Locale packs must use the .zip extension."))
+            val pack = state.localeCatalog.firstOrNull { it.id == state.selectedCatalogLocaleId }
+                ?: state.localeCatalog.firstOrNull()
+            if (pack == null) {
+                setNotice(CompanionNotice.Error("Load the online locale list first."))
                 return@launch
             }
-            val files = runCatching { ZipArchiveReader.readEntries(data) }
-                .getOrElse {
-                    setNotice(CompanionNotice.Error("Locale pack ZIP is invalid."))
-                    return@launch
+            setNotice(CompanionNotice.Attention("Downloading ${pack.name}..."))
+            val catalogUrl = state.localeCatalogUrl.ifBlank { catalogUrl("locale-packs/index.json") }
+            val file = runCatching { companionController.downloadLocalePack(catalogUrl, pack) }
+                .onFailure { error ->
+                    setNotice(CompanionNotice.Error(error.message ?: "Locale-pack download failed."))
                 }
-            val manifestEntry = files.entries.singleOrNull { (path, _) ->
-                path.startsWith("locales/") && path.endsWith("/manifest.toml")
+                .getOrNull() ?: return@launch
+            installLocalePack(file.filename, file.data)
+        }
+    }
+
+    private suspend fun installLocalePack(displayName: String, data: ByteArray) {
+        val state = current
+        if (!state.isConnected) {
+            setNotice(CompanionNotice.Error("Connect to your Nano before installing locale packs."))
+            return
+        }
+        if (!displayName.endsWith(".zip", ignoreCase = true)) {
+            setNotice(CompanionNotice.Error("Locale packs must use the .zip extension."))
+            return
+        }
+        val files = runCatching {
+            ZipArchiveReader.readEntries(data, maximumEntries = 4, maximumUncompressedBytes = 128 * 1024)
+        }
+            .getOrElse {
+                setNotice(CompanionNotice.Error("Locale pack ZIP is invalid."))
+                return
             }
-            if (manifestEntry == null) {
-                setNotice(CompanionNotice.Error("ZIP must contain one locales/<id>/manifest.toml."))
-                return@launch
-            }
-            val root = manifestEntry.key.substringBeforeLast('/') + "/"
-            val id = root.removePrefix("locales/").removeSuffix("/")
-            if (!id.matches(Regex("[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*"))) {
-                setNotice(CompanionNotice.Error("Locale pack ID is invalid."))
-                return@launch
-            }
-            val packFiles = files.filterKeys { it.startsWith(root) }.mapKeys { (path, _) -> path.removePrefix(root) }
-            if (packFiles.size != files.size) {
-                setNotice(CompanionNotice.Error("ZIP contains files outside its locale pack folder."))
-                return@launch
-            }
-            if (!ensureReaderReachable("installing a locale pack")) return@launch
-            setNotice(CompanionNotice.Attention("Installing locale pack $id..."))
-            runCatching {
-                withNanoApi {
-                    companionController.beginLocalePackInstall(state.baseUrl, id)
-                    packFiles.forEach { (path, bytes) ->
-                        companionController.uploadLocalePackFile(state.baseUrl, id, path, bytes)
-                    }
-                    companionController.activateLocalePack(state.baseUrl, id)
+        val manifestEntry = files.entries.singleOrNull { (path, _) ->
+            path.startsWith("locales/") && path.endsWith("/manifest.toml")
+        }
+        if (manifestEntry == null) {
+            setNotice(CompanionNotice.Error("ZIP must contain one locales/<id>/manifest.toml."))
+            return
+        }
+        val root = manifestEntry.key.substringBeforeLast('/') + "/"
+        val id = root.removePrefix("locales/").removeSuffix("/")
+        if (!id.matches(Regex("[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*"))) {
+            setNotice(CompanionNotice.Error("Locale pack ID is invalid."))
+            return
+        }
+        val packFiles = files.filterKeys { it.startsWith(root) }.mapKeys { (path, _) -> path.removePrefix(root) }
+        if (packFiles.size != files.size) {
+            setNotice(CompanionNotice.Error("ZIP contains files outside its locale pack folder."))
+            return
+        }
+        if (!ensureReaderReachable("installing a locale pack")) return
+        setNotice(CompanionNotice.Attention("Installing locale pack $id..."))
+        runCatching {
+            withNanoApi {
+                companionController.beginLocalePackInstall(state.baseUrl, id)
+                packFiles.forEach { (path, bytes) ->
+                    companionController.uploadLocalePackFile(state.baseUrl, id, path, bytes)
                 }
-            }.onSuccess { locales ->
-                updateState {
-                    it.copy(
-                        availableLocales = locales.locales,
-                        notice = CompanionNotice.Success("Installed locale pack $id."),
-                    )
-                }
-            }.onFailure { error ->
-                setNotice(CompanionNotice.Error(error.message ?: "Locale pack installation failed."))
+                companionController.activateLocalePack(state.baseUrl, id)
             }
+        }.onSuccess { locales ->
+            updateState {
+                it.copy(
+                    availableLocales = locales.locales,
+                    selectedCatalogLocaleId = id,
+                    notice = CompanionNotice.Success("Installed locale pack $id."),
+                )
+            }
+        }.onFailure { error ->
+            setNotice(CompanionNotice.Error(error.message ?: "Locale pack installation failed."))
         }
     }
 

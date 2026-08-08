@@ -7,9 +7,14 @@ object ZipArchiveReader {
     private const val METHOD_STORED = 0
     private const val METHOD_DEFLATED = 8
 
-    fun readEntries(data: ByteArray): Map<String, ByteArray> {
+    fun readEntries(
+        data: ByteArray,
+        maximumEntries: Int = Int.MAX_VALUE,
+        maximumUncompressedBytes: Int = Int.MAX_VALUE,
+    ): Map<String, ByteArray> {
         val directoryOffset = centralDirectoryOffset(data)
         val entries = linkedMapOf<String, ByteArray>()
+        var totalUncompressedBytes = 0
         var offset = directoryOffset
 
         while (offset + 46 <= data.size && data.readIntLe(offset) == CENTRAL_DIRECTORY_HEADER) {
@@ -29,6 +34,12 @@ object ZipArchiveReader {
 
             val name = data.decodeUtf8Slice(nameStart, nameEnd)
             if (!name.endsWith('/')) {
+                if (entries.size >= maximumEntries ||
+                    uncompressedSize > maximumUncompressedBytes - totalUncompressedBytes
+                ) {
+                    throw RsvpConversionError.unsupportedEpub
+                }
+                totalUncompressedBytes += uncompressedSize
                 entries[EpubUtils.normalizeZipPath(name)] = readEntry(
                     data = data,
                     localHeaderOffset = localHeaderOffset,

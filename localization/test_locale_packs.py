@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import struct
 import sys
 import tomllib
@@ -57,6 +58,12 @@ ENDFONT
 class LocalePackTest(unittest.TestCase):
 	def test_generated_archives_match_the_pack_contract(self) -> None:
 		model = load_model(DEFAULT_TOML)
+		catalog = json.loads((DEFAULT_OUTPUT / "index.json").read_text(encoding="utf-8"))
+		self.assertEqual(
+			[language.code for language in model.languages if language.name != model.default_language],
+			[item["id"] for item in catalog],
+		)
+		self.assertTrue(all(item["file"] == f'{item["id"]}.zip' for item in catalog))
 		for language in model.languages:
 			if language.name == model.default_language:
 				continue
@@ -133,7 +140,7 @@ class LocalePackTest(unittest.TestCase):
 			)
 			configured = replace(model, languages=[model.languages[0], language])
 			generated = outputs(configured, Path(directory), (2026, 1, 2, 3, 4, 6))
-			with zipfile.ZipFile(io.BytesIO(next(iter(generated.values())))) as archive:
+			with zipfile.ZipFile(io.BytesIO(generated[Path(directory) / f"{language.code}.zip"])) as archive:
 				prefix = f"locales/{language.code}"
 				self.assertIn(f"{prefix}/ui/font.u8g2", archive.namelist())
 				manifest = tomllib.loads(archive.read(f"{prefix}/manifest.toml").decode())
@@ -155,7 +162,7 @@ class LocalePackTest(unittest.TestCase):
 			)
 			configured = replace(model, languages=[model.languages[0], language])
 			generated = outputs(configured, Path(directory), (2026, 1, 2, 3, 4, 6))
-			with zipfile.ZipFile(io.BytesIO(next(iter(generated.values())))) as archive:
+			with zipfile.ZipFile(io.BytesIO(generated[Path(directory) / f"{language.code}.zip"])) as archive:
 				font = archive.read(f"locales/{language.code}/ui/font.u8g2")
 				self.assertEqual(u8g2_codepoints(font), required)
 
@@ -179,7 +186,7 @@ class LocalePackTest(unittest.TestCase):
 		configured = replace(model, languages=[model.languages[0], language], texts=texts)
 		with TemporaryDirectory() as directory:
 			generated = outputs(configured, Path(directory), (2026, 1, 2, 3, 4, 6))
-			with zipfile.ZipFile(io.BytesIO(next(iter(generated.values())))) as archive:
+			with zipfile.ZipFile(io.BytesIO(generated[Path(directory) / f"{language.code}.zip"])) as archive:
 				font = archive.read("locales/he/ui/font.u8g2")
 				self.assertEqual(u8g2_codepoints(font), required_ui_codepoints(ui_strings(configured, language)))
 				self.assertLessEqual(font[10], 9)
@@ -194,7 +201,9 @@ class LocalePackTest(unittest.TestCase):
 		model = load_model(DEFAULT_TOML)
 		with TemporaryDirectory() as directory:
 			generated = outputs(model, Path(directory), (2026, 1, 2, 3, 4, 6))
-			for content in generated.values():
+			for path, content in generated.items():
+				if path.suffix != ".zip":
+					continue
 				with zipfile.ZipFile(io.BytesIO(content)) as archive:
 					self.assertFalse(any(name.endswith(".rfont4") for name in archive.namelist()))
 
@@ -239,7 +248,7 @@ class LocalePackTest(unittest.TestCase):
 		self.assertNotEqual(shaped[0], translations[0])
 		with TemporaryDirectory() as directory:
 			generated = outputs(configured, Path(directory), (2026, 1, 2, 3, 4, 6))
-			with zipfile.ZipFile(io.BytesIO(next(iter(generated.values())))) as archive:
+			with zipfile.ZipFile(io.BytesIO(generated[Path(directory) / f"{language.code}.zip"])) as archive:
 				font = archive.read("locales/ar/ui/font.u8g2")
 				strings = archive.read("locales/ar/ui/strings.bin")
 				manifest = tomllib.loads(archive.read("locales/ar/manifest.toml").decode())

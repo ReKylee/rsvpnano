@@ -63,7 +63,7 @@ private enum class LibraryFilter(val label: String) {
 
 
 @Composable
-fun LibraryTab(
+internal fun LibraryScreen(
     uiState: CompanionUiState,
     onRefresh: () -> Unit,
     needsArticleFetch: (PendingUpload) -> Boolean,

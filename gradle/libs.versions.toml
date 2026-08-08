@@ -3,6 +3,7 @@ activity = "1.13.0"
 agp = "8.13.2"
 composeBom = "2026.05.01"
 composeMultiplatform = "1.11.1"
+navigationevent = "1.1.0"
 filekit = "0.14.1"
 korlibsCompression = "6.0.0"
 kotlin = "2.3.10"
@@ -28,6 +29,7 @@ compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", v
 compose-material-icons-extended = { module = "org.jetbrains.compose.material:material-icons-extended", version = "1.7.3" }
 compose-material3 = { module = "org.jetbrains.compose.material3:material3", version = "1.9.0" }
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform" }
+navigationevent-compose = { module = "org.jetbrains.androidx.navigationevent:navigationevent-compose", version.ref = "navigationevent" }
 filekit-dialogs-compose = { module = "io.github.vinceglb:filekit-dialogs-compose", version.ref = "filekit" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "datetime" }

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -46,11 +45,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,7 +64,9 @@ import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoSettingsSchema
 import com.rsvpnano.app.releaseSource
 
-private enum class SettingsCategory(
+internal const val SETTINGS_INDEX_HELP = "Choose a section to configure your reader, its display, languages, or fonts."
+
+internal enum class SettingsDestination(
     val label: String,
     val icon: ImageVector,
     val help: String,
@@ -78,11 +77,12 @@ private enum class SettingsCategory(
     Display("Display", Icons.Outlined.Palette, "Choose the reader theme, brightness, standby behavior, and screensaver."),
     Locales("Languages", Icons.Outlined.Language, "Choose the interface language or install a locale pack. Reader language support comes from fonts."),
     Fonts("Fonts", Icons.Outlined.CloudUpload, "Choose the default reading typeface and install fonts for the scripts used by your books."),
+    About("About", Icons.Outlined.Info, "Project links and creator credit for the RSVP Nano companion."),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsTab(
+internal fun SettingsScreen(
     uiState: CompanionUiState,
     presenter: CompanionPresenter,
     onFirmwareNotificationsChange: (Boolean) -> Unit,
@@ -91,29 +91,23 @@ fun SettingsTab(
     onUploadTheme: () -> Unit,
     onUploadFont: () -> Unit,
     onUploadLocalePack: () -> Unit,
-    onHelpChanged: (String, String) -> Unit,
+    destination: SettingsDestination?,
+    onDestinationSelected: (SettingsDestination) -> Unit,
 ) {
-    var categoryName by rememberSaveable { mutableStateOf(SettingsCategory.Device.name) }
-    var showMobileCategory by rememberSaveable { mutableStateOf(false) }
-    var showAbout by rememberSaveable { mutableStateOf(false) }
-    val category = SettingsCategory.valueOf(categoryName)
+    val selected = destination ?: SettingsDestination.Device
     val content: @Composable (Modifier) -> Unit = { modifier ->
-        if (showAbout) {
-            AboutPage(modifier)
-        } else {
-            SettingsContent(
-                category = category,
-                uiState = uiState,
-                presenter = presenter,
-                onFirmwareNotificationsChange = onFirmwareNotificationsChange,
-                hasPermissions = hasPermissions,
-                onGrantPermissions = onGrantPermissions,
-                onUploadTheme = onUploadTheme,
-                onUploadFont = onUploadFont,
-                onUploadLocalePack = onUploadLocalePack,
-                modifier = modifier,
-            )
-        }
+        SettingsContent(
+            destination = selected,
+            uiState = uiState,
+            presenter = presenter,
+            onFirmwareNotificationsChange = onFirmwareNotificationsChange,
+            hasPermissions = hasPermissions,
+            onGrantPermissions = onGrantPermissions,
+            onUploadTheme = onUploadTheme,
+            onUploadFont = onUploadFont,
+            onUploadLocalePack = onUploadLocalePack,
+            modifier = modifier,
+        )
     }
 
     PullRefreshBox(
@@ -121,49 +115,23 @@ fun SettingsTab(
         onRefresh = presenter::refresh,
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val help = when {
-                showAbout -> "About" to "Project links and creator credit for the RSVP Nano companion."
-                maxWidth >= 720.dp || showMobileCategory -> category.label to category.help
-                else -> "Settings" to "Choose a section to configure your reader, its display, languages, or fonts."
-            }
-            SideEffect { onHelpChanged(help.first, help.second) }
             if (maxWidth >= 720.dp) {
                 Row(modifier = Modifier.fillMaxSize()) {
                     SettingsRail(
-                        selected = category.takeUnless { showAbout },
-                        aboutSelected = showAbout,
-                        onSelected = {
-                            categoryName = it.name
-                            showAbout = false
-                        },
-                        onAbout = { showAbout = true },
+                        selected = selected,
+                        onSelected = onDestinationSelected,
                     )
                     VerticalDivider()
                     content(Modifier.weight(1f))
                 }
             } else {
-                if (!showMobileCategory && !showAbout) {
+                if (destination == null) {
                     SettingsIndex(
                         uiState = uiState,
-                        onSelected = {
-                            categoryName = it.name
-                            showMobileCategory = true
-                        },
-                        onAbout = { showAbout = true },
+                        onSelected = onDestinationSelected,
                     )
                 } else {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        TextButton(
-                            onClick = {
-                                showMobileCategory = false
-                                showAbout = false
-                            },
-                        ) {
-                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
-                            Text("Settings")
-                        }
-                        content(Modifier.weight(1f))
-                    }
+                    content(Modifier.fillMaxSize())
                 }
             }
         }
@@ -172,13 +140,11 @@ fun SettingsTab(
 
 @Composable
 private fun SettingsRail(
-    selected: SettingsCategory?,
-    aboutSelected: Boolean,
-    onSelected: (SettingsCategory) -> Unit,
-    onAbout: () -> Unit,
+    selected: SettingsDestination,
+    onSelected: (SettingsDestination) -> Unit,
 ) {
     NavigationRail(modifier = Modifier.width(184.dp)) {
-        SettingsCategory.entries.forEach { option ->
+        SettingsDestination.entries.filterNot { it == SettingsDestination.About }.forEach { option ->
             NavigationRailItem(
                 selected = selected == option,
                 onClick = { onSelected(option) },
@@ -188,8 +154,8 @@ private fun SettingsRail(
         }
         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         NavigationRailItem(
-            selected = aboutSelected,
-            onClick = onAbout,
+            selected = selected == SettingsDestination.About,
+            onClick = { onSelected(SettingsDestination.About) },
             icon = { Icon(Icons.Outlined.Info, contentDescription = null) },
             label = { Text("About") },
         )
@@ -198,7 +164,7 @@ private fun SettingsRail(
 
 @Composable
 private fun SettingsContent(
-    category: SettingsCategory,
+    destination: SettingsDestination,
     uiState: CompanionUiState,
     presenter: CompanionPresenter,
     onFirmwareNotificationsChange: (Boolean) -> Unit,
@@ -210,8 +176,8 @@ private fun SettingsContent(
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        when (category) {
-            SettingsCategory.Device -> DeviceSettings(
+        when (destination) {
+            SettingsDestination.Device -> DeviceSettings(
                 uiState = uiState,
                 onWifiSsidChange = presenter::setWifiSsidDraft,
                 onWifiPasswordChange = presenter::setWifiPasswordDraft,
@@ -224,13 +190,13 @@ private fun SettingsContent(
                 onGrantPermissions = onGrantPermissions,
             )
 
-            SettingsCategory.Reading -> ReadingSettings(
+            SettingsDestination.Reading -> ReadingSettings(
                 settings = uiState.settings,
                 isConnected = uiState.isConnected,
                 onUpdateSettings = presenter::updateSettings,
             )
 
-            SettingsCategory.Display -> DisplaySettings(
+            SettingsDestination.Display -> DisplaySettings(
                 uiState = uiState,
                 onUpdateSettings = presenter::updateSettings,
                 onRefreshThemeCatalog = presenter::refreshThemeCatalog,
@@ -239,12 +205,12 @@ private fun SettingsContent(
                 onUploadTheme = onUploadTheme,
             )
 
-            SettingsCategory.Typography -> TypographySettings(
+            SettingsDestination.Typography -> TypographySettings(
                 uiState = uiState,
                 onUpdateSettings = presenter::updateSettings,
             )
 
-            SettingsCategory.Locales -> LocaleSettings(
+            SettingsDestination.Locales -> LocaleSettings(
                 uiState = uiState,
                 onUpdateSettings = presenter::updateSettings,
                 onUploadLocalePack = onUploadLocalePack,
@@ -253,7 +219,7 @@ private fun SettingsContent(
                 onInstallOnlineLocale = presenter::installOnlineLocalePack,
             )
 
-            SettingsCategory.Fonts -> FontSettings(
+            SettingsDestination.Fonts -> FontSettings(
                 uiState = uiState,
                 onUpdateSettings = presenter::updateSettings,
                 onRefreshFontCatalog = presenter::refreshFontCatalog,
@@ -261,6 +227,8 @@ private fun SettingsContent(
                 onUploadFont = onUploadFont,
                 onRemoveFont = presenter::removeFont,
             )
+
+            SettingsDestination.About -> AboutPage()
         }
     }
 }
@@ -932,34 +900,33 @@ private fun LocaleSettings(
 @Composable
 private fun SettingsIndex(
     uiState: CompanionUiState,
-    onSelected: (SettingsCategory) -> Unit,
-    onAbout: () -> Unit,
+    onSelected: (SettingsDestination) -> Unit,
 ) {
     val settings = uiState.settings
     val summaries = mapOf(
-        SettingsCategory.Device to if (uiState.isConnected) {
+        SettingsDestination.Device to if (uiState.isConnected) {
             "Connected to ${uiState.currentNano?.ssid ?: "Nano"} · ${settings?.network?.wifiSsid?.takeIf(String::isNotBlank) ?: "No internet Wi-Fi"}"
         } else {
             "Not connected"
         },
-        SettingsCategory.Reading to settings?.let { "${it.reading.wpm} WPM · ${it.reading.pauseMode.replace('-', ' ')} pause" }.orEmpty(),
-        SettingsCategory.Typography to settings?.let {
+        SettingsDestination.Reading to settings?.let { "${it.reading.wpm} WPM · ${it.reading.pauseMode.replace('-', ' ')} pause" }.orEmpty(),
+        SettingsDestination.Typography to settings?.let {
             val font = uiState.availableFonts.firstOrNull { font -> font.id == it.reading.typography.fontId }?.name
                 ?: it.reading.typography.fontId
             val size = listOf("Large", "Medium", "Small").getOrElse(it.reading.typography.fontSizeIndex) { "Default" }
             "$font · $size · Tracking ${it.reading.typography.tracking}"
         }.orEmpty(),
-        SettingsCategory.Display to settings?.let {
+        SettingsDestination.Display to settings?.let {
             val theme = uiState.availableThemes.firstOrNull { theme -> theme.id == it.`interface`.selectedThemeId }?.name
                 ?: it.`interface`.selectedThemeId
             "$theme · ${it.`interface`.brightnessPercent}% brightness"
         }.orEmpty(),
-        SettingsCategory.Locales to settings?.let {
+        SettingsDestination.Locales to settings?.let {
             val locale = uiState.availableLocales.firstOrNull { pack -> pack.locale == it.`interface`.locale }?.nativeName
                 ?: "English"
             "$locale · ${uiState.availableLocales.size} locale packs installed"
         }.orEmpty(),
-        SettingsCategory.Fonts to settings?.let {
+        SettingsDestination.Fonts to settings?.let {
             val font = uiState.availableFonts.firstOrNull { installed -> installed.id == it.reading.typography.fontId }?.name
                 ?: it.reading.typography.fontId
             "$font · ${uiState.availableFonts.count { installed -> !installed.builtIn }} reader fonts installed"
@@ -968,7 +935,7 @@ private fun SettingsIndex(
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
     ) {
-        SettingsCategory.entries.forEach { option ->
+        SettingsDestination.entries.filterNot { it == SettingsDestination.About }.forEach { option ->
             ListItem(
                 headlineContent = { Text(option.label) },
                 supportingContent = summaries[option]?.takeIf(String::isNotBlank)?.let { summary ->
@@ -985,7 +952,7 @@ private fun SettingsIndex(
             supportingContent = { Text("RSVP Nano companion") },
             leadingContent = { Icon(Icons.Outlined.Info, contentDescription = null) },
             trailingContent = { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null) },
-            modifier = Modifier.clickable(onClick = onAbout),
+            modifier = Modifier.clickable { onSelected(SettingsDestination.About) },
         )
     }
 }

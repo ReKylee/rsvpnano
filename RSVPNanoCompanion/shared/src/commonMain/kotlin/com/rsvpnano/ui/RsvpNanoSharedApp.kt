@@ -56,6 +56,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import com.rsvpnano.app.CompanionNotice
 import com.rsvpnano.app.NanoConnectionTransport
 import com.rsvpnano.app.NanoEndpoint
@@ -67,7 +70,7 @@ import io.github.vinceglb.filekit.dialogs.FileKitType
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
 import kotlinx.coroutines.launch
 
-private enum class CompanionTab(val label: String, val icon: ImageVector) {
+internal enum class CompanionScreen(val label: String, val icon: ImageVector) {
     Library("Library", Icons.AutoMirrored.Outlined.LibraryBooks),
     Settings("Settings", Icons.Outlined.Settings),
 }
@@ -86,17 +89,15 @@ fun RsvpNanoSharedApp(
         val snackbarHostState = remember { SnackbarHostState() }
         val snackbarNotices = remember { mutableStateMapOf<String, CompanionNotice>() }
         val scope = rememberCoroutineScope()
-        var selectedTabName by rememberSaveable { mutableStateOf(CompanionTab.Library.name) }
-        val selectedTab = CompanionTab.valueOf(selectedTabName)
+        var selectedScreenName by rememberSaveable { mutableStateOf(CompanionScreen.Library.name) }
+        val selectedScreen = CompanionScreen.valueOf(selectedScreenName)
+        var settingsDestinationName by rememberSaveable { mutableStateOf<String?>(null) }
+        val settingsDestination = settingsDestinationName?.let(SettingsDestination::valueOf)
         var showAddPicker by rememberSaveable { mutableStateOf(false) }
         var showArticleDialog by rememberSaveable { mutableStateOf(false) }
         var showRssDialog by rememberSaveable { mutableStateOf(false) }
         var showConnectionDialog by rememberSaveable { mutableStateOf(false) }
         var showHelpDialog by rememberSaveable { mutableStateOf(false) }
-        var settingsHelpTitle by rememberSaveable { mutableStateOf("Settings") }
-        var settingsHelpBody by rememberSaveable {
-            mutableStateOf("Choose a section to configure your reader, its display, languages, or fonts.")
-        }
         val filePicker = rememberFilePickerLauncher(
             type = FileKitType.File(extensions = listOf("epub", "txt", "html", "htm", "rsvp")),
         ) { file ->
@@ -141,29 +142,44 @@ fun RsvpNanoSharedApp(
             }
         }
 
-        LaunchedEffect(selectedTab) {
-            if (selectedTab == CompanionTab.Settings && uiState.themeCatalog.isEmpty()) {
+        LaunchedEffect(selectedScreen) {
+            if (selectedScreen == CompanionScreen.Settings && uiState.themeCatalog.isEmpty()) {
                 presenter.refreshThemeCatalog()
             }
-            if (selectedTab == CompanionTab.Settings && uiState.fontCatalog.isEmpty()) {
+            if (selectedScreen == CompanionScreen.Settings && uiState.fontCatalog.isEmpty()) {
                 presenter.refreshFontCatalog()
             }
-            if (selectedTab == CompanionTab.Settings && uiState.localeCatalog.isEmpty()) {
+            if (selectedScreen == CompanionScreen.Settings && uiState.localeCatalog.isEmpty()) {
                 presenter.refreshLocaleCatalog()
             }
         }
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val wide = maxWidth >= 840.dp
+            val activeSettingsDestination = if (wide) {
+                settingsDestination ?: SettingsDestination.Device
+            } else {
+                settingsDestination
+            }
+            val navigateBack = {
+                val (screen, destination) = previousScreen(selectedScreen, settingsDestination, wide)
+                selectedScreenName = screen.name
+                settingsDestinationName = destination?.name
+            }
+            NavigationBackHandler(
+                state = rememberNavigationEventState(NavigationEventInfo.None),
+                isBackEnabled = selectedScreen == CompanionScreen.Settings,
+                onBackCompleted = navigateBack,
+            )
             Row(modifier = Modifier.fillMaxSize()) {
                 if (wide) {
                     NavigationRail {
-                        CompanionTab.entries.forEach { tab ->
+                        CompanionScreen.entries.forEach { screen ->
                             NavigationRailItem(
-                                selected = selectedTab == tab,
-                                onClick = { selectedTabName = tab.name },
-                                icon = { Icon(imageVector = tab.icon, contentDescription = null) },
-                                label = { Text(tab.label) },
+                                selected = selectedScreen == screen,
+                                onClick = { selectedScreenName = screen.name },
+                                icon = { Icon(imageVector = screen.icon, contentDescription = null) },
+                                label = { Text(screen.label) },
                             )
                         }
                     }
@@ -172,17 +188,32 @@ fun RsvpNanoSharedApp(
                     modifier = Modifier.weight(1f),
             topBar = {
                 TopAppBar(
-                    title = { Text(selectedTab.label) },
+                    title = {
+                        Text(
+                            if (!wide && selectedScreen == CompanionScreen.Settings) {
+                                settingsDestination?.label ?: "Settings"
+                            } else {
+                                selectedScreen.label
+                            },
+                        )
+                    },
                     navigationIcon = {
-                        if (!wide && selectedTab == CompanionTab.Settings) {
-                            IconButton(onClick = { selectedTabName = CompanionTab.Library.name }) {
-                                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back to library")
+                        if (!wide && selectedScreen == CompanionScreen.Settings) {
+                            IconButton(onClick = navigateBack) {
+                                Icon(
+                                    Icons.AutoMirrored.Outlined.ArrowBack,
+                                    contentDescription = if (settingsDestination == null) {
+                                        "Back to library"
+                                    } else {
+                                        "Back to settings"
+                                    },
+                                )
                             }
                         }
                     },
                     actions = {
-                        if (!wide && selectedTab == CompanionTab.Library) {
-                            IconButton(onClick = { selectedTabName = CompanionTab.Settings.name }) {
+                        if (!wide && selectedScreen == CompanionScreen.Library) {
+                            IconButton(onClick = { selectedScreenName = CompanionScreen.Settings.name }) {
                                 Icon(Icons.Outlined.Settings, contentDescription = "Settings")
                             }
                         }
@@ -216,7 +247,7 @@ fun RsvpNanoSharedApp(
                 }
             },
             floatingActionButton = {
-                if (selectedTab == CompanionTab.Library) {
+                if (selectedScreen == CompanionScreen.Library) {
                     ExtendedFloatingActionButton(
                         onClick = { showAddPicker = true },
                         icon = { Icon(Icons.Outlined.Add, contentDescription = null) },
@@ -234,8 +265,8 @@ fun RsvpNanoSharedApp(
                 contentAlignment = Alignment.TopCenter,
             ) {
                 Box(modifier = Modifier.fillMaxSize().widthIn(max = 840.dp)) {
-                    when (selectedTab) {
-                    CompanionTab.Library -> LibraryTab(
+                    when (selectedScreen) {
+                    CompanionScreen.Library -> LibraryScreen(
                         uiState = uiState,
                         onRefresh = presenter::refresh,
                         needsArticleFetch = PendingUpload::needsArticleFetch,
@@ -251,7 +282,7 @@ fun RsvpNanoSharedApp(
                         onAddContent = { showAddPicker = true },
                     )
 
-                    CompanionTab.Settings -> SettingsTab(
+                    CompanionScreen.Settings -> SettingsScreen(
                         uiState = uiState,
                         presenter = presenter,
                         onFirmwareNotificationsChange = onFirmwareNotificationsChange,
@@ -260,10 +291,8 @@ fun RsvpNanoSharedApp(
                         onUploadTheme = { themePicker.launch() },
                         onUploadFont = { fontPicker.launch() },
                         onUploadLocalePack = { localePackPicker.launch() },
-                        onHelpChanged = { title, body ->
-                            settingsHelpTitle = title
-                            settingsHelpBody = body
-                        },
+                        destination = activeSettingsDestination,
+                        onDestinationSelected = { settingsDestinationName = it.name },
                     )
                 }
                 }
@@ -340,10 +369,12 @@ fun RsvpNanoSharedApp(
             }
 
             if (showHelpDialog) {
-                val help = if (selectedTab == CompanionTab.Library) {
-                    "Library" to "Add books, saved articles, or RSS feeds here. Connect to sync them with your reader."
-                } else {
-                    settingsHelpTitle to settingsHelpBody
+                val help = when (selectedScreen) {
+                    CompanionScreen.Library ->
+                        "Library" to "Add books, saved articles, or RSS feeds here. Connect to sync them with your reader."
+                    CompanionScreen.Settings -> activeSettingsDestination
+                        ?.let { it.label to it.help }
+                        ?: ("Settings" to SETTINGS_INDEX_HELP)
                 }
                 HelpDialog(
                     title = help.first,
@@ -356,6 +387,17 @@ fun RsvpNanoSharedApp(
         }
     }
 }
+
+internal fun previousScreen(
+    screen: CompanionScreen,
+    settingsDestination: SettingsDestination?,
+    wide: Boolean,
+): Pair<CompanionScreen, SettingsDestination?> =
+    if (!wide && screen == CompanionScreen.Settings && settingsDestination != null) {
+        CompanionScreen.Settings to null
+    } else {
+        CompanionScreen.Library to settingsDestination
+    }
 
 @Composable
 private fun ConnectionButton(

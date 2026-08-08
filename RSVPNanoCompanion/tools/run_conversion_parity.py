@@ -189,6 +189,23 @@ def run_multilingual_format_parity() -> None:
         if actual != expected:
             raise AssertionError(f"Multilingual content events differed for {name}")
 
+    required = [
+        ("language", "he"),
+        ("direction", "rtl"),
+        ("language", "ar"),
+        ("language", "ja"),
+        ("direction", "ltr"),
+        ("language", "zh-Hans"),
+    ]
+    for name in names[2:]:
+        events = module.events_for_file(MULTILINGUAL / name)[2]
+        position = 0
+        for event in events:
+            if position < len(required) and event == required[position]:
+                position += 1
+        if position != len(required):
+            raise AssertionError(f"Multilingual language metadata was not preserved for {name}")
+
 
 def run_web_vector(tmp: Path, command: str, input_name: str, expected_name: str, title: str, label: str) -> None:
     node = shutil.which("node")

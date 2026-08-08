@@ -143,6 +143,14 @@ def directive_text(text: str) -> str:
     return clean_text(text).replace("\n", " ").replace("\r", " ")
 
 
+def normalize_locale(value: str) -> str:
+    locale = value.strip().replace("_", "-")
+    parts = locale.split("-")
+    return locale if 0 < len(locale) <= 35 and all(
+        0 < len(part) <= 8 and part.isalnum() for part in parts
+    ) else ""
+
+
 def local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
@@ -295,32 +303,45 @@ class RsvpWriter:
 
 
 class HtmlEventsExtractor(HTMLParser):
-    def __init__(self) -> None:
+    def __init__(self, initial_locale: str = "") -> None:
         super().__init__(convert_charrefs=True)
         self.events: list[tuple[str, str]] = []
         self._skip_depth = 0
         self._heading_tag: str | None = None
         self._heading_parts: list[str] = []
         self._text_parts: list[str] = []
+        self._locale = normalize_locale(initial_locale)
+        self._direction = "auto"
+        self._scopes: list[tuple[str, str, str]] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        del attrs
-        tag = tag.lower()
+        tag = tag.rsplit(":", 1)[-1].lower()
         if tag in SKIP_TAGS:
             self._skip_depth += 1
             return
         if self._skip_depth > 0:
             return
-        if tag in HEADING_TAGS:
-            self._flush_text()
-            self._heading_tag = tag
-            self._heading_parts = []
-            return
         if tag == "br":
             self._flush_text()
+            return
+        if tag in BLOCK_TAGS or tag in HEADING_TAGS:
+            self._flush_text()
+
+        previous_locale = self._locale
+        previous_direction = self._direction
+        attributes = {name.lower(): value or "" for name, value in attrs}
+        locale = normalize_locale(attributes.get("xml:lang") or attributes.get("lang", ""))
+        direction = attributes.get("dir", "").strip().lower()
+        self._change_language(locale or self._locale)
+        self._change_direction(direction if direction in {"auto", "ltr", "rtl"} else self._direction)
+        self._scopes.append((tag, previous_locale, previous_direction))
+
+        if tag in HEADING_TAGS:
+            self._heading_tag = tag
+            self._heading_parts = []
 
     def handle_endtag(self, tag: str) -> None:
-        tag = tag.lower()
+        tag = tag.rsplit(":", 1)[-1].lower()
         if tag in SKIP_TAGS and self._skip_depth > 0:
             self._skip_depth -= 1
             return
@@ -332,9 +353,17 @@ class HtmlEventsExtractor(HTMLParser):
                 self.events.append(("chapter", title))
             self._heading_tag = None
             self._heading_parts = []
-            return
-        if tag in BLOCK_TAGS:
+        elif tag in BLOCK_TAGS:
             self._flush_text()
+
+        for index in range(len(self._scopes) - 1, -1, -1):
+            scope_tag, locale, direction = self._scopes[index]
+            if scope_tag != tag:
+                continue
+            del self._scopes[index:]
+            self._change_language(locale)
+            self._change_direction(direction)
+            break
 
     def handle_data(self, data: str) -> None:
         if self._skip_depth > 0:
@@ -354,9 +383,23 @@ class HtmlEventsExtractor(HTMLParser):
         if text:
             self.events.append(("text", text))
 
+    def _change_language(self, locale: str) -> None:
+        if locale == self._locale:
+            return
+        self._flush_text()
+        self._locale = locale
+        self.events.append(("language", locale))
 
-def html_events(markup: str) -> list[tuple[str, str]]:
-    parser = HtmlEventsExtractor()
+    def _change_direction(self, direction: str) -> None:
+        if direction == self._direction:
+            return
+        self._flush_text()
+        self._direction = direction
+        self.events.append(("direction", direction))
+
+
+def html_events(markup: str, initial_locale: str = "") -> list[tuple[str, str]]:
+    parser = HtmlEventsExtractor(initial_locale)
     parser.feed(markup)
     parser.close()
     return parser.events
@@ -407,7 +450,7 @@ def parse_package(
     root = ET.fromstring(package_xml)
     title = first_child_text(root, "title")
     author = first_child_text(root, "creator")
-    language = first_child_text(root, "language").strip().replace("_", "-")
+    language = normalize_locale(first_child_text(root, "language"))
 
     manifest: dict[str, tuple[str, str]] = {}
     nav_paths: list[str] = []
@@ -607,7 +650,10 @@ def epub_events_and_metadata(path: Path) -> tuple[str, str, list[tuple[str, str]
 
         for index, spine_path in enumerate(spine_paths, start=1):
             toc_entries = toc_titles.get(normalize_zip_path(spine_path).lower(), [])
-            chapter_events = html_events(with_toc_anchor_chapters(read_zip_text(epub, spine_path), toc_entries))
+            chapter_events = html_events(
+                with_toc_anchor_chapters(read_zip_text(epub, spine_path), toc_entries),
+                language,
+            )
             if not any(kind == "text" for kind, _ in chapter_events):
                 continue
             toc_labels = [label for label, _fragment in toc_entries]

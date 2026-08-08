@@ -45,9 +45,17 @@ def html_document(xhtml: bool = False) -> str:
 
 def rsvp_document() -> str:
     lines = ["@rsvp 1", f"@title {TITLE}", "@source public-domain multilingual excerpts", "", f"@chapter {TITLE}"]
-    for index, (_locale, _direction, text) in enumerate(PARAGRAPHS):
+    current_locale = ""
+    current_direction = "auto"
+    for index, (locale, direction, text) in enumerate(PARAGRAPHS):
         if index:
             lines.extend(("", "@para"))
+        if locale != current_locale:
+            lines.append(f"@language {locale}")
+            current_locale = locale
+        if direction != current_direction:
+            lines.append(f"@direction {direction}")
+            current_direction = direction
         lines.append(text)
     return "\n".join(lines) + "\n"
 

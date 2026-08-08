@@ -1,5 +1,6 @@
 package com.rsvpnano.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,30 +14,28 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.Newspaper
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,6 +46,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoBookLanguage
@@ -70,15 +71,13 @@ internal fun LibraryScreen(
     onEditDraft: (PendingUpload) -> Unit,
     onDeleteDraft: (PendingUpload) -> Unit,
     onSyncArticles: () -> Unit,
+    onOpenBook: (NanoBook) -> Unit,
     onDeleteBook: (NanoBook) -> Unit,
-    onSetBookPosition: (NanoBook, Int) -> Unit,
-    onSetBookLanguageFonts: (NanoBook, List<NanoLanguageFont>) -> Unit,
     onAddContent: () -> Unit,
 ) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var filterName by rememberSaveable { mutableStateOf(LibraryFilter.All.name) }
     val filter = LibraryFilter.valueOf(filterName)
-    var selectedBook by remember { mutableStateOf<NanoBook?>(null) }
     var bookToDelete by remember { mutableStateOf<NanoBook?>(null) }
     var draftToDelete by remember { mutableStateOf<PendingUpload?>(null) }
     val visibleDrafts = uiState.drafts.filter { draft ->
@@ -111,7 +110,7 @@ internal fun LibraryScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -131,7 +130,6 @@ internal fun LibraryScreen(
                             )
                         }
                     }
-                    HorizontalDivider()
                 }
             }
 
@@ -185,7 +183,7 @@ internal fun LibraryScreen(
                 items(visibleBooks, key = { book -> book.id }) { book ->
                     LibraryBookRow(
                         book = book,
-                        onOpenBook = { selectedBook = book },
+                        onOpenBook = { onOpenBook(book) },
                         onDeleteBook = { bookToDelete = book },
                     )
                 }
@@ -193,28 +191,15 @@ internal fun LibraryScreen(
         }
     }
 
-    selectedBook?.let { book ->
-        LibraryBookDialog(
-            book = book,
-            onDismiss = { selectedBook = null },
-            onSetPosition = { wordIndex ->
-                selectedBook = null
-                onSetBookPosition(book, wordIndex)
-            },
-            availableFonts = uiState.availableFonts,
-            globalFontId = uiState.settings?.reading?.typography?.fontId.orEmpty(),
-            onSetLanguageFonts = { selections ->
-                selectedBook = null
-                onSetBookLanguageFonts(book, selections)
-            },
-        )
-    }
-
     bookToDelete?.let { book ->
         AlertDialog(
             onDismissRequest = { bookToDelete = null },
             icon = {
-                Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
+                Icon(
+                    imageVector = Icons.Outlined.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                )
             },
             title = { Text("Delete from reader?") },
             text = { Text(book.displayTitle) },
@@ -244,7 +229,11 @@ internal fun LibraryScreen(
         AlertDialog(
             onDismissRequest = { draftToDelete = null },
             icon = {
-                Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
+                Icon(
+                    imageVector = Icons.Outlined.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                )
             },
             title = { Text("Delete saved article?") },
             text = { Text(draft.title) },
@@ -278,7 +267,6 @@ private fun PendingArticleRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    var menuExpanded by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -298,34 +286,13 @@ private fun PendingArticleRow(
                 text = listOfNotNull(
                     if (needsFetch) "Queued for download" else "Ready to sync",
                     draft.sourceUrl?.takeIf(String::isNotBlank)?.substringAfter("://")?.substringBefore('/'),
-                ).joinToString(" · "),
+                ).joinToString(INLINE_DIVIDER),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Box {
-            IconButton(onClick = { menuExpanded = true }) {
-                Icon(Icons.Outlined.MoreVert, contentDescription = "Article actions")
-            }
-            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                DropdownMenuItem(
-                    text = { Text("Edit") },
-                    onClick = {
-                        menuExpanded = false
-                        onEdit()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("Delete") },
-                    onClick = {
-                        menuExpanded = false
-                        onDelete()
-                    },
-                )
-            }
-        }
+        DestructiveIconButton(contentDescription = "Delete saved article", onClick = onDelete)
     }
-    HorizontalDivider()
 }
 
 @Composable
@@ -353,54 +320,48 @@ private fun LibraryBookRow(
     onOpenBook: () -> Unit,
     onDeleteBook: (NanoBook) -> Unit,
 ) {
-    var menuExpanded by remember { mutableStateOf(false) }
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onOpenBook)
-            .padding(vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top,
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Icon(
+            imageVector = if (book.isArticle) Icons.Outlined.Newspaper else Icons.AutoMirrored.Outlined.MenuBook,
+            contentDescription = null,
+            tint = if (book.isArticle) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Icon(
-                imageVector = if (book.isArticle) Icons.Outlined.Newspaper else Icons.AutoMirrored.Outlined.MenuBook,
-                contentDescription = null,
-                tint = if (book.isArticle) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary,
+            Text(
+                text = book.displayTitle,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = book.displayTitle, style = MaterialTheme.typography.titleSmall)
-                Text(
-                    text = book.librarySubtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+            Text(
+                text = book.librarySubtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            book.reading?.percent?.let { progress ->
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0, 100) / 100f },
+                    modifier = Modifier.fillMaxWidth().height(2.dp),
                 )
             }
-            Box {
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(Icons.Outlined.MoreVert, contentDescription = "Book actions")
-                }
-                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Delete from reader") },
-                        onClick = {
-                            menuExpanded = false
-                            onDeleteBook(book)
-                        },
-                    )
-                }
-            }
         }
-        book.reading?.percent?.let { progress ->
-            LinearProgressIndicator(
-                progress = { (progress.coerceIn(0, 100) / 100f) },
-                modifier = Modifier.fillMaxWidth().height(2.dp),
-            )
-        }
-        HorizontalDivider()
+        DestructiveIconButton(
+            contentDescription = "Delete ${book.displayTitle} from reader",
+            onClick = { onDeleteBook(book) },
+        )
     }
 }
 
@@ -410,21 +371,207 @@ internal val NanoBook.librarySubtitle: String
         metadata.wordCount.takeIf { it > 0 }?.let { add("$it words") }
         if (!isArticle) metadata.chapterCount.takeIf { it > 0 }?.let { add("$it chapters") }
         reading?.percent?.let { add("$it% read") }
-    }.joinToString(" · ")
+    }.joinToString(INLINE_DIVIDER)
 
 @Composable
-private fun LibraryBookDialog(
+internal fun BookDetailScreen(
     book: NanoBook,
-    onDismiss: () -> Unit,
-    onSetPosition: (Int) -> Unit,
     availableFonts: List<NanoFontSummary>,
     globalFontId: String,
+    onSetPosition: (Int) -> Unit,
     onSetLanguageFonts: (List<NanoLanguageFont>) -> Unit,
 ) {
-    var showPositionDialog by remember(book.id) { mutableStateOf(false) }
-    var showLanguageFonts by remember(book.id) { mutableStateOf(false) }
     val metadata = book.metadata
     val reading = book.reading
+    val wordCount = metadata.wordCount
+    val canSetProgress = book.source != null && wordCount > 0
+    val currentIndex = if (canSetProgress) {
+        (reading?.wordIndex ?: 0).coerceIn(0, wordCount - 1)
+    } else {
+        0
+    }
+    val chapters = metadata.chapters
+        .filter { it.wordIndex in 0 until wordCount }
+        .sortedBy { it.wordIndex }
+    var targetIndex by remember(book.id, currentIndex) { mutableStateOf(currentIndex) }
+    var showLanguageFonts by remember(book.id) { mutableStateOf(false) }
+
+    fun percentForIndex(index: Int): Int = if (wordCount <= 1) {
+        0
+    } else {
+        ((index.toFloat() / (wordCount - 1)) * 100).roundToInt().coerceIn(0, 100)
+    }
+
+    fun indexForPercent(percent: Int): Int = if (wordCount <= 1) {
+        0
+    } else {
+        ((percent.coerceIn(0, 100) / 100f) * (wordCount - 1)).roundToInt().coerceIn(0, wordCount - 1)
+    }
+
+    val targetPercent = percentForIndex(targetIndex)
+    val targetChapterIndex = chapters.indexOfLast { it.wordIndex <= targetIndex }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
+            item {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Icon(
+                        imageVector = if (book.isArticle) Icons.Outlined.Newspaper else Icons.AutoMirrored.Outlined.MenuBook,
+                        contentDescription = null,
+                        tint = if (book.isArticle) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary,
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(
+                            text = metadata.author.ifBlank { if (book.isArticle) "Saved article" else "Unknown author" },
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = book.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Book information", style = MaterialTheme.typography.titleMedium)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(28.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        MetadataField("Words", metadata.wordCount.toString())
+                        MetadataField("Chapters", metadata.chapterCount.toString())
+                        MetadataField("File size", book.byteLabel)
+                        metadata.locale.takeIf(String::isNotBlank)?.let { MetadataField("Language", it) }
+                        metadata.scripts.takeIf { it.isNotEmpty() }
+                            ?.let { MetadataField("Scripts", it.joinToString()) }
+                        metadata.direction.takeIf { it != "auto" }
+                            ?.let { MetadataField("Direction", it.uppercase()) }
+                    }
+                }
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Reading progress", style = MaterialTheme.typography.titleMedium)
+                    if (canSetProgress) {
+                        Text(
+                            text = if (targetIndex == currentIndex) {
+                                "$targetPercent% read"
+                            } else {
+                                "Move from ${percentForIndex(currentIndex)}% to $targetPercent%"
+                            },
+                            style = MaterialTheme.typography.headlineSmall,
+                        )
+                        Slider(
+                            value = targetPercent.toFloat(),
+                            onValueChange = { targetIndex = indexForPercent(it.roundToInt()) },
+                            valueRange = 0f..100f,
+                            steps = 99,
+                        )
+                        Text(
+                            text = "Word ${targetIndex + 1} of $wordCount",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(28.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            reading?.currentChapter?.let {
+                                MetadataField("Current chapter", "${it.number}. ${it.title}")
+                            }
+                            reading?.let {
+                                MetadataField("Remaining", "${it.remainingWords} words")
+                                MetadataField("Reading time", "About ${it.estimatedMinutes} min")
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Reading progress becomes available after the reader indexes this book.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            if (chapters.isNotEmpty()) {
+                item {
+                    Text("Chapters", style = MaterialTheme.typography.titleMedium)
+                }
+                itemsIndexed(chapters, key = { index, chapter -> "${chapter.wordIndex}:$index" }) { index, chapter ->
+                    val selected = index == targetChapterIndex
+                    val atChapterStart = targetIndex == chapter.wordIndex
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (selected) MaterialTheme.colorScheme.secondaryContainer
+                                else MaterialTheme.colorScheme.surface,
+                            )
+                            .padding(start = 12.dp, top = 8.dp, end = 4.dp, bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("${index + 1}. ${chapter.title}", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                listOf(
+                                    "${percentForIndex(chapter.wordIndex)}%",
+                                    "Word ${chapter.wordIndex + 1}",
+                                ).joinToString(INLINE_DIVIDER),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        TextButton(onClick = { targetIndex = chapter.wordIndex }) {
+                            Icon(Icons.Outlined.MyLocation, contentDescription = null)
+                            Text(if (atChapterStart) "Target" else "Set here")
+                        }
+                    }
+                }
+            }
+
+            if (book.source != null && metadata.wordCount > 0) {
+                item {
+                    OutlinedButton(onClick = { showLanguageFonts = true }) {
+                        Icon(imageVector = Icons.Outlined.Language, contentDescription = null)
+                        Text("Language fonts")
+                    }
+                }
+            }
+        }
+
+        if (canSetProgress) {
+            Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Button(
+                        onClick = { onSetPosition(targetIndex) },
+                        enabled = targetIndex != currentIndex,
+                    ) {
+                        Icon(Icons.Outlined.MyLocation, contentDescription = null)
+                        Text(if (targetIndex == currentIndex) "Progress unchanged" else "Update to $targetPercent%")
+                    }
+                }
+            }
+        }
+    }
 
     if (showLanguageFonts) {
         BookLanguageFontsDialog(
@@ -432,66 +579,10 @@ private fun LibraryBookDialog(
             availableFonts = availableFonts,
             globalFontId = globalFontId,
             onDismiss = { showLanguageFonts = false },
-            onSave = onSetLanguageFonts,
-        )
-    } else if (!showPositionDialog) {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            icon = {
-                Icon(
-                    imageVector = if (book.isArticle) Icons.Outlined.Newspaper else Icons.AutoMirrored.Outlined.MenuBook,
-                    contentDescription = null,
-                )
+            onSave = {
+                showLanguageFonts = false
+                onSetLanguageFonts(it)
             },
-            title = { Text(text = book.displayTitle) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    metadata.author.takeIf { it.isNotBlank() }?.let { MetadataField("Author", it) }
-                    reading?.currentChapter?.let { MetadataField("Current chapter", "${it.number}. ${it.title}") }
-                    MetadataField("Word count", metadata.wordCount.toString())
-                    MetadataField("Chapters", metadata.chapterCount.toString())
-                    metadata.locale.takeIf { it.isNotBlank() }?.let { MetadataField("Language", it) }
-                    metadata.scripts.takeIf { it.isNotEmpty() }?.let { MetadataField("Scripts", it.joinToString()) }
-                    metadata.direction.takeIf { it != "auto" }?.let { MetadataField("Direction", it.uppercase()) }
-                    metadata.requiredCapabilities.takeIf { it.isNotEmpty() }
-                        ?.let { MetadataField("Language support", it.joinToString()) }
-                    reading?.let {
-                        MetadataField("Progress", "${it.percent}%")
-                        MetadataField("Remaining", "${it.remainingWords} words")
-                        MetadataField("Reading time", "About ${it.estimatedMinutes} min remaining")
-                    }
-                    MetadataField("File size", book.byteLabel)
-                    MetadataField("Filename", book.name)
-                    if (book.source != null && metadata.wordCount > 0) {
-                        FilledTonalButton(onClick = { showLanguageFonts = true }) {
-                            Icon(imageVector = Icons.Outlined.Language, contentDescription = null)
-                            Text("Language fonts")
-                        }
-                        FilledTonalButton(onClick = { showPositionDialog = true }) {
-                            Text("Change reading position")
-                        }
-                    } else {
-                        Text(
-                            text = "Reading position becomes available after the reader indexes this book.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = onDismiss) {
-                    Text(text = "Close")
-                }
-            },
-        )
-    }
-
-    if (showPositionDialog) {
-        ReadingPositionDialog(
-            book = book,
-            onDismiss = { showPositionDialog = false },
-            onSave = onSetPosition,
         )
     }
 }
@@ -568,74 +659,6 @@ private fun MetadataField(label: String, value: String) {
         Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(text = value, style = MaterialTheme.typography.bodySmall)
     }
-}
-
-@Composable
-private fun ReadingPositionDialog(
-    book: NanoBook,
-    onDismiss: () -> Unit,
-    onSave: (Int) -> Unit,
-) {
-    val wordCount = book.metadata.wordCount
-    val chapters = book.metadata.chapters.filter { it.wordIndex in 0 until wordCount }.sortedBy { it.wordIndex }
-    val initialIndex = (book.reading?.wordIndex ?: 0).coerceIn(0, wordCount - 1)
-    fun percentForIndex(index: Int) = if (wordCount <= 1) 0 else
-        ((index.toFloat() / (wordCount - 1)) * 100).roundToInt().coerceIn(0, 100)
-    fun indexForPercent(percent: Int) = if (wordCount <= 1) 0 else
-        ((percent.coerceIn(0, 100) / 100f) * (wordCount - 1)).roundToInt().coerceIn(0, wordCount - 1)
-    var targetIndex by remember(book.id) { mutableStateOf(initialIndex) }
-    var targetPercent by remember(book.id) { mutableStateOf(percentForIndex(initialIndex)) }
-    val chapterIndex = chapters.indexOfLast { it.wordIndex <= targetIndex }.coerceAtLeast(0)
-    fun moveTo(index: Int) {
-        targetIndex = index.coerceIn(0, wordCount - 1)
-        targetPercent = percentForIndex(targetIndex)
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Reading position") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("$targetPercent%", style = MaterialTheme.typography.headlineSmall)
-                Text("Word ${targetIndex + 1} of $wordCount", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Slider(
-                    value = targetPercent.toFloat(),
-                    onValueChange = {
-                        targetPercent = it.roundToInt().coerceIn(0, 100)
-                        targetIndex = indexForPercent(targetPercent)
-                    },
-                    valueRange = 0f..100f,
-                    steps = 99,
-                )
-                if (chapters.isNotEmpty()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = { moveTo(chapters[chapterIndex - 1].wordIndex) },
-                            enabled = chapterIndex > 0,
-                        ) {
-                            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, contentDescription = "Previous chapter")
-                        }
-                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Chapter ${chapterIndex + 1} of ${chapters.size}", style = MaterialTheme.typography.labelSmall)
-                            Text(chapters[chapterIndex].title, style = MaterialTheme.typography.bodySmall)
-                        }
-                        IconButton(
-                            onClick = { moveTo(chapters[chapterIndex + 1].wordIndex) },
-                            enabled = chapterIndex < chapters.lastIndex,
-                        ) {
-                            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = "Next chapter")
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = { onSave(targetIndex) }) { Text("Save") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-    )
 }
 
 val NanoBook.isArticle: Boolean

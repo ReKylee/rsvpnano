@@ -6,11 +6,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
@@ -91,6 +94,8 @@ fun RsvpNanoSharedApp(
         val scope = rememberCoroutineScope()
         var selectedScreenName by rememberSaveable { mutableStateOf(CompanionScreen.Library.name) }
         val selectedScreen = CompanionScreen.valueOf(selectedScreenName)
+        var selectedBookId by rememberSaveable { mutableStateOf<String?>(null) }
+        val selectedBook = selectedBookId?.let { id -> uiState.books.firstOrNull { it.id == id } }
         var settingsDestinationName by rememberSaveable { mutableStateOf<String?>(null) }
         val settingsDestination = settingsDestinationName?.let(SettingsDestination::valueOf)
         var showAddPicker by rememberSaveable { mutableStateOf(false) }
@@ -161,14 +166,20 @@ fun RsvpNanoSharedApp(
             } else {
                 settingsDestination
             }
+            val openBook = selectedBook.takeIf { selectedScreen == CompanionScreen.Library }
+            val viewingBook = openBook != null
             val navigateBack = {
-                val (screen, destination) = previousScreen(selectedScreen, settingsDestination, wide)
-                selectedScreenName = screen.name
-                settingsDestinationName = destination?.name
+                if (viewingBook) {
+                    selectedBookId = null
+                } else {
+                    val (screen, destination) = previousScreen(selectedScreen, settingsDestination, wide)
+                    selectedScreenName = screen.name
+                    settingsDestinationName = destination?.name
+                }
             }
             NavigationBackHandler(
                 state = rememberNavigationEventState(NavigationEventInfo.None),
-                isBackEnabled = selectedScreen == CompanionScreen.Settings,
+                isBackEnabled = viewingBook || selectedScreen == CompanionScreen.Settings,
                 onBackCompleted = navigateBack,
             )
             Row(modifier = Modifier.fillMaxSize()) {
@@ -190,29 +201,33 @@ fun RsvpNanoSharedApp(
                 TopAppBar(
                     title = {
                         Text(
-                            if (!wide && selectedScreen == CompanionScreen.Settings) {
+                            text = if (!wide && selectedScreen == CompanionScreen.Settings) {
                                 settingsDestination?.label ?: "Settings"
+                            } else if (openBook != null) {
+                                openBook.displayTitle
                             } else {
                                 selectedScreen.label
                             },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     },
                     navigationIcon = {
-                        if (!wide && selectedScreen == CompanionScreen.Settings) {
+                        if (viewingBook || (!wide && selectedScreen == CompanionScreen.Settings)) {
                             IconButton(onClick = navigateBack) {
                                 Icon(
                                     Icons.AutoMirrored.Outlined.ArrowBack,
-                                    contentDescription = if (settingsDestination == null) {
-                                        "Back to library"
-                                    } else {
-                                        "Back to settings"
+                                    contentDescription = when {
+                                        viewingBook -> "Back to library"
+                                        settingsDestination != null -> "Back to settings"
+                                        else -> "Back to library"
                                     },
                                 )
                             }
                         }
                     },
                     actions = {
-                        if (!wide && selectedScreen == CompanionScreen.Library) {
+                        if (!wide && selectedScreen == CompanionScreen.Library && !viewingBook) {
                             IconButton(onClick = { selectedScreenName = CompanionScreen.Settings.name }) {
                                 Icon(Icons.Outlined.Settings, contentDescription = "Settings")
                             }
@@ -247,7 +262,7 @@ fun RsvpNanoSharedApp(
                 }
             },
             floatingActionButton = {
-                if (selectedScreen == CompanionScreen.Library) {
+                if (selectedScreen == CompanionScreen.Library && !viewingBook) {
                     ExtendedFloatingActionButton(
                         onClick = { showAddPicker = true },
                         icon = { Icon(Icons.Outlined.Add, contentDescription = null) },
@@ -265,36 +280,45 @@ fun RsvpNanoSharedApp(
                 contentAlignment = Alignment.TopCenter,
             ) {
                 Box(modifier = Modifier.fillMaxSize().widthIn(max = 840.dp)) {
-                    when (selectedScreen) {
-                    CompanionScreen.Library -> LibraryScreen(
-                        uiState = uiState,
-                        onRefresh = presenter::refresh,
-                        needsArticleFetch = PendingUpload::needsArticleFetch,
-                        onEditDraft = {
-                            presenter.editDraft(it)
-                            showArticleDialog = true
-                        },
-                        onDeleteDraft = presenter::deleteDraft,
-                        onSyncArticles = presenter::syncSavedArticles,
-                        onDeleteBook = presenter::deleteDeviceBook,
-                        onSetBookPosition = presenter::setBookPosition,
-                        onSetBookLanguageFonts = presenter::setBookLanguageFonts,
-                        onAddContent = { showAddPicker = true },
-                    )
+                    if (openBook != null) {
+                        BookDetailScreen(
+                            book = openBook,
+                            availableFonts = uiState.availableFonts,
+                            globalFontId = uiState.settings?.reading?.typography?.fontId.orEmpty(),
+                            onSetPosition = { presenter.setBookPosition(openBook, it) },
+                            onSetLanguageFonts = { presenter.setBookLanguageFonts(openBook, it) },
+                        )
+                    } else {
+                        when (selectedScreen) {
+                            CompanionScreen.Library -> LibraryScreen(
+                                uiState = uiState,
+                                onRefresh = presenter::refresh,
+                                needsArticleFetch = PendingUpload::needsArticleFetch,
+                                onEditDraft = {
+                                    presenter.editDraft(it)
+                                    showArticleDialog = true
+                                },
+                                onDeleteDraft = presenter::deleteDraft,
+                                onSyncArticles = presenter::syncSavedArticles,
+                                onOpenBook = { selectedBookId = it.id },
+                                onDeleteBook = presenter::deleteDeviceBook,
+                                onAddContent = { showAddPicker = true },
+                            )
 
-                    CompanionScreen.Settings -> SettingsScreen(
-                        uiState = uiState,
-                        presenter = presenter,
-                        onFirmwareNotificationsChange = onFirmwareNotificationsChange,
-                        hasPermissions = hasPermissions,
-                        onGrantPermissions = onGrantPermissions,
-                        onUploadTheme = { themePicker.launch() },
-                        onUploadFont = { fontPicker.launch() },
-                        onUploadLocalePack = { localePackPicker.launch() },
-                        destination = activeSettingsDestination,
-                        onDestinationSelected = { settingsDestinationName = it.name },
-                    )
-                }
+                            CompanionScreen.Settings -> SettingsScreen(
+                                uiState = uiState,
+                                presenter = presenter,
+                                onFirmwareNotificationsChange = onFirmwareNotificationsChange,
+                                hasPermissions = hasPermissions,
+                                onGrantPermissions = onGrantPermissions,
+                                onUploadTheme = { themePicker.launch() },
+                                onUploadFont = { fontPicker.launch() },
+                                onUploadLocalePack = { localePackPicker.launch() },
+                                destination = activeSettingsDestination,
+                                onDestinationSelected = { settingsDestinationName = it.name },
+                            )
+                        }
+                    }
                 }
             }
 
@@ -370,8 +394,11 @@ fun RsvpNanoSharedApp(
 
             if (showHelpDialog) {
                 val help = when (selectedScreen) {
-                    CompanionScreen.Library ->
+                    CompanionScreen.Library -> if (viewingBook) {
+                        "Book details" to "Review metadata, choose language fonts, or set a new reading position by chapter or percentage."
+                    } else {
                         "Library" to "Add books, saved articles, or RSS feeds here. Connect to sync them with your reader."
+                    }
                     CompanionScreen.Settings -> activeSettingsDestination
                         ?.let { it.label to it.help }
                         ?: ("Settings" to SETTINGS_INDEX_HELP)
@@ -417,12 +444,14 @@ private fun ConnectionButton(
         } else {
             Icon(Icons.Outlined.Wifi, contentDescription = null)
         }
+        Spacer(Modifier.width(8.dp))
         Text(
             text = when {
                 busy -> "Connecting"
                 uiState.isConnected -> uiState.currentNano?.ssid ?: "Nano"
                 else -> "Connect"
             },
+            modifier = Modifier.widthIn(max = 112.dp),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -433,9 +462,8 @@ private fun ConnectionButton(
 private fun ConnectionDot() {
     Box(
         Modifier
-            .padding(end = 6.dp)
             .size(8.dp)
-            .clip(MaterialTheme.shapes.extraSmall)
+            .clip(CircleShape)
             .background(Color(0xFF3C8C69)),
     )
 }

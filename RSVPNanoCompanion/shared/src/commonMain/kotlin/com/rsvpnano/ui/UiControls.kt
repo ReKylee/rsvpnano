@@ -36,6 +36,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
+internal const val INLINE_DIVIDER = "  │  "
+
 @Composable
 fun DropdownRow(
     label: String,
@@ -195,12 +197,13 @@ fun SettingsStatusRow(
             .fillMaxWidth()
             .padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 2.dp),
         )
         Column(
             modifier = Modifier.weight(1f),
@@ -209,7 +212,11 @@ fun SettingsStatusRow(
             Text(text = title, style = MaterialTheme.typography.labelLarge)
             SettingsDescription(body)
         }
-        action?.invoke()
+        if (action != null) {
+            Box(modifier = Modifier.align(Alignment.CenterVertically)) {
+                action()
+            }
+        }
     }
 }
 

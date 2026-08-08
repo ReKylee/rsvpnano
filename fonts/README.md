@@ -42,27 +42,29 @@ pack. `--scripts` explicitly declares complete ISO 15924 capabilities and overri
 incidental glyphs from advertising a whole script. Add `Zmth` only for a font intended to provide complete Unicode
 math coverage rather than a font that happens to contain a few operators:
 
+The named reader maps `Hebr`, `Arab`, `Hani`, `Jpan`, and `Zmth` select only their required script codepoints plus
+reader punctuation, digits, currency symbols, and bidi controls. They also declare their script capabilities, so a
+duplicate `--scripts` argument is unnecessary. Unrelated letters from multilingual source fonts are deliberately
+omitted.
+
 ```bash
 uv run --with freetype-py --with fonttools python fonts/convert_alpha4_font.py \
   --font path/to/NotoSerifHebrew-Regular.ttf \
   --name "Noto Serif Hebrew" \
-  --map auto \
+  --map Hebr \
   --locales he \
-  --scripts Hebr \
   --shaping
 
 uv run --with freetype-py --with fonttools python fonts/convert_alpha4_font.py \
   --font path/to/STIXTwoMath-Regular.otf \
   --name "STIX Two Math" \
-  --map auto \
-  --scripts Zmth
+  --map Zmth
 
 uv run --with freetype-py --with fonttools python fonts/convert_alpha4_font.py \
   --font path/to/NotoSerifJP-Regular.otf \
   --name "Noto Serif Japanese" \
-  --map auto \
-  --locales ja \
-  --scripts Hani,Hira,Kana
+  --map Jpan \
+  --locales ja
 ```
 
 Horizontal CJK fonts intentionally omit `--shaping`; direct cmap glyphs cover this renderer, while vertical layout

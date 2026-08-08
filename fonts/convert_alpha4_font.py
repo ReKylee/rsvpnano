@@ -23,13 +23,9 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 import freetype
-
-try:
-    from fontTools import subset as font_subset
-    from fontTools.ttLib import TTFont
-except Exception:  # pragma: no cover
-    font_subset = None  # type: ignore[assignment]
-    TTFont = None  # type: ignore[assignment]
+from fontTools import subset as font_subset
+from fontTools.ttLib import TTFont
+from fontTools.unicodedata import script as unicode_script, script_extension
 
 DEFAULT_MAP = "32-126,160-383,512-591,1024-1279,8208-8230,8240,8249,8250,8364,8470"
 DEFAULT_ALPHA_CUTOFF = 32
@@ -58,6 +54,60 @@ SCRIPT_TAGS = {
     "Kana": SCRIPT_KATAKANA,
     "Hang": SCRIPT_HANGUL,
     "Zmth": SCRIPT_MATH,
+}
+READER_COMMON_CODEPOINTS = frozenset(
+    {
+        *range(0x20, 0x41),
+        *range(0x5B, 0x61),
+        *range(0x7B, 0x7F),
+        0x00A0,
+        0x00A1,
+        0x00A7,
+        0x00A9,
+        0x00AB,
+        0x00AD,
+        0x00AE,
+        0x00B0,
+        0x00B1,
+        0x00B6,
+        0x00B7,
+        0x00BB,
+        0x00BF,
+        0x00D7,
+        0x00F7,
+        *range(0x2000, 0x2070),
+        *range(0x20A0, 0x20D0),
+        0x25CC,
+        0xFFFD,
+    }
+)
+READER_MATH_RANGES = (
+    (0x00B2, 0x00B3),  # superscript two and three
+    (0x00B9, 0x00B9),  # superscript one
+    (0x00BC, 0x00BE),  # vulgar fractions
+    (0x2070, 0x209F),  # superscripts and subscripts
+    (0x2100, 0x214F),  # letterlike symbols
+    (0x2150, 0x218F),  # number forms
+    (0x2190, 0x23FF),  # arrows, operators, and technical symbols
+    (0x25A0, 0x25FF),  # geometric symbols used in notation
+    (0x27C0, 0x2AFF),  # supplemental arrows and mathematical operators
+    (0x1D400, 0x1D7FF),  # mathematical alphanumerics
+)
+READER_CJK_PUNCTUATION_RANGES = (
+    (0xFF01, 0xFF20),
+    (0xFF3B, 0xFF40),
+    (0xFF5B, 0xFF65),
+)
+READER_SCRIPT_MAPS = {
+    "Hebr": (SCRIPT_HEBREW, frozenset(("Hebr",)), ()),
+    "Arab": (SCRIPT_ARABIC, frozenset(("Arab",)), ()),
+    "Hani": (SCRIPT_HAN, frozenset(("Hani",)), READER_CJK_PUNCTUATION_RANGES),
+    "Jpan": (
+        SCRIPT_HAN | SCRIPT_HIRAGANA | SCRIPT_KATAKANA,
+        frozenset(("Hani", "Hira", "Kana")),
+        READER_CJK_PUNCTUATION_RANGES,
+    ),
+    "Zmth": (SCRIPT_MATH, frozenset(), READER_MATH_RANGES),
 }
 SHAPED_GLYPH_CODEPOINT = 0xFFFFFFFF
 FONT_LAYOUT_TAGS = ("GDEF", "GSUB", "GPOS")
@@ -139,33 +189,9 @@ def parse_codepoint_ranges(spec: str) -> list[CodepointRange]:
 
 
 def script_mask(codepoint: int) -> int:
-    if (ord('A') <= codepoint <= ord('Z') or ord('a') <= codepoint <= ord('z')
-            or codepoint in (0x00AA, 0x00B5, 0x00BA)
-            or 0x00C0 <= codepoint <= 0x00D6 or 0x00D8 <= codepoint <= 0x00F6
-            or 0x00F8 <= codepoint <= 0x024F or 0x1E00 <= codepoint <= 0x1EFF):
-        return SCRIPT_LATIN
-    if (0x0400 <= codepoint <= 0x052F or 0x2DE0 <= codepoint <= 0x2DFF
-            or 0xA640 <= codepoint <= 0xA69F):
-        return SCRIPT_CYRILLIC
-    if 0x0370 <= codepoint <= 0x03FF or 0x1F00 <= codepoint <= 0x1FFF:
-        return SCRIPT_GREEK
-    if 0x0590 <= codepoint <= 0x05FF or 0xFB1D <= codepoint <= 0xFB4F:
-        return SCRIPT_HEBREW
-    if (0x0600 <= codepoint <= 0x06FF or 0x0750 <= codepoint <= 0x077F
-            or 0x08A0 <= codepoint <= 0x08FF or 0xFB50 <= codepoint <= 0xFDFF
-            or 0xFE70 <= codepoint <= 0xFEFF):
-        return SCRIPT_ARABIC
-    if (0x3400 <= codepoint <= 0x4DBF or 0x4E00 <= codepoint <= 0x9FFF
-            or 0xF900 <= codepoint <= 0xFAFF or 0x20000 <= codepoint <= 0x323AF):
-        return SCRIPT_HAN
-    if 0x3040 <= codepoint <= 0x309F:
-        return SCRIPT_HIRAGANA
-    if 0x30A0 <= codepoint <= 0x30FF or 0x31F0 <= codepoint <= 0x31FF or 0xFF66 <= codepoint <= 0xFF9F:
-        return SCRIPT_KATAKANA
-    if (0x1100 <= codepoint <= 0x11FF or 0x3130 <= codepoint <= 0x318F
-            or 0xA960 <= codepoint <= 0xA97F or 0xAC00 <= codepoint <= 0xD7FF):
-        return SCRIPT_HANGUL
-    return 0
+    if codepoint > 0x10FFFF:
+        return 0
+    return SCRIPT_TAGS.get(unicode_script(chr(codepoint)), 0)
 
 
 def codepoints_from_ranges(ranges: list[CodepointRange]) -> list[int]:
@@ -173,9 +199,17 @@ def codepoints_from_ranges(ranges: list[CodepointRange]) -> list[int]:
 
 
 def mapped_codepoints(font_path: Path, spec: str) -> list[int]:
-    if spec != "auto":
-        return codepoints_from_ranges(parse_codepoint_ranges(spec))
-    return sorted(set(cmap_for_font(font_path)) | {ord('?'), ord(' ')})
+    cmap = set(cmap_for_font(font_path))
+    if spec == "auto":
+        return sorted(cmap | {ord('?'), ord(' ')})
+    if spec in READER_SCRIPT_MAPS:
+        _mask, scripts, ranges = READER_SCRIPT_MAPS[spec]
+        mapped = {codepoint for codepoint in cmap if scripts & script_extension(chr(codepoint))}
+        mapped.update(codepoint for codepoint in cmap if any(start <= codepoint <= end for start, end in ranges))
+        return sorted(
+            mapped | (cmap & READER_COMMON_CODEPOINTS) | {ord('?'), ord(' ')}
+        )
+    return codepoints_from_ranges(parse_codepoint_ranges(spec))
 
 
 def capability_mask(strike_masks: list[int], declared: int) -> int:
@@ -376,8 +410,6 @@ def emit_uint16(values: list[int], indent: str = "    ") -> str:
 
 
 def cmap_for_font(font_path: Path) -> dict[int, str]:
-    if TTFont is None:
-        return {}
     font = TTFont(str(font_path))
     cmap: dict[int, str] = {}
     for table in font["cmap"].tables:
@@ -388,15 +420,13 @@ def cmap_for_font(font_path: Path) -> dict[int, str]:
 
 
 def font_layout(font_path: Path, codepoints: list[int]) -> tuple[int, int, dict[str, bytes], set[int]]:
-    if TTFont is None or font_subset is None:
-        raise RuntimeError("fontTools is required to generate reader fonts")
-
     font = TTFont(str(font_path))
     glyph_count = len(font.getGlyphOrder())
     units_per_em = int(font["head"].unitsPerEm)
     options = font_subset.Options()
     options.retain_gids = True
-    options.layout_features = ["*"]
+    # fontTools defaults track the features used by normal shaping engines.
+    # "*" also retains opt-in stylistic and decorative alternates.
     subsetter = font_subset.Subsetter(options=options)
     subsetter.populate(unicodes=codepoints)
     subsetter.subset(font)
@@ -413,9 +443,6 @@ def value_x_advance(value_record: object | None) -> int:
 
 
 def gpos_kerning_units(font_path: Path, codepoints: list[int]) -> dict[tuple[int, int], int]:
-    if TTFont is None:
-        return {}
-
     font = TTFont(str(font_path))
     if "GPOS" not in font:
         font.close()
@@ -481,8 +508,6 @@ def gpos_kerning_units(font_path: Path, codepoints: list[int]) -> dict[tuple[int
 
 
 def units_per_em(font_path: Path) -> int:
-    if TTFont is None:
-        return 0
     font = TTFont(str(font_path))
     value = int(font["head"].unitsPerEm)
     font.close()
@@ -1023,7 +1048,11 @@ def main() -> int:
     parser.add_argument("--locales", default="", help="comma-separated BCP 47 locale affinities")
     parser.add_argument("--scripts", default="", help="additional complete ISO 15924 capabilities")
     parser.add_argument("--sizes", default="large=52,medium=43,small=33")
-    parser.add_argument("--map", default=DEFAULT_MAP, help="codepoint ranges, or 'auto' for every mapped glyph")
+    parser.add_argument(
+        "--map",
+        default=DEFAULT_MAP,
+        help="codepoint ranges, 'auto', or a built-in reader script map: Hebr/Arab/Hani/Jpan/Zmth",
+    )
     parser.add_argument("--output-root", type=Path, default=Path(__file__).resolve().parent)
     parser.add_argument("--header", action="store_true", help="emit the built-in C++ fallback instead of .rfont4 files")
     parser.add_argument("--shaping", action="store_true", help="embed OpenType layout data and its glyph closure")
@@ -1044,6 +1073,11 @@ def main() -> int:
     font_display_name = args.name or args.font.stem
     locales = parse_locales(args.locales)
     declared_scripts = parse_scripts(args.scripts)
+    if args.map in READER_SCRIPT_MAPS:
+        map_script = READER_SCRIPT_MAPS[args.map][0]
+        if declared_scripts not in (0, map_script):
+            raise ValueError(f"--map {args.map} conflicts with --scripts")
+        declared_scripts = map_script
     base = c_identifier(font_display_name)
     cutoff = max(0, min(254, args.alpha_cutoff))
     gamma = max(0.01, args.gamma)

@@ -15,6 +15,7 @@
 #include <vector>
 #include "board/BoardStorage.h"
 
+#include "converter/EpubZip.h"
 #include "display/ThemeStore.h"
 #include "fonts/FontCatalog.h"
 #include "fonts/RFont4Format.h"
@@ -45,6 +46,8 @@ namespace {
     constexpr size_t kMaxFocusTimersBytes = 4096;
     constexpr size_t kMaxThemeUploadBytes = 4096;
     constexpr size_t kMaxFontUploadBytes = 96UL * 1024UL * 1024UL;
+    constexpr size_t kMaxLocalePackUploadBytes = 256UL * 1024UL;
+    constexpr size_t kMaxLocalePackFiles = 4;
 
     std::vector<std::string> scriptNames(uint32_t mask) {
         std::vector<std::string> result;
@@ -86,6 +89,69 @@ namespace {
                                                backupPath.c_str());
     }
 
+    std::expected<std::string, std::string> installLocaleArchive(std::string_view archivePath,
+                                                                  locales::Catalog& catalog) {
+        EpubZip::Archive archive;
+        if (!archive.open(archivePath))
+            return std::unexpected("Locale pack is not a supported ZIP archive");
+
+        const auto entries = archive.entries();
+        if (entries.empty() || entries.size() > kMaxLocalePackFiles)
+            return std::unexpected("Locale pack has an invalid file count");
+
+        std::string id;
+        for (const auto& entry: entries) {
+            const auto candidate = locales::packIdFromArchiveManifest(entry.name);
+            if (!candidate)
+                continue;
+            if (!id.empty())
+                return std::unexpected("Locale pack must contain one valid manifest path");
+            id = *candidate;
+        }
+        if (id.empty())
+            return std::unexpected("Locale pack manifest is missing");
+
+        const std::string root = "locales/" + id + "/";
+        if (auto staged = locales::beginStaging(Board::Storage::filesystem(), id); !staged)
+            return std::unexpected(staged.error());
+
+        for (size_t index = 0; index < entries.size(); ++index) {
+            const auto& entry = entries[index];
+            if (!entry.name.starts_with(root))
+                return std::unexpected("Locale pack contains files outside its package folder");
+            const std::string_view relative = std::string_view{entry.name}.substr(root.size());
+            if (!locales::isValidPackFilePath(relative))
+                return std::unexpected("Locale pack contains an invalid file path");
+            for (size_t previous = 0; previous < index; ++previous) {
+                if (entries[previous].name == entry.name)
+                    return std::unexpected("Locale pack contains duplicate files");
+            }
+
+            const size_t maximum = relative == "manifest.toml" ? locales::kMaximumManifestBytes
+                                  : relative == "ui/font.u8g2" ? locales::kMaximumUiFontBytes
+                                                               : locales::kMaximumResidentUiBytes;
+            std::string contents;
+            if (!archive.extractToString(entry.name, contents, maximum))
+                return std::unexpected("Locale pack contains an invalid compressed file");
+            auto target = locales::prepareStagedFile(Board::Storage::filesystem(), id, relative);
+            if (!target)
+                return std::unexpected(target.error());
+            File output = Board::Storage::filesystem().open(target->c_str(), FILE_WRITE);
+            if (!output || output.write(reinterpret_cast<const uint8_t*>(contents.data()), contents.size())
+                           != contents.size()) {
+                if (output)
+                    output.close();
+                return std::unexpected("Locale pack file could not be staged");
+            }
+            output.close();
+        }
+
+        archive.close();
+        if (auto activated = locales::activateStaged(Board::Storage::filesystem(), catalog, id); !activated)
+            return std::unexpected(activated.error());
+        return id;
+    }
+
     const char kWebCompanionHtml[] PROGMEM = R"HTML(<!doctype html>
 <html lang="en">
 <head>
@@ -96,10 +162,10 @@ namespace {
 :root{color-scheme:dark;--bg:#0c1110;--fg:#f5f1e8;--muted:#a7aaa0;--line:#2d3430;--card:#151b18;--accent:#78d5b1;--accentInk:#07110e;--accent2:#ff9b73;--soft:#1d2924}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top left,#18241f 0,#0c1110 38%);color:var(--fg);font:15px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 header{position:sticky;top:0;z-index:2;background:rgba(12,17,16,.92);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);padding:14px 16px 10px}
-h1{font-size:1.15rem;margin:0 0 10px}.tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+h1{font-size:1.15rem;margin:0 0 10px}.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
 button,.button{border:1px solid var(--line);border-radius:8px;background:#111714;color:var(--fg);padding:9px 11px;font:inherit}
 button.primary,.button.primary{background:var(--accent);border-color:var(--accent);color:var(--accentInk);font-weight:700}button.danger{color:var(--accent2)}
-.tabs button{white-space:nowrap;padding:8px 6px}.tabs button.active{background:var(--fg);color:var(--bg)}
+.tabs button{flex:0 0 auto;white-space:nowrap;padding:8px 10px}.tabs button.active{background:var(--fg);color:var(--bg)}
 main{max-width:980px;margin:0 auto;padding:16px}.page{display:none}.page.active{display:block}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:12px}
 h2{font-size:1.05rem;margin:0 0 10px}h3{font-size:.95rem;margin:0 0 8px}.muted{color:var(--muted)}.status{padding:10px 12px;border-radius:8px;background:var(--soft);margin-bottom:12px}
@@ -116,6 +182,8 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <button data-tab="books" class="active">Books</button>
 <button data-tab="articles">Articles</button>
 <button data-tab="settings">Settings</button>
+<button data-tab="languages">Languages</button>
+<button data-tab="fonts">Fonts</button>
 <button data-tab="rss">RSS</button>
 <button data-tab="focus">Focus</button>
 <button data-tab="help">Help</button>
@@ -169,13 +237,6 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <div class="row"><button id="installOnlineThemeButton">Install online theme</button></div>
 <label>Theme file</label><input id="themeFileInput" type="file" accept=".toml">
 <div class="row"><button id="uploadThemeButton">Upload theme file</button></div>
-<hr>
-<label>Online font</label><select id="onlineFontId"></select>
-<div class="row"><button id="installOnlineFontButton">Install online font</button></div>
-<label>Font family</label><input id="fontFamilyName" placeholder="Font folder name">
-<label>Font file</label><input id="fontFileInput" type="file" accept=".rfont4">
-<div class="row"><button id="uploadFontButton">Upload font file</button></div>
-<div id="fontsList" class="muted">Loading...</div>
 <label>Brightness <span id="brightnessValue"></span></label><input id="brightnessPercent" type="range" min="5" max="100" step="5">
 <label>Reader hand</label><select id="handedness"><option value="right">Right</option><option value="left">Left</option></select>
 <label>Footer label</label><select id="footerMetric"><option value="percentage">Percentage</option><option value="chapterTime">Chapter time</option><option value="bookTime">Book time</option></select>
@@ -185,15 +246,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <label><input id="readingChapter" type="checkbox" style="width:auto"> Show chapter while reading</label>
 <label><input id="readingProgress" type="checkbox" style="width:auto"> Show book percent while reading</label>
 </div>
-<div class="card"><h2>Languages</h2>
-<label>Interface language</label><select id="interfaceLocale"><option value="en">English</option></select>
-<div id="localesList" class="muted">Loading...</div>
-<label>Locale-pack folder</label><input id="localePackFiles" type="file" webkitdirectory multiple>
-<p class="muted">Choose an extracted locale-pack folder containing <code>manifest.toml</code> and its optional <code>ui</code> files.</p>
-<div class="row"><button class="primary" id="installLocalePackButton">Install locale pack</button><button id="refreshLocalesButton">Refresh</button></div>
-</div>
 <div class="card"><h2>Typography</h2>
-<label>Typeface</label><select id="typeface"><option value="literata">Literata</option></select>
 <label>Font size <span id="fontSizeValue"></span></label><input id="fontSizeIndex" type="range" min="0" max="2">
 <label>Tracking <span id="trackingValue"></span></label><input id="tracking" type="range" min="-2" max="3">
 <label>Anchor <span id="anchorValue"></span></label><input id="anchorPercent" type="range" min="30" max="40">
@@ -211,6 +264,41 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 </div>
 </div>
 <p><button class="primary" id="saveSettingsButton">Save settings</button></p>
+</section>
+
+<section id="languages" class="page">
+<div class="grid">
+<div class="card"><h2>Interface language</h2>
+<p class="muted">Reader language support comes from installed fonts; locale packs change only the interface.</p>
+<label>Language</label><select id="interfaceLocale"><option value="en">English</option></select>
+<p><button class="primary" id="saveLocaleButton">Save interface language</button></p>
+</div>
+<div class="card"><h2>Install locale pack</h2>
+<label>Online locale pack</label><select id="onlineLocaleId"></select>
+<div class="row"><button id="installOnlineLocaleButton">Install online pack</button></div>
+<label>Local locale-pack ZIP</label><input id="localePackFile" type="file" accept=".zip,application/zip">
+<div class="row"><button class="primary" id="installLocalePackButton">Install ZIP</button><button id="refreshLocalesButton">Refresh</button></div>
+</div>
+</div>
+<div class="card"><h2>Installed locale packs</h2><div id="localesList" class="muted">Loading...</div></div>
+</section>
+
+<section id="fonts" class="page">
+<div class="grid">
+<div class="card"><h2>Global reader font</h2>
+<p class="muted">Used unless a book selects another compatible font for one of its languages.</p>
+<label>Typeface</label><select id="typeface"><option value="literata">Literata</option></select>
+<p><button class="primary" id="saveFontButton">Save reader font</button></p>
+</div>
+<div class="card"><h2>Install reader font</h2>
+<label>Online font</label><select id="onlineFontId"></select>
+<div class="row"><button id="installOnlineFontButton">Install online font</button></div>
+<label>Font family</label><input id="fontFamilyName" placeholder="Font folder name">
+<label>RFont4 file</label><input id="fontFileInput" type="file" accept=".rfont4">
+<div class="row"><button id="uploadFontButton">Upload font file</button></div>
+</div>
+</div>
+<div class="card"><h2>Installed reader fonts</h2><div id="fontsList" class="muted">Loading...</div></div>
 </section>
 
 <section id="rss" class="page">
@@ -241,7 +329,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 </section>
 </main>
 <script>
-const $=id=>document.getElementById(id);let settings=null,rssConfig={feeds:[]},focusTimers={timers:[]};let deviceThemes=[],deviceFonts=[],deviceLocales={locales:[],rejected:[]};let themeCatalog=[];let themeCatalogUrl='';let fontCatalog=[];let fontCatalogUrl='';
+const $=id=>document.getElementById(id);let settings=null,rssConfig={feeds:[]},focusTimers={timers:[]};let deviceThemes=[],deviceFonts=[],deviceLocales={locales:[],rejected:[]};let themeCatalog=[];let themeCatalogUrl='';let fontCatalog=[];let fontCatalogUrl='';let localeCatalog=[];let localeCatalogUrl='';
 function status(msg){$('status').textContent=msg}
 function catalogUrl(path){const u=(settings&&settings.updates)||{};let owner=String(u.repositoryOwner||'').trim(),repo='rsvpnano',tag=String(u.releaseTag||'').trim();const apply=v=>{const p=v.trim().split('/');if(p.length!==2||!p[0]||!p[1])return false;owner=p[0];repo=p[1];return true};apply(owner);const at=tag.indexOf('@');if(at>0&&at<tag.length-1){const r=tag.slice(0,at).trim();tag=tag.slice(at+1).trim();if(!apply(r)&&r)repo=r}if(!owner||!repo)throw new Error('Configure a GitHub release owner first.');return 'https://raw.githubusercontent.com/'+[owner,repo,tag||'main'].map(encodeURIComponent).join('/')+'/'+path}
 async function api(path,opts){const r=await fetch(path,opts);const t=await r.text();let j={};try{j=t?JSON.parse(t):{}}catch(e){throw new Error(t||'Bad response')}if(!r.ok)throw new Error((j.error&&j.error.message)||r.statusText);return j.data}
@@ -276,12 +364,14 @@ async function removeFont(id){if(!confirm('Remove font '+id+'?'))return;try{awai
 function setLocaleOptions(){const current=(settings&&settings.interface&&settings.interface.locale)||'en';const locales=new Map([['en','English']]);(deviceLocales.locales||[]).filter(p=>p.locale).forEach(p=>locales.set(p.locale,p.nativeName||p.englishName||p.locale));if(!locales.has(current))locales.set(current,current);$('interfaceLocale').innerHTML=[...locales].map(([id,name])=>`<option value="${html(id)}">${html(name)}</option>`).join('');setVal('interfaceLocale',current)}
 function renderLocales(){const packs=deviceLocales.locales||[],rejected=deviceLocales.rejected||[];let out=packs.map(p=>`<div class="item"><div class="item-title">${html(p.nativeName||p.englishName||p.id)}</div><div class="item-meta">${html([p.id,p.version,p.locale,p.direction].filter(Boolean).join(' - '))}</div><p><button class="danger" data-delete-locale="${html(encodeURIComponent(p.id))}">Remove</button></p></div>`).join('');if(!out)out='<span class="muted">No external locale packs installed.</span>';if(rejected.length)out+=`<p class="muted">Rejected: ${rejected.map(i=>html(i.id+': '+i.reason)).join('; ')}</p>`;$('localesList').innerHTML=out;document.querySelectorAll('[data-delete-locale]').forEach(b=>b.onclick=()=>removeLocalePack(decodeURIComponent(b.dataset.deleteLocale)));setLocaleOptions()}
 async function loadLocales(){try{deviceLocales=await api('/api/v1/locales');renderLocales()}catch(e){status('Locale packs load failed: '+e.message)}}
-function selectedPackFiles(){const files=[...$('localePackFiles').files];return files.map(file=>{let path=file.webkitRelativePath||file.name;const slash=path.indexOf('/');if(slash>=0)path=path.slice(slash+1);return {file,path}}).filter(x=>x.path==='manifest.toml'||x.path.startsWith('ui/'))}
-async function installLocalePack(){const files=selectedPackFiles(),manifest=files.find(x=>x.path==='manifest.toml');if(!manifest){status('Choose a locale-pack folder containing manifest.toml.');return}try{const match=(await manifest.file.text()).match(/^id\s*=\s*"([A-Za-z0-9-]+)"\s*$/m);if(!match)throw new Error('manifest.toml has no valid pack id');const id=match[1];await api('/api/v1/locales/'+encodeURIComponent(id)+'/stage',{method:'POST'});for(let index=0;index<files.length;index++){const item=files[index],fd=new FormData();fd.append('file',item.file,item.file.name);status('Uploading locale pack '+(index+1)+'/'+files.length+'...');await api('/api/v1/locales/'+encodeURIComponent(id)+'/files?path='+encodeURIComponent(item.path),{method:'POST',body:fd})}await api('/api/v1/locales/'+encodeURIComponent(id)+'/activate',{method:'POST'});$('localePackFiles').value='';await loadLocales();status('Installed locale pack '+id)}catch(e){status('Locale pack install failed: '+e.message)}}
+async function uploadLocalePackBlob(blob,name){const fd=new FormData();fd.append('file',blob,name||'locale.zip');return api('/api/v1/locales',{method:'POST',body:fd})}
+async function loadLocaleCatalog(){try{localeCatalogUrl=catalogUrl('locale-packs/index.json');localeCatalog=await fetch(localeCatalogUrl,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Catalog unavailable');return r.json()});$('onlineLocaleId').innerHTML=localeCatalog.map(p=>`<option value="${html(p.id)}">${html(p.name||p.id)}</option>`).join('')}catch(e){$('onlineLocaleId').innerHTML='<option value="">Catalog unavailable</option>'}}
+async function installOnlineLocale(){const id=val('onlineLocaleId'),pack=localeCatalog.find(p=>p.id===id);if(!pack||!pack.file){status('Choose an online locale pack first.');return}try{const url=new URL(pack.file,localeCatalogUrl).toString();const blob=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Locale pack unavailable');return r.blob()});await uploadLocalePackBlob(blob,pack.file);await loadLocales();status('Installed '+(pack.name||pack.id))}catch(e){status('Online locale install failed: '+e.message)}}
+async function installLocalePack(){const file=$('localePackFile').files[0];if(!file){status('Choose a locale-pack ZIP first.');return}try{await uploadLocalePackBlob(file,file.name);$('localePackFile').value='';await loadLocales();status('Installed '+file.name)}catch(e){status('Locale pack install failed: '+e.message)}}
 async function removeLocalePack(id){if(!confirm('Remove locale pack '+id+'?'))return;try{await api('/api/v1/locales/'+encodeURIComponent(id),{method:'DELETE'});await loadLocales();status('Removed locale pack '+id)}catch(e){status('Locale pack removal failed: '+e.message)}}
 function snapWpm(v){v=Math.max(10,Math.min(1000,Math.round(+v||300)));return Math.round(v/10)*10}
 function updateLabels(){['wpm','longWordMs','complexWordMs','punctuationMs','brightnessPercent','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>{const l=$(id+'Value')||$(id.replace('Percent','')+'Value')||$(id.replace('Index','')+'Value');if(l)l.textContent=$(id).value+(id==='wpm'?' WPM':id.includes('Ms')?' ms':id==='brightnessPercent'?'%':'')})}
-async function loadSettings(){try{[settings,{themes:deviceThemes=[]},{fonts:deviceFonts=[]},deviceLocales]=await Promise.all([api('/api/v1/settings'),api('/api/v1/appearance/themes'),api('/api/v1/appearance/fonts'),api('/api/v1/locales')]);setThemeOptions();setFontOptions();renderFonts();renderLocales();if(!themeCatalog.length)loadThemeCatalog();if(!fontCatalog.length)loadFontCatalog();const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;setVal('readingMode',r.mode||'rsvp');setVal('pauseMode',r.pauseMode);setVal('wpm',snapWpm(r.wpm));setVal('longWordMs',p.longWordDelayMs);setVal('complexWordMs',p.complexWordDelayMs);setVal('punctuationMs',p.punctuationDelayMs);setVal('themeId',i.selectedThemeId||'default');setVal('interfaceLocale',i.locale||'en');setVal('brightnessPercent',i.brightnessPercent);setVal('handedness',r.leftHanded?'left':'right');setVal('footerMetric',r.footerMetric);setVal('batteryLabel',r.batteryLabel);setVal('batteryIcon',r.batteryIconVisible);setVal('readingBattery',r.batteryVisibleWhileReading);setVal('readingChapter',r.chapterVisibleWhileReading);setVal('readingProgress',r.progressVisibleWhileReading);setVal('typeface',t.fontId);setVal('fontSizeIndex',t.fontSizeIndex);setVal('tracking',t.tracking);setVal('anchorPercent',t.anchor);setVal('guideWidth',t.guideWidth);setVal('guideGap',t.guideGap);setVal('focusHighlight',t.focusHighlight);setVal('phantomWords',r.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
+async function loadSettings(){try{[settings,{themes:deviceThemes=[]},{fonts:deviceFonts=[]},deviceLocales]=await Promise.all([api('/api/v1/settings'),api('/api/v1/appearance/themes'),api('/api/v1/appearance/fonts'),api('/api/v1/locales')]);setThemeOptions();setFontOptions();renderFonts();renderLocales();if(!themeCatalog.length)loadThemeCatalog();if(!fontCatalog.length)loadFontCatalog();if(!localeCatalog.length)loadLocaleCatalog();const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;setVal('readingMode',r.mode||'rsvp');setVal('pauseMode',r.pauseMode);setVal('wpm',snapWpm(r.wpm));setVal('longWordMs',p.longWordDelayMs);setVal('complexWordMs',p.complexWordDelayMs);setVal('punctuationMs',p.punctuationDelayMs);setVal('themeId',i.selectedThemeId||'default');setVal('interfaceLocale',i.locale||'en');setVal('brightnessPercent',i.brightnessPercent);setVal('handedness',r.leftHanded?'left':'right');setVal('footerMetric',r.footerMetric);setVal('batteryLabel',r.batteryLabel);setVal('batteryIcon',r.batteryIconVisible);setVal('readingBattery',r.batteryVisibleWhileReading);setVal('readingChapter',r.chapterVisibleWhileReading);setVal('readingProgress',r.progressVisibleWhileReading);setVal('typeface',t.fontId);setVal('fontSizeIndex',t.fontSizeIndex);setVal('tracking',t.tracking);setVal('anchorPercent',t.anchor);setVal('guideWidth',t.guideWidth);setVal('guideGap',t.guideGap);setVal('focusHighlight',t.focusHighlight);setVal('phantomWords',r.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
 async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const r=settings.reading,i=settings.interface,t=r.typography,p=r.pacing;r.wpm=+val('wpm');r.mode=val('readingMode');r.pauseMode=val('pauseMode');p.longWordDelayMs=+val('longWordMs');p.complexWordDelayMs=+val('complexWordMs');p.punctuationDelayMs=+val('punctuationMs');i.selectedThemeId=val('themeId');i.locale=val('interfaceLocale');i.brightnessPercent=+val('brightnessPercent');r.leftHanded=val('handedness')==='left';r.footerMetric=val('footerMetric');r.batteryLabel=val('batteryLabel');r.batteryIconVisible=val('batteryIcon');r.batteryVisibleWhileReading=val('readingBattery');r.chapterVisibleWhileReading=val('readingChapter');r.progressVisibleWhileReading=val('readingProgress');r.phantomWords=val('phantomWords');t.fontId=val('typeface');t.fontSizeIndex=+val('fontSizeIndex');t.focusHighlight=val('focusHighlight');t.tracking=+val('tracking');t.anchor=+val('anchorPercent');t.guideWidth=+val('guideWidth');t.guideGap=+val('guideGap');try{settings=await api('/api/v1/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});status('Settings saved and applied.')}catch(e){status('Settings save failed: '+e.message)}}
 async function loadWifi(){try{await api('/api/v1/network');const ssid=(settings&&settings.network&&settings.network.wifiSsid)||'';$('wifiSsid').value=ssid;$('wifiPassword').value='';$('wifiCurrent').textContent=ssid?'Saved network: '+ssid:'No home Wi-Fi saved.'}catch(e){status('Wi-Fi load failed: '+e.message)}}
 async function saveWifi(){const ssid=$('wifiSsid').value.trim();if(!ssid){status('Enter a Wi-Fi SSID first.');return}try{await api('/api/v1/network',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password:$('wifiPassword').value})});settings.network.wifiSsid=ssid;$('wifiPassword').value='';$('wifiCurrent').textContent='Saved network: '+ssid;status('Wi-Fi saved for RSS and OTA.')}catch(e){status('Wi-Fi save failed: '+e.message)}}
@@ -293,10 +383,10 @@ function readFocus(){focusTimers.timers=[...document.querySelectorAll('[data-foc
 async function loadFocus(){try{focusTimers=await api('/api/v1/focus');renderFocus();status('Focus timers loaded.')}catch(e){status('Focus timer load failed: '+e.message)}}
 function addFocus(){readFocus();if(focusTimers.timers.length<6){focusTimers.timers.push({name:'Timer',focusMinutes:25,breakMinutes:5,rounds:4});renderFocus()}}
 async function saveFocus(){readFocus();try{focusTimers=await api('/api/v1/focus',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(focusTimers)});renderFocus();status('Focus timers saved.')}catch(e){status('Focus timer save failed: '+e.message)}}
-document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.tab).classList.add('active');if(b.dataset.tab==='settings'){loadSettings();loadWifi()}if(b.dataset.tab==='rss')loadRss();if(b.dataset.tab==='focus')loadFocus()});
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.tab).classList.add('active');if(['settings','languages','fonts'].includes(b.dataset.tab))loadSettings();if(b.dataset.tab==='settings')loadWifi();if(b.dataset.tab==='rss')loadRss();if(b.dataset.tab==='focus')loadFocus()});
 $('wpm').oninput=()=>{setVal('wpm',snapWpm(val('wpm')));updateLabels()};
 ['longWordMs','complexWordMs','punctuationMs','brightnessPercent','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>$(id).oninput=updateLabels);
-$('refreshBooksButton').onclick=refresh;$('refreshArticlesButton').onclick=refresh;$('uploadBookButton').onclick=()=>uploadPicked('bookFileInput','book');$('uploadArticleButton').onclick=()=>uploadPicked('articleFileInput','article');$('uploadThemeButton').onclick=uploadPickedTheme;$('installOnlineThemeButton').onclick=installOnlineTheme;$('uploadFontButton').onclick=uploadPickedFont;$('installOnlineFontButton').onclick=installOnlineFont;$('installLocalePackButton').onclick=installLocalePack;$('refreshLocalesButton').onclick=loadLocales;$('syncArticleButton').onclick=syncArticle;$('saveDraftButton').onclick=saveDraft;$('saveSettingsButton').onclick=saveSettings;$('saveWifiButton').onclick=saveWifi;$('forgetWifiButton').onclick=forgetWifi;$('saveRssButton').onclick=saveRss;$('reloadRssButton').onclick=loadRss;$('addFocusButton').onclick=addFocus;$('saveFocusButton').onclick=saveFocus;
+$('refreshBooksButton').onclick=refresh;$('refreshArticlesButton').onclick=refresh;$('uploadBookButton').onclick=()=>uploadPicked('bookFileInput','book');$('uploadArticleButton').onclick=()=>uploadPicked('articleFileInput','article');$('uploadThemeButton').onclick=uploadPickedTheme;$('installOnlineThemeButton').onclick=installOnlineTheme;$('uploadFontButton').onclick=uploadPickedFont;$('installOnlineFontButton').onclick=installOnlineFont;$('installOnlineLocaleButton').onclick=installOnlineLocale;$('installLocalePackButton').onclick=installLocalePack;$('refreshLocalesButton').onclick=loadLocales;$('syncArticleButton').onclick=syncArticle;$('saveDraftButton').onclick=saveDraft;$('saveSettingsButton').onclick=saveSettings;$('saveLocaleButton').onclick=saveSettings;$('saveFontButton').onclick=saveSettings;$('saveWifiButton').onclick=saveWifi;$('forgetWifiButton').onclick=forgetWifi;$('saveRssButton').onclick=saveRss;$('reloadRssButton').onclick=loadRss;$('addFocusButton').onclick=addFocus;$('saveFocusButton').onclick=saveFocus;
 loadDraft();refresh();
 </script>
 </body>
@@ -555,10 +645,8 @@ bool CompanionSyncManager::startServer() {
     server_.on("/api/v1/appearance/fonts", HTTP_POST, [this] { handleFonts(); }, [this] { handleFontUpload(); });
     server_.on("/api/v1/appearance/fonts", HTTP_DELETE, [this] { handleFonts(); });
     server_.on("/api/v1/locales", HTTP_GET, [this] { handleLocales(); });
-    server_.on(UriBraces("/api/v1/locales/{}/stage"), HTTP_POST, [this] { handleLocaleStage(); });
-    server_.on(UriBraces("/api/v1/locales/{}/files"), HTTP_POST, [this] { handleLocaleFile(); },
-               [this] { handleLocaleFileUpload(); });
-    server_.on(UriBraces("/api/v1/locales/{}/activate"), HTTP_POST, [this] { handleLocaleActivate(); });
+    server_.on("/api/v1/locales", HTTP_POST, [this] { handleLocaleInstall(); },
+               [this] { handleLocaleUpload(); });
     server_.on(UriBraces("/api/v1/locales/{}"), HTTP_DELETE, [this] { handleLocaleDelete(); });
     server_.on("/api/v1/settings", HTTP_GET, [this] { handleSettings(); });
     server_.on("/api/v1/settings", HTTP_PUT, [this] { handleSettings(); });
@@ -1141,19 +1229,7 @@ void CompanionSyncManager::handleLocales() {
     sendData(server_, jsonBuffer_, 200, response);
 }
 
-void CompanionSyncManager::handleLocaleStage() {
-    const String id = server_.pathArg(0);
-    auto started = locales::beginStaging(Board::Storage::filesystem(), {id.c_str(), id.length()});
-    if (!started) {
-        sendError(started.error() == "invalid pack ID" ? 400 : 500, "staging_failed", started.error(), "id");
-        return;
-    }
-    statusLine1_ = "Locale staging";
-    statusLine2_ = id.c_str();
-    sendData(server_, jsonBuffer_, 201, api::IdResponse{std::string{id.c_str()}});
-}
-
-void CompanionSyncManager::handleLocaleFile() {
+void CompanionSyncManager::handleLocaleInstall() {
     if (uploadFile_)
         uploadFile_.close();
     const auto resetUpload = [this] {
@@ -1166,31 +1242,36 @@ void CompanionSyncManager::handleLocaleFile() {
             Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         const std::string error = uploadError_;
         resetUpload();
-        sendError(422, "invalid_pack_file", error, "file");
+        sendError(422, "invalid_locale_pack", error, "file");
         return;
     }
-    if (uploadTmpPath_.empty() || uploadFinalPath_.empty()) {
+    if (uploadTmpPath_.empty()) {
         resetUpload();
-        sendError(400, "missing_upload", "Locale-pack file is required", "file");
+        sendError(400, "missing_upload", "Locale-pack ZIP is required", "file");
         return;
     }
-    auto replaced = replaceUploadedFile(uploadTmpPath_, uploadFinalPath_);
-    if (!replaced) {
-        Logger::failure("sync", "stage locale file", uploadTmpPath_.c_str(), uploadFinalPath_.c_str(),
-                        replaced.error());
-        Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
+
+    const std::string archivePath = uploadTmpPath_;
+    auto installed = installLocaleArchive(archivePath, localeCatalog_);
+    Board::Storage::filesystem().remove(archivePath.c_str());
+    if (!installed) {
         resetUpload();
-        sendError(500, "storage_error", "Locale-pack file could not be staged");
+        const int status = installed.error().contains("another pack") ? 409
+                         : installed.error().contains("could not")    ? 500
+                                                                       : 422;
+        sendError(status, "invalid_locale_pack", installed.error(), "file");
         return;
     }
-    const std::string path = uploadFinalPath_;
-    statusLine1_ = "Locale file received";
-    statusLine2_ = path.c_str();
+
+    const std::string id = std::move(*installed);
+    changes_ |= Locales;
+    statusLine1_ = "Locale installed";
+    statusLine2_ = id.c_str();
     resetUpload();
-    sendData(server_, jsonBuffer_, 201, api::UploadResponse{path});
+    sendData(server_, jsonBuffer_, 201, api::IdResponse{id});
 }
 
-void CompanionSyncManager::handleLocaleFileUpload() {
+void CompanionSyncManager::handleLocaleUpload() {
     HTTPUpload& upload = server_.upload();
     if (upload.status == UPLOAD_FILE_START) {
         if (uploadFile_)
@@ -1199,40 +1280,33 @@ void CompanionSyncManager::handleLocaleFileUpload() {
         uploadTmpPath_.clear();
         uploadFinalPath_.clear();
 
-        const String id = server_.pathArg(0);
-        const String relativePath = server_.arg("path");
-        auto target = locales::prepareStagedFile(Board::Storage::filesystem(), {id.c_str(), id.length()},
-                                                   {relativePath.c_str(), relativePath.length()});
-        if (!target) {
-            uploadError_ = target.error();
+        if (!StorageFiles::ensureDirectory(StoragePaths::kLocalesPath)) {
+            uploadError_ = "Locale-pack folder is unavailable";
             return;
         }
-        uploadFinalPath_ = std::move(*target);
-        uploadTmpPath_ = uploadFinalPath_ + ".uploading";
+        uploadTmpPath_ = std::string{StoragePaths::kLocalesPath} + "/.upload.zip";
         Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_.c_str(), FILE_WRITE);
         if (!uploadFile_) {
-            uploadError_ = "could not create the staged file";
+            uploadError_ = "Could not create locale-pack upload";
             return;
         }
-        statusLine1_ = "Receiving locale file";
-        statusLine2_ = relativePath.c_str();
+        statusLine1_ = "Receiving locale pack";
+        statusLine2_ = upload.filename.c_str();
         return;
     }
 
     if (upload.status == UPLOAD_FILE_WRITE) {
         if (!uploadError_.empty() || !uploadFile_)
             return;
-        const size_t maximum = uploadFinalPath_.ends_with("/manifest.toml") ? locales::kMaximumManifestBytes
-                                                                            : locales::kMaximumAssetBytes;
-        if (static_cast<size_t>(upload.totalSize) + upload.currentSize > maximum) {
-            uploadError_ = "locale-pack file is too large";
+        if (static_cast<size_t>(upload.totalSize) + upload.currentSize > kMaxLocalePackUploadBytes) {
+            uploadError_ = "Locale-pack ZIP is too large";
             uploadFile_.close();
             Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
             return;
         }
         if (uploadFile_.write(upload.buf, upload.currentSize) != upload.currentSize) {
-            uploadError_ = "locale-pack file write failed";
+            uploadError_ = "Locale-pack ZIP write failed";
             uploadFile_.close();
             Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
         }
@@ -1250,25 +1324,8 @@ void CompanionSyncManager::handleLocaleFileUpload() {
             uploadFile_.close();
         if (!uploadTmpPath_.empty())
             Board::Storage::filesystem().remove(uploadTmpPath_.c_str());
-        uploadError_ = "upload aborted";
+        uploadError_ = "Locale-pack upload aborted";
     }
-}
-
-void CompanionSyncManager::handleLocaleActivate() {
-    const String id = server_.pathArg(0);
-    auto activated = locales::activateStaged(Board::Storage::filesystem(), localeCatalog_,
-                                              {id.c_str(), id.length()});
-    if (!activated) {
-        const int status = activated.error().contains("another pack") ? 409
-                         : activated.error().contains("could not")    ? 500
-                                                                      : 422;
-        sendError(status, "activation_failed", activated.error(), "id");
-        return;
-    }
-    changes_ |= Locales;
-    statusLine1_ = "Locale installed";
-    statusLine2_ = id.c_str();
-    sendData(server_, jsonBuffer_, 200, api::IdResponse{std::string{id.c_str()}});
 }
 
 void CompanionSyncManager::handleLocaleDelete() {

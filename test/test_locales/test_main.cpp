@@ -115,6 +115,11 @@ void test_locale_normalization_is_stable() {
     TEST_ASSERT_FALSE(locales::isValidPackFilePath("reader/segmentation.bin"));
     TEST_ASSERT_FALSE(locales::isValidPackFilePath("reader/../secret"));
     TEST_ASSERT_FALSE(locales::isValidPackFilePath("notes.txt"));
+    const auto archiveId = locales::packIdFromArchiveManifest("locales/zh-Hans/manifest.toml");
+    TEST_ASSERT_TRUE(archiveId.has_value());
+    TEST_ASSERT_EQUAL_STRING("zh-Hans", std::string{*archiveId}.c_str());
+    TEST_ASSERT_FALSE(locales::packIdFromArchiveManifest("locales/../manifest.toml").has_value());
+    TEST_ASSERT_FALSE(locales::packIdFromArchiveManifest("zh-Hans/manifest.toml").has_value());
 }
 
 void test_binary_ui_assets_are_bounded_before_runtime_use() {

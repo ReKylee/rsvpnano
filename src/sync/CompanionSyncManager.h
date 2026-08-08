@@ -65,10 +65,8 @@ private:
     void handleFonts();
     void handleFontUpload();
     void handleLocales();
-    void handleLocaleStage();
-    void handleLocaleFile();
-    void handleLocaleFileUpload();
-    void handleLocaleActivate();
+    void handleLocaleInstall();
+    void handleLocaleUpload();
     void handleLocaleDelete();
     void handleNotFound();
     void sendError(int status, const char* code, std::string_view message, const char* field = nullptr);

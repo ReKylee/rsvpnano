@@ -247,25 +247,14 @@ class NanoCompanionController(
         return client.fetchLocales(baseUrl)
     }
 
-    suspend fun beginLocalePackInstall(baseUrl: String, id: String) {
-        verifyReachable(baseUrl)
-        client.beginLocalePackStage(baseUrl, id)
-    }
-
-    suspend fun uploadLocalePackFile(
+    suspend fun installLocalePack(
         baseUrl: String,
-        id: String,
-        path: String,
+        filename: String,
         data: ByteArray,
         onProgress: ((sent: Long, total: Long) -> Unit)? = null,
-    ) {
+    ): NanoLocalesResponse {
         verifyReachable(baseUrl)
-        client.uploadLocalePackFile(baseUrl, id, path, data, onProgress)
-    }
-
-    suspend fun activateLocalePack(baseUrl: String, id: String): NanoLocalesResponse {
-        verifyReachable(baseUrl)
-        client.activateLocalePack(baseUrl, id)
+        client.uploadLocalePack(baseUrl, filename, data, onProgress)
         return client.fetchLocales(baseUrl)
     }
 

@@ -263,44 +263,29 @@ class NanoKtorClientAndroidTest {
     }
 
     @Test
-    fun localePackLifecycleUsesStagingContract() = runBlocking {
+    fun localePackLifecycleUploadsZip() = runBlocking {
         val seen = mutableListOf<String>()
         val client = NanoKtorClient(mockHttpClient { request ->
             seen += "${request.method.value} ${request.url.encodedPath}?${request.url.encodedQuery}"
             when {
                 request.method == HttpMethod.Get ->
                     """{"data":{"locales":[{"id":"ja","version":"1.0.0","locale":"ja","nativeName":"Japanese","englishName":"Japanese","direction":"ltr","translationStatus":"preview"}],"rejected":[]}}"""
-                request.url.encodedPath.endsWith("/stage") -> """{"data":{"id":"ja"}}"""
-                request.url.encodedPath.endsWith("/files") -> {
-                    assertEquals("ui/font.u8g2", request.url.parameters["path"])
+                request.method == HttpMethod.Post -> {
                     assertIs<MultiPartFormDataContent>(request.body)
-                    """{"data":{"path":"/locales/.ja.installing/ui/font.u8g2"}}"""
+                    """{"data":{"id":"ja"}}"""
                 }
-                request.url.encodedPath.endsWith("/activate") -> """{"data":{"id":"ja"}}"""
                 request.method == HttpMethod.Delete -> """{"data":{"id":"ja","deleted":true}}"""
                 else -> error("Unexpected request: ${request.url}")
             }
         })
 
         assertEquals("ja", client.fetchLocales("http://device.local").locales.single().locale)
-        assertEquals("ja", client.beginLocalePackStage("http://device.local", "ja").id)
-        assertEquals(
-            "/locales/.ja.installing/ui/font.u8g2",
-            client.uploadLocalePackFile(
-                "http://device.local",
-                "ja",
-                "ui/font.u8g2",
-                byteArrayOf(1, 2, 3),
-            ).path,
-        )
-        assertEquals("ja", client.activateLocalePack("http://device.local", "ja").id)
+        assertEquals("ja", client.uploadLocalePack("http://device.local", "ja.zip", byteArrayOf(1, 2, 3)).id)
         assertEquals(true, client.deleteLocalePack("http://device.local", "ja").deleted)
         assertEquals(
             listOf(
                 "GET /api/v1/locales?",
-                "POST /api/v1/locales/ja/stage?",
-                "POST /api/v1/locales/ja/files?path=ui%2Ffont.u8g2",
-                "POST /api/v1/locales/ja/activate?",
+                "POST /api/v1/locales?",
                 "DELETE /api/v1/locales/ja?",
             ),
             seen,

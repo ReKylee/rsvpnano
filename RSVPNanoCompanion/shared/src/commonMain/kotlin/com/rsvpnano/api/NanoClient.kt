@@ -76,17 +76,12 @@ interface NanoClient {
         throw NanoClientError("Locale-pack catalog download is not supported by this client.")
     suspend fun downloadLocalePack(url: String): ByteArray =
         throw NanoClientError("Locale-pack download is not supported by this client.")
-    suspend fun beginLocalePackStage(baseUrl: String, id: String): NanoUploadResponse =
-        throw NanoClientError("Locale-pack installation is not supported by this client.")
-    suspend fun uploadLocalePackFile(
+    suspend fun uploadLocalePack(
         baseUrl: String,
-        id: String,
-        path: String,
+        name: String,
         data: ByteArray,
         onProgress: ((sent: Long, total: Long) -> Unit)? = null,
     ): NanoUploadResponse = throw NanoClientError("Locale-pack installation is not supported by this client.")
-    suspend fun activateLocalePack(baseUrl: String, id: String): NanoUploadResponse =
-        throw NanoClientError("Locale-pack activation is not supported by this client.")
     suspend fun deleteLocalePack(baseUrl: String, id: String): NanoUploadResponse =
         throw NanoClientError("Locale-pack removal is not supported by this client.")
     suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse

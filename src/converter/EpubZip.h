@@ -31,6 +31,9 @@ namespace EpubZip {
     public:
         bool open(std::string_view path);
         void close();
+        std::span<const ZipEntry> entries() const {
+            return entries_;
+        }
         bool contains(std::string_view name) const;
         const ZipEntry* find(std::string_view name) const;
 

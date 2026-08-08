@@ -794,7 +794,7 @@ private fun LocaleSettings(
         }
         SettingsSection(
             title = "Locale pack library",
-            subtitle = "Install interface translations from the online catalog or a local ZIP.",
+            subtitle = "Install from the repository and release saved on the Nano, or choose a local ZIP.",
             action = {
                 IconButton(onClick = onRefreshLocaleCatalog) {
                     Icon(imageVector = Icons.Outlined.Sync, contentDescription = "Refresh locale catalog")
@@ -802,11 +802,20 @@ private fun LocaleSettings(
             },
         ) {
             if (uiState.localeCatalog.isNotEmpty()) {
+                val selected = uiState.localeCatalog.firstOrNull { it.id == uiState.selectedCatalogLocaleId }
+                    ?: uiState.localeCatalog.first()
                 DropdownRow(
                     label = "Language",
                     selected = uiState.selectedCatalogLocaleId,
                     options = uiState.localeCatalog.map { it.id to it.name },
                     onSelected = onSelectCatalogLocale,
+                )
+                Text(
+                    listOf(selected.locale, selected.version, selected.translationStatus)
+                        .filter(String::isNotBlank)
+                        .joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Button(onClick = onInstallOnlineLocale, modifier = Modifier.fillMaxWidth()) {
                     Icon(imageVector = Icons.Outlined.CloudUpload, contentDescription = null)
@@ -915,7 +924,7 @@ private fun FontSettings(
         }
         SettingsSection(
             title = "Font library",
-            subtitle = "Install shared .rfont4 reader fonts from the catalog or a local file.",
+            subtitle = "Install shared .rfont4 files from the repository and release saved on the Nano, or a local file.",
             action = {
                 IconButton(onClick = onRefreshFontCatalog) {
                     Icon(imageVector = Icons.Outlined.Sync, contentDescription = "Refresh font catalog")
@@ -923,11 +932,20 @@ private fun FontSettings(
             },
         ) {
             if (uiState.fontCatalog.isNotEmpty()) {
+                val selected = uiState.fontCatalog.firstOrNull { it.id == uiState.selectedCatalogFontId }
+                    ?: uiState.fontCatalog.first()
                 DropdownRow(
                     label = "Font",
                     selected = uiState.selectedCatalogFontId,
                     options = uiState.fontCatalog.map { it.id to it.name },
                     onSelected = onSelectCatalogFont,
+                )
+                Text(
+                    (selected.locales + if (selected.shaping) listOf("Contextual shaping") else emptyList())
+                        .joinToString(" · ")
+                        .ifBlank { "Capabilities are embedded in the RFont4 file." },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Button(onClick = onInstallOnlineFont, modifier = Modifier.fillMaxWidth()) {
                     Icon(imageVector = Icons.Outlined.CloudUpload, contentDescription = null)

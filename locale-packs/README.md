@@ -4,8 +4,9 @@ The `.zip` files are optional UI-localization overlays stamped with their genera
 root so its contents land under `/locales/<locale>/`. Installing a locale pack changes only the interface language;
 it is never required to read a book in that language.
 
-`index.json` is the companion's online catalog. It points to these ZIP files; the companion extracts one locally and
-streams its validated files through the existing staging-and-activation API, so the reader never needs to unzip it.
+`index.json` is the companion's online catalog. Both companions resolve it from the repository owner and optional
+release tag saved on the reader, then upload the selected ZIP once. The reader streams its small files through the
+same staging, validation, and atomic activation path used for manual installation.
 
 Reader capability belongs to RFont4. Installing one font under `/fonts/<family>/font.rfont4` adds the scripts and
 OpenType shaping data declared in that file. Locale pack ZIPs never contain or refer to reader fonts.

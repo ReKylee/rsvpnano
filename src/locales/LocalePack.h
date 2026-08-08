@@ -92,6 +92,7 @@ namespace locales {
 
     bool isValidPackId(std::string_view id);
     bool isValidPackFilePath(std::string_view path);
+    std::optional<std::string_view> packIdFromArchiveManifest(std::string_view path);
     std::string_view toString(TranslationStatus value);
     std::expected<StringTable, std::string> decodeStringTable(std::vector<uint8_t> bytes, size_t expectedEntries);
     std::expected<void, std::string> validateU8g2Font(std::span<const uint8_t> bytes);

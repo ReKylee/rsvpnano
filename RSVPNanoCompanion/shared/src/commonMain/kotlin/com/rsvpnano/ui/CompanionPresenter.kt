@@ -18,7 +18,6 @@ import com.rsvpnano.converters.ImportPreparation
 import com.rsvpnano.converters.RsvpConverter
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoLanguageFont
-import com.rsvpnano.converters.ZipArchiveReader
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.RememberedNano
@@ -1150,47 +1149,17 @@ class CompanionPresenter(
             setNotice(CompanionNotice.Error("Locale packs must use the .zip extension."))
             return
         }
-        val files = runCatching {
-            ZipArchiveReader.readEntries(data, maximumEntries = 4, maximumUncompressedBytes = 128 * 1024)
-        }
-            .getOrElse {
-                setNotice(CompanionNotice.Error("Locale pack ZIP is invalid."))
-                return
-            }
-        val manifestEntry = files.entries.singleOrNull { (path, _) ->
-            path.startsWith("locales/") && path.endsWith("/manifest.toml")
-        }
-        if (manifestEntry == null) {
-            setNotice(CompanionNotice.Error("ZIP must contain one locales/<id>/manifest.toml."))
-            return
-        }
-        val root = manifestEntry.key.substringBeforeLast('/') + "/"
-        val id = root.removePrefix("locales/").removeSuffix("/")
-        if (!id.matches(Regex("[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*"))) {
-            setNotice(CompanionNotice.Error("Locale pack ID is invalid."))
-            return
-        }
-        val packFiles = files.filterKeys { it.startsWith(root) }.mapKeys { (path, _) -> path.removePrefix(root) }
-        if (packFiles.size != files.size) {
-            setNotice(CompanionNotice.Error("ZIP contains files outside its locale pack folder."))
-            return
-        }
         if (!ensureReaderReachable("installing a locale pack")) return
-        setNotice(CompanionNotice.Attention("Installing locale pack $id..."))
+        setNotice(CompanionNotice.Attention("Installing $displayName..."))
         runCatching {
             withNanoApi {
-                companionController.beginLocalePackInstall(state.baseUrl, id)
-                packFiles.forEach { (path, bytes) ->
-                    companionController.uploadLocalePackFile(state.baseUrl, id, path, bytes)
-                }
-                companionController.activateLocalePack(state.baseUrl, id)
+                companionController.installLocalePack(state.baseUrl, displayName, data)
             }
         }.onSuccess { locales ->
             updateState {
                 it.copy(
                     availableLocales = locales.locales,
-                    selectedCatalogLocaleId = id,
-                    notice = CompanionNotice.Success("Installed locale pack $id."),
+                    notice = CompanionNotice.Success("Installed $displayName."),
                 )
             }
         }.onFailure { error ->

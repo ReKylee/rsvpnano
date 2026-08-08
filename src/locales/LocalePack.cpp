@@ -177,6 +177,15 @@ namespace locales {
             || (validRelativePath(path) && path.starts_with("ui/") && !path.ends_with(".rfont4"));
     }
 
+    std::optional<std::string_view> packIdFromArchiveManifest(std::string_view path) {
+        constexpr std::string_view prefix = "locales/";
+        constexpr std::string_view suffix = "/manifest.toml";
+        if (!path.starts_with(prefix) || !path.ends_with(suffix))
+            return std::nullopt;
+        const std::string_view id = path.substr(prefix.size(), path.size() - prefix.size() - suffix.size());
+        return isValidPackId(id) ? std::optional{id} : std::nullopt;
+    }
+
     std::string_view toString(TranslationStatus value) {
         return value == TranslationStatus::preview ? "preview" : "reviewed";
     }

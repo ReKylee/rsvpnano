@@ -298,26 +298,18 @@ class NanoKtorClient(
         return response.body()
     }
 
-    override suspend fun beginLocalePackStage(baseUrl: String, id: String): NanoUploadResponse {
-        val response = httpClient.post(buildUrl(baseUrl, "api/v1/locales/$id/stage"))
-        return decodeDeviceResponse(response.status, response.body<String>(), NanoUploadResponse.serializer())
-    }
-
-    override suspend fun uploadLocalePackFile(
+    override suspend fun uploadLocalePack(
         baseUrl: String,
-        id: String,
-        path: String,
+        name: String,
         data: ByteArray,
         onProgress: ((sent: Long, total: Long) -> Unit)?,
     ): NanoUploadResponse {
-        val response = httpClient.post(
-            buildUrl(baseUrl, "api/v1/locales/$id/files", query = listOf("path" to path))
-        ) {
+        val response = httpClient.post(buildUrl(baseUrl, "api/v1/locales")) {
             setBody(
                 MultiPartFormDataContent(
                     formData {
                         append("file", data, headers = io.ktor.http.Headers.build {
-                            append(HttpHeaders.ContentDisposition, "form-data; name=\"file\"; filename=\"${path.substringAfterLast('/')}\"")
+                            append(HttpHeaders.ContentDisposition, "form-data; name=\"file\"; filename=\"$name\"")
                             append(HttpHeaders.ContentType, ContentType.Application.OctetStream.toString())
                         })
                     }
@@ -327,11 +319,6 @@ class NanoKtorClient(
                 onUpload { sent, total -> progress(sent, total ?: data.size.toLong()) }
             }
         }
-        return decodeDeviceResponse(response.status, response.body<String>(), NanoUploadResponse.serializer())
-    }
-
-    override suspend fun activateLocalePack(baseUrl: String, id: String): NanoUploadResponse {
-        val response = httpClient.post(buildUrl(baseUrl, "api/v1/locales/$id/activate"))
         return decodeDeviceResponse(response.status, response.body<String>(), NanoUploadResponse.serializer())
     }
 

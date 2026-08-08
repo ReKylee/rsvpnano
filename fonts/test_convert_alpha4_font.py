@@ -46,6 +46,16 @@ class FontMapTest(TestCase):
             target = fonts.get(locale, fonts["latin"]) | builtin_ascii
             self.assertEqual(set(), {ord(char) for char in text if not char.isspace()} - target, locale)
 
+        for locale, name in (("he", "Frank Ruhl Libre"), ("ar", "Amiri")):
+            required = {
+                ord(char)
+                for language, _direction, text in PARAGRAPHS
+                if language == locale
+                for char in text
+                if not char.isspace()
+            }
+            self.assertLessEqual(required, rfont4_codepoints(Path(f"fonts/{name}/font.rfont4")) | builtin_ascii)
+
         available = set().union(*fonts.values(), builtin_ascii)
         mixed = PARAGRAPHS[-1][2]
         self.assertEqual(set(), {ord(char) for char in mixed if not char.isspace()} - available)

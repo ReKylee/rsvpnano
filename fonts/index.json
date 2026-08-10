@@ -44,14 +44,6 @@
     "shaping": true
   },
   {
-    "id": "literata",
-    "name": "Literata",
-    "locales": [],
-    "scriptMask": 3,
-    "file": "Literata/font.rfont4",
-    "shaping": false
-  },
-  {
     "id": "noto-naskh-arabic",
     "name": "Noto Naskh Arabic",
     "locales": [

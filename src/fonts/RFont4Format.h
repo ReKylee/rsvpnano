@@ -16,10 +16,12 @@ namespace RFont4 {
     constexpr char kExtension[] = ".rfont4";
     constexpr char kFilename[] = "font.rfont4";
     constexpr uint32_t kMagic = 0x34544652UL; // "RFT4", little endian on disk.
-    constexpr uint16_t kVersion = 4;
+    constexpr uint16_t kVersion = 5;
     constexpr size_t kPageMapBytes = 256;
     constexpr size_t kPageTableEntries = 256;
-    constexpr size_t kSizeCount = 3;
+    constexpr size_t kSizeCount = 4;
+    constexpr size_t kCompactStrikeIndex = kSizeCount - 1;
+    constexpr size_t kStrikeCount = kSizeCount;
     constexpr size_t kMaximumLayoutTableCount = 3;
     constexpr uint32_t kShapedGlyphCodepoint = UINT32_MAX;
     constexpr uint32_t layoutTag(char a, char b, char c, char d) {
@@ -33,8 +35,8 @@ namespace RFont4 {
         layoutTag('G', 'S', 'U', 'B'),
         layoutTag('G', 'P', 'O', 'S'),
     };
-    constexpr std::array<const char*, kSizeCount> kSizeIds = {"large", "medium", "small"};
-    constexpr std::array<const char*, kSizeCount> kSizeLabels = {"Large", "Medium", "Small"};
+    constexpr std::array<const char*, kSizeCount> kSizeIds = {"large", "medium", "small", "compact"};
+    constexpr std::array<const char*, kSizeCount> kSizeLabels = {"Large", "Medium", "Small", "Compact"};
     constexpr uint32_t kKnownScriptMask = UnicodeText::ScriptLatin | UnicodeText::ScriptCyrillic
                                         | UnicodeText::ScriptGreek | UnicodeText::ScriptHebrew
                                         | UnicodeText::ScriptArabic | UnicodeText::ScriptHan
@@ -77,7 +79,8 @@ namespace RFont4 {
         uint8_t maxGlyphWidth = 0;
         uint8_t maxGlyphHeight = 0;
         uint8_t pixelsPerEm = 0;
-        uint16_t reserved = 0;
+        uint8_t bitsPerPixel = 4;
+        uint8_t reserved = 0;
         uint32_t bitmapSize = 0;
         uint32_t pageMapSize = kPageMapBytes;
         uint32_t pageTableSize = 0;
@@ -121,7 +124,7 @@ namespace RFont4 {
 
     struct Directory {
         Header header;
-        std::array<StrikeRecord, kSizeCount> strikes{};
+        std::array<StrikeRecord, kStrikeCount> strikes{};
         std::array<LayoutTableRecord, kMaximumLayoutTableCount> layoutTables{};
     };
 
@@ -138,18 +141,18 @@ namespace RFont4 {
             && header.strikeRecordSize == sizeof(StrikeRecord) && header.glyphRecordSize == sizeof(GlyphRecord)
             && header.kerningRecordSize == sizeof(KerningRecord)
             && header.glyphIdRecordSize == sizeof(GlyphIdRecord)
-            && header.layoutTableRecordSize == sizeof(LayoutTableRecord) && header.strikeCount == kSizeCount
+            && header.layoutTableRecordSize == sizeof(LayoutTableRecord) && header.strikeCount == kStrikeCount
             && header.layoutTableCount <= kMaximumLayoutTableCount && header.nameSize > 1
             && (header.scriptMask & ~kKnownScriptMask) == 0 && header.nameOffset == sizeof(Header)
             && header.localeOffset == header.nameOffset + header.nameSize
             && header.strikesOffset == header.localeOffset + header.localeSize
-            && header.layoutTablesOffset >= header.strikesOffset + kSizeCount * sizeof(StrikeRecord)
+            && header.layoutTablesOffset >= header.strikesOffset + kStrikeCount * sizeof(StrikeRecord)
             && header.totalSize == fileSize
             && (hasShaping ? header.unitsPerEm > 0 && header.sourceGlyphCount > 0
                            : header.unitsPerEm == 0 && header.sourceGlyphCount == 0);
     }
 
-    inline bool layoutValid(const Header& header, std::span<const StrikeRecord, kSizeCount> strikes,
+    inline bool layoutValid(const Header& header, std::span<const StrikeRecord, kStrikeCount> strikes,
                             std::span<const LayoutTableRecord> tables, size_t fileSize) {
         if (!headerValid(header, fileSize) || tables.size() != header.layoutTableCount)
             return false;
@@ -169,6 +172,7 @@ namespace RFont4 {
                                                                       * sizeof(uint16_t));
             if (strike.glyphCount == 0 || strike.glyphCount > UINT16_MAX || strike.yAdvance == 0
                 || strike.pixelsPerEm == 0
+                || (strike.bitsPerPixel != 1 && strike.bitsPerPixel != 4)
                 || strike.glyphIdCount > strike.glyphCount || !validPageTables
                 || !section(strike.bitmapOffset, strike.bitmapSize)
                 || !section(strike.glyphsOffset,

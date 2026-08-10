@@ -1,3 +1,4 @@
+import re
 import struct
 from pathlib import Path
 from unittest import TestCase, mock
@@ -77,7 +78,7 @@ class FontMapTest(TestCase):
 
     def test_generated_fonts_cover_the_multilingual_corpus(self) -> None:
         fonts = {
-            "latin": rfont4_codepoints(Path("fonts/Literata/font.rfont4")),
+            "latin": alpha4_header_codepoints(Path("src/fonts/LiterataFallbackAlpha4.h")),
             "he": rfont4_codepoints(Path("fonts/Noto Serif Hebrew/font.rfont4")),
             "ar": rfont4_codepoints(Path("fonts/Noto Naskh Arabic/font.rfont4")),
             "ja": rfont4_codepoints(Path("fonts/Noto Serif Japanese/font.rfont4")),
@@ -128,8 +129,13 @@ def rfont4_codepoints(path: Path) -> set[int]:
     data = path.read_bytes()
     header = struct.unpack_from(RFONT4_HEADER_FORMAT, data)
     strike = struct.unpack_from(RFONT4_STRIKE_FORMAT, data, header[17])
-    glyph_count, glyphs_offset = strike[0], strike[17]
+    glyph_count, glyphs_offset = strike[0], strike[18]
     return {
         struct.unpack_from(RFONT4_GLYPH_FORMAT, data, glyphs_offset + index * RFONT4_GLYPH_SIZE)[0]
         for index in range(glyph_count)
     }
+
+
+def alpha4_header_codepoints(path: Path) -> set[int]:
+    glyphs = path.read_text(encoding="utf-8").split("Glyphs[] PROGMEM = {", 1)[1].split("};", 1)[0]
+    return {int(value, 16) for value in re.findall(r"^\s*\{(0x[0-9A-F]+),", glyphs, re.MULTILINE)}

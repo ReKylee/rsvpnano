@@ -44,6 +44,7 @@ namespace {
 
     void validateStrike(const std::vector<uint8_t>& bytes, const RFont4::StrikeRecord& strike,
                         uint32_t expectedScriptMask) {
+        TEST_ASSERT_TRUE(strike.bitsPerPixel == 1 || strike.bitsPerPixel == 4);
         TEST_ASSERT_EQUAL_UINT32(RFont4::kPageMapBytes, strike.pageMapSize);
         TEST_ASSERT_TRUE(strike.pageTableCount > 0);
         uint32_t scriptMask = 0;
@@ -56,6 +57,7 @@ namespace {
             TEST_ASSERT_TRUE(static_cast<uint64_t>(glyph.bitmapOffset)
                                  + static_cast<uint64_t>(glyph.rowStride) * glyph.height
                              <= strike.bitmapSize);
+            TEST_ASSERT_EQUAL_UINT8((glyph.width * strike.bitsPerPixel + 7U) / 8U, glyph.rowStride);
             TEST_ASSERT_TRUE(static_cast<uint64_t>(glyph.kernOffset) + glyph.kernCount
                              <= strike.kerningPairCount);
 
@@ -98,8 +100,11 @@ namespace {
         TEST_ASSERT_TRUE(RFont4::layoutValid(header, strikes,
                                              std::span{tables}.first(header.layoutTableCount), bytes.size()));
         TEST_ASSERT_EQUAL_UINT8('\0', bytes[header.nameOffset + header.nameSize - 1]);
-        for (const auto& strike: strikes)
-            validateStrike(bytes, strike, header.scriptMask);
+        for (size_t index = 0; index < strikes.size(); ++index) {
+            TEST_ASSERT_EQUAL_UINT8(index == RFont4::kCompactStrikeIndex ? 1 : 4,
+                                    strikes[index].bitsPerPixel);
+            validateStrike(bytes, strikes[index], header.scriptMask);
+        }
     }
 
 } // namespace
@@ -117,7 +122,7 @@ void test_all_rfont4_assets_are_fully_validated_off_device() {
     }
     TEST_ASSERT_TRUE(count > 0);
 
-    const auto bytes = readFont("fonts/Literata/font.rfont4");
+    const auto bytes = readFont("fonts/Andika/font.rfont4");
     const auto header = recordAt<RFont4::Header>(bytes, 0);
     auto strikes = readStrikes(bytes, header);
     const auto tables = readTables(bytes, header);
@@ -191,9 +196,34 @@ void test_shaper_reuses_rfont4_nominal_glyphs_and_advances() {
     TEST_ASSERT_EQUAL_UINT32(4, output.size());
 }
 
+void test_compact_strike_renders_one_bit_rows() {
+    constexpr uint8_t bitmap[]{0xA0};
+    constexpr ui::fonts::AlphaGlyph glyphs[]{
+        {.codepoint = 'x', .width = 3, .height = 1, .rowStride = 1, .xAdvance = 4},
+    };
+    const ui::fonts::AlphaFont font{
+        .bitmap = bitmap,
+        .glyphs = glyphs,
+        .glyphCount = 1,
+        .yAdvance = 2,
+        .ascent = 1,
+        .pixelsPerEm = 2,
+        .bitsPerPixel = 1,
+    };
+    Arduino_GFX gfx{8, 4};
+    ui::fonts::AlphaTextRenderer<8> renderer{gfx};
+    TEST_ASSERT_TRUE(renderer.begin());
+    renderer.setFont(font);
+    renderer.setTextColor(0xFFFF, 0);
+
+    TEST_ASSERT_EQUAL_INT16(4, renderer.drawCodepoint('x', 0, 1));
+    TEST_ASSERT_EQUAL(2, gfx.writes);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_all_rfont4_assets_are_fully_validated_off_device);
     RUN_TEST(test_shaper_reuses_rfont4_nominal_glyphs_and_advances);
+    RUN_TEST(test_compact_strike_renders_one_bit_rows);
     return UNITY_END();
 }

@@ -148,6 +148,10 @@ void test_reader_font_selection_uses_requested_then_font_affinity_then_terminal_
         {.id = "cjk-sc", .label = "CJK SC", .locales = std::string{"zh-Hans\0", 8},
          .scriptMask = UnicodeText::ScriptHan},
         {.id = "math", .label = "STIX Two Math", .scriptMask = UnicodeText::ScriptMath},
+        {.id = "hebrew", .label = "Hebrew", .locales = std::string{"he\0", 3},
+         .scriptMask = UnicodeText::ScriptHebrew},
+        {.id = "arabic", .label = "Arabic", .locales = std::string{"ar\0", 3},
+         .scriptMask = UnicodeText::ScriptArabic},
     };
     TEST_ASSERT_EQUAL_UINT32(1, FontCatalog::selectFamily(families, "latin", "en", UnicodeText::ScriptLatin));
     TEST_ASSERT_EQUAL_UINT32(2, FontCatalog::selectFamily(families, "latin", "ja", UnicodeText::ScriptHan));
@@ -159,7 +163,8 @@ void test_reader_font_selection_uses_requested_then_font_affinity_then_terminal_
     TEST_ASSERT_EQUAL_UINT32(4, FontCatalog::selectFamily(families, "literata", "en", UnicodeText::ScriptMath));
     TEST_ASSERT_EQUAL_UINT32(4, FontCatalog::selectFamily(
                                     families, "literata", "en", UnicodeText::ScriptLatin | UnicodeText::ScriptMath));
-    TEST_ASSERT_EQUAL_UINT32(0, FontCatalog::selectFamily(families, "missing", "ar", UnicodeText::ScriptArabic));
+    TEST_ASSERT_EQUAL_UINT32(5, FontCatalog::selectFamily(families, "missing", "he", UnicodeText::ScriptHebrew));
+    TEST_ASSERT_EQUAL_UINT32(6, FontCatalog::selectFamily(families, "missing", "ar", UnicodeText::ScriptArabic));
 }
 
 void test_bidi_resolves_metadata_direction_visual_runs_and_mirroring() {

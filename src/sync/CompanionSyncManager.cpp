@@ -247,7 +247,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <label><input id="readingProgress" type="checkbox" style="width:auto"> Show book percent while reading</label>
 </div>
 <div class="card"><h2>Typography</h2>
-<label>Font size <span id="fontSizeValue"></span></label><input id="fontSizeIndex" type="range" min="0" max="2">
+<label>Font size <span id="fontSizeValue"></span></label><input id="fontSizeIndex" type="range" min="0" max="3">
 <label>Tracking <span id="trackingValue"></span></label><input id="tracking" type="range" min="-2" max="3">
 <label>Anchor <span id="anchorValue"></span></label><input id="anchorPercent" type="range" min="30" max="40">
 <label>Guide width <span id="guideWidthValue"></span></label><input id="guideWidth" type="range" min="12" max="30" step="2">

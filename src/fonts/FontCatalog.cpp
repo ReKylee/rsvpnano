@@ -17,11 +17,8 @@ namespace {
 
     constexpr const char* kFallbackId = "literata";
     constexpr const char* kFallbackLabel = "Literata";
-    const std::array<const ui::fonts::AlphaFont*, RFont4::kSizeCount> kFallbackFonts = {
-        &ui::fonts::LiterataFallbackAlpha4_52,
-        &ui::fonts::LiterataFallbackAlpha4_43,
-        &ui::fonts::LiterataFallbackAlpha4_33,
-    };
+    constexpr auto& kFallbackFonts = ui::fonts::LiterataFallbackAlpha4_Sizes;
+    static_assert(std::size(kFallbackFonts) == RFont4::kSizeCount);
 
     template<typename T, size_t Extent>
     std::expected<void, std::string> readSection(File& file, uint32_t offset, std::span<T, Extent> out) {
@@ -86,7 +83,7 @@ void FontCatalog::reset() {
     families_ = {{.id = kFallbackId,
                   .label = kFallbackLabel,
                   .builtIn = true,
-                  .scriptMask = kFallbackFonts.front()->scriptMask}};
+                  .scriptMask = kFallbackFonts[0]->scriptMask}};
 }
 
 void FontCatalog::loadFromSd() {
@@ -100,20 +97,28 @@ void FontCatalog::loadFromSd() {
         return;
     }
 
+    size_t rejected = 0;
     while (File entry = root.openNextFile()) {
         if (!entry.isDirectory()) {
             entry.close();
             continue;
         }
 
-        auto family = inspectFontFile(std::string{entry.path()} + "/" + RFont4::kFilename);
+        const std::string path = std::string{entry.path()} + "/" + RFont4::kFilename;
+        auto family = inspectFontFile(path);
         if (family && family->id != kFallbackId && !find(family->id))
             families_.push_back(std::move(*family));
+        else if (!family) {
+            ++rejected;
+            ESP_LOGW("font", "rejected %s: %s", path.c_str(), family.error().c_str());
+        }
         entry.close();
     }
     root.close();
 
     std::ranges::sort(families_.begin() + 1, families_.end(), {}, &Family::label);
+    ESP_LOGI("font", "catalog ready installed=%u rejected=%u", static_cast<unsigned>(families_.size() - 1),
+             static_cast<unsigned>(rejected));
 }
 
 std::optional<std::reference_wrapper<const FontCatalog::Family>> FontCatalog::find(std::string_view id) const {
@@ -218,6 +223,7 @@ FontCatalog::loadRuntimeStrike(LoadedFamily& family, size_t sizeIndex) {
         .pixelsPerEm = strike.pixelsPerEm,
         .file = std::ref(family.file),
         .fileStrike = strike,
+        .bitsPerPixel = strike.bitsPerPixel,
     };
     return std::cref(loaded.font);
 }

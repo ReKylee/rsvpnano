@@ -108,7 +108,7 @@ namespace screens {
     }
 
     FontCatalog::Face ReaderScreen::pageTypeface(size_t wordIndex) {
-        return fonts.loadFace(fontChoice(wordIndex), typography_.fontSizeIndex);
+        return fonts.loadFace(fontChoice(wordIndex), RFont4::kCompactStrikeIndex);
     }
 
     bool ReaderScreen::openBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, size_t index,

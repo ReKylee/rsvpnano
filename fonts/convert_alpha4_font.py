@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Convert TrueType/OpenType fonts to sparse Alpha4 Arduino_GFX bitfonts.
+"""Convert TrueType/OpenType fonts to sparse RFont4 reader fonts.
 
 This generator intentionally moves font-shape work out of the firmware runtime:
 
 * FreeType rasterization, cutoff/gamma, and despeckling are done offline.
 * Glyph boxes are cropped from the final Alpha4 mask, not raw coverage.
-* Rows are packed independently as Alpha4, two pixels per byte.
+* Reader rows are Alpha4; the compact strike is one bit per pixel.
 * Renderers scan each packed row directly, avoiding duplicate row/span metadata.
 * Unicode lookup uses generated 256-entry page tables for O(1) glyph lookup.
 * GPOS kerning is emitted as per-left-glyph slices for small local lookups.
@@ -221,8 +221,8 @@ def capability_mask(strike_masks: list[int], declared: int) -> int:
     return result
 
 
-def row_stride_bytes(width: int) -> int:
-    return (width + 1) // 2
+def row_stride_bytes(width: int, bits_per_pixel: int = 4) -> int:
+    return (width * bits_per_pixel + 7) // 8
 
 
 def quantize4(value: int, cutoff: int, gamma: float) -> int:
@@ -310,6 +310,19 @@ def pack_alpha4_rows(rows: list[list[int]], width: int, height: int) -> bytes:
     return bytes(out)
 
 
+def pack_alpha1_rows(rows: list[list[int]], width: int, height: int) -> bytes:
+    out = bytearray()
+    for y in range(height):
+        row = rows[y]
+        for first in range(0, width, 8):
+            packed = 0
+            for offset in range(min(8, width - first)):
+                if row[first + offset] >= 8:
+                    packed |= 0x80 >> offset
+            out.append(packed)
+    return bytes(out)
+
+
 def render_glyph_id(
     face: freetype.Face,
     codepoint: int,
@@ -320,6 +333,7 @@ def render_glyph_id(
     weak_threshold: int,
     strong_threshold: int,
     max_neighbors: int,
+    bits_per_pixel: int,
 ) -> RenderedGlyph | None:
     try:
         face.load_glyph(glyph_id, freetype.FT_LOAD_RENDER | freetype.FT_LOAD_TARGET_NORMAL)
@@ -365,7 +379,7 @@ def render_glyph_id(
         rows=cropped,
         width=width,
         height=height,
-        row_stride=row_stride_bytes(width),
+        row_stride=row_stride_bytes(width, bits_per_pixel),
         x_advance=x_advance,
         x_offset=max(-128, min(127, x_offset + min_x)),
         y_offset=max(-128, min(127, y_offset + min_y)),
@@ -381,13 +395,14 @@ def render_glyph(
     weak_threshold: int,
     strong_threshold: int,
     max_neighbors: int,
+    bits_per_pixel: int,
 ) -> RenderedGlyph | None:
     glyph_id = int(face.get_char_index(codepoint))
     if glyph_id == 0 and codepoint not in (ord(' '), ord('?')):
         return None
     return render_glyph_id(
         face, codepoint, glyph_id, cutoff, gamma, enable_despeckle,
-        weak_threshold, strong_threshold, max_neighbors,
+        weak_threshold, strong_threshold, max_neighbors, bits_per_pixel,
     )
 
 
@@ -588,6 +603,7 @@ def generate_font(
     weak_threshold: int,
     strong_threshold: int,
     max_neighbors: int,
+    bits_per_pixel: int,
 ) -> tuple[str, dict[str, int | float]]:
     face = freetype.Face(str(font_path))
     face.set_char_size(size * 64, size * 64, 72, 72)
@@ -605,9 +621,11 @@ def generate_font(
     fallback_glyphs = 0
 
     for codepoint in codepoints:
-        rendered = render_glyph(face, codepoint, cutoff, gamma, enable_despeckle, weak_threshold, strong_threshold, max_neighbors)
+        rendered = render_glyph(face, codepoint, cutoff, gamma, enable_despeckle, weak_threshold,
+                                strong_threshold, max_neighbors, bits_per_pixel)
         if rendered is None and fallback_face is not None:
-            rendered = render_glyph(fallback_face, codepoint, cutoff, gamma, enable_despeckle, weak_threshold, strong_threshold, max_neighbors)
+            rendered = render_glyph(fallback_face, codepoint, cutoff, gamma, enable_despeckle, weak_threshold,
+                                    strong_threshold, max_neighbors, bits_per_pixel)
             if rendered is not None:
                 # Shaping glyph IDs belong to the primary face, never its raster fallback.
                 rendered = replace(rendered, glyph_id=0)
@@ -635,7 +653,7 @@ def generate_font(
     for glyph_id in sorted(shaping_glyph_ids - direct_glyph_ids - {0}):
         rendered = render_glyph_id(
             face, SHAPED_GLYPH_CODEPOINT, glyph_id, cutoff, gamma, enable_despeckle,
-            weak_threshold, strong_threshold, max_neighbors,
+            weak_threshold, strong_threshold, max_neighbors, bits_per_pixel,
         )
         if rendered is None:
             raise ValueError(f"could not render shaping glyph {glyph_id}")
@@ -670,7 +688,8 @@ def generate_font(
     for record, rendered in zip(records, rendered_glyphs):
         bitmap_offset = len(bitmap)
         if rendered.width > 0 and rendered.height > 0:
-            bitmap.extend(pack_alpha4_rows(rendered.rows, rendered.width, rendered.height))
+            pack = pack_alpha1_rows if bits_per_pixel == 1 else pack_alpha4_rows
+            bitmap.extend(pack(rendered.rows, rendered.width, rendered.height))
 
         unique_pairs = sorted(set(pairs_by_left.get(record.codepoint, [])), key=lambda item: item[0])
         kern_offset = len(kern_pairs_flat)
@@ -786,6 +805,9 @@ def generate_font(
     lines.append(f"    {len(glyph_ids)},")
     lines.append(f"    0x{generated_script_mask:08X}UL,")
     lines.append(f"    {size},")
+    lines.append("    {},")
+    lines.append("    {},")
+    lines.append(f"    {bits_per_pixel},")
     lines.append("};")
     lines.append("")
 
@@ -811,15 +833,16 @@ def generate_font(
         "glyph_ids": len(glyph_ids),
         "shaping_glyphs": len(shaping_glyph_ids - direct_glyph_ids - {0}),
         "script_mask": generated_script_mask,
+        "bits_per_pixel": bits_per_pixel,
     }
     return "\n".join(lines), stats
 
 
-SIZE_LABELS = ("large", "medium", "small")
+SIZE_LABELS = ("large", "medium", "small", "compact")
 RFONT4_MAGIC = 0x34544652
-RFONT4_VERSION = 4
+RFONT4_VERSION = 5
 RFONT4_HEADER_FORMAT = "<I7H2B3H7I"
-RFONT4_STRIKE_FORMAT = "<IIIHBBBbbBBBH9I"
+RFONT4_STRIKE_FORMAT = "<IIIHBBBbbBBBBB9I"
 RFONT4_GLYPH_FORMAT = "<III4BbbHI"
 RFONT4_KERN_FORMAT = "<Ib"
 RFONT4_GLYPH_ID_FORMAT = "<II"
@@ -862,7 +885,7 @@ def parse_size_spec(spec: str) -> list[tuple[str, int]]:
             label, value = token.split('=', 1)
             label = label.strip().lower()
             if label not in SIZE_LABELS:
-                raise ValueError(f"unknown size label '{label}', expected large/medium/small")
+                raise ValueError(f"unknown size label '{label}', expected {','.join(SIZE_LABELS)}")
             by_name[label] = int(value.strip(), 0)
         for label in SIZE_LABELS:
             if label not in by_name:
@@ -871,7 +894,7 @@ def parse_size_spec(spec: str) -> list[tuple[str, int]]:
         return parsed
     values = [int(token, 0) for token in tokens]
     if len(values) != len(SIZE_LABELS):
-        raise ValueError("--sizes must be either large=52,medium=43,small=33 or three comma-separated values")
+        raise ValueError("--sizes must define large, medium, small, and compact")
     return list(zip(SIZE_LABELS, values))
 
 
@@ -945,6 +968,7 @@ def generated_strike(symbol: str, body: str, stats: dict[str, int | float]) -> d
         "max_width": int(max((entry[3] for entry in glyph_entries), default=0)),
         "max_height": int(max((entry[4] for entry in glyph_entries), default=0)),
         "pixels_per_em": int(stats["size"]),
+        "bits_per_pixel": int(stats["bits_per_pixel"]),
         "bitmap": bitmap,
         "glyphs": glyphs,
         "page_map": page_map,
@@ -964,7 +988,7 @@ def pack_rfont4_family(
     layout_tables: dict[str, bytes],
 ) -> bytes:
     if len(strikes) != len(SIZE_LABELS):
-        raise ValueError("RFont4 requires large, medium, and small strikes")
+        raise ValueError("RFont4 requires large, medium, small, and compact strikes")
     selected_tables = [(tag, layout_tables[tag]) for tag in FONT_LAYOUT_TAGS if layout_tables.get(tag)]
     name = display_name.encode("utf-8") + b"\0"
     locale_data = b"".join(locale.encode("ascii") + b"\0" for locale in locales)
@@ -985,7 +1009,8 @@ def pack_rfont4_family(
         strike_records.append((
             strike["glyph_count"], strike["kerning_count"], strike["glyph_id_count"], strike["page_count"],
             strike["y_advance"], strike["ascent"], strike["descent"], strike["word_ink_top"],
-            strike["word_ink_bottom"], strike["max_width"], strike["max_height"], strike["pixels_per_em"], 0,
+            strike["word_ink_bottom"], strike["max_width"], strike["max_height"], strike["pixels_per_em"],
+            strike["bits_per_pixel"], 0,
             len(strike["bitmap"]), len(strike["page_map"]), len(strike["page_tables"]), *offsets,
         ))
 
@@ -1047,7 +1072,7 @@ def main() -> int:
     parser.add_argument("--name", default=None)
     parser.add_argument("--locales", default="", help="comma-separated BCP 47 locale affinities")
     parser.add_argument("--scripts", default="", help="additional complete ISO 15924 capabilities")
-    parser.add_argument("--sizes", default="large=52,medium=43,small=33")
+    parser.add_argument("--sizes", default="large=52,medium=43,small=33,compact=10")
     parser.add_argument(
         "--map",
         default=DEFAULT_MAP,
@@ -1102,8 +1127,8 @@ def main() -> int:
         parts.append("namespace ui::fonts {")
         parts.append("")
         parts.append("// Generated by fonts/convert_alpha4_font.py.")
-        parts.append("// Pixel data is Alpha4 coverage, not final RGB color.")
-        parts.append("// Rows are packed independently: rowStride = (width + 1) / 2 bytes.")
+        parts.append("// Pixel data is Alpha4 coverage except for the 1-bit compact strike, not final RGB color.")
+        parts.append("// Rows are packed independently according to each strike's bitsPerPixel.")
         parts.append("// Glyph boxes are cropped after cutoff/gamma/despeckle.")
         parts.append("// Visible spans are found directly from the packed row.")
         parts.append("// Unicode page tables provide O(1) glyph lookup by codepoint high/low byte.")
@@ -1115,7 +1140,7 @@ def main() -> int:
         parts.append("")
 
         font_symbols: list[str] = []
-        for _, size in named_sizes:
+        for label, size in named_sizes:
             symbol = f"{base}_{size}"
             body, stats = generate_font(
                 args.font,
@@ -1132,6 +1157,7 @@ def main() -> int:
                 weak,
                 strong,
                 max_neighbors,
+                1 if label == "compact" else 4,
             )
             parts.append(body)
             font_symbols.append(symbol)
@@ -1167,6 +1193,7 @@ def main() -> int:
                 weak,
                 strong,
                 max_neighbors,
+                1 if label == "compact" else 4,
             )
             generated_strikes.append(generated_strike(symbol, body, stats))
             all_stats.append(stats)

@@ -1,11 +1,12 @@
 # RSVP Nano fonts
 
 This directory holds the offline font pipeline and the pre-converted `.rfont4` catalog used by the web flasher/companion.
+The compiled Literata fallback is intentionally absent from this installable catalog.
 
-`RFont4` is named for its packed 4-bit alpha coverage. Format version 4 keeps that rendering format while using
-32-bit Unicode codepoints, direct OpenType glyph IDs for shaping, and a generated script-capability mask. It stores
-only packed glyph rows; the renderer finds visible spans after each row is read instead of storing duplicate indexes.
-Older files must be regenerated.
+`RFont4` is named for its primary packed 4-bit alpha coverage. Format version 5 stores three Alpha4 RSVP strikes and
+one compact 1-bit strike in the same family file, alongside 32-bit Unicode codepoints, direct OpenType glyph IDs for
+shaping, and a generated script-capability mask. It stores only packed glyph rows; the renderer finds visible spans
+after each row is read instead of storing duplicate indexes. Older files must be regenerated.
 
 Folder layout:
 
@@ -25,13 +26,13 @@ src/fonts/
   LiterataFallbackAlpha4.h
 ```
 
-`large`, `medium`, and `small` default to the reader sizes we already used in firmware: `52`, `43`, and `33` px. Override them with:
+`large`, `medium`, `small`, and `compact` default to `52`, `43`, `33`, and `10` px. Override them with:
 
 ```bash
 uv run --with freetype-py --with fonttools python fonts/convert_alpha4_font.py \
   --font path/to/MyFont.ttf \
   --name "My Font" \
-  --sizes large=56,medium=44,small=34
+  --sizes large=56,medium=44,small=34,compact=10
 ```
 
 Add `--shaping` only for fonts whose scripts require contextual OpenType shaping. It embeds the subsetted
@@ -84,14 +85,16 @@ uv run --with freetype-py --with fonttools python fonts/convert_alpha4_font.py \
 Runtime behavior:
 
 - The SD card catalog is built from `/fonts/<folder name>/` directories.
-- Each folder contains one `font.rfont4` family file with large, medium, and small raster strikes.
+- Each folder contains one `font.rfont4` family file with Large, Medium, and Small Alpha4 strikes plus one Compact
+  1-bit strike. Compact is selectable in RSVP mode and is always used for page reading and scrub previews.
 - Optional GDEF/GSUB/GPOS shaping tables are stored once in that same file, never in a locale pack.
 - The selected family file stays open once; only each used strike's 256-byte Unicode page map is resident, while page indexes, glyph
   records, and Alpha4 rows are read through bounded renderer caches. Each glyph row needs one SD read.
 - Each bundled font keeps its license and any upstream font log beside its converted assets.
 - Generated RFont4 files include the rasterized glyph closure referenced by their shared layout tables, preserving
   the source font's OpenType glyph IDs.
-- Locale-pack U8g2 fonts live under `/locales/<id>/ui` and are never loaded by the reader.
+- Locale-pack U8g2 fonts live under `/locales/<id>/ui`, contain only fixed translated UI strings, and are never
+  loaded by the reader. Arbitrary book text uses the selected RFont4 family's compact strike.
 - If the selected RFont4 lacks a glyph, the renderer falls through to the compiled U8g2 font without loading another asset.
 - Installing an RFont4 is sufficient to enable its reader scripts. Installing the matching UI locale is optional.
 

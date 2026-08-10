@@ -55,6 +55,7 @@ namespace ui::fonts {
         uint8_t pixelsPerEm = 0;
         std::optional<std::reference_wrapper<File>> file;
         RFont4::StrikeRecord fileStrike;
+        uint8_t bitsPerPixel = 4;
     };
 
     struct AlphaByteInfo {
@@ -687,6 +688,11 @@ namespace ui::fonts {
 
         void compositePackedRowSpanIntoStrip(const uint8_t* packedRow, int16_t srcX, uint8_t stripRow, uint16_t dstCol,
                                              uint16_t count) {
+            if (font_->bitsPerPixel == 1) {
+                std::ranges::fill_n(strip_[stripRow] + dstCol, count, fg_);
+                std::ranges::fill_n(stripInk_[stripRow] + dstCol, count, static_cast<uint8_t>(1));
+                return;
+            }
             uint16_t out = dstCol;
             uint16_t remaining = count;
 
@@ -810,6 +816,10 @@ namespace ui::fonts {
         }
 
         void renderSpan(const uint8_t* packedRow, int16_t srcStart, int16_t spanWidth, uint16_t* output) {
+            if (font_->bitsPerPixel == 1) {
+                std::ranges::fill_n(output, spanWidth, fg_);
+                return;
+            }
             int16_t src = srcStart;
             int16_t out = 0;
 
@@ -839,7 +849,9 @@ namespace ui::fonts {
             }
         }
 
-        static uint8_t coverageAt(const uint8_t* packedRow, uint8_t x) {
+        uint8_t coverageAt(const uint8_t* packedRow, uint8_t x) const {
+            if (font_->bitsPerPixel == 1)
+                return (pgm_read_byte(packedRow + (x >> 3U)) & (0x80U >> (x & 7U))) != 0 ? 15 : 0;
             const uint8_t packed = pgm_read_byte(packedRow + (x >> 1U));
             return (x & 1U) == 0 ? static_cast<uint8_t>(packed >> 4U) : static_cast<uint8_t>(packed & 0x0FU);
         }
@@ -912,7 +924,7 @@ namespace ui::fonts {
         }
 
         template<typename Function>
-        static void forEachVisibleSpan(const uint8_t* packedRow, int16_t first, int16_t last, Function&& function) {
+        void forEachVisibleSpan(const uint8_t* packedRow, int16_t first, int16_t last, Function&& function) const {
             int16_t x = first;
             while (x < last) {
                 while (x < last && coverageAt(packedRow, static_cast<uint8_t>(x)) == 0)

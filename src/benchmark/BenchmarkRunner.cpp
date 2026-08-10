@@ -31,11 +31,8 @@ namespace {
     constexpr const char* kSdWritePath = "/benchmark/sd-write.bin";
     constexpr const char* kDraculaEpubPath = "/benchmark/Dracula-epub.epub";
     constexpr const char* kDraculaRsvpPath = "/benchmark/Dracula-epub.rsvp";
-    constexpr size_t kDisplayRowsPerChunk = 16;
     constexpr size_t kSdProbeBytes = 256UL * 1024UL;
     constexpr size_t kSdChunkBytes = 4096;
-    constexpr uint16_t kDisplayColorA = 0x0000;
-    constexpr uint16_t kDisplayColorB = 0xFFFF;
     constexpr size_t kCpuIterations = 64;
     constexpr size_t kRenderIterations = 8;
 
@@ -73,6 +70,40 @@ namespace {
         }
     }
 
+    ui::Rect renderArea() {
+        const int16_t top = std::min<int16_t>(48, gDisplay.height() / 3);
+        const int16_t bottom = std::min<int16_t>(32, gDisplay.height() / 4);
+        return {8, top, static_cast<int16_t>(gDisplay.width() - 16),
+                static_cast<int16_t>(gDisplay.height() - top - bottom)};
+    }
+
+    void showRenderScreen(std::string_view title, std::string_view detail) {
+        const ui::Rect area = renderArea();
+        gDisplay.invalidate();
+        gDisplay.beginFrame(static_cast<uint8_t>(screens::Screen::Status));
+        gDisplay.label({8, 4, static_cast<int16_t>(gDisplay.width() - 16), 20}, "Font benchmark", 2,
+                       ui::themes::ColorRole::Accent, ui::TextAlign::Center);
+        gDisplay.label({8, 26, static_cast<int16_t>(gDisplay.width() - 16), 18}, title, 2,
+                       ui::themes::ColorRole::Foreground, ui::TextAlign::Center);
+        const int16_t footerY = static_cast<int16_t>(area.y + area.h + 4);
+        gDisplay.label({8, footerY, static_cast<int16_t>(gDisplay.width() - 16),
+                        static_cast<int16_t>(gDisplay.height() - footerY)},
+                       detail, 1, ui::themes::ColorRole::Muted, ui::TextAlign::Center);
+        auto& gfx = Board::Display::gfx();
+        gfx.drawFastHLine(area.x, area.y, area.w, gDisplay.color(ui::themes::ColorRole::Outline));
+        gfx.drawFastHLine(area.x, static_cast<int16_t>(area.y + area.h - 1), area.w,
+                          gDisplay.color(ui::themes::ColorRole::Outline));
+        gDisplay.endFrame();
+    }
+
+    void clearRenderArea() {
+        const ui::Rect area = renderArea();
+        auto& gfx = Board::Display::gfx();
+        gfx.fillRect(area.x, static_cast<int16_t>(area.y + 1), area.w, static_cast<int16_t>(area.h - 2),
+                     gDisplay.color(ui::themes::ColorRole::Background));
+        gfx.flush();
+    }
+
     void logMetric(std::string_view name, bool ok, uint32_t elapsedUs, size_t iterations = 1, size_t bytes = 0,
                    uint32_t heapBefore = 0, uint32_t heapAfter = 0, uint32_t minimumHeap = 0) {
         const uint32_t elapsedMs = (elapsedUs + 999U) / 1000U;
@@ -108,29 +139,10 @@ namespace {
     }
 
     bool benchmarkDisplayPush() {
-        const uint16_t width = Board::Display::nativeWidth();
-        const uint16_t height = Board::Display::nativeHeight();
-        const uint16_t rows = height < kDisplayRowsPerChunk ? height : kDisplayRowsPerChunk;
-        const size_t pixels = static_cast<size_t>(width) * rows;
-
-        uint16_t* buffer =
-            static_cast<uint16_t*>(heap_caps_malloc(pixels * sizeof(uint16_t), MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
-        if (buffer == nullptr) {
-            return false;
-        }
-
-        for (size_t i = 0; i < pixels; ++i) {
-            buffer[i] = (i & 1U) == 0 ? kDisplayColorA : kDisplayColorB;
-        }
-
-        bool ok = true;
-        for (uint16_t y = 0; y < height && ok; y = static_cast<uint16_t>(y + rows)) {
-            const uint16_t chunkRows = static_cast<uint16_t>(min<uint16_t>(rows, height - y));
-            ok = Board::Display::pushColors(0, y, width, chunkRows, buffer);
-        }
-
-        heap_caps_free(buffer);
-        return ok;
+        auto& gfx = Board::Display::gfx();
+        gfx.fillScreen(gDisplay.color(ui::themes::ColorRole::Background));
+        gfx.flush();
+        return true;
     }
 
     bool benchmarkSdWriteRead() {
@@ -274,9 +286,11 @@ namespace {
             .has_value();
     }
 
-    bool renderParagraph(const TextSample& sample, size_t sizeIndex, int16_t& baseline,
+    bool renderParagraph(const TextSample& sample, const ui::Rect& area, size_t sizeIndex, int16_t& baseline,
                          size_t fixedFamily = SIZE_MAX) {
-        int16_t cursor = sample.rightToLeft ? static_cast<int16_t>(Board::Display::nativeWidth() - 12) : 12;
+        const int16_t left = static_cast<int16_t>(area.x + 4);
+        const int16_t right = static_cast<int16_t>(area.x + area.w - 4);
+        int16_t cursor = sample.rightToLeft ? right : left;
         size_t offset = 0;
         std::vector<ui::fonts::PositionedGlyph> glyphs;
         glyphs.reserve(32);
@@ -309,13 +323,12 @@ namespace {
                 advance = gText.textAdvance(word);
             }
             const int16_t space = std::max<int16_t>(2, gText.glyphAdvance(' '));
-            const bool wrap = sample.rightToLeft ? cursor - advance < 12
-                                                 : cursor + advance > Board::Display::nativeWidth() - 12;
+            const bool wrap = sample.rightToLeft ? cursor - advance < left : cursor + advance > right;
             if (wrap) {
                 baseline = static_cast<int16_t>(baseline + face.raster.get().yAdvance + 2);
-                cursor = sample.rightToLeft ? static_cast<int16_t>(Board::Display::nativeWidth() - 12) : 12;
+                cursor = sample.rightToLeft ? right : left;
             }
-            if (baseline >= Board::Display::nativeHeight() - 4)
+            if (baseline >= area.y + area.h - 4)
                 return true;
             const int16_t x = sample.rightToLeft ? static_cast<int16_t>(cursor - advance) : cursor;
             const int16_t drawn = shaped ? gText.drawGlyphs(glyphs, x, baseline)
@@ -345,50 +358,66 @@ namespace {
         const FontCatalog::Family& family = gFonts.families()[familyIndex];
         const TextSample& sample = sampleFor(family);
         const std::string prefix = "font_" + family.id;
-        showStatus("Font benchmark", family.label.c_str(), sample.id.data());
+        const ui::Rect area = renderArea();
+        showRenderScreen(family.label, sample.id);
 
         FontCatalog::Face face = gFonts.loadFace(familyIndex, 1);
         gText.setFont(face.raster.get());
-        gText.setTextColor(0xFFFF, 0x0000);
+        gText.setTextColor(gDisplay.color(ui::themes::ColorRole::Foreground),
+                           gDisplay.color(ui::themes::ColorRole::Background));
         bool ok = true;
         if (face.shaper) {
             std::vector<ui::fonts::PositionedGlyph> glyphs;
             glyphs.reserve(sample.word.size());
-            ok &= runTimed(prefix + "_shape_cold", [&] { return shape(face, sample, glyphs); }, 0);
+            ok &= runTimed(prefix + "_shape_cold", 1, [&] { return shape(face, sample, glyphs); }, 0, false);
             ok &= runTimed(prefix + "_shape_warm", kCpuIterations,
                            [&] { return shape(face, sample, glyphs); }, 0, false);
             if (!glyphs.empty()) {
+                clearRenderArea();
                 ok &= runTimed(prefix + "_render_rsvp", kRenderIterations, [&] {
-                    return gText.drawGlyphs(glyphs, 24, static_cast<int16_t>(Board::Display::nativeHeight() / 2)) >= 0;
+                    return gText.drawGlyphs(glyphs, static_cast<int16_t>(area.x + 12),
+                                            static_cast<int16_t>(area.y + area.h / 2)) >= 0;
                 }, 0, false);
+                Board::Display::gfx().flush();
             }
         } else {
+            clearRenderArea();
             ok &= runTimed(prefix + "_render_rsvp", kRenderIterations, [&] {
-                return gText.drawString(sample.word, 24,
-                                        static_cast<int16_t>(Board::Display::nativeHeight() / 2)) >= 0;
+                return gText.drawString(sample.word, static_cast<int16_t>(area.x + 12),
+                                        static_cast<int16_t>(area.y + area.h / 2)) >= 0;
             }, 0, false);
+            Board::Display::gfx().flush();
         }
 
         face = gFonts.loadFace(familyIndex, RFont4::kCompactStrikeIndex);
         gText.setFont(face.raster.get());
+        clearRenderArea();
         ok &= runTimed(prefix + "_render_page", kRenderIterations, [&] {
-            int16_t baseline = 24;
-            return renderParagraph(sample, RFont4::kCompactStrikeIndex, baseline, familyIndex);
+            int16_t baseline = static_cast<int16_t>(area.y + 14);
+            return renderParagraph(sample, area, RFont4::kCompactStrikeIndex, baseline, familyIndex);
         }, 0, false);
+        Board::Display::gfx().flush();
+        gFonts.clearLoaded();
         delay(1);
         return ok;
     }
 
     bool benchmarkMixedPage() {
-        return runTimed("multilingual_page_pipeline", kRenderIterations, [&] {
-            Board::Display::gfx().fillScreen(0x0000);
-            int16_t baseline = 16;
-            return renderParagraph(kLatinSample, RFont4::kCompactStrikeIndex, baseline)
-                && renderParagraph(kHebrewSample, RFont4::kCompactStrikeIndex, baseline)
-                && renderParagraph(kArabicSample, RFont4::kCompactStrikeIndex, baseline)
-                && renderParagraph(kCjkSample, RFont4::kCompactStrikeIndex, baseline)
-                && renderParagraph(kMathSample, RFont4::kCompactStrikeIndex, baseline);
+        const ui::Rect area = renderArea();
+        showRenderScreen("Multilingual page", "Latin / Hebrew / Arabic / CJK / Math");
+        clearRenderArea();
+        gFonts.clearLoaded();
+        const bool ok = runTimed("multilingual_page_pipeline", kRenderIterations, [&] {
+            int16_t baseline = static_cast<int16_t>(area.y + 12);
+            return renderParagraph(kLatinSample, area, RFont4::kCompactStrikeIndex, baseline)
+                && renderParagraph(kHebrewSample, area, RFont4::kCompactStrikeIndex, baseline)
+                && renderParagraph(kArabicSample, area, RFont4::kCompactStrikeIndex, baseline)
+                && renderParagraph(kCjkSample, area, RFont4::kCompactStrikeIndex, baseline)
+                && renderParagraph(kMathSample, area, RFont4::kCompactStrikeIndex, baseline);
         }, 0, false);
+        Board::Display::gfx().flush();
+        gFonts.clearLoaded();
+        return ok;
     }
 
     bool benchmarkFonts() {
@@ -412,6 +441,8 @@ namespace {
 
     bool beginDisplay() {
         gDisplayReady = Board::Display::begin();
+        if (gDisplayReady)
+            gDisplay.setOrientation(Board::Display::defaultUiOrientation());
         gDisplay.setTheme(gTheme);
         return gDisplayReady;
     }
@@ -481,8 +512,7 @@ namespace Benchmark {
         runTimed("input_begin", beginInput);
         waitForStartInput();
         runTimed("display_push_full", benchmarkDisplayPush,
-                 static_cast<size_t>(Board::Display::nativeWidth())
-                     * static_cast<size_t>(Board::Display::nativeHeight()) * sizeof(uint16_t));
+                 static_cast<size_t>(gDisplay.width()) * static_cast<size_t>(gDisplay.height()) * sizeof(uint16_t));
         if (Board::Audio::available()) {
             runTimed("audio_begin", beginAudio);
             runTimed("audio_beep", beepAudio);

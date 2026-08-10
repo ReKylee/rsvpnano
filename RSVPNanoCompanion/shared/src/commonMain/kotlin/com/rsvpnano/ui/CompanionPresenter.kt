@@ -166,8 +166,6 @@ class CompanionPresenter(
 
     fun setRssFeedDraft(value: String) = updateState { it.copy(rssFeedDraft = value) }
 
-    fun setSelectedCatalogThemeId(value: String) = updateState { it.copy(selectedCatalogThemeId = value) }
-
     fun refresh() {
         scope.launch {
             val startedAt = currentTimeMillis()
@@ -207,12 +205,9 @@ class CompanionPresenter(
             }
                 .onSuccess { (catalogUrl, themes) ->
                     updateState {
-                        val selected = it.selectedCatalogThemeId.takeIf { id -> themes.any { theme -> theme.id == id } }
-                            ?: themes.firstOrNull()?.id.orEmpty()
                         it.copy(
                             themeCatalog = themes,
                             themeCatalogUrl = catalogUrl,
-                            selectedCatalogThemeId = selected,
                         )
                     }
                 }
@@ -237,7 +232,16 @@ class CompanionPresenter(
                     }
                 }
                 .onFailure { error ->
-                    setNotice(CompanionNotice.Error(error.message ?: "Online font catalog could not be loaded."))
+                    val message = error.message.orEmpty()
+                    setNotice(
+                        CompanionNotice.Error(
+                            if ("is required for type with serial name NanoFontCatalogItem" in message) {
+                                "The configured repository has an older font catalog. Select a release containing the current fonts/index.json."
+                            } else {
+                                message.ifBlank { "Online font catalog could not be loaded." }
+                            },
+                        ),
+                    )
                 }
         }
     }
@@ -942,15 +946,14 @@ class CompanionPresenter(
         }
     }
 
-    fun installSelectedOnlineTheme() {
+    fun installOnlineTheme(themeId: String) {
         scope.launch {
             val state = current
             if (!state.isConnected) {
                 setNotice(CompanionNotice.Error("Connect to your Nano before installing themes."))
                 return@launch
             }
-            val theme = state.themeCatalog.firstOrNull { it.id == state.selectedCatalogThemeId }
-                ?: state.themeCatalog.firstOrNull()
+            val theme = state.themeCatalog.firstOrNull { it.id == themeId }
             if (theme == null) {
                 setNotice(CompanionNotice.Error("Load the online theme list first."))
                 return@launch
@@ -979,7 +982,6 @@ class CompanionPresenter(
                     it.copy(
                         settings = snapshot.settings,
                         availableThemes = snapshot.themes,
-                        selectedCatalogThemeId = theme.id,
                         notice = CompanionNotice.Success("Installed ${theme.name}."),
                     )
                 }

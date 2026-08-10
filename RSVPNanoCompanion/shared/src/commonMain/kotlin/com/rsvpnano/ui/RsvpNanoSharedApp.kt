@@ -147,24 +147,22 @@ fun RsvpNanoSharedApp(
             }
         }
 
-        LaunchedEffect(selectedScreen) {
-            if (selectedScreen == CompanionScreen.Settings && uiState.themeCatalog.isEmpty()) {
-                presenter.refreshThemeCatalog()
-            }
-            if (selectedScreen == CompanionScreen.Settings && uiState.fontCatalog.isEmpty()) {
-                presenter.refreshFontCatalog()
-            }
-            if (selectedScreen == CompanionScreen.Settings && uiState.localeCatalog.isEmpty()) {
-                presenter.refreshLocaleCatalog()
-            }
-        }
-
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val wide = maxWidth >= 840.dp
             val activeSettingsDestination = if (wide) {
                 settingsDestination ?: SettingsDestination.Device
             } else {
                 settingsDestination
+            }
+            LaunchedEffect(selectedScreen, activeSettingsDestination) {
+                if (selectedScreen == CompanionScreen.Settings) {
+                    when (activeSettingsDestination) {
+                        SettingsDestination.Themes -> if (uiState.themeCatalog.isEmpty()) presenter.refreshThemeCatalog()
+                        SettingsDestination.Locales -> if (uiState.localeCatalog.isEmpty()) presenter.refreshLocaleCatalog()
+                        SettingsDestination.Fonts -> if (uiState.fontCatalog.isEmpty()) presenter.refreshFontCatalog()
+                        else -> Unit
+                    }
+                }
             }
             val openBook = selectedBook.takeIf { selectedScreen == CompanionScreen.Library }
             val viewingBook = openBook != null

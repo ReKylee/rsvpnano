@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.Brightness6
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Palette
@@ -38,7 +39,6 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -70,7 +70,8 @@ internal enum class SettingsDestination(
     Device("Reader & network", Icons.Outlined.Wifi, "Connect to your reader, configure its Wi-Fi, and choose its update source."),
     Reading("Reading", Icons.AutoMirrored.Outlined.MenuBook, "Set reading speed, pacing, pauses, footer information, and controls."),
     Typography("Typography", Icons.Outlined.TextFields, "Adjust reader text size, tracking, focus highlight, and guide placement."),
-    Display("Display", Icons.Outlined.Palette, "Choose the reader theme, brightness, standby behavior, and screensaver."),
+    Display("Display", Icons.Outlined.Brightness6, "Choose brightness, standby behavior, and screensaver settings."),
+    Themes("Themes", Icons.Outlined.Palette, "Choose the active theme or install themes from the configured repository."),
     Locales("Languages", Icons.Outlined.Language, "Choose the interface language or install a locale pack. Reader language support comes from fonts."),
     Fonts("Fonts", Icons.Outlined.CloudUpload, "Choose the default reading typeface and install fonts for the scripts used by your books."),
     About("About", Icons.Outlined.Info, "Project links and creator credit for the RSVP Nano companion."),
@@ -108,7 +109,12 @@ internal fun SettingsScreen(
 
     PullRefreshBox(
         isRefreshing = uiState.isRefreshing,
-        onRefresh = presenter::refresh,
+        onRefresh = when (selected) {
+            SettingsDestination.Themes -> presenter::refreshThemeCatalog
+            SettingsDestination.Locales -> presenter::refreshLocaleCatalog
+            SettingsDestination.Fonts -> presenter::refreshFontCatalog
+            else -> presenter::refresh
+        },
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             if (maxWidth >= 720.dp) {
@@ -195,9 +201,13 @@ private fun SettingsContent(
             SettingsDestination.Display -> DisplaySettings(
                 uiState = uiState,
                 onUpdateSettings = presenter::updateSettings,
+            )
+
+            SettingsDestination.Themes -> ThemeSettings(
+                uiState = uiState,
+                onUpdateSettings = presenter::updateSettings,
                 onRefreshThemeCatalog = presenter::refreshThemeCatalog,
-                onSelectCatalogTheme = presenter::setSelectedCatalogThemeId,
-                onInstallOnlineTheme = presenter::installSelectedOnlineTheme,
+                onInstallOnlineTheme = presenter::installOnlineTheme,
                 onUploadTheme = onUploadTheme,
             )
 
@@ -508,10 +518,6 @@ private fun PacingSlider(
 private fun DisplaySettings(
     uiState: CompanionUiState,
     onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
-    onRefreshThemeCatalog: () -> Unit,
-    onSelectCatalogTheme: (String) -> Unit,
-    onInstallOnlineTheme: () -> Unit,
-    onUploadTheme: () -> Unit,
 ) {
     SettingsPage {
         val settings = uiState.settings
@@ -521,18 +527,9 @@ private fun DisplaySettings(
         }
 
         SettingsSection(
-            title = "Appearance",
-            subtitle = "Theme, brightness, and one-handed layout.",
+            title = "Display",
+            subtitle = "Brightness and one-handed layout.",
         ) {
-            DropdownRow(
-                label = "Theme",
-                description = "Colors and typeface settings used by the Nano.",
-                selected = settings.`interface`.selectedThemeId,
-                options = uiState.availableThemes
-                    .map { theme -> theme.id to theme.name }
-                    .ifEmpty { listOf(settings.`interface`.selectedThemeId to settings.`interface`.selectedThemeId) },
-                onSelected = { themeId -> onUpdateSettings { it.withThemeId(themeId) } },
-            )
             SliderRow(
                 label = "Brightness",
                 description = "Applied immediately.",
@@ -640,43 +637,67 @@ private fun DisplaySettings(
             )
         }
 
+    }
+}
+
+@Composable
+private fun ThemeSettings(
+    uiState: CompanionUiState,
+    onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
+    onRefreshThemeCatalog: () -> Unit,
+    onInstallOnlineTheme: (String) -> Unit,
+    onUploadTheme: () -> Unit,
+) {
+    SettingsPage {
+        val settings = uiState.settings
+        if (settings == null) {
+            UnavailableSettings(uiState.isConnected)
+            return@SettingsPage
+        }
+        SettingsSection(title = "Active theme") {
+            DropdownRow(
+                label = "Theme",
+                description = "Colors and typeface settings used by the Nano.",
+                selected = settings.`interface`.selectedThemeId,
+                options = uiState.availableThemes
+                    .map { theme -> theme.id to theme.name }
+                    .ifEmpty { listOf(settings.`interface`.selectedThemeId to settings.`interface`.selectedThemeId) },
+                onSelected = { themeId -> onUpdateSettings { it.withThemeId(themeId) } },
+            )
+        }
+        SettingsSection(title = "Installed") {
+            if (uiState.availableThemes.isEmpty()) {
+                Text("No themes reported by the reader.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            uiState.availableThemes.forEach { theme ->
+                AssetRow(theme.name, "Available on the reader", action = null, onAction = {})
+            }
+        }
+        val installedIds = uiState.availableThemes.mapTo(mutableSetOf()) { it.id }
         SettingsSection(
-            title = "Theme library",
-            subtitle = "Install from the online catalog or a local theme file.",
+            title = "Available from ${catalogSource(settings)}",
             action = {
                 IconButton(onClick = onRefreshThemeCatalog) {
-                    Icon(imageVector = Icons.Outlined.Sync, contentDescription = "Refresh theme catalog")
+                    Icon(Icons.Outlined.Sync, contentDescription = "Refresh theme catalog")
                 }
             },
         ) {
-            Text(text = "From catalog", style = MaterialTheme.typography.labelLarge)
-            if (uiState.themeCatalog.isNotEmpty()) {
-                DropdownRow(
-                    label = "Theme",
-                    selected = uiState.selectedCatalogThemeId,
-                    options = uiState.themeCatalog.map { theme -> theme.id to theme.name },
-                    onSelected = onSelectCatalogTheme,
-                )
-                Button(
-                    onClick = onInstallOnlineTheme,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(imageVector = Icons.Outlined.CloudUpload, contentDescription = null)
-                    Text(text = "Install theme")
-                }
-            } else {
+            val available = uiState.themeCatalog.filterNot { it.id in installedIds }
+            if (available.isEmpty()) {
                 Text(
-                    text = "The online catalog is unavailable. Use refresh to try again.",
+                    if (uiState.themeCatalog.isEmpty()) "The online theme catalog is unavailable." else "All available themes are installed.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
                 )
             }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            Text(text = "From file", style = MaterialTheme.typography.labelLarge)
-            OutlinedButton(onClick = onUploadTheme, modifier = Modifier.fillMaxWidth()) {
-                Icon(imageVector = Icons.Outlined.UploadFile, contentDescription = null)
-                Text(text = "Choose theme file")
+            available.forEach { theme ->
+                AssetRow(
+                    title = theme.name,
+                    subtitle = "Theme",
+                    action = "Install",
+                    onAction = { onInstallOnlineTheme(theme.id) },
+                )
             }
+            UploadRow("Install local theme file", onUploadTheme)
         }
     }
 }
@@ -700,7 +721,7 @@ private fun TypographySettings(
             SegmentedChoiceRow(
                 label = "Font size",
                 selected = settings.reading.typography.fontSizeIndex.toString(),
-                options = listOf("0" to "Large", "1" to "Medium", "2" to "Small"),
+                options = listOf("0" to "Large", "1" to "Medium", "2" to "Small", "3" to "Compact"),
                 onSelected = { value -> onUpdateSettings { it.withFontSizeIndex(value.toInt()) } },
             )
             SliderRow(
@@ -861,13 +882,18 @@ private fun SettingsIndex(
         SettingsDestination.Typography to settings?.let {
             val font = uiState.availableFonts.firstOrNull { font -> font.id == it.reading.typography.fontId }?.name
                 ?: it.reading.typography.fontId
-            val size = listOf("Large", "Medium", "Small").getOrElse(it.reading.typography.fontSizeIndex) { "Default" }
+            val size = listOf("Large", "Medium", "Small", "Compact")
+                .getOrElse(it.reading.typography.fontSizeIndex) { "Default" }
             listOf(font, size, "Tracking ${it.reading.typography.tracking}").joinToString(INLINE_DIVIDER)
         }.orEmpty(),
         SettingsDestination.Display to settings?.let {
-            val theme = uiState.availableThemes.firstOrNull { theme -> theme.id == it.`interface`.selectedThemeId }?.name
+            listOf("${it.`interface`.brightnessPercent}% brightness", it.`interface`.screensaver)
+                .joinToString(INLINE_DIVIDER)
+        }.orEmpty(),
+        SettingsDestination.Themes to settings?.let {
+            val theme = uiState.availableThemes.firstOrNull { installed -> installed.id == it.`interface`.selectedThemeId }?.name
                 ?: it.`interface`.selectedThemeId
-            listOf(theme, "${it.`interface`.brightnessPercent}% brightness").joinToString(INLINE_DIVIDER)
+            listOf(theme, "${uiState.availableThemes.size} installed").joinToString(INLINE_DIVIDER)
         }.orEmpty(),
         SettingsDestination.Locales to settings?.let {
             val locale = uiState.availableLocales.firstOrNull { pack -> pack.locale == it.`interface`.locale }?.nativeName

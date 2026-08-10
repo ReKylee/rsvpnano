@@ -49,7 +49,6 @@ data class CompanionUiState(
     val availableFonts: List<NanoFontSummary> = emptyList(),
     val availableLocales: List<NanoLocaleSummary> = emptyList(),
     val themeCatalogUrl: String = "",
-    val selectedCatalogThemeId: String = "",
     val fontCatalog: List<NanoFontCatalogItem> = emptyList(),
     val fontCatalogUrl: String = "",
     val localeCatalog: List<NanoLocaleCatalogItem> = emptyList(),

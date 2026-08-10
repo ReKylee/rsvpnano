@@ -3,17 +3,24 @@
 
 #include <Arduino.h>
 #include <esp_heap_caps.h>
+#include <algorithm>
 #include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 #include "board/BoardStorage.h"
 
 #include "board/Board.h"
 #include "board/BoardConfig.h"
 #include "board/BoardInput.h"
 #include "converter/EpubConverter.h"
+#include "fonts/FontCatalog.h"
 #include "input/Input.h"
 #include "storage/fs/SdCard.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
+#include "text/BidiText.h"
+#include "text/UnicodeText.h"
 #include "ui/Theme.h"
 #include "ui/Ui.h"
 #include "ui/screens/Screens.h"
@@ -29,26 +36,59 @@ namespace {
     constexpr size_t kSdChunkBytes = 4096;
     constexpr uint16_t kDisplayColorA = 0x0000;
     constexpr uint16_t kDisplayColorB = 0xFFFF;
+    constexpr size_t kCpuIterations = 64;
+    constexpr size_t kRenderIterations = 8;
 
     ui::Context gDisplay(Board::Display::gfx());
     ui::themes::Theme gTheme = ui::themes::defaultTheme();
+    ui::fonts::AlphaTextRenderer<640> gText(Board::Display::gfx());
+    FontCatalog gFonts;
     bool gDisplayReady = false;
 
+    struct TextSample {
+        std::string_view id;
+        std::string_view locale;
+        std::string_view paragraph;
+        std::string_view word;
+        bool rightToLeft = false;
+    };
+
+    constexpr TextSample kLatinSample{
+        "latin", "en", "Comfortable reading should remain quick on every page.", "Comfortable", false};
+    constexpr TextSample kHebrewSample{
+        "hebrew", "he", "קריאה עברית נוחה וברורה עם נִקּוּד מלא.", "נִקּוּד", true};
+    constexpr TextSample kArabicSample{
+        "arabic", "ar", "القراءة العربية واضحة ومريحة مع التَّشْكِيلِ.", "التَّشْكِيلِ", true};
+    constexpr TextSample kCjkSample{
+        "cjk", "ja", "日本語と中文の文章を快適に読みます。", "日本語と中文", false};
+    constexpr TextSample kMathSample{
+        "math", "en", "∀x∈ℝ, x²≥0 and ∫₀¹x²dx=⅓.", "∀x∈ℝ", false};
+    constexpr std::string_view kMixedParagraph =
+        "English 123 — עברית עם נִקּוּד — العربية مع التَّشْكِيلِ — 日本語と中文 — ∀x∈ℝ.";
+
     void showStatus(const char* title, const char* line1 = "", const char* line2 = "") {
-        ESP_LOGD("bench", "screen title=%s line1=%s line2=%s", title, line1, line2);
+        ESP_LOGI("bench", "screen title=%s line1=%s line2=%s", title, line1, line2);
         if (gDisplayReady) {
             screens::status(gDisplay, title, line1, line2);
         }
     }
 
-    void logMetric(const char* name, bool ok, uint32_t elapsedMs, size_t bytes = 0) {
-        const uint32_t rateKiBPerSecond = elapsedMs > 0 && bytes > 0
-                                            ? static_cast<uint32_t>((static_cast<uint64_t>(bytes) * 1000ULL)
-                                                                    / (static_cast<uint64_t>(elapsedMs) * 1024ULL))
+    void logMetric(std::string_view name, bool ok, uint32_t elapsedUs, size_t iterations = 1, size_t bytes = 0,
+                   uint32_t heapBefore = 0, uint32_t heapAfter = 0, uint32_t minimumHeap = 0) {
+        const uint32_t elapsedMs = (elapsedUs + 999U) / 1000U;
+        const uint32_t averageUs = iterations > 0 ? elapsedUs / iterations : 0;
+        const uint32_t rateKiBPerSecond = elapsedUs > 0 && bytes > 0
+                                            ? static_cast<uint32_t>((static_cast<uint64_t>(bytes) * 1000000ULL)
+                                                                    / (static_cast<uint64_t>(elapsedUs) * 1024ULL))
                                             : 0;
-        ESP_LOGD("bench", "metric=%s ok=%u ms=%lu bytes=%lu rate_kib_s=%lu", name, ok ? 1 : 0,
-                 static_cast<unsigned long>(elapsedMs), static_cast<unsigned long>(bytes),
-                 static_cast<unsigned long>(rateKiBPerSecond));
+        ESP_LOGI("bench",
+                 "metric=%.*s ok=%u ms=%lu us=%lu iterations=%lu avg_us=%lu bytes=%lu rate_kib_s=%lu "
+                 "heap_before=%lu heap_after=%lu heap_min=%lu",
+                 static_cast<int>(name.size()), name.data(), ok ? 1 : 0, static_cast<unsigned long>(elapsedMs),
+                 static_cast<unsigned long>(elapsedUs), static_cast<unsigned long>(iterations),
+                 static_cast<unsigned long>(averageUs), static_cast<unsigned long>(bytes),
+                 static_cast<unsigned long>(rateKiBPerSecond), static_cast<unsigned long>(heapBefore),
+                 static_cast<unsigned long>(heapAfter), static_cast<unsigned long>(minimumHeap));
     }
 
     void fillBytes(uint8_t* buffer, size_t bytes, uint32_t offset) {
@@ -174,15 +214,200 @@ namespace {
         return EpubConverter::convertIfNeeded(kDraculaEpubPath, kDraculaRsvpPath, options).has_value();
     }
 
-    void runTimed(const char* name, bool (*operation)(), size_t bytes = 0) {
-        showStatus("Benchmark", name, "Running");
-        const uint32_t startedMs = millis();
-        const bool ok = operation();
-        const uint32_t elapsedMs = millis() - startedMs;
-        logMetric(name, ok, elapsedMs, bytes);
-        const std::string elapsed = std::to_string(elapsedMs) + " ms";
-        showStatus(ok ? "Benchmark OK" : "Benchmark failed", name, elapsed.c_str());
-        delay(250);
+    template<typename Operation>
+    bool runTimed(std::string_view name, size_t iterations, Operation&& operation, size_t bytes = 0,
+                  bool updateDisplay = true) {
+        const std::string ownedName{name};
+        if (updateDisplay)
+            showStatus("Benchmark", ownedName.c_str(), "Running");
+        const uint32_t heapBefore = ESP.getFreeHeap();
+        const bool monitorHeap = heap_caps_monitor_local_minimum_free_size_start() == ESP_OK;
+        const uint32_t startedUs = micros();
+        bool ok = true;
+        size_t completed = 0;
+        while (completed < iterations && ok) {
+            ok = operation();
+            ++completed;
+        }
+        const uint32_t elapsedUs = micros() - startedUs;
+        const uint32_t heapAfter = ESP.getFreeHeap();
+        const uint32_t minimumHeap = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
+        if (monitorHeap)
+            heap_caps_monitor_local_minimum_free_size_stop();
+        logMetric(name, ok, elapsedUs, completed, bytes, heapBefore, heapAfter, minimumHeap);
+        if (updateDisplay) {
+            const std::string elapsed = std::to_string(elapsedUs / 1000U) + " ms";
+            showStatus(ok ? "Benchmark OK" : "Benchmark failed", ownedName.c_str(), elapsed.c_str());
+            delay(250);
+        }
+        return ok;
+    }
+
+    template<typename Operation>
+    bool runTimed(std::string_view name, Operation&& operation, size_t bytes = 0) {
+        return runTimed(name, 1, std::forward<Operation>(operation), bytes);
+    }
+
+    const TextSample& sampleFor(const FontCatalog::Family& family) {
+        if ((family.scriptMask & UnicodeText::ScriptArabic) != 0)
+            return kArabicSample;
+        if ((family.scriptMask & UnicodeText::ScriptHebrew) != 0)
+            return kHebrewSample;
+        if ((family.scriptMask & (UnicodeText::ScriptHan | UnicodeText::ScriptHiragana
+                                  | UnicodeText::ScriptKatakana)) != 0)
+            return kCjkSample;
+        if ((family.scriptMask & UnicodeText::ScriptMath) != 0)
+            return kMathSample;
+        return kLatinSample;
+    }
+
+    bool shape(const FontCatalog::Face& face, const TextSample& sample,
+               std::vector<ui::fonts::PositionedGlyph>& glyphs) {
+        if (!face.shaper)
+            return false;
+        const size_t offset = sample.paragraph.find(sample.word);
+        if (offset == std::string_view::npos)
+            return false;
+        glyphs.clear();
+        return face.shaper->get()
+            .shape(sample.paragraph, offset, sample.word.size(), sample.rightToLeft, sample.locale, gText, glyphs)
+            .has_value();
+    }
+
+    bool renderParagraph(const TextSample& sample, size_t sizeIndex, int16_t& baseline,
+                         size_t fixedFamily = SIZE_MAX) {
+        int16_t cursor = sample.rightToLeft ? static_cast<int16_t>(Board::Display::nativeWidth() - 12) : 12;
+        size_t offset = 0;
+        std::vector<ui::fonts::PositionedGlyph> glyphs;
+        glyphs.reserve(32);
+        while (offset < sample.paragraph.size()) {
+            while (offset < sample.paragraph.size() && sample.paragraph[offset] == ' ')
+                ++offset;
+            if (offset == sample.paragraph.size())
+                break;
+            const size_t found = sample.paragraph.find(' ', offset);
+            const size_t end = found == std::string_view::npos ? sample.paragraph.size() : found;
+            const std::string_view word = sample.paragraph.substr(offset, end - offset);
+            const uint32_t scripts = UnicodeText::scriptsIn(word);
+            const size_t selected = fixedFamily == SIZE_MAX
+                                      ? FontCatalog::selectFamily(gFonts.families(), "literata", sample.locale, scripts)
+                                      : fixedFamily;
+            FontCatalog::Face face = gFonts.loadFace(selected, sizeIndex);
+            gText.setFont(face.raster.get());
+
+            int16_t advance = 0;
+            bool shaped = false;
+            if (face.shaper) {
+                glyphs.clear();
+                const auto result = face.shaper->get().shape(sample.paragraph, offset, word.size(),
+                                                             sample.rightToLeft, sample.locale, gText, glyphs);
+                if (!result)
+                    return false;
+                advance = *result;
+                shaped = true;
+            } else {
+                advance = gText.textAdvance(word);
+            }
+            const int16_t space = std::max<int16_t>(2, gText.glyphAdvance(' '));
+            const bool wrap = sample.rightToLeft ? cursor - advance < 12
+                                                 : cursor + advance > Board::Display::nativeWidth() - 12;
+            if (wrap) {
+                baseline = static_cast<int16_t>(baseline + face.raster.get().yAdvance + 2);
+                cursor = sample.rightToLeft ? static_cast<int16_t>(Board::Display::nativeWidth() - 12) : 12;
+            }
+            if (baseline >= Board::Display::nativeHeight() - 4)
+                return true;
+            const int16_t x = sample.rightToLeft ? static_cast<int16_t>(cursor - advance) : cursor;
+            const int16_t drawn = shaped ? gText.drawGlyphs(glyphs, x, baseline)
+                                         : gText.drawString(word, x, baseline);
+            if (drawn < 0)
+                return false;
+            cursor = sample.rightToLeft ? static_cast<int16_t>(x - space)
+                                        : static_cast<int16_t>(x + drawn + space);
+            offset = end;
+        }
+        baseline = static_cast<int16_t>(baseline + 16);
+        return true;
+    }
+
+    bool benchmarkBidi(std::string_view id, const TextSample& sample) {
+        BidiText::Analysis analysis;
+        BidiText::Line line;
+        const std::string metric = "bidi_" + std::string{id} + "_paragraph";
+        return runTimed(metric, kCpuIterations, [&] {
+            if (!analysis.reset(sample.paragraph, sample.rightToLeft ? TextDirection::rtl : TextDirection::ltr))
+                return false;
+            return analysis.resolve({0, sample.paragraph.size()}, line).has_value() && !line.empty();
+        }, 0, false);
+    }
+
+    bool benchmarkFamily(size_t familyIndex) {
+        const FontCatalog::Family& family = gFonts.families()[familyIndex];
+        const TextSample& sample = sampleFor(family);
+        const std::string prefix = "font_" + family.id;
+        showStatus("Font benchmark", family.label.c_str(), sample.id.data());
+
+        FontCatalog::Face face = gFonts.loadFace(familyIndex, 1);
+        gText.setFont(face.raster.get());
+        gText.setTextColor(0xFFFF, 0x0000);
+        bool ok = true;
+        if (face.shaper) {
+            std::vector<ui::fonts::PositionedGlyph> glyphs;
+            glyphs.reserve(sample.word.size());
+            ok &= runTimed(prefix + "_shape_cold", [&] { return shape(face, sample, glyphs); }, 0);
+            ok &= runTimed(prefix + "_shape_warm", kCpuIterations,
+                           [&] { return shape(face, sample, glyphs); }, 0, false);
+            if (!glyphs.empty()) {
+                ok &= runTimed(prefix + "_render_rsvp", kRenderIterations, [&] {
+                    return gText.drawGlyphs(glyphs, 24, static_cast<int16_t>(Board::Display::nativeHeight() / 2)) >= 0;
+                }, 0, false);
+            }
+        } else {
+            ok &= runTimed(prefix + "_render_rsvp", kRenderIterations, [&] {
+                return gText.drawString(sample.word, 24,
+                                        static_cast<int16_t>(Board::Display::nativeHeight() / 2)) >= 0;
+            }, 0, false);
+        }
+
+        face = gFonts.loadFace(familyIndex, RFont4::kCompactStrikeIndex);
+        gText.setFont(face.raster.get());
+        ok &= runTimed(prefix + "_render_page", kRenderIterations, [&] {
+            int16_t baseline = 24;
+            return renderParagraph(sample, RFont4::kCompactStrikeIndex, baseline, familyIndex);
+        }, 0, false);
+        delay(1);
+        return ok;
+    }
+
+    bool benchmarkMixedPage() {
+        return runTimed("multilingual_page_pipeline", kRenderIterations, [&] {
+            Board::Display::gfx().fillScreen(0x0000);
+            int16_t baseline = 16;
+            return renderParagraph(kLatinSample, RFont4::kCompactStrikeIndex, baseline)
+                && renderParagraph(kHebrewSample, RFont4::kCompactStrikeIndex, baseline)
+                && renderParagraph(kArabicSample, RFont4::kCompactStrikeIndex, baseline)
+                && renderParagraph(kCjkSample, RFont4::kCompactStrikeIndex, baseline)
+                && renderParagraph(kMathSample, RFont4::kCompactStrikeIndex, baseline);
+        }, 0, false);
+    }
+
+    bool benchmarkFonts() {
+        if (!gText.begin())
+            return false;
+        const bool catalogOk = runTimed("font_catalog_load", [] {
+            gFonts.loadFromSd();
+            return !gFonts.families().empty();
+        });
+        if (!catalogOk)
+            return false;
+
+        ESP_LOGI("bench", "font_catalog families=%u", static_cast<unsigned>(gFonts.families().size()));
+        bool ok = benchmarkBidi("hebrew", kHebrewSample) && benchmarkBidi("arabic", kArabicSample);
+        const TextSample mixedBidi{"mixed", "en", kMixedParagraph, "עברית", false};
+        ok = benchmarkBidi("mixed", mixedBidi) && ok;
+        for (size_t index = 0; index < gFonts.families().size(); ++index)
+            ok = benchmarkFamily(index) && ok;
+        return benchmarkMixedPage() && ok;
     }
 
     bool beginDisplay() {
@@ -266,12 +491,13 @@ namespace Benchmark {
             logMetric("audio_beep", false, 0);
         }
 
-        const uint32_t mountStartedMs = millis();
+        const uint32_t mountStartedUs = micros();
         mounted = SdCard::mount(mounted, &mountedFrequencyKhz);
-        logMetric("sd_mount", mounted, millis() - mountStartedMs);
-        ESP_LOGD("bench", "sd_frequency_khz=%d", mountedFrequencyKhz);
+        logMetric("sd_mount", mounted, micros() - mountStartedUs);
+        ESP_LOGI("bench", "sd_frequency_khz=%d", mountedFrequencyKhz);
         if (mounted) {
             runTimed("sd_write_read", benchmarkSdWriteRead, kSdProbeBytes * 2);
+            benchmarkFonts();
             runTimed("epub_dracula_convert", benchmarkDraculaConversion);
         } else {
             logMetric("sd_write_read", false, 0, kSdProbeBytes * 2);

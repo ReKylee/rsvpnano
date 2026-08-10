@@ -9,9 +9,8 @@ from pathlib import Path
 
 
 START_RE = re.compile(r"\[bench\] start board=(.+?) id=(.+)$")
-METRIC_RE = re.compile(
-    r"\[bench\] metric=([^\s]+) ok=([01]) ms=(\d+) bytes=(\d+) rate_kib_s=(\d+)"
-)
+METRIC_RE = re.compile(r"\[bench\] metric=([^\s]+)(.*)$")
+VALUE_RE = re.compile(r"([a-z_]+)=(-?\d+)")
 
 
 @dataclass
@@ -22,8 +21,14 @@ class MetricRow:
     metric: str
     ok: str
     ms: int
+    us: int
+    iterations: int
+    avg_us: int
     bytes: int
     rate_kib_s: int
+    heap_before: int
+    heap_after: int
+    heap_min: int
 
 
 def env_from_log_name(path: Path) -> str:
@@ -45,16 +50,24 @@ def parse_log(path: Path) -> list[MetricRow]:
             if not metric:
                 continue
 
+            values = {key: int(value) for key, value in VALUE_RE.findall(metric.group(2))}
+
             rows.append(
                 MetricRow(
                     log=path.name,
                     env=env,
                     board=board,
                     metric=metric.group(1),
-                    ok=metric.group(2),
-                    ms=int(metric.group(3)),
-                    bytes=int(metric.group(4)),
-                    rate_kib_s=int(metric.group(5)),
+                    ok=str(values.get("ok", 0)),
+                    ms=values.get("ms", 0),
+                    us=values.get("us", values.get("ms", 0) * 1000),
+                    iterations=values.get("iterations", 1),
+                    avg_us=values.get("avg_us", values.get("us", values.get("ms", 0) * 1000)),
+                    bytes=values.get("bytes", 0),
+                    rate_kib_s=values.get("rate_kib_s", 0),
+                    heap_before=values.get("heap_before", 0),
+                    heap_after=values.get("heap_after", 0),
+                    heap_min=values.get("heap_min", 0),
                 )
             )
     return rows
@@ -81,26 +94,28 @@ def write_summary(rows: list[MetricRow], output: Path) -> None:
         return
 
     lines += [
-        "| Log | Env | Board | Metric | OK | ms | bytes | KiB/s |",
-        "| --- | --- | --- | --- | ---: | ---: | ---: | ---: |",
+        "| Log | Env | Board | Metric | OK | total us | iterations | avg us | bytes | KiB/s | heap delta | min heap |",
+        "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         lines.append(
             f"| {row.log} | {row.env} | {row.board} | {row.metric} | {row.ok} | "
-            f"{row.ms} | {row.bytes} | {row.rate_kib_s} |"
+            f"{row.us} | {row.iterations} | {row.avg_us} | {row.bytes} | {row.rate_kib_s} | "
+            f"{row.heap_after - row.heap_before} | {row.heap_min} |"
         )
 
     lines += [
         "",
         "## Latest Metrics",
         "",
-        "| Env | Metric | OK | ms | KiB/s | Log |",
-        "| --- | --- | ---: | ---: | ---: | --- |",
+        "| Env | Metric | OK | avg us | KiB/s | heap delta | Log |",
+        "| --- | --- | ---: | ---: | ---: | ---: | --- |",
     ]
     latest_rows = latest_by_env_and_metric(rows)
     for row in latest_rows:
         lines.append(
-            f"| {row.env} | {row.metric} | {row.ok} | {row.ms} | {row.rate_kib_s} | {row.log} |"
+            f"| {row.env} | {row.metric} | {row.ok} | {row.avg_us} | {row.rate_kib_s} | "
+            f"{row.heap_after - row.heap_before} | {row.log} |"
         )
 
     lines += ["", "## Quick Analysis", ""]
@@ -113,11 +128,11 @@ def write_summary(rows: list[MetricRow], output: Path) -> None:
         if not successful:
             lines.append(f"- `{metric_name}`: no successful samples.")
             continue
-        fastest = min(successful, key=lambda item: item.ms)
-        slowest = max(successful, key=lambda item: item.ms)
+        fastest = min(successful, key=lambda item: item.avg_us)
+        slowest = max(successful, key=lambda item: item.avg_us)
         lines.append(
-            f"- `{metric_name}`: fastest `{fastest.env}` at {fastest.ms} ms; "
-            f"slowest `{slowest.env}` at {slowest.ms} ms."
+            f"- `{metric_name}`: fastest `{fastest.env}` at {fastest.avg_us} us/iteration; "
+            f"slowest `{slowest.env}` at {slowest.avg_us} us/iteration."
         )
 
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")

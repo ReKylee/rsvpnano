@@ -902,9 +902,18 @@ namespace ui {
                            uint8_t maxLines) {
         if (rect.w <= 0 || rect.h <= 0)
             return;
-        const uint8_t size = std::max<uint8_t>(1, textSize);
         const bool externalFont = languageAssets_.owns(text) && !languageAssets_.font.empty();
         const uint8_t cellWidth = externalFont ? locales::uiFontCellWidth(languageAssets_.font) : kUiFontCellWidth;
+        const uint8_t fontHeight = externalFont ? locales::uiFontHeight(languageAssets_.font) : kUiFontHeight;
+        const size_t codepoints = Utf8Text::count(text);
+        uint8_t size = std::max<uint8_t>(1, textSize);
+        while (size > 1) {
+            const size_t columns = static_cast<size_t>(rect.w) / (cellWidth * size);
+            const size_t lines = columns == 0 ? SIZE_MAX : (codepoints + columns - 1) / columns;
+            if (lines <= maxLines && static_cast<size_t>(fontHeight) * size * lines <= static_cast<size_t>(rect.h))
+                break;
+            --size;
+        }
         const size_t capacity = static_cast<size_t>(std::max<int16_t>(0, rect.w) / (cellWidth * size));
         if (capacity == 0)
             return;
@@ -923,7 +932,7 @@ namespace ui {
 
         std::string_view first = text;
         std::string_view second;
-        if (maxLines > 1 && Utf8Text::count(text) > capacity) {
+        if (maxLines > 1 && codepoints > capacity) {
             size_t split = Utf8Text::prefixBytes(text, capacity);
             const size_t space = text.rfind(' ', split);
             if (space != std::string_view::npos && Utf8Text::count(text.substr(0, space)) >= capacity / 2)

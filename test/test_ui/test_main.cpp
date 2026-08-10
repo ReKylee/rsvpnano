@@ -876,13 +876,24 @@ void test_labels_truncate_to_their_rectangles() {
     context.beginFrame(2);
     context.button({0, 0, 72, 40}, "Alpha Beta", true, ui::Icon::None, 2, "By", "42%");
     context.endFrame();
-    TEST_ASSERT_EQUAL(13, gfx.textWrites);
+    TEST_ASSERT_EQUAL(15, gfx.textWrites);
 
     gfx.textWrites = 0;
     context.beginFrame(3);
     context.button({0, 0, 120, 50}, "A", true, ui::Icon::None, 1, "12345678");
     context.endFrame();
     TEST_ASSERT_EQUAL(9, gfx.textWrites);
+}
+
+void test_labels_scale_down_to_fit_font_metrics() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx);
+    context.beginFrame(1);
+    context.label({0, 0, 60, 18}, "123456", 2);
+    context.endFrame();
+
+    TEST_ASSERT_EQUAL_UINT8(1, gfx.lastTextSize);
+    TEST_ASSERT_EQUAL(6, gfx.textWrites);
 }
 
 void test_labels_align_and_battery_owns_its_drawing() {
@@ -1224,6 +1235,7 @@ int main(int, char**) {
     RUN_TEST(test_ui_font_preserves_widget_background);
     RUN_TEST(test_centered_drag_rate_has_deadzone_and_signed_edges);
     RUN_TEST(test_labels_truncate_to_their_rectangles);
+    RUN_TEST(test_labels_scale_down_to_fit_font_metrics);
     RUN_TEST(test_labels_align_and_battery_owns_its_drawing);
     RUN_TEST(test_setting_gives_long_values_the_full_card_width);
     RUN_TEST(test_slider_redraws_with_its_active_color);

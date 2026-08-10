@@ -73,9 +73,17 @@ namespace ui {
     void Context::drawLanguageIcon(Rect rect, uint16_t ink) {
         const int16_t cx = static_cast<int16_t>(rect.x + rect.w / 2);
         const int16_t cy = static_cast<int16_t>(rect.y + rect.h / 2);
-        gfx_.drawCircle(cx, cy, 9, ink);
-        gfx_.drawFastVLine(cx, static_cast<int16_t>(cy - 8), 17, ink);
-        gfx_.drawFastHLine(static_cast<int16_t>(cx - 8), cy, 17, ink);
+        const int16_t left = static_cast<int16_t>(cx - 10);
+        const int16_t top = static_cast<int16_t>(cy - 8);
+        gfx_.drawRoundRect(left, top, 13, 13, 2, ink);
+        gfx_.drawRoundRect(static_cast<int16_t>(left + 7), static_cast<int16_t>(top + 5), 13, 13, 2, ink);
+        gfx_.drawLine(static_cast<int16_t>(left + 3), static_cast<int16_t>(top + 10),
+                      static_cast<int16_t>(left + 6), static_cast<int16_t>(top + 3), ink);
+        gfx_.drawLine(static_cast<int16_t>(left + 6), static_cast<int16_t>(top + 3),
+                      static_cast<int16_t>(left + 9), static_cast<int16_t>(top + 10), ink);
+        gfx_.drawFastHLine(static_cast<int16_t>(left + 4), static_cast<int16_t>(top + 7), 5, ink);
+        gfx_.drawFastHLine(static_cast<int16_t>(left + 10), static_cast<int16_t>(top + 10), 7, ink);
+        gfx_.drawFastVLine(static_cast<int16_t>(left + 13), static_cast<int16_t>(top + 8), 7, ink);
     }
 
     void Context::drawHourglassIcon(Rect rect, uint16_t ink) {

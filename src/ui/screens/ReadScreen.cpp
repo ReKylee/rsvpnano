@@ -10,7 +10,14 @@ namespace screens {
         const ui::Rect area = detail::tabContent(ui);
         const bool wide = ui.width() >= 620 && ui.height() >= 150 && ui.height() <= 240;
         ui::Column column{area, static_cast<int16_t>(wide ? 18 : 10)};
-        const ui::Rect resume = column.next(64);
+        const ui::Rect header = column.next(64);
+        constexpr int16_t kHeaderActionSize = 40;
+        constexpr int16_t kHeaderGap = 8;
+        const ui::Rect resume{header.x, header.y,
+                              static_cast<int16_t>(header.w - kHeaderActionSize - kHeaderGap), header.h};
+        const ui::Rect language{static_cast<int16_t>(header.x + header.w - kHeaderActionSize),
+                                static_cast<int16_t>(header.y + (header.h - kHeaderActionSize) / 2),
+                                kHeaderActionSize, kHeaderActionSize};
         const std::string_view author = model.author.empty() ? ui.text(UiText::Unknown) : model.author;
         char progress[4];
         size_t progressLength = 0;
@@ -28,14 +35,14 @@ namespace screens {
         if (ui.button(resume, model.title, true, ui::Icon::Bookmark, 2, author, progressText)) {
             return Action::Resume;
         }
+        if (ui.iconButton(language, ui::Icon::Language)) {
+            screen = Screen::BookFonts;
+        }
 
         ui::Row actions{column.next(64), 10};
-        const int16_t buttonWidth = static_cast<int16_t>((actions.bounds.w - actions.gap * 2) / 3);
+        const int16_t buttonWidth = static_cast<int16_t>((actions.bounds.w - actions.gap) / 2);
         if (ui.button(actions.next(buttonWidth), ui.text(UiText::Chapters))) {
             screen = Screen::Chapters;
-        }
-        if (ui.button(actions.next(buttonWidth), ui.text(UiText::Language), true, ui::Icon::Language)) {
-            screen = Screen::BookFonts;
         }
         if (ui.button(actions.next(buttonWidth), ui.text(UiText::Library))) {
             screen = Screen::Library;

@@ -125,8 +125,12 @@ void StorageManager::refreshBookPaths(bool includeMetadata) {
         return;
     }
 
-    statusCallback_(statusContext_, "SD", "Reading library", "", 96);
+    ESP_LOGI("storage", "library scan begin metadata=%u", includeMetadata ? 1U : 0U);
+    statusCallback_(statusContext_, "SD", "Reading library", includeMetadata ? "Reading metadata" : "Finding books",
+                    96);
     BookLibrary::refresh(library_, includeMetadata, RSVP_ON_DEVICE_EPUB_CONVERSION);
+    ESP_LOGI("storage", "library scan ready books=%u metadata=%u", static_cast<unsigned>(library_.paths.size()),
+             includeMetadata ? 1U : 0U);
 }
 
 void StorageManager::clearBookCache() {

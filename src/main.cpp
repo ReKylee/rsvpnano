@@ -33,6 +33,7 @@ void setup() {
 #else
     ESP_LOGI("main", "app setup task=%s core=%d", pcTaskGetName(nullptr), xPortGetCoreID());
     app.begin();
+    Logger::checkpoint("running");
 #endif
 }
 

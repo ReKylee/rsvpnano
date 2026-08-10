@@ -73,7 +73,7 @@ namespace Board {
 
             const Board::Power::DiagnosticSnapshot power = Board::Power::diagnosticSnapshot();
             if (!power.available) {
-                ESP_LOGW("diag", "power_snapshot=unavailable");
+                ESP_LOGI("diag", "power_snapshot=vbus_sense:unavailable charge_status:unavailable");
                 return;
             }
 

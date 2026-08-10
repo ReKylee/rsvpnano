@@ -13,6 +13,7 @@
 #include "board/BoardStorage.h"
 #include "board/BoardSystem.h"
 #include "freertos/task.h"
+#include "logging/Logger.h"
 #include "rss/RssFeeds.h"
 #include "settings/NvsSecurity.h"
 #include "storage/index/ReadingProgress.h"
@@ -65,18 +66,30 @@ void App::begin() {
     immediateUi_.setTouchSource({.surface = Board::Input::touchSurface(), .poll = &Input::pollTouch});
 
     storage_.begin();
+    Logger::startupCheckpoint("storage");
     fs::FS* filesystem = storage_.mounted() ? &Board::Storage::filesystem() : nullptr;
     migrateSettingsLocale();
     if (filesystem != nullptr)
         migrateSettingsLocale(*filesystem);
     if (auto result = settingsStore_.begin(filesystem); !result)
         ESP_LOGW("settings", "startup warning: %s", result.error().message.c_str());
+    Logger::startupCheckpoint("settings");
+    Logger::checkpoint("legacy_migration");
     migrateLegacyStorage();
+    Logger::startupCheckpoint("migration");
+    Logger::checkpoint("locale_catalog");
     localeCatalog_ = filesystem == nullptr ? locales::Catalog{} : locales::scanInstalled(*filesystem);
     for (const auto& issue: localeCatalog_.rejected)
         ESP_LOGW("languages", "rejected %s: %s", issue.id.c_str(), issue.reason.c_str());
+    ESP_LOGI("languages", "catalog ready installed=%u rejected=%u",
+             static_cast<unsigned>(localeCatalog_.packs.size()),
+             static_cast<unsigned>(localeCatalog_.rejected.size()));
+    Logger::startupCheckpoint("locale_catalog");
+    Logger::checkpoint("ui_locale");
     reloadUiAssets();
+    Logger::startupCheckpoint("locales");
     readerScreen_.fonts.loadFromSd();
+    Logger::startupCheckpoint("fonts");
     auto& deviceSettings = settingsStore_.settings();
     interfaceScreen_.begin(immediateUi_, deviceSettings.interface, localeCatalog_,
                            &Board::Display::setBrightness);
@@ -88,7 +101,9 @@ void App::begin() {
     else
         focusScreen_.begin();
     readerScreen_.loadInitialBook(immediateUi_, storage_, prefs_, bootMs_);
+    Logger::startupCheckpoint("book");
     libraryScreen_.invalidate();
+    ESP_LOGI("startup", "ready");
 }
 
 void App::update(uint32_t nowMs) {
@@ -531,6 +546,7 @@ void App::updateBackgroundJob() {
 
         const JobKind completed = jobKind_;
         jobKind_ = JobKind::None;
+        Logger::checkpoint("running");
         if (completed == JobKind::Book) {
             if (jobBookLoaded_) {
                 readerScreen_.finishBookOpen(prefs_, jobLoadedBookIndex_, jobBookPath_, millis());
@@ -589,6 +605,7 @@ void App::backgroundJobEntry(void* context) {
 void App::runBackgroundJob() {
     switch (jobKind_) {
     case JobKind::Rss: {
+        Logger::checkpoint("rss_update");
         Preferences preferences;
         if (!preferences.begin(settings::kStateNvsNamespace)) {
             jobRssResult_.summary = "RSS failed";
@@ -601,15 +618,19 @@ void App::runBackgroundJob() {
         break;
     }
     case JobKind::StorageCheck:
+        Logger::checkpoint("storage_check");
         jobStorageResult_ = SdDiagnostics::run(storage_.mounted(), jobStorageInventory_);
         break;
     case JobKind::OtaCheck:
+        Logger::checkpoint("ota_check");
         jobOtaResult_ = OtaUpdater::checkOnly(jobOtaConfig_, &App::renderStorageStatus, this);
         break;
     case JobKind::OtaInstall:
+        Logger::checkpoint("ota_install");
         jobOtaResult_ = OtaUpdater::checkAndInstall(jobOtaConfig_, &App::renderStorageStatus, this);
         break;
     case JobKind::Book: {
+        Logger::checkpoint("book_open");
         StorageManager::IndexedBookLoadOptions options;
         options.loadedPath = &jobBookPath_;
         options.loadedIndex = &jobLoadedBookIndex_;

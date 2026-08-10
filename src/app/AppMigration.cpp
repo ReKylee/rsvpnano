@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "board/BoardStorage.h"
+#include "logging/Logger.h"
 #include "rss/RssConfig.h"
 #include "rss/RssConfigStorage.h"
 #include "settings/NvsSecurity.h"
@@ -180,6 +181,8 @@ void App::migrateLegacyStorage() {
 
     if (prefs_.getBool(kMigrationMarker, false))
         return;
+
+    Logger::checkpoint("legacy_settings");
 
     auto nextLine = [](std::string_view& text) {
         const size_t end = text.find('\n');
@@ -600,6 +603,7 @@ void App::migrateLegacyStorage() {
         }
     }
 
+    Logger::checkpoint("legacy_themes");
     bool themesComplete = filesystem != nullptr;
     if (filesystem != nullptr) {
         File directory = filesystem->open(StoragePaths::kThemesPath);
@@ -748,6 +752,7 @@ void App::migrateLegacyStorage() {
         }
     }
 
+    Logger::checkpoint("legacy_rss");
     bool rssComplete = filesystem != nullptr;
     if (filesystem != nullptr) {
         const char* legacyRssPath = nullptr;
@@ -795,6 +800,7 @@ void App::migrateLegacyStorage() {
         }
     }
 
+    Logger::checkpoint("legacy_focus");
     bool focusComplete = filesystem != nullptr;
     if (filesystem != nullptr) {
         const char* legacyFocusPath = nullptr;
@@ -847,6 +853,7 @@ void App::migrateLegacyStorage() {
         }
     }
 
+    Logger::checkpoint("legacy_books");
     bool booksComplete = filesystem != nullptr;
     if (filesystem != nullptr) {
         storage_.refreshBooks(false);
@@ -973,6 +980,7 @@ void App::migrateLegacyStorage() {
         }
     }
 
+    Logger::checkpoint("legacy_finish");
     if (settingsPersisted && configComplete && themesComplete && rssComplete && focusComplete && booksComplete) {
         if (prefs_.putBool(kMigrationMarker, true) > 0) {
             for (const char* marker: kPreviousMigrationMarkers) {

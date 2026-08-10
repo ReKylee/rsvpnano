@@ -94,8 +94,8 @@ namespace locales {
             return {};
         }
 
-        std::expected<void, std::string> inspectAsset(fs::FS& filesystem, std::string_view directory,
-                                                      const Asset& asset, std::string_view name, bool verifyHash) {
+        std::expected<File, std::string> openAsset(fs::FS& filesystem, std::string_view directory,
+                                                   const Asset& asset, std::string_view name) {
             const std::string path = assetPath(directory, asset.path);
             File file = filesystem.open(path.c_str(), FILE_READ);
             if (!file || file.isDirectory()) {
@@ -107,14 +107,27 @@ namespace locales {
                 file.close();
                 return std::unexpected(std::string{name} + " has the wrong byte length");
             }
-            if (!verifyHash) {
-                file.close();
-                return {};
-            }
+            return file;
+        }
 
+        std::expected<void, std::string> inspectAsset(fs::FS& filesystem, std::string_view directory,
+                                                      const Asset& asset, std::string_view name) {
+            auto file = openAsset(filesystem, directory, asset, name);
+            if (!file)
+                return std::unexpected(file.error());
+            file->close();
+            return {};
+        }
+
+        std::expected<void, std::string> verifyAssetHash(fs::FS& filesystem, std::string_view directory,
+                                                         const Asset& asset, std::string_view name) {
+            auto opened = openAsset(filesystem, directory, asset, name);
+            if (!opened)
+                return std::unexpected(opened.error());
+            File file = std::move(*opened);
             SHA256Builder hash;
             hash.begin();
-            std::array<uint8_t, 4096> buffer;
+            std::array<uint8_t, 512> buffer;
             uint32_t remaining = asset.bytes;
             while (remaining > 0) {
                 const size_t requested = std::min<size_t>(buffer.size(), remaining);
@@ -134,15 +147,20 @@ namespace locales {
             return {};
         }
 
-        std::expected<void, std::string> inspectPackFiles(fs::FS& filesystem, const InstalledPack& pack,
-                                                          bool verifyHashes) {
+        std::expected<void, std::string> inspectPackFiles(fs::FS& filesystem, const InstalledPack& pack) {
             return forEachAsset(pack.manifest, [&](const Asset& asset, std::string_view name) {
-                return inspectAsset(filesystem, pack.directory, asset, name, verifyHashes);
+                return inspectAsset(filesystem, pack.directory, asset, name);
+            });
+        }
+
+        std::expected<void, std::string> verifyPackFiles(fs::FS& filesystem, const InstalledPack& pack) {
+            return forEachAsset(pack.manifest, [&](const Asset& asset, std::string_view name) {
+                return verifyAssetHash(filesystem, pack.directory, asset, name);
             });
         }
 
         std::expected<InstalledPack, std::string> loadPack(fs::FS& filesystem, const std::string& directory,
-                                                           std::string_view id, bool verifyHashes) {
+                                                           std::string_view id) {
             const std::string manifestPath = directory + "/manifest.toml";
             auto content = StorageFiles::readTextFile(filesystem, manifestPath.c_str(), kMaximumManifestBytes);
             if (!content)
@@ -153,10 +171,7 @@ namespace locales {
             uint32_t scriptMask = 0;
             for (const std::string_view script: manifest->scripts)
                 scriptMask |= UnicodeText::scriptMask(script);
-            InstalledPack pack{directory, std::move(*manifest), scriptMask};
-            if (auto files = inspectPackFiles(filesystem, pack, verifyHashes); !files)
-                return std::unexpected(files.error());
-            return pack;
+            return InstalledPack{directory, std::move(*manifest), scriptMask};
         }
 
         std::expected<std::vector<uint8_t>, std::string> readAsset(fs::FS& filesystem, std::string_view directory,
@@ -212,12 +227,16 @@ namespace locales {
             if (!usableDirectory)
                 continue;
 
-            auto loaded = loadPack(filesystem, directory, id, false);
+            auto loaded = loadPack(filesystem, directory, id);
             if (!loaded) {
                 catalog.rejected.push_back({id, loaded.error()});
                 continue;
             }
             InstalledPack pack = std::move(*loaded);
+            if (auto files = inspectPackFiles(filesystem, pack); !files) {
+                catalog.rejected.push_back({id, files.error()});
+                continue;
+            }
             if (std::ranges::any_of(catalog.packs, [&](const InstalledPack& installed) {
                     return installed.manifest.id == pack.manifest.id;
                 })) {
@@ -312,9 +331,11 @@ namespace locales {
         const std::string backup = backupDirectory(id);
 
         recoverInterrupted(filesystem);
-        auto staged = loadPack(filesystem, staging, id, true);
+        auto staged = loadPack(filesystem, staging, id);
         if (!staged)
             return std::unexpected(staged.error());
+        if (auto files = verifyPackFiles(filesystem, *staged); !files)
+            return std::unexpected(files.error());
 
         if (std::ranges::any_of(catalog.packs, [&](const InstalledPack& pack) {
                 return pack.manifest.id != id && pack.manifest.locale == staged->manifest.locale;

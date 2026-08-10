@@ -79,11 +79,12 @@ namespace screens {
     size_t ReaderScreen::fontChoice(size_t wordIndex) const {
         const std::string_view word = ReadingLoop::wordAt(session, wordIndex);
         const std::string_view locale = session.metadata.localeAt(wordIndex);
-        const std::string_view requested = settings::fontForLocale(session.state.overrides, locale, typography_.fontId);
+        const uint32_t requiredScripts = UnicodeText::scriptsIn(word);
+        const std::string_view requested = settings::fontForText(
+            session.state.overrides, locale, requiredScripts, typography_.fontId);
         const auto families = fonts.families();
         if (families.empty())
             return 0;
-        const uint32_t requiredScripts = UnicodeText::scriptsIn(word);
         return FontCatalog::selectFamily(families, requested, locale, requiredScripts);
     }
 

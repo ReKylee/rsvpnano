@@ -69,7 +69,8 @@ class NanoSettingsWireFormatTest {
         assertFalse(font.usableFor("en", 9))
 
         val math = NanoFontSummary("math", "STIX Two Math", scriptMask = 1 shl 9)
-        assertTrue(math.usableFor("en", (1 shl 9) or 1))
+        assertFalse(math.usableFor("en", (1 shl 9) or 1))
+        assertTrue(math.usableFor("en", 1 shl 9))
         assertFalse(math.usableFor("en", 1))
     }
 }

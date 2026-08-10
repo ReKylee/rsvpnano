@@ -7,7 +7,7 @@
 
 namespace screens {
     bool bookFonts(ui::Context& ui, const BookMetadata& metadata, settings::ReadingOverrides& overrides,
-                   const settings::TypographySettings& globalTypography, FontCatalog& fonts, Screen& screen) {
+                   FontCatalog& fonts, Screen& screen) {
         std::array<std::string_view, settings::kMaximumBookLanguages> locales;
         size_t localeCount = 0;
         const auto addLocale = [&](std::string_view locale) {
@@ -42,10 +42,8 @@ namespace screens {
                        static_cast<int16_t>(content.h - detail::kBackButtonHeight - 4)},
                       columns, 34, 4};
         bool changed = false;
-        for (size_t localeIndex = 0; localeIndex < localeCount; ++localeIndex) {
-            const std::string_view locale = locales[localeIndex];
-            const uint32_t requiredScripts = metadata.scriptsForLocale(locale);
-
+        const auto chooseFont = [&](std::string_view label, std::string_view locale, uint32_t requiredScripts,
+                                    std::string_view selectedId) -> std::optional<std::string> {
             std::vector<size_t> compatible;
             compatible.reserve(families.size());
             for (size_t familyIndex = 0; familyIndex < families.size(); ++familyIndex) {
@@ -53,29 +51,63 @@ namespace screens {
                     compatible.push_back(familyIndex);
             }
 
-            const auto selected = std::ranges::find(overrides.languageFonts, locale, &settings::LanguageFont::locale);
-            const std::string_view activeId = selected == overrides.languageFonts.end()
-                                                ? std::string_view{globalTypography.fontId}
-                                                : std::string_view{selected->fontId};
-            const auto active = std::ranges::find_if(compatible,
-                                                     [&](size_t index) { return families[index].id == activeId; });
-            const size_t activeIndex = active == compatible.end() ? 0 : active - compatible.begin();
-            const std::string_view label = compatible.empty() ? std::string_view{"Unavailable"}
-                                                               : std::string_view{families[compatible[activeIndex]].label};
-            if (!ui.setting(grid.next(), locale, label, ui::SettingLayout::Inline)
-                || compatible.empty())
+            auto active = std::ranges::find_if(compatible,
+                                               [&](size_t index) { return families[index].id == selectedId; });
+            const std::string_view value = selectedId.empty() || active == compatible.end()
+                                             ? ui.text(UiText::Default)
+                                             : std::string_view{families[*active].label};
+            if (!ui.setting(grid.next(), label, value, ui::SettingLayout::Inline) || compatible.empty())
+                return std::nullopt;
+            if (selectedId.empty() || active == compatible.end())
+                return families[compatible.front()].id;
+            ++active;
+            return active == compatible.end() ? std::string{} : families[*active].id;
+        };
+
+        for (size_t localeIndex = 0; localeIndex < localeCount; ++localeIndex) {
+            const std::string_view locale = locales[localeIndex];
+            const uint32_t requiredScripts = metadata.scriptsForLocale(locale) & ~UnicodeText::ScriptMath;
+            if (requiredScripts == 0)
                 continue;
 
-            const std::string& nextId = families[compatible[(activeIndex + 1) % compatible.size()]].id;
-            if (nextId == globalTypography.fontId) {
+            const auto selected = std::ranges::find(overrides.languageFonts, locale,
+                                                    &settings::LanguageFont::locale);
+            const std::string_view selectedId = selected == overrides.languageFonts.end()
+                                                  ? std::string_view{}
+                                                  : std::string_view{selected->fontId};
+            const auto nextId = chooseFont(locale, locale, requiredScripts, selectedId);
+            if (!nextId)
+                continue;
+            if (nextId->empty()) {
                 if (selected != overrides.languageFonts.end())
                     overrides.languageFonts.erase(selected);
             } else if (selected == overrides.languageFonts.end()) {
-                overrides.languageFonts.push_back({std::string{locale}, nextId});
+                overrides.languageFonts.push_back({.locale = std::string{locale},
+                                                   .fontId = std::move(*nextId)});
             } else {
-                selected->fontId = nextId;
+                selected->fontId = std::move(*nextId);
             }
             changed = true;
+        }
+        if ((metadata.scriptMask & UnicodeText::ScriptMath) != 0) {
+            const auto selected = std::ranges::find(overrides.languageFonts, settings::kMathFontTarget,
+                                                    &settings::LanguageFont::locale);
+            const auto nextId = chooseFont("Math", {}, UnicodeText::ScriptMath,
+                                           selected == overrides.languageFonts.end()
+                                             ? std::string_view{}
+                                             : std::string_view{selected->fontId});
+            if (nextId) {
+                if (nextId->empty()) {
+                    if (selected != overrides.languageFonts.end())
+                        overrides.languageFonts.erase(selected);
+                } else if (selected == overrides.languageFonts.end()) {
+                    overrides.languageFonts.push_back({.locale = std::string{settings::kMathFontTarget},
+                                                       .fontId = std::move(*nextId)});
+                } else {
+                    selected->fontId = std::move(*nextId);
+                }
+                changed = true;
+            }
         }
         return changed;
     }

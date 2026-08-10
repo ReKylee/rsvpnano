@@ -9,9 +9,12 @@
 
 #include "settings/SettingsRules.h"
 #include "standby/ScreensaverTypes.h"
+#include "text/UnicodeText.h"
 namespace settings {
 
     inline constexpr size_t kMaximumBookLanguages = 8;
+    inline constexpr size_t kMaximumBookFontSelections = kMaximumBookLanguages + 1;
+    inline constexpr std::string_view kMathFontTarget = "math";
 
     enum class ReadingMode : uint8_t {
         rsvp,
@@ -72,9 +75,10 @@ namespace settings {
         bool operator==(const ReadingOverrides&) const = default;
     };
 
-    inline std::string_view fontForLocale(const ReadingOverrides& overrides, std::string_view locale,
-                                          std::string_view fallback) {
-        const auto selected = std::ranges::find(overrides.languageFonts, locale, &LanguageFont::locale);
+    inline std::string_view fontForText(const ReadingOverrides& overrides, std::string_view locale,
+                                        uint32_t scripts, std::string_view fallback) {
+        const std::string_view target = (scripts & UnicodeText::ScriptMath) != 0 ? kMathFontTarget : locale;
+        const auto selected = std::ranges::find(overrides.languageFonts, target, &LanguageFont::locale);
         return selected == overrides.languageFonts.end() ? fallback : std::string_view{selected->fontId};
     }
 

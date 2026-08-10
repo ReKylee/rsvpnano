@@ -1517,8 +1517,8 @@ void CompanionSyncManager::handleBookLanguageFonts() {
         sendError(400, "missing_field", "Book id is required", "id");
         return;
     }
-    if (update->languageFonts.size() > settings::kMaximumBookLanguages) {
-        sendError(422, "too_many_languages", "A book can configure at most 8 languages", "languageFonts");
+    if (update->languageFonts.size() > settings::kMaximumBookFontSelections) {
+        sendError(422, "too_many_fonts", "A book can configure at most 8 languages and Math", "languageFonts");
         return;
     }
 
@@ -1546,21 +1546,39 @@ void CompanionSyncManager::handleBookLanguageFonts() {
 
     for (size_t index = 0; index < update->languageFonts.size(); ++index) {
         auto& selection = update->languageFonts[index];
+        const auto preceding = std::span{update->languageFonts}.first(index);
+        if (selection.locale == settings::kMathFontTarget) {
+            if ((metadata.scriptMask & UnicodeText::ScriptMath) == 0) {
+                sendError(422, "invalid_math", "Math is not present in this book", "languageFonts");
+                return;
+            }
+            if (std::ranges::find(preceding, settings::kMathFontTarget,
+                                  &settings::LanguageFont::locale) != preceding.end()) {
+                sendError(422, "duplicate_math", "Math can select one font", "languageFonts");
+                return;
+            }
+            const auto family = fontCatalog_.find(selection.fontId);
+            if (!family || !family->get().supports(UnicodeText::ScriptMath)) {
+                sendError(422, "incompatible_font", "Font does not support Math", "languageFonts");
+                return;
+            }
+            selection.fontId = family->get().id;
+            continue;
+        }
+
         auto locale = LocaleTag::normalize(selection.locale);
         if (!locale || std::ranges::find(bookLanguages, *locale) == bookLanguages.end()) {
             sendError(422, "invalid_language", "Language is not present in this book", "languageFonts");
             return;
         }
         selection.locale = std::move(*locale);
-        if (std::ranges::find(update->languageFonts.begin(), update->languageFonts.begin() + index, selection.locale,
-                              &settings::LanguageFont::locale)
-            != update->languageFonts.begin() + index) {
+        if (std::ranges::find(preceding, selection.locale, &settings::LanguageFont::locale) != preceding.end()) {
             sendError(422, "duplicate_language", "Each language can select one font", "languageFonts");
             return;
         }
         const auto family = fontCatalog_.find(selection.fontId);
-        const uint32_t requiredScripts = metadata.scriptsForLocale(selection.locale);
-        if (!family || !family->get().usableFor(selection.locale, requiredScripts)) {
+        const uint32_t requiredScripts = metadata.scriptsForLocale(selection.locale) & ~UnicodeText::ScriptMath;
+        if (requiredScripts == 0 || !family || !family->get().usableFor(selection.locale, requiredScripts)) {
             sendError(422, "incompatible_font", "Font does not support this language", "languageFonts");
             return;
         }

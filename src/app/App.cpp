@@ -273,8 +273,7 @@ void App::renderScreen(uint32_t nowMs) {
     case screens::Screen::BookFonts: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         if (screens::bookFonts(immediateUi_, readerScreen_.session.metadata,
-                               readerScreen_.session.state.overrides, settingsStore_.settings().reading.typography,
-                               readerScreen_.fonts, screen_)) {
+                               readerScreen_.session.state.overrides, readerScreen_.fonts, screen_)) {
             ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
             readerScreen_.refreshTypography();
         }

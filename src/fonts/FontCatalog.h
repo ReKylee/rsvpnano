@@ -45,9 +45,7 @@ public:
         }
 
         bool usableFor(std::string_view locale, uint32_t requiredScripts) const {
-            return supports(requiredScripts) || (prefers(locale) && supportsAny(requiredScripts))
-                || ((requiredScripts & UnicodeText::ScriptMath) != 0
-                    && (scriptMask & UnicodeText::ScriptMath) != 0);
+            return supports(requiredScripts) || (prefers(locale) && supportsAny(requiredScripts));
         }
 
         bool prefers(std::string_view locale) const {

@@ -161,10 +161,17 @@ void test_secrets_are_not_part_of_public_documents() {
 
 void test_book_language_font_selection_uses_global_fallback() {
     settings::ReadingOverrides book;
-    TEST_ASSERT_EQUAL_STRING("global-font", settings::fontForLocale(book, "ja", "global-font").data());
-    book.languageFonts.push_back({"ja", "japanese-font"});
-    TEST_ASSERT_EQUAL_STRING("japanese-font", settings::fontForLocale(book, "ja", "global-font").data());
-    TEST_ASSERT_EQUAL_STRING("global-font", settings::fontForLocale(book, "en", "global-font").data());
+    TEST_ASSERT_EQUAL_STRING("global-font", settings::fontForText(book, "ja", UnicodeText::ScriptHan,
+                                                                   "global-font").data());
+    book.languageFonts.push_back({.locale = "ja", .fontId = "japanese-font"});
+    TEST_ASSERT_EQUAL_STRING("japanese-font", settings::fontForText(book, "ja", UnicodeText::ScriptHan,
+                                                                     "global-font").data());
+    TEST_ASSERT_EQUAL_STRING("global-font", settings::fontForText(book, "en", UnicodeText::ScriptLatin,
+                                                                   "global-font").data());
+    book.languageFonts.push_back({.locale = std::string{settings::kMathFontTarget}, .fontId = "math-font"});
+    TEST_ASSERT_EQUAL_STRING("math-font", settings::fontForText(book, "en", UnicodeText::ScriptLatin
+                                                                                | UnicodeText::ScriptMath,
+                                                                 "global-font").data());
 }
 
 void test_book_locale_follows_text_run_boundaries() {
@@ -180,7 +187,9 @@ void test_book_locale_follows_text_run_boundaries() {
 void test_book_reading_overrides_round_trip_through_toml() {
     ReadingSession::BookState state;
     state.wordIndex = 42;
-    state.overrides.languageFonts.push_back({"ar", "arabic-font"});
+    state.overrides.languageFonts.push_back({.locale = "ar", .fontId = "arabic-font"});
+    state.overrides.languageFonts.push_back(
+        {.locale = std::string{settings::kMathFontTarget}, .fontId = "math-font"});
     state.overrides.locale = "ar";
     state.overrides.pacing = settings::ReadingPacing::cjkPhrase;
 
@@ -190,9 +199,11 @@ void test_book_reading_overrides_round_trip_through_toml() {
     ReadingSession::BookState decoded;
     TEST_ASSERT_FALSE(glz::read_toml(decoded, toml));
     TEST_ASSERT_EQUAL_UINT32(42, decoded.wordIndex);
-    TEST_ASSERT_EQUAL_UINT32(1, decoded.overrides.languageFonts.size());
+    TEST_ASSERT_EQUAL_UINT32(2, decoded.overrides.languageFonts.size());
     TEST_ASSERT_EQUAL_STRING("ar", decoded.overrides.languageFonts.front().locale.c_str());
     TEST_ASSERT_EQUAL_STRING("arabic-font", decoded.overrides.languageFonts.front().fontId.c_str());
+    TEST_ASSERT_EQUAL_STRING("math", decoded.overrides.languageFonts.back().locale.c_str());
+    TEST_ASSERT_EQUAL_STRING("math-font", decoded.overrides.languageFonts.back().fontId.c_str());
     TEST_ASSERT_EQUAL_STRING("ar", decoded.overrides.locale->c_str());
     TEST_ASSERT_EQUAL(settings::ReadingPacing::cjkPhrase, *decoded.overrides.pacing);
 }

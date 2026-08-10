@@ -151,12 +151,7 @@ data class NanoFontSummary(
     fun usableFor(locale: String, requiredScripts: Int): Boolean =
         requiredScripts == 0 || (scriptMask and requiredScripts) == requiredScripts ||
             (locales.any { locale == it || locale.startsWith("$it-") } &&
-                (scriptMask and requiredScripts) != 0) ||
-            (requiredScripts and SCRIPT_MATH) != 0 && (scriptMask and SCRIPT_MATH) != 0
-
-    private companion object {
-        const val SCRIPT_MATH = 1 shl 9
-    }
+                (scriptMask and requiredScripts) != 0)
 }
 
 @Serializable

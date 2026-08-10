@@ -295,6 +295,10 @@ private fun PendingArticleRow(
     }
 }
 
+private const val FONT_TARGET_MATH = "math"
+
+private const val SCRIPT_MATH = 1 shl 9
+
 @Composable
 private fun LibraryEmptyState(text: String, onAddContent: (() -> Unit)?) {
     Column(
@@ -591,9 +595,9 @@ internal fun BookDetailScreen(
             availableFonts = availableFonts,
             globalFontId = globalFontId,
             onDismiss = { showLanguageFonts = false },
-            onSave = {
+            onSave = { selections ->
                 showLanguageFonts = false
-                onSetLanguageFonts(it)
+                onSetLanguageFonts(selections)
             },
         )
     }
@@ -614,7 +618,9 @@ private fun BookLanguageFontsDialog(
                 NanoBookLanguage(it, book.metadata.scriptMask)
             },
         )
-    }
+    }.map { it.copy(scriptMask = it.scriptMask and SCRIPT_MATH.inv()) }
+        .filter { it.scriptMask != 0 }
+    val hasMath = (book.metadata.scriptMask and SCRIPT_MATH) != 0
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(imageVector = Icons.Outlined.Language, contentDescription = null) },
@@ -626,31 +632,21 @@ private fun BookLanguageFontsDialog(
                     val requiredScripts = bookLanguage.scriptMask
                     val compatible = availableFonts.filter { it.usableFor(locale, requiredScripts) }
                     val selectedId = selections.firstOrNull { it.locale == locale }?.fontId
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(locale, style = MaterialTheme.typography.titleSmall)
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            FilterChip(
-                                selected = selectedId == null,
-                                onClick = { selections = selections.filterNot { it.locale == locale } },
-                                label = {
-                                    val globalName = availableFonts.firstOrNull { it.id == globalFontId }?.name
-                                        ?: globalFontId.ifBlank { "default" }
-                                    Text("Global ($globalName)")
-                                },
-                            )
-                            compatible.forEach { font ->
-                                FilterChip(
-                                    selected = selectedId == font.id,
-                                    onClick = {
-                                        selections = selections.filterNot { it.locale == locale } +
-                                            NanoLanguageFont(locale, font.id)
-                                    },
-                                    label = { Text(font.name) },
+                    FontTargetOptions(locale, selectedId, compatible, availableFonts, globalFontId) { fontId ->
+                        selections = selections.filterNot { it.locale == locale } + listOfNotNull(
+                            fontId?.let { NanoLanguageFont(locale = locale, fontId = it) },
+                        )
+                    }
+                }
+                if (hasMath) {
+                    item(key = "math") {
+                        val compatible = availableFonts.filter { (it.scriptMask and SCRIPT_MATH) == SCRIPT_MATH }
+                        val selectedId = selections.firstOrNull { it.locale == FONT_TARGET_MATH }?.fontId
+                        FontTargetOptions("Math", selectedId, compatible, availableFonts, globalFontId) { fontId ->
+                            selections = selections.filterNot { it.locale == FONT_TARGET_MATH } +
+                                listOfNotNull(
+                                    fontId?.let { NanoLanguageFont(locale = FONT_TARGET_MATH, fontId = it) },
                                 )
-                            }
                         }
                     }
                 }
@@ -663,6 +659,41 @@ private fun BookLanguageFontsDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         },
     )
+}
+
+@Composable
+private fun FontTargetOptions(
+    label: String,
+    selectedId: String?,
+    compatible: List<NanoFontSummary>,
+    availableFonts: List<NanoFontSummary>,
+    globalFontId: String,
+    onSelect: (String?) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, style = MaterialTheme.typography.titleSmall)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            FilterChip(
+                selected = selectedId == null,
+                onClick = { onSelect(null) },
+                label = {
+                    val globalName = availableFonts.firstOrNull { it.id == globalFontId }?.name
+                        ?: globalFontId.ifBlank { "default" }
+                    Text("Global ($globalName)")
+                },
+            )
+            compatible.forEach { font ->
+                FilterChip(
+                    selected = selectedId == font.id,
+                    onClick = { onSelect(font.id) },
+                    label = { Text(font.name) },
+                )
+            }
+        }
+    }
 }
 
 @Composable

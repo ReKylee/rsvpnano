@@ -219,9 +219,11 @@ class NanoKtorClientAndroidTest {
                         assertEquals(250, body.getValue("wordIndex").jsonPrimitive.int)
                         """{"data":{"id":"b12345678","wordIndex":250,"percent":25}}"""
                     } else {
-                        val font = body.getValue("languageFonts").jsonArray.single().jsonObject
-                        assertEquals("ar", font.getValue("locale").jsonPrimitive.content)
-                        assertEquals("noto-sans-arabic", font.getValue("fontId").jsonPrimitive.content)
+                        val fonts = body.getValue("languageFonts").jsonArray
+                        assertEquals("ar", fonts[0].jsonObject.getValue("locale").jsonPrimitive.content)
+                        assertEquals("noto-sans-arabic", fonts[0].jsonObject.getValue("fontId").jsonPrimitive.content)
+                        assertEquals("math", fonts[1].jsonObject.getValue("locale").jsonPrimitive.content)
+                        assertEquals("stix-two-math", fonts[1].jsonObject.getValue("fontId").jsonPrimitive.content)
                         """{"data":{"id":"b12345678"}}"""
                     }
                 }
@@ -244,7 +246,10 @@ class NanoKtorClientAndroidTest {
         val languageFonts = client.setBookLanguageFonts(
             baseUrl = "http://device.local",
             id = "b12345678",
-            languageFonts = listOf(NanoLanguageFont("ar", "noto-sans-arabic")),
+            languageFonts = listOf(
+                NanoLanguageFont(locale = "ar", fontId = "noto-sans-arabic"),
+                NanoLanguageFont(locale = "math", fontId = "stix-two-math"),
+            ),
         )
 
         assertEquals("/books/articles/Story.rsvp", upload.path)

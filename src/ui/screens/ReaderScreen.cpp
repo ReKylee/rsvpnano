@@ -56,11 +56,13 @@ namespace screens {
     void ReaderScreen::begin(const ui::themes::Theme& theme) {
         text_.begin();
         applyTheme(theme);
+        refreshTypography();
     }
 
     void ReaderScreen::applyTheme(const ui::themes::Theme& theme) {
         background_ = theme.definition.colors.background;
-        refreshTypography();
+        renderedWordIndex_ = SIZE_MAX;
+        ++typographyRevision_;
     }
 
     void ReaderScreen::refreshTypography() {
@@ -70,10 +72,68 @@ namespace screens {
         fonts.clearLoaded();
         loadedWordIndex_ = SIZE_MAX;
         loadedFamilyIndex_ = SIZE_MAX;
+        renderedWordIndex_ = SIZE_MAX;
+        prefetchedWordIndex_ = SIZE_MAX;
         rsvpBidi_.clear();
         rsvpLine_.clear();
         rsvpParagraph_ = {};
         ++typographyRevision_;
+
+        const auto families = fonts.families();
+        if (families.size() <= 1 || ReadingLoop::wordCount(session) == 0)
+            return;
+        std::vector<uint8_t> prepared(families.size());
+        std::vector<size_t> firstWords(families.size(), SIZE_MAX);
+        const size_t sizeIndex = settings_.mode == settings::ReadingMode::page
+                                   ? RFont4::kCompactStrikeIndex
+                                   : static_cast<size_t>(typography_.fontSizeIndex);
+        const auto prepare = [&](size_t wordIndex, std::string_view locale, uint32_t scripts) {
+            for (const UnicodeText::ScriptTag& script: UnicodeText::SupportedScripts) {
+                if ((scripts & script.mask) == 0)
+                    continue;
+                const std::string_view requested = settings::fontForText(
+                    session.state.overrides, locale, script.mask, typography_.fontId);
+                const size_t family = FontCatalog::selectFamily(families, requested, locale, script.mask);
+                if (family != 0 && !prepared[family]) {
+                    fonts.loadFace(family, sizeIndex);
+                    prepared[family] = true;
+                    firstWords[family] = wordIndex;
+                }
+            }
+        };
+        prepare(0, session.metadata.localeAt(0), session.metadata.scriptMaskAt(0));
+        for (const BookTextRun& run: session.metadata.textRuns) {
+            const std::string_view locale = run.locale.empty() ? std::string_view{session.metadata.locale}
+                                                               : std::string_view{run.locale};
+            prepare(run.wordIndex, locale, run.scriptMask);
+        }
+
+        if (settings_.mode != settings::ReadingMode::rsvp)
+            return;
+        for (size_t family = 1; family < firstWords.size(); ++family) {
+            const size_t wordIndex = firstWords[family];
+            if (wordIndex == SIZE_MAX || wordIndex >= ReadingLoop::wordCount(session)
+                || fontChoice(wordIndex) != family)
+                continue;
+            const FontCatalog::Face face = fonts.loadFace(family, sizeIndex);
+            activateFace(face);
+            const std::string_view word = ReadingLoop::wordAt(session, wordIndex);
+            if (!face.shaper) {
+                text_.prepare(word);
+                continue;
+            }
+            const ReadingLoop::TextParagraph paragraph = ReadingLoop::paragraphAt(session, wordIndex);
+            const size_t localWord = wordIndex - paragraph.firstWord;
+            if (localWord >= paragraph.wordOffsets.size())
+                continue;
+            rsvpGlyphs_.clear();
+            const size_t offset = paragraph.wordOffsets[localWord];
+            const bool rightToLeft = session.metadata.directionAt(wordIndex) == TextDirection::rtl;
+            if (face.shaper->get().shape(paragraph.text, offset, word.size(), rightToLeft,
+                                         session.metadata.localeAt(wordIndex), text_, rsvpGlyphs_))
+                text_.prepare(std::span<const ui::fonts::PositionedGlyph>{rsvpGlyphs_});
+        }
+        rsvpGlyphs_.clear();
     }
 
     size_t ReaderScreen::fontChoice(size_t wordIndex) const {
@@ -106,6 +166,20 @@ namespace screens {
         }
         face_ = fonts.loadFace(family, typography_.fontSizeIndex);
         activateFace(face_);
+    }
+
+    void ReaderScreen::prefetchNextWord() {
+        if (settings_.mode == settings::ReadingMode::page || pagePreview_
+            || renderedWordIndex_ != session.currentIndex)
+            return;
+        const size_t next = session.currentIndex + 1;
+        if (next == prefetchedWordIndex_ || next >= ReadingLoop::wordCount(session))
+            return;
+        prefetchedWordIndex_ = next;
+        if (face_.shaper || face_.raster.get().bitmap != nullptr || fontChoice(next) != loadedFamilyIndex_)
+            return;
+        activateFace(face_);
+        text_.prepare(ReadingLoop::wordAt(session, next));
     }
 
     FontCatalog::Face ReaderScreen::pageTypeface(size_t wordIndex) {
@@ -379,6 +453,8 @@ namespace screens {
                 text_.drawString(before, static_cast<int16_t>(x - 24 - text_.textAdvance(before, typography_.tracking)),
                                  baseline, typography_.tracking);
             }
+            if (!shaped)
+                text_.prepare(word);
             if (shaped) {
                 int16_t cursor = x;
                 size_t first = 0;
@@ -421,6 +497,7 @@ namespace screens {
             }
         }
 
+        renderedWordIndex_ = pageView ? SIZE_MAX : session.currentIndex;
         const bool showChapter = !reading || settings.chapterVisibleWhileReading;
         const bool showProgress = !reading || settings.progressVisibleWhileReading;
         const bool showBattery = !reading || settings.batteryVisibleWhileReading;
@@ -654,6 +731,8 @@ namespace screens {
             finishPause(preferences, nowMs);
             return;
         }
+        prefetchNextWord();
+        nowMs = millis();
         if (!session.playing)
             return;
         const size_t previousIndex = session.currentIndex;

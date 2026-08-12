@@ -73,6 +73,7 @@ namespace screens {
         size_t fontChoice(size_t wordIndex) const;
         void activateFace(const FontCatalog::Face& face);
         void refreshTypeface();
+        void prefetchNextWord();
         FontCatalog::Face pageTypeface(size_t wordIndex);
 
         Arduino_GFX& gfx_;
@@ -81,6 +82,8 @@ namespace screens {
         FontCatalog::Face face_;
         size_t loadedWordIndex_ = SIZE_MAX;
         size_t loadedFamilyIndex_ = SIZE_MAX;
+        size_t renderedWordIndex_ = SIZE_MAX;
+        size_t prefetchedWordIndex_ = SIZE_MAX;
         uint8_t loadedFontSizeIndex_ = 0xFF;
         uint32_t fontRevision_ = 0;
         uint32_t typographyRevision_ = 0;

@@ -425,8 +425,11 @@ namespace screens::PageReader {
             layout(state, text, typeface, typography, session, area, anchorIndex(session, current));
         if (current < state.pageStart)
             layout(state, text, typeface, typography, session, area, anchorIndex(session, current));
-        while (current >= state.pageEnd && state.pageEnd > state.pageStart)
-            layout(state, text, typeface, typography, session, area, state.pageEnd);
+        if (current >= state.pageEnd && state.pageEnd > state.pageStart) {
+            const size_t nextPage = state.pageEnd;
+            layout(state, text, typeface, typography, session, area,
+                   current == nextPage ? nextPage : anchorIndex(session, current));
+        }
         if (current >= state.pageEnd)
             layout(state, text, typeface, typography, session, area, current);
 

@@ -527,6 +527,39 @@ void test_page_reader_uses_reader_typeface_after_skipping_a_colliding_page_range
     TEST_ASSERT_EQUAL(0, gfx.textWrites);
 }
 
+void test_page_reader_reanchors_distant_forward_seek_without_laying_out_intermediate_pages() {
+    Arduino_GFX gfx(136, 17);
+    ui::Context context(gfx);
+    ui::fonts::AlphaTextRenderer<640> text(gfx);
+    TEST_ASSERT_TRUE(text.begin());
+    context.setTheme(theme());
+    settings::TypographySettings typography;
+    std::vector<std::string> words(1024, "a");
+    ReadingSession session;
+    ReadingLoop::setWords(session, words, 0);
+    screens::PageReader::State state;
+    size_t selections = 0;
+    const auto typeface = [&](size_t) -> FontCatalog::Face {
+        ++selections;
+        return {std::cref(kReaderFont), std::nullopt};
+    };
+    constexpr ui::Rect area{0, 0, 136, 17};
+
+    context.beginFrame(1);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, area);
+    context.endFrame();
+
+    selections = 0;
+    ReadingLoop::seekTo(session, 1000);
+    context.beginFrame(1);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, area);
+    context.endFrame();
+
+    TEST_ASSERT_TRUE(state.pageStart <= 1000);
+    TEST_ASSERT_GREATER_THAN(1000, state.pageEnd);
+    TEST_ASSERT_LESS_THAN(64, selections);
+}
+
 void test_page_reader_uses_each_words_selected_typeface_for_layout() {
     Arduino_GFX gfx(60, 17);
     ui::Context context(gfx);
@@ -1235,6 +1268,7 @@ int main(int, char**) {
     RUN_TEST(test_tap_target_handles_touch_without_drawing);
     RUN_TEST(test_layout_cursors_are_deterministic);
     RUN_TEST(test_page_reader_uses_reader_typeface_after_skipping_a_colliding_page_range);
+    RUN_TEST(test_page_reader_reanchors_distant_forward_seek_without_laying_out_intermediate_pages);
     RUN_TEST(test_page_reader_uses_each_words_selected_typeface_for_layout);
     RUN_TEST(test_page_reader_caches_visual_bidi_layout);
     RUN_TEST(test_page_reader_only_runs_bidi_for_pages_that_need_it);

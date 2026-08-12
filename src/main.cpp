@@ -2,14 +2,17 @@
 #include <esp_log.h>
 #include "logging/Logger.h"
 
-#include "app/App.h"
 #if RSVP_BENCHMARK_MODE
 #include "benchmark/BenchmarkRunner.h"
+#else
+#include "app/App.h"
 #endif
 #include "board/Board.h"
 #include "settings/NvsSecurity.h"
 
+#if !RSVP_BENCHMARK_MODE
 App app;
+#endif
 
 void setup() {
     Serial.begin(115200);

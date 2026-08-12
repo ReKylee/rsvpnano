@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 START_RE = re.compile(r"\[bench\] start board=(.+?) id=(.+)$")
-METRIC_RE = re.compile(r"\[bench\] metric=([^\s]+)(.*)$")
+METRIC_RE = re.compile(r"\[bench\] metric=([^\s]+)(.*?)(?=\[bench\] metric=|$)")
 VALUE_RE = re.compile(r"([a-z_]+)=(-?\d+)")
 
 
@@ -29,6 +29,7 @@ class MetricRow:
     heap_before: int
     heap_after: int
     heap_min: int
+    deadline_misses: int
 
 
 def env_from_log_name(path: Path) -> str:
@@ -46,30 +47,30 @@ def parse_log(path: Path) -> list[MetricRow]:
                 board = start.group(1)
                 continue
 
-            metric = METRIC_RE.search(line)
-            if not metric:
-                continue
+            for metric in METRIC_RE.finditer(line):
+                values = {key: int(value) for key, value in VALUE_RE.findall(metric.group(2))}
+                if not {"ok", "us", "iterations", "avg_us", "deadline_misses"} <= values.keys():
+                    continue
 
-            values = {key: int(value) for key, value in VALUE_RE.findall(metric.group(2))}
-
-            rows.append(
-                MetricRow(
-                    log=path.name,
-                    env=env,
-                    board=board,
-                    metric=metric.group(1),
-                    ok=str(values.get("ok", 0)),
-                    ms=values.get("ms", 0),
-                    us=values.get("us", values.get("ms", 0) * 1000),
-                    iterations=values.get("iterations", 1),
-                    avg_us=values.get("avg_us", values.get("us", values.get("ms", 0) * 1000)),
-                    bytes=values.get("bytes", 0),
-                    rate_kib_s=values.get("rate_kib_s", 0),
-                    heap_before=values.get("heap_before", 0),
-                    heap_after=values.get("heap_after", 0),
-                    heap_min=values.get("heap_min", 0),
+                rows.append(
+                    MetricRow(
+                        log=path.name,
+                        env=env,
+                        board=board,
+                        metric=metric.group(1),
+                        ok=str(values.get("ok", 0)),
+                        ms=values.get("ms", 0),
+                        us=values.get("us", values.get("ms", 0) * 1000),
+                        iterations=values.get("iterations", 1),
+                        avg_us=values.get("avg_us", values.get("us", values.get("ms", 0) * 1000)),
+                        bytes=values.get("bytes", 0),
+                        rate_kib_s=values.get("rate_kib_s", 0),
+                        heap_before=values.get("heap_before", 0),
+                        heap_after=values.get("heap_after", 0),
+                        heap_min=values.get("heap_min", 0),
+                        deadline_misses=values.get("deadline_misses", 0),
+                    )
                 )
-            )
     return rows
 
 
@@ -94,13 +95,13 @@ def write_summary(rows: list[MetricRow], output: Path) -> None:
         return
 
     lines += [
-        "| Log | Env | Board | Metric | OK | total us | iterations | avg us | bytes | KiB/s | heap delta | min heap |",
-        "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Log | Env | Board | Metric | OK | total us | iterations | avg us | deadline misses | bytes | KiB/s | heap delta | min heap |",
+        "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         lines.append(
             f"| {row.log} | {row.env} | {row.board} | {row.metric} | {row.ok} | "
-            f"{row.us} | {row.iterations} | {row.avg_us} | {row.bytes} | {row.rate_kib_s} | "
+            f"{row.us} | {row.iterations} | {row.avg_us} | {row.deadline_misses} | {row.bytes} | {row.rate_kib_s} | "
             f"{row.heap_after - row.heap_before} | {row.heap_min} |"
         )
 
@@ -108,13 +109,13 @@ def write_summary(rows: list[MetricRow], output: Path) -> None:
         "",
         "## Latest Metrics",
         "",
-        "| Env | Metric | OK | avg us | KiB/s | heap delta | Log |",
-        "| --- | --- | ---: | ---: | ---: | ---: | --- |",
+        "| Env | Metric | OK | avg us | deadline misses | KiB/s | heap delta | Log |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     latest_rows = latest_by_env_and_metric(rows)
     for row in latest_rows:
         lines.append(
-            f"| {row.env} | {row.metric} | {row.ok} | {row.avg_us} | {row.rate_kib_s} | "
+            f"| {row.env} | {row.metric} | {row.ok} | {row.avg_us} | {row.deadline_misses} | {row.rate_kib_s} | "
             f"{row.heap_after - row.heap_before} | {row.log} |"
         )
 
@@ -141,7 +142,7 @@ def write_summary(rows: list[MetricRow], output: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create a Markdown summary from benchmark logs.")
     parser.add_argument("--logs-dir", default=str(Path(__file__).resolve().parent / "logs"))
-    parser.add_argument("--output", default=str(Path(__file__).resolve().parent / "summary.md"))
+    parser.add_argument("--output", default=str(Path(__file__).resolve().parent / "logs" / "summary.md"))
     args = parser.parse_args()
 
     logs_dir = Path(args.logs_dir)

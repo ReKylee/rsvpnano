@@ -16,7 +16,8 @@ namespace Board::Storage {
                                                       : WaveshareC6TouchLcd147::Storage::kDefaultFrequencyHz;
         SPI.begin(WaveshareC6TouchLcd147::Storage::kSclkPin, WaveshareC6TouchLcd147::Storage::kMisoPin,
                   WaveshareC6TouchLcd147::Storage::kMosiPin, WaveshareC6TouchLcd147::Storage::kCsPin);
-        return SD.begin(WaveshareC6TouchLcd147::Storage::kCsPin, SPI, frequencyHz, mountPoint, 5, false);
+        return SD.begin(WaveshareC6TouchLcd147::Storage::kCsPin, SPI, frequencyHz, mountPoint,
+                        kMaximumOpenFiles, false);
     }
 
     void end() {

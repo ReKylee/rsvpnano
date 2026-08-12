@@ -4,8 +4,9 @@ from pathlib import Path
 from unittest import TestCase, mock
 
 from fonts.convert_alpha4_font import (
-    RFONT4_GLYPH_FORMAT,
-    RFONT4_GLYPH_SIZE,
+    DEFAULT_SIZE_SPEC,
+    RFONT4_GLYPH_IDENTITY_FORMAT,
+    RFONT4_GLYPH_IDENTITY_SIZE,
     RFONT4_HEADER_FORMAT,
     RFONT4_STRIKE_FORMAT,
     SCRIPT_MATH,
@@ -13,12 +14,16 @@ from fonts.convert_alpha4_font import (
     mapped_codepoints,
     parse_locales,
     parse_scripts,
+    parse_size_spec,
     script_mask,
 )
 from RSVPNanoCompanion.tools.generate_multilingual_corpus import PARAGRAPHS
 
 
 class FontMapTest(TestCase):
+    def test_default_compact_strike_is_readable_outline_size(self) -> None:
+        self.assertEqual(12, dict(parse_size_spec(DEFAULT_SIZE_SPEC))["compact"])
+
     def test_auto_map_uses_only_the_fonts_unicode_cmap(self) -> None:
         with mock.patch("fonts.convert_alpha4_font.cmap_for_font", return_value={0x05D0: "alef", 0x05D1: "bet"}):
             self.assertEqual(mapped_codepoints(Path("font.ttf"), "auto"), [0x20, 0x3F, 0x05D0, 0x05D1])
@@ -124,18 +129,40 @@ class FontMapTest(TestCase):
         ):
             self.assertTrue(ascii_letters.isdisjoint(rfont4_codepoints(Path(f"fonts/{name}/font.rfont4"))), name)
 
+    def test_generated_fonts_use_the_default_compact_strike(self) -> None:
+        for path in Path("fonts").glob("*/font.rfont4"):
+            strike = rfont4_compact_strike(path)
+            self.assertEqual(12, strike[8], path)
+            self.assertEqual(1, strike[9], path)
+            self.assertGreater(strike[6], 3, path)
+            self.assertGreater(strike[7], 3, path)
+
+        fallback = Path("src/fonts/LiterataFallbackAlpha4.h").read_text(encoding="utf-8")
+        self.assertIn("LiterataFallbackAlpha4_12", fallback)
+        self.assertNotIn("LiterataFallbackAlpha4_10", fallback)
+
 
 def rfont4_codepoints(path: Path) -> set[int]:
     data = path.read_bytes()
     header = struct.unpack_from(RFONT4_HEADER_FORMAT, data)
-    strike = struct.unpack_from(RFONT4_STRIKE_FORMAT, data, header[17])
-    glyph_count, glyphs_offset = strike[0], strike[18]
+    glyph_count, identities_offset = header[14], header[20]
     return {
-        struct.unpack_from(RFONT4_GLYPH_FORMAT, data, glyphs_offset + index * RFONT4_GLYPH_SIZE)[0]
+        struct.unpack_from(
+            RFONT4_GLYPH_IDENTITY_FORMAT,
+            data,
+            identities_offset + index * RFONT4_GLYPH_IDENTITY_SIZE,
+        )[0]
         for index in range(glyph_count)
     }
 
 
+def rfont4_compact_strike(path: Path) -> tuple[int, ...]:
+    data = path.read_bytes()
+    header = struct.unpack_from(RFONT4_HEADER_FORMAT, data)
+    strike_size = struct.calcsize(RFONT4_STRIKE_FORMAT)
+    return struct.unpack_from(RFONT4_STRIKE_FORMAT, data, header[19] + 3 * strike_size)
+
+
 def alpha4_header_codepoints(path: Path) -> set[int]:
-    glyphs = path.read_text(encoding="utf-8").split("Glyphs[] PROGMEM = {", 1)[1].split("};", 1)[0]
-    return {int(value, 16) for value in re.findall(r"^\s*\{(0x[0-9A-F]+),", glyphs, re.MULTILINE)}
+    identities = path.read_text(encoding="utf-8").split("Identities[] PROGMEM = {", 1)[1].split("};", 1)[0]
+    return {int(value, 16) for value in re.findall(r"^\s*\{(0x[0-9A-F]+),", identities, re.MULTILINE)}

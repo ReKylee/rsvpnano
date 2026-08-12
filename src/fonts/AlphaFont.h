@@ -21,9 +21,122 @@
 
 namespace ui::fonts {
 
+    struct RFontFileCache {
+        static constexpr size_t kBlockSize = 4096;
+#if defined(BOARD_HAS_PSRAM)
+        static constexpr size_t kBlockCount = 16;
+#else
+        static constexpr size_t kBlockCount = 2;
+#endif
+
+        struct Stats {
+            uint32_t logicalReads = 0;
+            uint32_t blockReads = 0;
+            uint32_t seeks = 0;
+            uint32_t requestedBytes = 0;
+            uint32_t loadedBytes = 0;
+        };
+
+        bool read(File& file, uint32_t fileSize, uint32_t offset, void* output, size_t size) {
+#if defined(RSVP_BENCHMARK_MODE)
+            ++stats_.logicalReads;
+            stats_.requestedBytes += static_cast<uint32_t>(size);
+#endif
+            if (size > fileSize || offset > fileSize - size)
+                return false;
+
+            auto* destination = static_cast<uint8_t*>(output);
+            while (size > 0) {
+                const uint32_t blockOffset = offset & ~(static_cast<uint32_t>(kBlockSize) - 1U);
+                Block* block = find(file, blockOffset);
+                if (block == nullptr) {
+                    block = &oldest();
+                    const size_t available = std::min<size_t>(kBlockSize, fileSize - blockOffset);
+                    if ((file.position() != blockOffset && !seek(file, blockOffset))
+                        || file.read(block->bytes.data(), available) != available) {
+                        block->offset = UINT32_MAX;
+                        return false;
+                    }
+                    block->file = &file;
+                    block->offset = blockOffset;
+                    block->size = static_cast<uint16_t>(available);
+#if defined(RSVP_BENCHMARK_MODE)
+                    ++stats_.blockReads;
+                    stats_.loadedBytes += static_cast<uint32_t>(available);
+#endif
+                }
+
+                block->used = ++clock_;
+                const size_t within = offset - blockOffset;
+                const size_t chunk = std::min(size, static_cast<size_t>(block->size) - within);
+                std::memcpy(destination, block->bytes.data() + within, chunk);
+                destination += chunk;
+                offset += static_cast<uint32_t>(chunk);
+                size -= chunk;
+            }
+            return true;
+        }
+
+        void clear() {
+            for (Block& block: blocks_) {
+                block.file = nullptr;
+                block.offset = UINT32_MAX;
+                block.used = 0;
+            }
+            clock_ = 0;
+#if defined(RSVP_BENCHMARK_MODE)
+            stats_ = {};
+#endif
+        }
+
+#if defined(RSVP_BENCHMARK_MODE)
+        void resetStats() {
+            stats_ = {};
+        }
+        const Stats& stats() const {
+            return stats_;
+        }
+#endif
+
+    private:
+        struct Block {
+            alignas(4) std::array<uint8_t, kBlockSize> bytes{};
+            const File* file = nullptr;
+            uint32_t offset = UINT32_MAX;
+            uint32_t used = 0;
+            uint16_t size = 0;
+        };
+
+        Block* find(const File& file, uint32_t offset) {
+            const auto found = std::ranges::find_if(blocks_, [&](const Block& block) {
+                return block.file == &file && block.offset == offset;
+            });
+            return found == blocks_.end() ? nullptr : &*found;
+        }
+
+        Block& oldest() {
+            return *std::ranges::min_element(blocks_, {}, &Block::used);
+        }
+
+        bool seek(File& file, uint32_t offset) {
+            if (!file.seek(offset))
+                return false;
+#if defined(RSVP_BENCHMARK_MODE)
+            ++stats_.seeks;
+#endif
+            return true;
+        }
+
+        std::array<Block, kBlockCount> blocks_{};
+        uint32_t clock_ = 0;
+#if defined(RSVP_BENCHMARK_MODE)
+        Stats stats_{};
+#endif
+    };
+
     using AlphaGlyph = RFont4::GlyphRecord;
+    using AlphaGlyphIdentity = RFont4::GlyphIdentityRecord;
     using AlphaKerningPair = RFont4::KerningRecord;
-    using AlphaGlyphId = RFont4::GlyphIdRecord;
 
     struct PositionedGlyph {
         uint32_t cluster = 0;
@@ -38,6 +151,7 @@ namespace ui::fonts {
         std::string_view name;
         const uint8_t* bitmap = nullptr;
         const AlphaGlyph* glyphs = nullptr;
+        const AlphaGlyphIdentity* identities = nullptr;
         uint32_t glyphCount = 0;
         uint8_t yAdvance = 0;
         uint8_t ascent = 0;
@@ -49,13 +163,19 @@ namespace ui::fonts {
         uint32_t kerningPairCount = 0;
         int8_t wordInkTop = 0;
         int8_t wordInkBottom = -1;
-        const AlphaGlyphId* glyphIds = nullptr;
-        uint32_t glyphIdCount = 0;
+        const uint8_t* glyphMap = nullptr;
+        uint32_t glyphMapCount = 0;
         uint32_t scriptMask = 0;
         uint8_t pixelsPerEm = 0;
         std::optional<std::reference_wrapper<File>> file;
+        std::optional<std::reference_wrapper<RFontFileCache>> fileCache;
+        uint32_t fileSize = 0;
+        uint32_t generation = 0;
+        RFont4::Header fileHeader;
         RFont4::StrikeRecord fileStrike;
         uint8_t bitsPerPixel = 4;
+        RFont4::BitmapEncoding bitmapEncoding = RFont4::BitmapEncoding::raw;
+        const uint8_t* pageTableData = nullptr;
     };
 
     struct AlphaByteInfo {
@@ -98,12 +218,15 @@ namespace ui::fonts {
         }
 
         void setFont(const AlphaFont& font) {
-            if (font_ == &font)
+            if (font_ == &font && fontGeneration_ == font.generation)
                 return;
             font_ = &font;
+            fontGeneration_ = font.generation;
             for (auto& entry: fileGlyphCache_)
                 entry.index = UINT32_MAX;
             fileKerningKeys_.fill(UINT64_MAX);
+            preparedBitmapCount_ = 0;
+            preparedBitmapBytes_ = 0;
         }
 
         void setTextColor(uint16_t fg, uint16_t bg) {
@@ -127,6 +250,7 @@ namespace ui::fonts {
                 return bounds.advance;
             }
 
+            prepareBitmaps(text);
             if (!drawGlyphsToStrips(text, x, baseline, bounds, tracking)) {
                 drawGlyphs(text, x, baseline, tracking);
             }
@@ -140,6 +264,16 @@ namespace ui::fonts {
             if (glyph == nullptr)
                 return drawU8g2(codepoint, u8g2Style(), x, baseline);
             return drawAlpha(*glyph, x, baseline);
+        }
+
+        void prepare(std::string_view text) {
+            if (ready_ && font_ != nullptr)
+                prepareBitmaps(text);
+        }
+
+        void prepare(std::span<const PositionedGlyph> glyphs) {
+            if (ready_ && font_ != nullptr)
+                prepareBitmaps(glyphs);
         }
 
         int16_t glyphAdvance(uint32_t codepoint) const {
@@ -170,6 +304,7 @@ namespace ui::fonts {
             measure(glyphs, x, baseline, bounds);
             if (bounds.w == 0 || bounds.h == 0)
                 return bounds.advance;
+            prepareBitmaps(glyphs);
             if (!drawGlyphsToStrips(glyphs, x, baseline, bounds)) {
                 int16_t cursor = x;
                 for (const PositionedGlyph& positioned: glyphs) {
@@ -181,56 +316,30 @@ namespace ui::fonts {
             return bounds.advance;
         }
 
+#if defined(RSVP_BENCHMARK_MODE)
+        void clearBitmapCache() {
+            preparedBitmapCount_ = 0;
+            preparedBitmapBytes_ = 0;
+        }
+#endif
+
         int16_t glyphIdAdvance(uint32_t glyphId) const {
-            const AlphaGlyph* glyph = findGlyphId(glyphId);
+            uint16_t glyphIndex = 0;
+            const AlphaGlyph* glyph = resolveGlyphId(glyphId, glyphIndex) ? glyphAt(glyphIndex) : nullptr;
             return glyph == nullptr ? 0 : readGlyph(*glyph).xAdvance;
         }
 
         bool resolveGlyphId(uint32_t glyphId, uint16_t& glyphIndex) const {
-            if (font_ == nullptr || font_->glyphIdCount == 0
-                || (!font_->file && (font_->glyphs == nullptr || font_->glyphIds == nullptr)))
+            if (font_ == nullptr || glyphId >= font_->glyphMapCount
+                || (font_->glyphMap == nullptr && !font_->file))
                 return false;
-            if (font_->file) {
-                for (const FileGlyphCacheEntry& cached: fileGlyphCache_) {
-                    if (cached.index != UINT32_MAX && cached.glyph.glyphId == glyphId) {
-                        glyphIndex = static_cast<uint16_t>(cached.index);
-                        return true;
-                    }
-                }
-                uint32_t first = 0;
-                uint32_t last = font_->glyphIdCount;
-                RFont4::GlyphIdRecord record;
-                while (first < last) {
-                    const uint32_t middle = first + (last - first) / 2;
-                    if (!readFile(font_->fileStrike.glyphIdsOffset + middle * sizeof(record), &record,
-                                  sizeof(record)))
-                        return false;
-                    if (record.glyphId < glyphId)
-                        first = middle + 1;
-                    else
-                        last = middle;
-                }
-                if (first >= font_->glyphIdCount
-                    || !readFile(font_->fileStrike.glyphIdsOffset + first * sizeof(record), &record,
-                                 sizeof(record))
-                    || record.glyphId != glyphId || record.glyphIndex >= font_->glyphCount)
-                    return false;
-                glyphIndex = static_cast<uint16_t>(record.glyphIndex);
-                return fileGlyph(glyphIndex) != nullptr;
-            }
-            const std::span ids{font_->glyphIds, static_cast<size_t>(font_->glyphIdCount)};
-            const auto record = std::ranges::lower_bound(ids, glyphId, {}, [](const AlphaGlyphId& candidate) {
-                return readPacked(candidate).glyphId;
-            });
-            if (record == ids.end())
+            if (font_->glyphMap != nullptr)
+                std::memcpy(&glyphIndex, font_->glyphMap + glyphId * sizeof(glyphIndex),
+                            sizeof(glyphIndex));
+            else if (!readFile(font_->fileHeader.glyphMapOffset + glyphId * sizeof(glyphIndex),
+                               &glyphIndex, sizeof(glyphIndex)))
                 return false;
-            const AlphaGlyphId resolved = readPacked(*record);
-            if (resolved.glyphId != glyphId)
-                return false;
-            if (resolved.glyphIndex >= font_->glyphCount)
-                return false;
-            glyphIndex = static_cast<uint16_t>(resolved.glyphIndex);
-            return true;
+            return glyphIndex != kMissingGlyphIndex && glyphIndex < font_->glyphCount;
         }
 
         uint8_t pixelsPerEm() const {
@@ -238,10 +347,11 @@ namespace ui::fonts {
         }
 
         bool nominalGlyph(uint32_t codepoint, uint32_t& glyphId) const {
-            const AlphaGlyph* glyph = findGlyph(codepoint);
-            if (glyph == nullptr)
+            uint16_t glyphIndex = 0;
+            AlphaGlyphIdentity identity;
+            if (!findGlyphIndex(codepoint, glyphIndex) || !identityAt(glyphIndex, identity))
                 return false;
-            glyphId = readGlyph(*glyph).glyphId;
+            glyphId = identity.glyphId;
             return glyphId != 0;
         }
 
@@ -251,7 +361,7 @@ namespace ui::fonts {
 
         int16_t kerningAdjust(uint32_t leftCodepoint, uint32_t rightCodepoint) const {
             if (font_ == nullptr || font_->kerningPairCount == 0
-                || (!font_->file && font_->kerningPairs == nullptr)) {
+                || (font_->kerningPairs == nullptr && !font_->file)) {
                 return 0;
             }
 
@@ -265,8 +375,8 @@ namespace ui::fonts {
                 return 0;
             }
 
-            if (font_->file)
-                return fileKerningAdjust(left, rightCodepoint);
+            if (font_->kerningPairs == nullptr)
+                return fileKerningAdjust(left, leftCodepoint, rightCodepoint);
 
             const std::span pairs{font_->kerningPairs + left.kernOffset, static_cast<size_t>(left.kernCount)};
             const auto pair =
@@ -300,6 +410,14 @@ namespace ui::fonts {
         struct FileGlyphCacheEntry {
             uint32_t index = UINT32_MAX;
             AlphaGlyph glyph;
+        };
+
+        struct PreparedBitmap {
+            uint32_t fontOffset = 0;
+            uint16_t bufferOffset = 0;
+            uint16_t size = 0;
+            uint16_t storageBytes = 0;
+            bool storedRaw = false;
         };
 
         struct U8g2Style {
@@ -595,7 +713,8 @@ namespace ui::fonts {
         void clearStrip(uint16_t width, uint8_t rows) {
             for (uint8_t row = 0; row < rows; ++row) {
                 std::ranges::fill_n(strip_[row], width, bg_);
-                std::ranges::fill_n(stripInk_[row], width, static_cast<uint8_t>(0));
+                stripFirstInk_[row] = width;
+                stripLastInk_[row] = 0;
             }
         }
 
@@ -677,12 +796,19 @@ namespace ui::fonts {
                     continue;
                 }
 
-                forEachVisibleSpan(packedRow, overlapSrcX0, overlapSrcX1,
-                                   [&](int16_t srcX0, int16_t srcX1) {
-                    const uint16_t dstCol = static_cast<uint16_t>(glyphX + srcX0 - stripX);
-                    const uint16_t count = static_cast<uint16_t>(srcX1 - srcX0);
-                    compositePackedRowSpanIntoStrip(packedRow, srcX0, stripRow, dstCol, count);
-                });
+                if (font_->bitsPerPixel == 1) {
+                    forEachVisibleSpan(packedRow, overlapSrcX0, overlapSrcX1,
+                                       [&](int16_t srcX0, int16_t srcX1) {
+                        const uint16_t dstCol = static_cast<uint16_t>(glyphX + srcX0 - stripX);
+                        const uint16_t count = static_cast<uint16_t>(srcX1 - srcX0);
+                        compositePackedRowSpanIntoStrip(packedRow, srcX0, stripRow, dstCol, count);
+                    });
+                } else {
+                    compositePackedRowSpanIntoStrip(
+                        packedRow, overlapSrcX0, stripRow,
+                        static_cast<uint16_t>(overlapX0 - stripX),
+                        static_cast<uint16_t>(overlapSrcX1 - overlapSrcX0));
+                }
             }
         }
 
@@ -690,16 +816,21 @@ namespace ui::fonts {
                                              uint16_t count) {
             if (font_->bitsPerPixel == 1) {
                 std::ranges::fill_n(strip_[stripRow] + dstCol, count, fg_);
-                std::ranges::fill_n(stripInk_[stripRow] + dstCol, count, static_cast<uint8_t>(1));
+                includeInk(stripRow, dstCol, count);
                 return;
             }
             uint16_t out = dstCol;
             uint16_t remaining = count;
+            uint16_t firstInk = UINT16_MAX;
+            uint16_t lastInk = 0;
 
             if ((srcX & 1) != 0 && remaining > 0) {
                 const uint8_t coverage = coverageAt(packedRow, static_cast<uint8_t>(srcX));
-                strip_[stripRow][out] = blend_[coverage];
-                stripInk_[stripRow][out] = 1;
+                if (coverage != 0) {
+                    strip_[stripRow][out] = blend_[coverage];
+                    firstInk = out;
+                    lastInk = static_cast<uint16_t>(out + 1);
+                }
                 ++srcX;
                 ++out;
                 --remaining;
@@ -711,16 +842,21 @@ namespace ui::fonts {
                 if (info.isSolid) {
                     strip_[stripRow][out] = fg_;
                     strip_[stripRow][out + 1] = fg_;
-                    stripInk_[stripRow][out] = 1;
-                    stripInk_[stripRow][out + 1] = 1;
+                    if (firstInk == UINT16_MAX)
+                        firstInk = out;
+                    lastInk = static_cast<uint16_t>(out + 2);
                 } else if (info.hasInk) {
                     if (info.left != 0) {
                         strip_[stripRow][out] = blendPair_[packed][0];
-                        stripInk_[stripRow][out] = 1;
+                        if (firstInk == UINT16_MAX)
+                            firstInk = out;
+                        lastInk = static_cast<uint16_t>(out + 1);
                     }
                     if (info.right != 0) {
                         strip_[stripRow][out + 1] = blendPair_[packed][1];
-                        stripInk_[stripRow][out + 1] = 1;
+                        if (firstInk == UINT16_MAX)
+                            firstInk = static_cast<uint16_t>(out + 1);
+                        lastInk = static_cast<uint16_t>(out + 2);
                     }
                 }
 
@@ -731,36 +867,34 @@ namespace ui::fonts {
 
             if (remaining > 0) {
                 const uint8_t coverage = coverageAt(packedRow, static_cast<uint8_t>(srcX));
-                strip_[stripRow][out] = blend_[coverage];
-                stripInk_[stripRow][out] = 1;
+                if (coverage != 0) {
+                    strip_[stripRow][out] = blend_[coverage];
+                    if (firstInk == UINT16_MAX)
+                        firstInk = out;
+                    lastInk = static_cast<uint16_t>(out + 1);
+                }
             }
+            if (firstInk != UINT16_MAX)
+                includeInk(stripRow, firstInk, static_cast<uint16_t>(lastInk - firstInk));
+        }
+
+        void includeInk(uint8_t row, uint16_t first, uint16_t count) {
+            stripFirstInk_[row] = std::min(stripFirstInk_[row], first);
+            stripLastInk_[row] = std::max(stripLastInk_[row], static_cast<uint16_t>(first + count));
         }
 
         void flushStrip(int16_t stripX, int16_t stripY, uint16_t stripWidth, uint8_t stripRows) {
             for (uint8_t row = 0; row < stripRows; ++row) {
-                uint16_t x = 0;
-                while (x < stripWidth) {
-                    while (x < stripWidth && stripInk_[row][x] == 0) {
-                        ++x;
-                    }
-                    if (x >= stripWidth) {
-                        break;
-                    }
+                const uint16_t first = stripFirstInk_[row];
+                const uint16_t last = stripLastInk_[row];
+                if (first >= last || last > stripWidth)
+                    continue;
 
-                    const uint16_t spanStart = x;
-                    while (x < stripWidth && stripInk_[row][x] != 0) {
-                        ++x;
-                    }
-
-                    const int16_t spanWidth = static_cast<int16_t>(x - spanStart);
-                    if (spanWidth > 0) {
-                        // Pass mutable RAM pointer intentionally: Arduino_GFX selects the
-                        // bulk writePixels() path.
-                        output_.draw16bitRGBBitmap(static_cast<int16_t>(stripX + spanStart),
-                                                   static_cast<int16_t>(stripY + row), strip_[row] + spanStart,
-                                                   spanWidth, 1);
-                    }
-                }
+                // The strip already contains the union of every overlapping glyph. Sending its
+                // opaque span once avoids a display transaction for every disconnected ink run.
+                output_.draw16bitRGBBitmap(static_cast<int16_t>(stripX + first),
+                                           static_cast<int16_t>(stripY + row), strip_[row] + first,
+                                           static_cast<int16_t>(last - first), 1);
             }
         }
 
@@ -857,7 +991,7 @@ namespace ui::fonts {
         }
 
         AlphaGlyph readGlyph(const AlphaGlyph& glyph) const {
-            return font_->file ? glyph : readPacked(glyph);
+            return readPacked(glyph);
         }
 
         template<typename T>
@@ -871,6 +1005,8 @@ namespace ui::fonts {
             if (font_ == nullptr || !font_->file)
                 return false;
             File& file = font_->file->get();
+            if (font_->fileCache)
+                return font_->fileCache->get().read(file, font_->fileSize, offset, out, bytes);
             return (file.position() == offset || file.seek(offset))
                 && file.read(static_cast<uint8_t*>(out), bytes) == bytes;
         }
@@ -884,43 +1020,192 @@ namespace ui::fonts {
 
             RFont4::GlyphRecord record;
             const uint32_t offset = font_->fileStrike.glyphsOffset + index * sizeof(record);
-            if (!readFile(offset, &record, sizeof(record))
-                || static_cast<uint64_t>(record.bitmapOffset)
-                           + static_cast<uint64_t>(record.rowStride) * record.height
+            if (!readFile(offset, &record, sizeof(record)))
+                return nullptr;
+            const size_t decodedBytes = static_cast<size_t>(record.rowStride) * record.height;
+            const size_t storedBytes = RFont4::bitmapBytes(record);
+            if (static_cast<uint64_t>(record.bitmapOffset) + storedBytes
                        > font_->fileStrike.bitmapSize
+                || (RFont4::bitmapStoredRaw(font_->fileStrike, record)
+                    ? storedBytes != decodedBytes
+                    : decodedBytes != 0 && storedBytes == 0)
                 || static_cast<uint64_t>(record.kernOffset) + record.kernCount
                        > font_->fileStrike.kerningPairCount)
                 return nullptr;
 
-            cached = {
-                .index = index,
-                .glyph = {record.codepoint, record.bitmapOffset, record.kernOffset,
-                          record.width, record.height, record.rowStride, record.xAdvance,
-                          record.xOffset, record.yOffset, record.kernCount, record.glyphId},
-            };
+            cached = {.index = index, .glyph = record};
             return &cached.glyph;
         }
 
         const AlphaGlyph* glyphAt(uint32_t index) const {
             if (font_ == nullptr || index >= font_->glyphCount)
                 return nullptr;
-            return font_->file ? fileGlyph(index) : font_->glyphs + index;
+            return font_->glyphs != nullptr ? font_->glyphs + index : fileGlyph(index);
         }
 
         bool prepareRow(const AlphaGlyph& glyph, uint8_t row, const uint8_t*& packedRow) {
             if (row >= glyph.height || glyph.rowStride > packedRow_.size())
                 return false;
-            if (!font_->file) {
+            if (font_->bitmap != nullptr && font_->bitmapEncoding == RFont4::BitmapEncoding::raw) {
                 packedRow = font_->bitmap + glyph.bitmapOffset + static_cast<uint32_t>(row) * glyph.rowStride;
                 return true;
             }
 
-            const uint32_t bitmapOffset = glyph.bitmapOffset + static_cast<uint32_t>(row) * glyph.rowStride;
-            if (glyph.rowStride > 0
-                && !readFile(font_->fileStrike.bitmapOffset + bitmapOffset, packedRow_.data(), glyph.rowStride))
+            for (size_t index = 0; index < preparedBitmapCount_; ++index) {
+                const PreparedBitmap& prepared = preparedBitmaps_[index];
+                if (prepared.fontOffset == glyph.bitmapOffset) {
+                    packedRow = preparedBitmapData_.data() + prepared.bufferOffset
+                              + static_cast<size_t>(row) * glyph.rowStride;
+                    return true;
+                }
+            }
+
+            if (RFont4::bitmapStoredRaw(font_->fileStrike, glyph)) {
+                const uint32_t bitmapOffset = glyph.bitmapOffset + static_cast<uint32_t>(row) * glyph.rowStride;
+                if (glyph.rowStride > 0 && !readBitmap(bitmapOffset, packedRow_.data(), glyph.rowStride))
+                    return false;
+                packedRow = packedRow_.data();
+                return true;
+            }
+
+            preparedBitmapCount_ = 0;
+            preparedBitmapBytes_ = 0;
+            size_t used = 0;
+            if (!appendPreparedBitmap(glyph, used) || !loadPreparedBitmaps(0))
                 return false;
-            packedRow = packedRow_.data();
+            preparedBitmapBytes_ = used;
+            packedRow = preparedBitmapData_.data() + static_cast<size_t>(row) * glyph.rowStride;
             return true;
+        }
+
+        bool appendPreparedBitmap(const AlphaGlyph& glyph, size_t& used) {
+            const size_t bytes = static_cast<size_t>(glyph.rowStride) * glyph.height;
+            if (bytes == 0)
+                return true;
+            for (size_t index = 0; index < preparedBitmapCount_; ++index) {
+                if (preparedBitmaps_[index].fontOffset == glyph.bitmapOffset)
+                    return true;
+            }
+            if (preparedBitmapCount_ == preparedBitmaps_.size() || bytes > preparedBitmapData_.size() - used)
+                return false;
+            preparedBitmaps_[preparedBitmapCount_++] = {
+                .fontOffset = glyph.bitmapOffset,
+                .bufferOffset = static_cast<uint16_t>(used),
+                .size = static_cast<uint16_t>(bytes),
+                .storageBytes = static_cast<uint16_t>(RFont4::bitmapBytes(glyph)),
+                .storedRaw = RFont4::bitmapStoredRaw(font_->fileStrike, glyph),
+            };
+            used += bytes;
+            return true;
+        }
+
+        bool loadPreparedBitmaps(size_t first) {
+            std::sort(preparedBitmaps_.begin() + first,
+                      preparedBitmaps_.begin() + preparedBitmapCount_,
+                      [](const PreparedBitmap& left, const PreparedBitmap& right) {
+                          return left.fontOffset < right.fontOffset;
+                      });
+            for (size_t index = first; index < preparedBitmapCount_; ++index) {
+                const PreparedBitmap& prepared = preparedBitmaps_[index];
+                uint8_t* destination = preparedBitmapData_.data() + prepared.bufferOffset;
+                if (prepared.storedRaw) {
+                    if (prepared.storageBytes != prepared.size
+                        || !readBitmap(prepared.fontOffset, destination, prepared.size))
+                        return false;
+                    continue;
+                }
+                if (prepared.storageBytes > encodedBitmap_.size()
+                    || !readBitmap(prepared.fontOffset, encodedBitmap_.data(), prepared.storageBytes)
+                    || !RFont4::decompressLz4Block(
+                        std::span<const uint8_t>{encodedBitmap_.data(), prepared.storageBytes},
+                        std::span<uint8_t>{destination, prepared.size}))
+                    return false;
+            }
+            return true;
+        }
+
+        bool readBitmap(uint32_t offset, void* output, size_t bytes) const {
+            if (bytes > font_->fileStrike.bitmapSize || offset > font_->fileStrike.bitmapSize - bytes)
+                return false;
+            if (font_->bitmap != nullptr) {
+                std::memcpy(output, font_->bitmap + offset, bytes);
+                return true;
+            }
+            return readFile(font_->fileStrike.bitmapOffset + offset, output, bytes);
+        }
+
+        void prepareBitmaps(std::string_view text) {
+            if ((font_->bitmap != nullptr && font_->bitmapEncoding == RFont4::BitmapEncoding::raw)
+                || (font_->bitmap == nullptr && !font_->file))
+                return;
+
+            auto appendAll = [&](size_t& used) {
+                std::string_view cursor = text;
+                uint32_t codepoint = 0;
+                while (Utf8Text::next(cursor, codepoint)) {
+                    const AlphaGlyph* glyph = findGlyph(codepoint);
+                    if (glyph != nullptr && !appendPreparedBitmap(readGlyph(*glyph), used))
+                        return false;
+                }
+                return true;
+            };
+
+            size_t first = preparedBitmapCount_;
+            size_t baseBytes = preparedBitmapBytes_;
+            size_t used = baseBytes;
+            if (!appendAll(used)) {
+                preparedBitmapCount_ = 0;
+                first = 0;
+                baseBytes = 0;
+                used = 0;
+                if (!appendAll(used)) {
+                    preparedBitmapCount_ = 0;
+                    preparedBitmapBytes_ = 0;
+                    return;
+                }
+            }
+            if (!loadPreparedBitmaps(first)) {
+                preparedBitmapCount_ = first;
+                preparedBitmapBytes_ = baseBytes;
+                return;
+            }
+            preparedBitmapBytes_ = used;
+        }
+
+        void prepareBitmaps(std::span<const PositionedGlyph> glyphs) {
+            if ((font_->bitmap != nullptr && font_->bitmapEncoding == RFont4::BitmapEncoding::raw)
+                || (font_->bitmap == nullptr && !font_->file))
+                return;
+
+            auto appendAll = [&](size_t& used) {
+                for (const PositionedGlyph& positioned: glyphs) {
+                    const AlphaGlyph* glyph = glyphAt(positioned.glyphIndex);
+                    if (glyph != nullptr && !appendPreparedBitmap(readGlyph(*glyph), used))
+                        return false;
+                }
+                return true;
+            };
+
+            size_t first = preparedBitmapCount_;
+            size_t baseBytes = preparedBitmapBytes_;
+            size_t used = baseBytes;
+            if (!appendAll(used)) {
+                preparedBitmapCount_ = 0;
+                first = 0;
+                baseBytes = 0;
+                used = 0;
+                if (!appendAll(used)) {
+                    preparedBitmapCount_ = 0;
+                    preparedBitmapBytes_ = 0;
+                    return;
+                }
+            }
+            if (!loadPreparedBitmaps(first)) {
+                preparedBitmapCount_ = first;
+                preparedBitmapBytes_ = baseBytes;
+                return;
+            }
+            preparedBitmapBytes_ = used;
         }
 
         template<typename Function>
@@ -938,82 +1223,83 @@ namespace ui::fonts {
         }
 
         const AlphaGlyph* findGlyph(uint32_t codepoint) const {
-            if (font_ == nullptr || font_->glyphCount == 0 || (!font_->file && font_->glyphs == nullptr)) {
-                return nullptr;
-            }
-            if (font_->file) {
-                for (const auto& cached: fileGlyphCache_) {
-                    if (cached.index != UINT32_MAX && cached.glyph.codepoint == codepoint)
-                        return &cached.glyph;
-                }
-                if (codepoint <= UINT16_MAX && font_->pageMap != nullptr && font_->pageTableCount > 0) {
-                    const uint8_t pageIndex = font_->pageMap[codepoint >> 8U];
-                    if (pageIndex == kMissingPageIndex || pageIndex >= font_->pageTableCount)
-                        return nullptr;
-                    uint16_t index = kMissingGlyphIndex;
-                    const uint32_t entry = static_cast<uint32_t>(pageIndex) * RFont4::kPageTableEntries
-                                         + (codepoint & 0xFFU);
-                    if (!readFile(font_->fileStrike.pageTablesOffset + entry * sizeof(index), &index, sizeof(index))
-                        || index == kMissingGlyphIndex || index >= font_->glyphCount)
-                        return nullptr;
-                    return fileGlyph(index);
-                }
-                return findGlyphBinary(codepoint);
-            }
-            if (codepoint <= UINT16_MAX && font_->pageMap != nullptr && font_->pageTables != nullptr
-                && font_->pageTableCount > 0) {
+            uint16_t glyphIndex = 0;
+            return findGlyphIndex(codepoint, glyphIndex) ? glyphAt(glyphIndex) : nullptr;
+        }
+
+        bool findGlyphIndex(uint32_t codepoint, uint16_t& glyphIndex) const {
+            if (font_ == nullptr || font_->glyphCount == 0
+                || (font_->identities == nullptr && !font_->file))
+                return false;
+
+            if (codepoint <= UINT16_MAX && font_->pageMap != nullptr && font_->pageTableCount > 0) {
                 const uint8_t pageIndex = pgm_read_byte(font_->pageMap + (codepoint >> 8U));
-                if (pageIndex == kMissingPageIndex || pageIndex >= font_->pageTableCount) {
-                    return nullptr;
-                }
+                if (pageIndex == kMissingPageIndex || pageIndex >= font_->pageTableCount)
+                    return false;
 
-                const auto* page = reinterpret_cast<const uint16_t*>(pgm_read_ptr(font_->pageTables + pageIndex));
-                if (page == nullptr) {
-                    return nullptr;
+                glyphIndex = kMissingGlyphIndex;
+                if (font_->pageTableData != nullptr) {
+                    const size_t entry = static_cast<size_t>(pageIndex) * RFont4::kPageTableEntries
+                                       + (codepoint & 0xFFU);
+                    std::memcpy(&glyphIndex, font_->pageTableData + entry * sizeof(glyphIndex),
+                                sizeof(glyphIndex));
+                } else if (font_->pageTables != nullptr) {
+                    const auto* page =
+                        reinterpret_cast<const uint16_t*>(pgm_read_ptr(font_->pageTables + pageIndex));
+                    if (page == nullptr)
+                        return false;
+                    glyphIndex = pgm_read_word(page + (codepoint & 0xFFU));
+                } else if (font_->file) {
+                    if (!readFile(font_->fileHeader.pageTablesOffset
+                                      + (static_cast<uint32_t>(pageIndex) * RFont4::kPageTableEntries
+                                         + (codepoint & 0xFFU))
+                                            * sizeof(glyphIndex),
+                                  &glyphIndex, sizeof(glyphIndex)))
+                        return false;
+                } else {
+                    return findGlyphIndexBinary(codepoint, glyphIndex);
                 }
-
-                const uint16_t index = pgm_read_word(page + (codepoint & 0xFFU));
-                if (index == kMissingGlyphIndex || index >= font_->glyphCount) {
-                    return nullptr;
-                }
-                return font_->glyphs + index;
+                return glyphIndex != kMissingGlyphIndex && glyphIndex < font_->glyphCount;
             }
 
-            return findGlyphBinary(codepoint);
+            return findGlyphIndexBinary(codepoint, glyphIndex);
         }
 
-        const AlphaGlyph* findGlyphBinary(uint32_t codepoint) const {
-            if (font_->file) {
-                uint32_t first = 0;
-                uint32_t last = font_->glyphCount;
-                while (first < last) {
-                    const uint32_t middle = first + (last - first) / 2;
-                    const AlphaGlyph* candidate = fileGlyph(middle);
-                    if (candidate == nullptr)
-                        return nullptr;
-                    if (candidate->codepoint < codepoint)
-                        first = middle + 1;
-                    else
-                        last = middle;
-                }
-                const AlphaGlyph* glyph = first < font_->glyphCount ? fileGlyph(first) : nullptr;
-                return glyph != nullptr && glyph->codepoint == codepoint ? glyph : nullptr;
+        bool identityAt(uint32_t index, AlphaGlyphIdentity& identity) const {
+            if (index >= font_->glyphCount)
+                return false;
+            if (font_->identities != nullptr) {
+                identity = readPacked(font_->identities[index]);
+                return true;
             }
-            const std::span glyphs{font_->glyphs, static_cast<size_t>(font_->glyphCount)};
-            const auto glyph = std::ranges::lower_bound(glyphs, codepoint, {}, [](const AlphaGlyph& candidate) {
-                return readPacked(candidate).codepoint;
-            });
-            return glyph != glyphs.end() && readPacked(*glyph).codepoint == codepoint ? &*glyph : nullptr;
+            return readFile(font_->fileHeader.identitiesOffset + index * sizeof(identity),
+                            &identity, sizeof(identity));
         }
 
-        const AlphaGlyph* findGlyphId(uint32_t glyphId) const {
-            uint16_t index = 0;
-            return resolveGlyphId(glyphId, index) ? glyphAt(index) : nullptr;
+        bool findGlyphIndexBinary(uint32_t codepoint, uint16_t& glyphIndex) const {
+            uint32_t first = 0;
+            uint32_t last = font_->glyphCount;
+            AlphaGlyphIdentity identity;
+            while (first < last) {
+                const uint32_t middle = first + (last - first) / 2;
+                if (!identityAt(middle, identity))
+                    return false;
+                if (identity.codepoint < codepoint)
+                    first = middle + 1;
+                else
+                    last = middle;
+            }
+            if (first >= font_->glyphCount || !identityAt(first, identity)
+                || identity.codepoint != codepoint)
+                return false;
+            glyphIndex = static_cast<uint16_t>(first);
+            return true;
         }
 
-        int16_t fileKerningAdjust(const AlphaGlyph& left, uint32_t rightCodepoint) const {
-            const uint64_t key = static_cast<uint64_t>(left.codepoint) << 32U | rightCodepoint;
-            const size_t cacheIndex = static_cast<size_t>((left.codepoint * 31U) ^ rightCodepoint)
+        int16_t fileKerningAdjust(const AlphaGlyph& left, uint32_t leftCodepoint,
+                                  uint32_t rightCodepoint) const {
+            const uint64_t key = static_cast<uint64_t>(leftCodepoint) << 32U | rightCodepoint;
+            const size_t cacheIndex = static_cast<size_t>((leftCodepoint * 31U) ^ rightCodepoint)
                                     & (fileKerningKeys_.size() - 1U);
             if (fileKerningKeys_[cacheIndex] == key)
                 return fileKerningValues_[cacheIndex];
@@ -1072,12 +1358,19 @@ namespace ui::fonts {
 
         Arduino_GFX& output_;
         const AlphaFont* font_ = nullptr;
+        uint32_t fontGeneration_ = 0;
         mutable std::array<FileGlyphCacheEntry, 32> fileGlyphCache_{};
         mutable std::array<uint64_t, 16> fileKerningKeys_{};
         mutable std::array<int8_t, 16> fileKerningValues_{};
+        std::array<PreparedBitmap, 32> preparedBitmaps_{};
+        std::array<uint8_t, 8192> preparedBitmapData_{};
+        std::array<uint8_t, 4096> encodedBitmap_{};
+        size_t preparedBitmapCount_ = 0;
+        size_t preparedBitmapBytes_ = 0;
         std::array<uint8_t, (MaxRowWidth + 1) / 2> packedRow_{};
         uint16_t strip_[MaxStripRows][MaxRowWidth]{};
-        uint8_t stripInk_[MaxStripRows][MaxRowWidth]{};
+        std::array<uint16_t, MaxStripRows> stripFirstInk_{};
+        std::array<uint16_t, MaxStripRows> stripLastInk_{};
         uint16_t blend_[16]{};
         uint16_t blendPair_[256][2]{};
         uint16_t fg_ = 0xFFFF;

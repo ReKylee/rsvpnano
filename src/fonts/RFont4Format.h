@@ -16,7 +16,7 @@ namespace RFont4 {
     constexpr char kExtension[] = ".rfont4";
     constexpr char kFilename[] = "font.rfont4";
     constexpr uint32_t kMagic = 0x34544652UL; // "RFT4", little endian on disk.
-    constexpr uint16_t kVersion = 5;
+    constexpr uint16_t kVersion = 7;
     constexpr size_t kPageMapBytes = 256;
     constexpr size_t kPageTableEntries = 256;
     constexpr size_t kSizeCount = 4;
@@ -24,6 +24,13 @@ namespace RFont4 {
     constexpr size_t kStrikeCount = kSizeCount;
     constexpr size_t kMaximumLayoutTableCount = 3;
     constexpr uint32_t kShapedGlyphCodepoint = UINT32_MAX;
+    constexpr uint16_t kRawBitmapFlag = 0x8000U;
+    constexpr uint16_t kBitmapByteMask = 0x7FFFU;
+
+    enum class BitmapEncoding : uint8_t {
+        raw,
+        lz4,
+    };
     constexpr uint32_t layoutTag(char a, char b, char c, char d) {
         return static_cast<uint32_t>(static_cast<uint8_t>(a)) << 24U
              | static_cast<uint32_t>(static_cast<uint8_t>(b)) << 16U
@@ -50,27 +57,30 @@ namespace RFont4 {
         uint16_t strikeRecordSize = 0;
         uint16_t glyphRecordSize = 0;
         uint16_t kerningRecordSize = 0;
-        uint16_t glyphIdRecordSize = 0;
+        uint16_t glyphIdentityRecordSize = 0;
         uint16_t layoutTableRecordSize = 0;
         uint8_t strikeCount = 0;
         uint8_t layoutTableCount = 0;
         uint16_t nameSize = 0;
         uint16_t unitsPerEm = 0;
         uint16_t localeSize = 0;
+        uint16_t pageTableCount = 0;
+        uint32_t glyphCount = 0;
         uint32_t sourceGlyphCount = 0;
         uint32_t scriptMask = 0;
         uint32_t nameOffset = 0;
         uint32_t localeOffset = 0;
         uint32_t strikesOffset = 0;
+        uint32_t identitiesOffset = 0;
+        uint32_t pageMapOffset = 0;
+        uint32_t pageTablesOffset = 0;
+        uint32_t glyphMapOffset = 0;
         uint32_t layoutTablesOffset = 0;
         uint32_t totalSize = 0;
     };
 
     struct __attribute__((packed)) StrikeRecord {
-        uint32_t glyphCount = 0;
         uint32_t kerningPairCount = 0;
-        uint32_t glyphIdCount = 0;
-        uint16_t pageTableCount = 0;
         uint8_t yAdvance = 0;
         uint8_t ascent = 0;
         uint8_t descent = 0;
@@ -80,20 +90,14 @@ namespace RFont4 {
         uint8_t maxGlyphHeight = 0;
         uint8_t pixelsPerEm = 0;
         uint8_t bitsPerPixel = 4;
-        uint8_t reserved = 0;
+        BitmapEncoding bitmapEncoding = BitmapEncoding::raw;
         uint32_t bitmapSize = 0;
-        uint32_t pageMapSize = kPageMapBytes;
-        uint32_t pageTableSize = 0;
-        uint32_t bitmapOffset = 0;
         uint32_t glyphsOffset = 0;
-        uint32_t pageMapOffset = 0;
-        uint32_t pageTablesOffset = 0;
         uint32_t kerningOffset = 0;
-        uint32_t glyphIdsOffset = 0;
+        uint32_t bitmapOffset = 0;
     };
 
     struct __attribute__((packed)) GlyphRecord {
-        uint32_t codepoint = 0;
         uint32_t bitmapOffset = 0;
         uint32_t kernOffset = 0;
         uint8_t width = 0;
@@ -102,18 +106,18 @@ namespace RFont4 {
         uint8_t xAdvance = 0;
         int8_t xOffset = 0;
         int8_t yOffset = 0;
+        uint16_t bitmapBytes = 0;
         uint16_t kernCount = 0;
-        uint32_t glyphId = 0;
+    };
+
+    struct __attribute__((packed)) GlyphIdentityRecord {
+        uint32_t codepoint = 0;
+        uint16_t glyphId = 0;
     };
 
     struct __attribute__((packed)) KerningRecord {
         uint32_t rightCodepoint = 0;
         int8_t xAdjust = 0;
-    };
-
-    struct __attribute__((packed)) GlyphIdRecord {
-        uint32_t glyphId = 0;
-        uint32_t glyphIndex = 0;
     };
 
     struct __attribute__((packed)) LayoutTableRecord {
@@ -128,11 +132,11 @@ namespace RFont4 {
         std::array<LayoutTableRecord, kMaximumLayoutTableCount> layoutTables{};
     };
 
-    static_assert(sizeof(Header) == 54);
-    static_assert(sizeof(StrikeRecord) == 60);
-    static_assert(sizeof(GlyphRecord) == 24);
+    static_assert(sizeof(Header) == 76);
+    static_assert(sizeof(StrikeRecord) == 30);
+    static_assert(sizeof(GlyphRecord) == 18);
+    static_assert(sizeof(GlyphIdentityRecord) == 6);
     static_assert(sizeof(KerningRecord) == 5);
-    static_assert(sizeof(GlyphIdRecord) == 8);
     static_assert(sizeof(LayoutTableRecord) == 12);
 
     constexpr bool headerValid(const Header& header, size_t fileSize) {
@@ -140,15 +144,24 @@ namespace RFont4 {
         return header.magic == kMagic && header.version == kVersion && header.headerSize == sizeof(Header)
             && header.strikeRecordSize == sizeof(StrikeRecord) && header.glyphRecordSize == sizeof(GlyphRecord)
             && header.kerningRecordSize == sizeof(KerningRecord)
-            && header.glyphIdRecordSize == sizeof(GlyphIdRecord)
+            && header.glyphIdentityRecordSize == sizeof(GlyphIdentityRecord)
             && header.layoutTableRecordSize == sizeof(LayoutTableRecord) && header.strikeCount == kStrikeCount
             && header.layoutTableCount <= kMaximumLayoutTableCount && header.nameSize > 1
+            && header.glyphCount > 0 && header.glyphCount <= UINT16_MAX
+            && header.pageTableCount > 0 && header.pageTableCount <= UINT8_MAX
             && (header.scriptMask & ~kKnownScriptMask) == 0 && header.nameOffset == sizeof(Header)
             && header.localeOffset == header.nameOffset + header.nameSize
             && header.strikesOffset == header.localeOffset + header.localeSize
-            && header.layoutTablesOffset >= header.strikesOffset + kStrikeCount * sizeof(StrikeRecord)
+            && header.identitiesOffset == header.strikesOffset + kStrikeCount * sizeof(StrikeRecord)
+            && header.pageMapOffset
+                   == header.identitiesOffset + header.glyphCount * sizeof(GlyphIdentityRecord)
+            && header.pageTablesOffset == header.pageMapOffset + kPageMapBytes
+            && header.glyphMapOffset
+                   == header.pageTablesOffset
+                    + header.pageTableCount * kPageTableEntries * sizeof(uint16_t)
             && header.totalSize == fileSize
             && (hasShaping ? header.unitsPerEm > 0 && header.sourceGlyphCount > 0
+                                  && header.sourceGlyphCount <= UINT16_MAX
                            : header.unitsPerEm == 0 && header.sourceGlyphCount == 0);
     }
 
@@ -157,32 +170,31 @@ namespace RFont4 {
         if (!headerValid(header, fileSize) || tables.size() != header.layoutTableCount)
             return false;
 
-        uint64_t cursor = header.strikesOffset + strikes.size_bytes();
+        uint64_t cursor = header.identitiesOffset;
         const auto section = [&cursor](uint32_t offset, uint64_t bytes) {
             if (offset != cursor || bytes > UINT32_MAX - cursor)
                 return false;
             cursor += bytes;
             return true;
         };
+        if (!section(header.identitiesOffset,
+                     static_cast<uint64_t>(header.glyphCount) * sizeof(GlyphIdentityRecord))
+            || !section(header.pageMapOffset, kPageMapBytes)
+            || !section(header.pageTablesOffset,
+                        static_cast<uint64_t>(header.pageTableCount) * kPageTableEntries * sizeof(uint16_t))
+            || !section(header.glyphMapOffset,
+                        static_cast<uint64_t>(header.sourceGlyphCount) * sizeof(uint16_t)))
+            return false;
         for (const StrikeRecord& strike: strikes) {
-            const bool validPageTables = strike.pageMapSize == kPageMapBytes
-                                      && strike.pageTableCount <= UINT8_MAX
-                                      && strike.pageTableSize
-                                             == static_cast<uint32_t>(strike.pageTableCount * kPageTableEntries
-                                                                      * sizeof(uint16_t));
-            if (strike.glyphCount == 0 || strike.glyphCount > UINT16_MAX || strike.yAdvance == 0
-                || strike.pixelsPerEm == 0
+            if (strike.yAdvance == 0 || strike.pixelsPerEm == 0
                 || (strike.bitsPerPixel != 1 && strike.bitsPerPixel != 4)
-                || strike.glyphIdCount > strike.glyphCount || !validPageTables
-                || !section(strike.bitmapOffset, strike.bitmapSize)
+                || (strike.bitmapEncoding != BitmapEncoding::raw
+                    && strike.bitmapEncoding != BitmapEncoding::lz4)
                 || !section(strike.glyphsOffset,
-                            static_cast<uint64_t>(strike.glyphCount) * sizeof(GlyphRecord))
-                || !section(strike.pageMapOffset, strike.pageMapSize)
-                || !section(strike.pageTablesOffset, strike.pageTableSize)
+                            static_cast<uint64_t>(header.glyphCount) * sizeof(GlyphRecord))
                 || !section(strike.kerningOffset,
                             static_cast<uint64_t>(strike.kerningPairCount) * sizeof(KerningRecord))
-                || !section(strike.glyphIdsOffset,
-                            static_cast<uint64_t>(strike.glyphIdCount) * sizeof(GlyphIdRecord)))
+                || !section(strike.bitmapOffset, strike.bitmapSize))
                 return false;
         }
         if (header.layoutTablesOffset != cursor)
@@ -200,6 +212,63 @@ namespace RFont4 {
                 return false;
         }
         return cursor == header.totalSize;
+    }
+
+    constexpr size_t bitmapBytes(const GlyphRecord& glyph) {
+        return glyph.bitmapBytes & kBitmapByteMask;
+    }
+
+    constexpr bool bitmapStoredRaw(const StrikeRecord& strike, const GlyphRecord& glyph) {
+        return strike.bitmapEncoding == BitmapEncoding::raw
+            || (glyph.bitmapBytes & kRawBitmapFlag) != 0;
+    }
+
+    inline bool decompressLz4Block(std::span<const uint8_t> input, std::span<uint8_t> output) {
+        size_t source = 0;
+        size_t destination = 0;
+        const auto length = [&](size_t base, size_t& result) {
+            result = base;
+            if (base != 15)
+                return true;
+            uint8_t extension = 0;
+            do {
+                if (source == input.size())
+                    return false;
+                extension = input[source++];
+                result += extension;
+            } while (extension == 255);
+            return true;
+        };
+
+        while (source < input.size()) {
+            const uint8_t token = input[source++];
+            size_t literalBytes = 0;
+            if (!length(token >> 4U, literalBytes)
+                || literalBytes > input.size() - source
+                || literalBytes > output.size() - destination)
+                return false;
+            std::copy_n(input.data() + source, literalBytes, output.data() + destination);
+            source += literalBytes;
+            destination += literalBytes;
+            if (source == input.size())
+                return destination == output.size();
+            if (source + 2 > input.size())
+                return false;
+            const size_t offset = static_cast<size_t>(input[source])
+                                | static_cast<size_t>(input[source + 1]) << 8U;
+            source += 2;
+            if (offset == 0 || offset > destination)
+                return false;
+            size_t matchBytes = 0;
+            if (!length(token & 0x0FU, matchBytes)
+                || matchBytes + 4 > output.size() - destination)
+                return false;
+            matchBytes += 4;
+            for (size_t index = 0; index < matchBytes; ++index)
+                output[destination + index] = output[destination + index - offset];
+            destination += matchBytes;
+        }
+        return destination == output.size();
     }
 
     inline bool equalIgnoreCase(std::string_view left, std::string_view right) {

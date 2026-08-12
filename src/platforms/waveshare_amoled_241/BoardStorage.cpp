@@ -11,7 +11,7 @@ namespace Board::Storage {
     }
 
     bool mount(const char* mountPoint, int frequencyKhz) {
-        return SD_MMC.begin(mountPoint, true, false, frequencyKhz, 5);
+        return SD_MMC.begin(mountPoint, true, false, frequencyKhz, kMaximumOpenFiles);
     }
 
     void end() {

@@ -15,7 +15,7 @@ jobs:
           submodules: recursive
 
       - name: Install PlatformIO
-        run: pip install platformio freetype-py fonttools uharfbuzz
+        run: pip install platformio freetype-py fonttools uharfbuzz lz4
 
       - name: Check generated localization
         run: |
@@ -23,7 +23,7 @@ jobs:
           python localization/generate_locale_packs.py --check
           python RSVPNanoCompanion/tools/generate_multilingual_corpus.py --check
           python -m unittest localization/test_locale_packs.py
-          python -m unittest fonts/test_convert_alpha4_font.py
+          python -m unittest discover -s fonts -p "test_*.py"
 
       - name: Run pacing tests
         run: pio test -e native_test

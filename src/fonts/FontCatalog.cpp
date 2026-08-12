@@ -1,8 +1,12 @@
 #include "fonts/FontCatalog.h"
 
 #include <esp_log.h>
+#if defined(BOARD_HAS_PSRAM)
+#include <esp_heap_caps.h>
+#endif
 
 #include <algorithm>
+#include <cstring>
 #include <iterator>
 #include <ranges>
 #include <span>
@@ -30,6 +34,31 @@ namespace {
             return std::unexpected("Font section read failed");
         return {};
     }
+
+#if defined(BOARD_HAS_PSRAM)
+    std::expected<void, std::string> readPsramSection(File& file, uint32_t offset, std::span<uint8_t> out) {
+        constexpr size_t kTransferBytes = 4096;
+        auto* transfer = static_cast<uint8_t*>(
+            heap_caps_malloc(kTransferBytes, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
+        if (transfer == nullptr)
+            return std::unexpected("Font transfer buffer unavailable");
+        if (!file.seek(offset)) {
+            heap_caps_free(transfer);
+            return std::unexpected("Font section seek failed");
+        }
+        for (size_t copied = 0; copied < out.size();) {
+            const size_t chunk = std::min(kTransferBytes, out.size() - copied);
+            if (file.read(transfer, chunk) != chunk) {
+                heap_caps_free(transfer);
+                return std::unexpected("Font section read failed");
+            }
+            std::memcpy(out.data() + copied, transfer, chunk);
+            copied += chunk;
+        }
+        heap_caps_free(transfer);
+        return {};
+    }
+#endif
 
     std::expected<RFont4::Header, std::string> readHeader(File& file) {
         RFont4::Header header;
@@ -169,6 +198,7 @@ FontCatalog::Face FontCatalog::loadFace(size_t familyIndex, size_t sizeIndex) {
 
 void FontCatalog::clearLoaded() {
     loadedFamilies_.clear();
+    fileCache_.reset();
 }
 
 std::expected<std::reference_wrapper<FontCatalog::LoadedFamily>, std::string>
@@ -178,6 +208,9 @@ FontCatalog::loadRuntimeFamily(size_t familyIndex) {
     });
     if (existing != loadedFamilies_.end())
         return std::ref(*existing);
+
+    if (!fileCache_)
+        fileCache_ = std::make_unique<ui::fonts::RFontFileCache>();
 
     LoadedFamily& loaded = loadedFamilies_.emplace_back();
     loaded.familyIndex = familyIndex;
@@ -192,6 +225,33 @@ FontCatalog::loadRuntimeFamily(size_t familyIndex) {
     if (!directory)
         return fail(directory.error());
     loaded.directory = std::move(*directory);
+
+#if defined(BOARD_HAS_PSRAM)
+    {
+        constexpr uint32_t kPsramCapabilities = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
+        const RFont4::Header& header = loaded.directory.header;
+        const uint32_t metadataEnd = header.glyphMapOffset
+                                   + header.sourceGlyphCount * sizeof(uint16_t);
+        const size_t metadataSize = metadataEnd - header.identitiesOffset;
+        if (metadataSize <= heap_caps_get_largest_free_block(kPsramCapabilities))
+            loaded.residentMetadata.reset(
+                static_cast<uint8_t*>(heap_caps_malloc(metadataSize, kPsramCapabilities)));
+        if (loaded.residentMetadata) {
+            if (auto read = readPsramSection(loaded.file, header.identitiesOffset,
+                                             {loaded.residentMetadata.get(), metadataSize});
+                !read)
+                return fail(read.error());
+            ESP_LOGI("font", "resident family metadata family=%s bytes=%u",
+                     families_[familyIndex].id.c_str(), static_cast<unsigned>(metadataSize));
+        }
+    }
+#endif
+    if (!loaded.residentMetadata) {
+        if (auto read = readSection(loaded.file, loaded.directory.header.pageMapOffset,
+                                    std::span{loaded.pageMap});
+            !read)
+            return fail(read.error());
+    }
     return std::ref(loaded);
 }
 
@@ -203,28 +263,81 @@ FontCatalog::loadRuntimeStrike(LoadedFamily& family, size_t sizeIndex) {
     LoadedStrike& loaded = family.loadedStrike.emplace();
     loaded.sizeIndex = sizeIndex;
     const RFont4::StrikeRecord& strike = family.directory.strikes[sizeIndex];
-    if (auto read = readSection(family.file, strike.pageMapOffset, std::span{loaded.pageMap}); !read) {
-        family.loadedStrike.reset();
-        return std::unexpected(read.error());
-    }
+    const RFont4::Header& header = family.directory.header;
     loaded.font = {
         .name = families_[family.familyIndex].label,
-        .glyphCount = strike.glyphCount,
+        .glyphCount = header.glyphCount,
         .yAdvance = strike.yAdvance,
         .ascent = strike.ascent,
         .descent = strike.descent,
-        .pageMap = loaded.pageMap.data(),
-        .pageTableCount = strike.pageTableCount,
+        .pageTableCount = header.pageTableCount,
         .kerningPairCount = strike.kerningPairCount,
         .wordInkTop = strike.wordInkTop,
         .wordInkBottom = strike.wordInkBottom,
-        .glyphIdCount = strike.glyphIdCount,
-        .scriptMask = family.directory.header.scriptMask,
+        .glyphMapCount = header.sourceGlyphCount,
+        .scriptMask = header.scriptMask,
         .pixelsPerEm = strike.pixelsPerEm,
         .file = std::ref(family.file),
+        .fileCache = std::ref(*fileCache_),
+        .fileSize = header.totalSize,
+        .generation = nextFontGeneration_++,
+        .fileHeader = header,
         .fileStrike = strike,
         .bitsPerPixel = strike.bitsPerPixel,
+        .bitmapEncoding = strike.bitmapEncoding,
     };
+
+    if (family.residentMetadata) {
+        const auto section = [&](uint32_t offset) {
+            return family.residentMetadata.get() + (offset - header.identitiesOffset);
+        };
+        loaded.font.identities = reinterpret_cast<const RFont4::GlyphIdentityRecord*>(
+            section(header.identitiesOffset));
+        loaded.font.pageMap = section(header.pageMapOffset);
+        loaded.font.pageTableData = section(header.pageTablesOffset);
+        if (header.sourceGlyphCount != 0)
+            loaded.font.glyphMap = section(header.glyphMapOffset);
+    } else {
+        loaded.font.pageMap = family.pageMap.data();
+    }
+
+#if defined(BOARD_HAS_PSRAM)
+    {
+        constexpr uint32_t kPsramCapabilities = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
+        const bool compact = sizeIndex == RFont4::kCompactStrikeIndex;
+        const bool residentBitmap = compact;
+        const uint32_t residentEnd = residentBitmap
+                                       ? strike.bitmapOffset + strike.bitmapSize
+                                       : strike.bitmapOffset;
+        const size_t residentSize = residentEnd - strike.glyphsOffset;
+        const size_t available = heap_caps_get_largest_free_block(kPsramCapabilities);
+        if (residentSize <= available)
+            loaded.residentData.reset(static_cast<uint8_t*>(heap_caps_malloc(residentSize, kPsramCapabilities)));
+        if (loaded.residentData) {
+            if (auto read = readPsramSection(family.file, strike.glyphsOffset,
+                                             {loaded.residentData.get(), residentSize});
+                !read) {
+                family.loadedStrike.reset();
+                return std::unexpected(read.error());
+            }
+
+            const auto section = [&](uint32_t offset) {
+                return loaded.residentData.get() + (offset - strike.glyphsOffset);
+            };
+            loaded.font.glyphs = reinterpret_cast<const RFont4::GlyphRecord*>(section(strike.glyphsOffset));
+            loaded.font.kerningPairs =
+                reinterpret_cast<const RFont4::KerningRecord*>(section(strike.kerningOffset));
+            if (residentBitmap)
+                loaded.font.bitmap = section(strike.bitmapOffset);
+            ESP_LOGI("font", "resident %s family=%s bytes=%u",
+                     compact ? "compact strike" : "metrics",
+                     families_[family.familyIndex].id.c_str(), static_cast<unsigned>(residentSize));
+            return std::cref(loaded.font);
+        }
+        ESP_LOGW("font", "strike remains file-backed family=%s bytes=%u",
+                  families_[family.familyIndex].id.c_str(), static_cast<unsigned>(residentSize));
+    }
+#endif
     return std::cref(loaded.font);
 }
 

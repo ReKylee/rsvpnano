@@ -6,9 +6,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <expected>
 #include <functional>
 #include <list>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -109,9 +111,15 @@ public:
     static std::expected<Family, std::string> inspectFontFile(std::string_view path);
 
 private:
+    struct FreeResidentData {
+        void operator()(uint8_t* data) const {
+            std::free(data);
+        }
+    };
+
     struct LoadedStrike {
         size_t sizeIndex = 0;
-        std::array<uint8_t, RFont4::kPageMapBytes> pageMap{};
+        std::unique_ptr<uint8_t, FreeResidentData> residentData;
         ui::fonts::AlphaFont font;
     };
 
@@ -119,6 +127,8 @@ private:
         size_t familyIndex = 0;
         File file;
         RFont4::Directory directory;
+        std::array<uint8_t, RFont4::kPageMapBytes> pageMap{};
+        std::unique_ptr<uint8_t, FreeResidentData> residentMetadata;
         std::optional<LoadedStrike> loadedStrike;
         TextShaping::Shaper shaper;
         bool shapingFailed = false;
@@ -132,4 +142,6 @@ private:
 
     std::vector<Family> families_;
     std::list<LoadedFamily> loadedFamilies_;
+    std::unique_ptr<ui::fonts::RFontFileCache> fileCache_;
+    uint32_t nextFontGeneration_ = 1;
 };

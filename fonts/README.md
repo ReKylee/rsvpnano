@@ -3,16 +3,23 @@
 This directory holds the offline font pipeline and the pre-converted `.rfont4` catalog used by the web flasher/companion.
 The compiled Literata fallback is intentionally absent from this installable catalog.
 
-`RFont4` is named for its primary packed 4-bit alpha coverage. Format version 5 stores three Alpha4 RSVP strikes and
-one compact 1-bit strike in the same family file, alongside 32-bit Unicode codepoints, direct OpenType glyph IDs for
-shaping, and a generated script-capability mask. It stores only packed glyph rows; the renderer finds visible spans
-after each row is read instead of storing duplicate indexes. Older files must be regenerated.
+`RFont4` is named for its primary packed 4-bit alpha coverage. Format version 7 stores three Alpha4 RSVP strikes and
+one compact 1-bit strike in the same family file. Codepoints, Unicode page tables, a direct OpenType glyph-ID map,
+and the generated script-capability mask are stored once per family; each strike contains only its metrics, kerning,
+and packed pixels. Alpha4 glyphs are independently LZ4-compressed when that saves space, preserving random access;
+the compact strike remains raw. The renderer finds visible spans after each row is read instead of storing duplicate indexes.
+Older files must be regenerated.
 
 Folder layout:
 
 ```text
+third_party/
+  atkinson-hyperlegible/
+    AtkinsonHyperlegible-Regular.ttf
+    OFL.txt
 fonts/
   convert_alpha4_font.py
+  generate_fonts.py
   index.json
   Atkinson Hyperlegible/
     font.rfont4
@@ -26,14 +33,32 @@ src/fonts/
   LiterataFallbackAlpha4.h
 ```
 
-`large`, `medium`, `small`, and `compact` default to `52`, `43`, `33`, and `10` px. Override them with:
+`convert_alpha4_font.py` is the single-family compiler. `large`, `medium`, `small`, and `compact` default to
+`52`, `43`, `33`, and `12` px. The compact strike remains 1-bit, but 12 px gives outline reader faces a readable
+minimum comparable to the hand-drawn 8–10 px UI fonts. Override the sizes with:
 
 ```bash
-uv run --with freetype-py --with fonttools python fonts/convert_alpha4_font.py \
+uv run --with freetype-py --with fonttools --with lz4 python fonts/convert_alpha4_font.py \
   --font path/to/MyFont.ttf \
   --name "My Font" \
-  --sizes large=56,medium=44,small=34,compact=10
+  --sizes large=56,medium=44,small=34,compact=12
 ```
+
+`generate_fonts.py` owns the current source-to-preset mapping. With no arguments it regenerates every installable
+font and the compiled Literata fallback, publishing only after every requested conversion succeeds:
+
+```bash
+uv run --with freetype-py --with fonttools --with lz4 python fonts/generate_fonts.py
+```
+
+Pass preset ids to regenerate only selected families, or use `--list` to show them:
+
+```bash
+uv run --with freetype-py --with fonttools --with lz4 python fonts/generate_fonts.py amiri noto-serif-japanese
+```
+
+Reader source binaries and their licenses live under `third_party/<family>/`. Generated files and the license files
+distributed with them live under `fonts/<display name>/`.
 
 Add `--shaping` only for fonts whose scripts require contextual OpenType shaping. It embeds the subsetted
 GDEF/GSUB/GPOS tables and glyph-ID closure once in the family file; ordinary Latin/Cyrillic fonts omit both.
@@ -49,19 +74,19 @@ duplicate `--scripts` argument is unnecessary. Unrelated letters from multilingu
 omitted.
 
 ```bash
-uv run --with freetype-py --with fonttools python fonts/convert_alpha4_font.py \
+uv run --with freetype-py --with fonttools --with lz4 python fonts/convert_alpha4_font.py \
   --font path/to/NotoSerifHebrew-Regular.ttf \
   --name "Noto Serif Hebrew" \
   --map Hebr \
   --locales he \
   --shaping
 
-uv run --with freetype-py --with fonttools python fonts/convert_alpha4_font.py \
+uv run --with freetype-py --with fonttools --with lz4 python fonts/convert_alpha4_font.py \
   --font path/to/STIXTwoMath-Regular.otf \
   --name "STIX Two Math" \
   --map Zmth
 
-uv run --with freetype-py --with fonttools python fonts/convert_alpha4_font.py \
+uv run --with freetype-py --with fonttools --with lz4 python fonts/convert_alpha4_font.py \
   --font path/to/NotoSerifJP-Regular.otf \
   --name "Noto Serif Japanese" \
   --map Jpan \
@@ -76,8 +101,8 @@ Default output is `fonts/<name>/font.rfont4` plus an updated `fonts/index.json`.
 Generate the built-in fallback header only when firmware fallback data must change. By default this writes to `src/fonts/LiterataFallbackAlpha4.h`:
 
 ```bash
-uv run --with freetype-py --with fonttools python fonts/convert_alpha4_font.py \
-  --font .local/Literata/static/Literata-Regular.ttf \
+uv run --with freetype-py --with fonttools --with lz4 python fonts/convert_alpha4_font.py \
+  --font "third_party/literata/Literata-Italic[opsz,wght].ttf" \
   --name LiterataFallbackAlpha4 \
   --header
 ```
@@ -88,8 +113,9 @@ Runtime behavior:
 - Each folder contains one `font.rfont4` family file with Large, Medium, and Small Alpha4 strikes plus one Compact
   1-bit strike. Compact is selectable in RSVP mode and is always used for page reading and scrub previews.
 - Optional GDEF/GSUB/GPOS shaping tables are stored once in that same file, never in a locale pack.
-- The selected family file stays open once; only each used strike's 256-byte Unicode page map is resident, while page indexes, glyph
-  records, and Alpha4 rows are read through bounded renderer caches. Each glyph row needs one SD read.
+- The selected family file stays open once. On PSRAM boards, shared lookup metadata and the active strike are loaded
+  once when space permits. Otherwise, the 256-byte page map remains resident and the bounded block/bitmap caches
+  service lookup data and packed rows from the file.
 - Each bundled font keeps its license and any upstream font log beside its converted assets.
 - Generated RFont4 files include the rasterized glyph closure referenced by their shared layout tables, preserving
   the source font's OpenType glyph IDs.

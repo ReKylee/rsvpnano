@@ -28,6 +28,7 @@ from fontTools.ttLib import TTFont
 from fontTools.unicodedata import script as unicode_script, script_extension
 
 DEFAULT_MAP = "32-126,160-383,512-591,1024-1279,8208-8230,8240,8249,8250,8364,8470"
+DEFAULT_SIZE_SPEC = "large=52,medium=43,small=33,compact=12"
 DEFAULT_ALPHA_CUTOFF = 32
 DEFAULT_GAMMA = 1.15
 MISSING_GLYPH_INDEX = 0xFFFF
@@ -604,6 +605,7 @@ def generate_font(
     strong_threshold: int,
     max_neighbors: int,
     bits_per_pixel: int,
+    shared_lookup_symbol: str | None = None,
 ) -> tuple[str, dict[str, int | float]]:
     face = freetype.Face(str(font_path))
     face.set_char_size(size * 64, size * 64, 72, 72)
@@ -727,10 +729,11 @@ def generate_font(
 
     bitmap_name = f"{symbol}Bitmap"
     glyph_name = f"{symbol}Glyphs"
-    page_map_name = f"{symbol}PageMap"
-    pages_name = f"{symbol}Pages"
+    lookup_symbol = shared_lookup_symbol or symbol
+    identities_name = f"{lookup_symbol}Identities"
+    page_map_name = f"{lookup_symbol}PageMap"
+    pages_name = f"{lookup_symbol}Pages"
     kern_name = f"{symbol}Kerning"
-    glyph_ids_name = f"{symbol}GlyphIds"
 
     lines: list[str] = []
     lines.append(f"constexpr uint8_t {symbol}MaxGlyphWidth = {max((rec.width for rec in records), default=0)};")
@@ -752,62 +755,60 @@ def generate_font(
     lines.append(f"inline constexpr AlphaGlyph {glyph_name}[] PROGMEM = {{")
     for rec in records:
         lines.append(
-            f"    {{0x{rec.codepoint:04X}, {rec.bitmap_offset}UL, {rec.kern_offset}, "
+            f"    {{{rec.bitmap_offset}UL, {rec.kern_offset}, "
             f"{rec.width}, {rec.height}, {rec.row_stride}, {rec.x_advance}, "
-            f"{rec.x_offset}, {rec.y_offset}, {rec.kern_count}, {rec.glyph_id}UL}},"
+            f"{rec.x_offset}, {rec.y_offset}, {rec.row_stride * rec.height}, {rec.kern_count}}},"
         )
     lines.append("};")
     lines.append("")
 
-    lines.append(f"inline constexpr AlphaGlyphId {glyph_ids_name}[] PROGMEM = {{")
-    for glyph_id, glyph_index in glyph_ids:
-        lines.append(f"    {{{glyph_id}UL, {glyph_index}UL}},")
-    lines.append("};")
-    lines.append("")
-
-    lines.append(f"inline constexpr uint8_t {page_map_name}[] PROGMEM = {{")
-    lines.append(emit_bytes(page_map))
-    lines.append("};")
-    lines.append("")
-
-    page_symbols: list[str] = []
-    for index, (high, table) in enumerate(pages):
-        page_symbol = f"{symbol}Page{index:02d}"
-        page_symbols.append(page_symbol)
-        lines.append(f"// U+{high:02X}xx")
-        lines.append(f"inline constexpr uint16_t {page_symbol}[] PROGMEM = {{")
-        lines.append(emit_uint16(table))
+    if shared_lookup_symbol is None:
+        lines.append(f"inline constexpr AlphaGlyphIdentity {identities_name}[] PROGMEM = {{")
+        for rec in records:
+            lines.append(f"    {{0x{rec.codepoint:04X}, {rec.glyph_id}}},")
         lines.append("};")
         lines.append("")
 
-    lines.append(f"inline constexpr const uint16_t* {pages_name}[] PROGMEM = {{")
-    for page_symbol in page_symbols:
-        lines.append(f"    {page_symbol},")
-    lines.append("};")
-    lines.append("")
+        lines.append(f"inline constexpr uint8_t {page_map_name}[] PROGMEM = {{")
+        lines.append(emit_bytes(page_map))
+        lines.append("};")
+        lines.append("")
+
+        page_symbols: list[str] = []
+        for index, (high, table) in enumerate(pages):
+            page_symbol = f"{symbol}Page{index:02d}"
+            page_symbols.append(page_symbol)
+            lines.append(f"// U+{high:02X}xx")
+            lines.append(f"inline constexpr uint16_t {page_symbol}[] PROGMEM = {{")
+            lines.append(emit_uint16(table))
+            lines.append("};")
+            lines.append("")
+
+        lines.append(f"inline constexpr const uint16_t* {pages_name}[] PROGMEM = {{")
+        for page_symbol in page_symbols:
+            lines.append(f"    {page_symbol},")
+        lines.append("};")
+        lines.append("")
 
     lines.append(f"inline constexpr AlphaFont {symbol} = {{")
-    lines.append(f"    \"{symbol}\",")
-    lines.append(f"    {bitmap_name},")
-    lines.append(f"    {glyph_name},")
-    lines.append(f"    {len(records)},")
-    lines.append(f"    {y_advance},")
-    lines.append(f"    {ascent},")
-    lines.append(f"    {descent},")
-    lines.append(f"    {page_map_name},")
-    lines.append(f"    {pages_name},")
-    lines.append(f"    {len(pages)},")
-    lines.append(f"    {kern_name},")
-    lines.append(f"    {len(kern_pairs_flat)},")
-    lines.append(f"    {word_ink_top},")
-    lines.append(f"    {word_ink_bottom},")
-    lines.append(f"    {glyph_ids_name},")
-    lines.append(f"    {len(glyph_ids)},")
-    lines.append(f"    0x{generated_script_mask:08X}UL,")
-    lines.append(f"    {size},")
-    lines.append("    {},")
-    lines.append("    {},")
-    lines.append(f"    {bits_per_pixel},")
+    lines.append(f"    .name = \"{symbol}\",")
+    lines.append(f"    .bitmap = {bitmap_name},")
+    lines.append(f"    .glyphs = {glyph_name},")
+    lines.append(f"    .identities = {identities_name},")
+    lines.append(f"    .glyphCount = {len(records)},")
+    lines.append(f"    .yAdvance = {y_advance},")
+    lines.append(f"    .ascent = {ascent},")
+    lines.append(f"    .descent = {descent},")
+    lines.append(f"    .pageMap = {page_map_name},")
+    lines.append(f"    .pageTables = {pages_name},")
+    lines.append(f"    .pageTableCount = {len(pages)},")
+    lines.append(f"    .kerningPairs = {kern_name},")
+    lines.append(f"    .kerningPairCount = {len(kern_pairs_flat)},")
+    lines.append(f"    .wordInkTop = {word_ink_top},")
+    lines.append(f"    .wordInkBottom = {word_ink_bottom},")
+    lines.append(f"    .scriptMask = 0x{generated_script_mask:08X}UL,")
+    lines.append(f"    .pixelsPerEm = {size},")
+    lines.append(f"    .bitsPerPixel = {bits_per_pixel},")
     lines.append("};")
     lines.append("")
 
@@ -840,18 +841,18 @@ def generate_font(
 
 SIZE_LABELS = ("large", "medium", "small", "compact")
 RFONT4_MAGIC = 0x34544652
-RFONT4_VERSION = 5
-RFONT4_HEADER_FORMAT = "<I7H2B3H7I"
-RFONT4_STRIKE_FORMAT = "<IIIHBBBbbBBBBB9I"
-RFONT4_GLYPH_FORMAT = "<III4BbbHI"
+RFONT4_VERSION = 7
+RFONT4_HEADER_FORMAT = "<I7H2B4H12I"
+RFONT4_STRIKE_FORMAT = "<IBBBbbBBBBB4I"
+RFONT4_GLYPH_FORMAT = "<II4BbbHH"
 RFONT4_KERN_FORMAT = "<Ib"
-RFONT4_GLYPH_ID_FORMAT = "<II"
+RFONT4_GLYPH_IDENTITY_FORMAT = "<IH"
 RFONT4_LAYOUT_TABLE_FORMAT = "<III"
 RFONT4_HEADER_SIZE = struct.calcsize(RFONT4_HEADER_FORMAT)
 RFONT4_STRIKE_SIZE = struct.calcsize(RFONT4_STRIKE_FORMAT)
 RFONT4_GLYPH_SIZE = struct.calcsize(RFONT4_GLYPH_FORMAT)
 RFONT4_KERN_SIZE = struct.calcsize(RFONT4_KERN_FORMAT)
-RFONT4_GLYPH_ID_SIZE = struct.calcsize(RFONT4_GLYPH_ID_FORMAT)
+RFONT4_GLYPH_IDENTITY_SIZE = struct.calcsize(RFONT4_GLYPH_IDENTITY_FORMAT)
 RFONT4_LAYOUT_TABLE_SIZE = struct.calcsize(RFONT4_LAYOUT_TABLE_FORMAT)
 
 
@@ -938,14 +939,44 @@ def generated_strike(symbol: str, body: str, stats: dict[str, int | float]) -> d
 
     glyph_entries = parse_record_entries(array_block(body, f"{symbol}Glyphs"))
     kern_entries = parse_record_entries(array_block(body, f"{symbol}Kerning"))
-    glyph_id_entries = parse_record_entries(array_block(body, f"{symbol}GlyphIds"))
+    identity_entries = parse_record_entries(array_block(body, f"{symbol}Identities"))
 
-    glyphs = b"".join(
-        struct.pack(RFONT4_GLYPH_FORMAT, *entry)
-        for entry in glyph_entries
-    )
+    bits_per_pixel = int(stats["bits_per_pixel"])
+    bitmap_encoding = 0 if bits_per_pixel == 1 else 1
+    encoded_bitmap = bytearray()
+    if bitmap_encoding:
+        try:
+            import lz4.block
+        except ImportError as error:
+            raise RuntimeError("RFont4 generation requires the lz4 Python package") from error
+    for entry in glyph_entries:
+        source_offset = entry[0]
+        decoded_bytes = entry[8]
+        raw = bitmap[source_offset:source_offset + decoded_bytes]
+        if len(raw) != decoded_bytes:
+            raise ValueError(f"glyph bitmap for {symbol} exceeds its strike")
+        entry[0] = len(encoded_bitmap)
+        if not raw or not bitmap_encoding:
+            stored = raw
+            entry[8] = len(stored)
+        elif len(raw) > 8192:
+            stored = raw
+            entry[8] = len(stored) | 0x8000
+        else:
+            compressed = lz4.block.compress(
+                raw, mode="high_compression", compression=12, store_size=False
+            )
+            if len(compressed) >= len(raw) or len(compressed) > 4096:
+                stored = raw
+                entry[8] = len(stored) | 0x8000
+            else:
+                stored = compressed
+                entry[8] = len(stored)
+        encoded_bitmap.extend(stored)
+
+    glyphs = b"".join(struct.pack(RFONT4_GLYPH_FORMAT, *entry) for entry in glyph_entries)
     kern = b"".join(struct.pack(RFONT4_KERN_FORMAT, *entry) for entry in kern_entries)
-    glyph_ids = b"".join(struct.pack(RFONT4_GLYPH_ID_FORMAT, *entry) for entry in glyph_id_entries)
+    identities = b"".join(struct.pack(RFONT4_GLYPH_IDENTITY_FORMAT, *entry) for entry in identity_entries)
 
     page_tables = bytearray()
     for index in range(int(stats["page_count"])):
@@ -958,23 +989,23 @@ def generated_strike(symbol: str, body: str, stats: dict[str, int | float]) -> d
     return {
         "glyph_count": len(glyph_entries),
         "kerning_count": len(kern_entries),
-        "glyph_id_count": len(glyph_id_entries),
         "page_count": int(stats["page_count"]),
         "y_advance": int(stats["y_advance"]),
         "ascent": int(stats["ascent"]),
         "descent": int(stats["descent"]),
         "word_ink_top": int(stats["word_ink_top"]),
         "word_ink_bottom": int(stats["word_ink_bottom"]),
-        "max_width": int(max((entry[3] for entry in glyph_entries), default=0)),
-        "max_height": int(max((entry[4] for entry in glyph_entries), default=0)),
+        "max_width": int(max((entry[2] for entry in glyph_entries), default=0)),
+        "max_height": int(max((entry[3] for entry in glyph_entries), default=0)),
         "pixels_per_em": int(stats["size"]),
-        "bits_per_pixel": int(stats["bits_per_pixel"]),
-        "bitmap": bitmap,
+        "bits_per_pixel": bits_per_pixel,
+        "bitmap_encoding": bitmap_encoding,
+        "bitmap": bytes(encoded_bitmap),
         "glyphs": glyphs,
+        "identities": identities,
         "page_map": page_map,
         "page_tables": bytes(page_tables),
         "kerning": kern,
-        "glyph_ids": glyph_ids,
     }
 
 
@@ -1000,18 +1031,48 @@ def pack_rfont4_family(
     strikes_offset = len(data)
     data.extend(b"\0" * (RFONT4_STRIKE_SIZE * len(strikes)))
 
+    glyph_count = int(strikes[0]["glyph_count"])
+    page_count = int(strikes[0]["page_count"])
+    identities = strikes[0]["identities"]
+    page_map = strikes[0]["page_map"]
+    page_tables = strikes[0]["page_tables"]
+    for strike in strikes[1:]:
+        if strike["glyph_count"] != glyph_count or strike["identities"] != identities:
+            raise ValueError("all RFont4 strikes must have identical glyph identities")
+        if (strike["page_count"] != page_count or strike["page_map"] != page_map
+                or strike["page_tables"] != page_tables):
+            raise ValueError("all RFont4 strikes must have identical codepoint lookup tables")
+
+    identities_offset = len(data)
+    data.extend(identities)
+    page_map_offset = len(data)
+    data.extend(page_map)
+    page_tables_offset = len(data)
+    data.extend(page_tables)
+    glyph_map_offset = len(data)
+    if selected_tables:
+        glyph_map = [0xFFFF] * source_glyph_count
+        for glyph_index, (_, glyph_id) in enumerate(
+            struct.iter_unpack(RFONT4_GLYPH_IDENTITY_FORMAT, identities)
+        ):
+            if glyph_id and glyph_map[glyph_id] == 0xFFFF:
+                glyph_map[glyph_id] = glyph_index
+        data.extend(struct.pack(f"<{source_glyph_count}H", *glyph_map))
+
     strike_records: list[tuple[int, ...]] = []
     for strike in strikes:
-        offsets: list[int] = []
-        for section in ("bitmap", "glyphs", "page_map", "page_tables", "kerning", "glyph_ids"):
-            offsets.append(len(data))
-            data.extend(strike[section])
+        glyphs_offset = len(data)
+        data.extend(strike["glyphs"])
+        kerning_offset = len(data)
+        data.extend(strike["kerning"])
+        bitmap_offset = len(data)
+        data.extend(strike["bitmap"])
         strike_records.append((
-            strike["glyph_count"], strike["kerning_count"], strike["glyph_id_count"], strike["page_count"],
+            strike["kerning_count"],
             strike["y_advance"], strike["ascent"], strike["descent"], strike["word_ink_top"],
             strike["word_ink_bottom"], strike["max_width"], strike["max_height"], strike["pixels_per_em"],
-            strike["bits_per_pixel"], 0,
-            len(strike["bitmap"]), len(strike["page_map"]), len(strike["page_tables"]), *offsets,
+            strike["bits_per_pixel"], strike["bitmap_encoding"],
+            len(strike["bitmap"]), glyphs_offset, kerning_offset, bitmap_offset,
         ))
 
     layout_tables_offset = len(data)
@@ -1032,18 +1093,24 @@ def pack_rfont4_family(
         RFONT4_STRIKE_SIZE,
         RFONT4_GLYPH_SIZE,
         RFONT4_KERN_SIZE,
-        RFONT4_GLYPH_ID_SIZE,
+        RFONT4_GLYPH_IDENTITY_SIZE,
         RFONT4_LAYOUT_TABLE_SIZE,
         len(strikes),
         len(selected_tables),
         len(name),
         units_per_em if selected_tables else 0,
         len(locale_data),
+        page_count,
+        glyph_count,
         source_glyph_count if selected_tables else 0,
         script_mask,
         name_offset,
         locale_offset,
         strikes_offset,
+        identities_offset,
+        page_map_offset,
+        page_tables_offset,
+        glyph_map_offset,
         layout_tables_offset,
         len(data),
     )
@@ -1072,7 +1139,7 @@ def main() -> int:
     parser.add_argument("--name", default=None)
     parser.add_argument("--locales", default="", help="comma-separated BCP 47 locale affinities")
     parser.add_argument("--scripts", default="", help="additional complete ISO 15924 capabilities")
-    parser.add_argument("--sizes", default="large=52,medium=43,small=33,compact=10")
+    parser.add_argument("--sizes", default=DEFAULT_SIZE_SPEC)
     parser.add_argument(
         "--map",
         default=DEFAULT_MAP,
@@ -1158,6 +1225,7 @@ def main() -> int:
                 strong,
                 max_neighbors,
                 1 if label == "compact" else 4,
+                font_symbols[0] if font_symbols else None,
             )
             parts.append(body)
             font_symbols.append(symbol)

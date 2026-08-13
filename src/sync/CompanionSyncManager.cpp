@@ -1517,11 +1517,6 @@ void CompanionSyncManager::handleBookLanguageFonts() {
         sendError(400, "missing_field", "Book id is required", "id");
         return;
     }
-    if (update->languageFonts.size() > settings::kMaximumBookFontSelections) {
-        sendError(422, "too_many_fonts", "A book can configure at most 8 languages and Math", "languageFonts");
-        return;
-    }
-
     std::string path;
     if (!resolveBookId(*update->id, path)) {
         sendError(404, "book_not_found", "Book not found", "id");

@@ -91,7 +91,7 @@ namespace screens {
     bool typographySettings(ui::Context& ui, settings::TypographySettings& config, FontCatalog& fonts,
                             Screen& screen);
     bool bookFonts(ui::Context& ui, const BookMetadata& metadata, settings::ReadingOverrides& overrides,
-                   FontCatalog& fonts, Screen& screen);
+                   const locales::Catalog& localeCatalog, FontCatalog& fonts, Screen& screen);
     bool readerSettings(ui::Context& ui, settings::ReadingSettings& settings, Screen& screen);
     class NetworkScreen {
     public:

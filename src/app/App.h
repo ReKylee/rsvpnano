@@ -39,6 +39,7 @@ private:
         OtaCheck,
         OtaInstall,
         Book,
+        Typography,
     };
 
     struct JobUpdate {
@@ -58,6 +59,7 @@ private:
     void handleTouch(uint32_t nowMs);
     void runRss();
     void runBookOpen(size_t index, uint32_t nowMs);
+    bool requestTypographyRefresh();
     void updateBackgroundJob();
     bool startBackgroundJob(JobKind kind);
     static void backgroundJobEntry(void* context);
@@ -79,6 +81,9 @@ private:
     bool backgroundJobActive() const {
         return jobKind_ != JobKind::None;
     }
+    bool typographyJobActive() const {
+        return jobKind_ == JobKind::Typography;
+    }
 
     ui::Context immediateUi_{Board::Display::gfx()};
     settings::SettingsStore settingsStore_;
@@ -98,6 +103,7 @@ private:
     QueueHandle_t jobQueue_ = nullptr;
     JobKind jobKind_ = JobKind::None;
     settings::DeviceSettings jobSettings_;
+    settings::ReadingOverrides jobReadingOverrides_;
     settings::DeviceSecrets jobSecrets_;
     OtaUpdater::Config jobOtaConfig_;
     RssFeeds::Result jobRssResult_;
@@ -109,6 +115,10 @@ private:
     std::string jobBookPath_;
     std::string jobBookName_;
     bool jobBookLoaded_ = false;
+    size_t pendingBookIndex_ = 0;
+    bool bookOpenPending_ = false;
+    bool typographyRefreshPending_ = false;
+    bool typographyOpensBook_ = false;
     screens::Screen screen_ = screens::Screen::Status;
     screens::Screen statusDestination_ = screens::Screen::Reader;
     uint32_t bootMs_ = 0;

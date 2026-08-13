@@ -156,6 +156,24 @@ namespace {
         TEST_ASSERT_EQUAL_UINT32(1, other.readCount());
     }
 
+    void test_file_cache_prefetch_respects_the_read_budget() {
+        constexpr size_t blockSize = ui::fonts::RFontFileCache::kBlockSize;
+        File file{std::string(blockSize * 3, static_cast<char>(0x5A))};
+        ui::fonts::RFontFileCache cache;
+        size_t remainingReads = 1;
+
+        TEST_ASSERT_TRUE(cache.prefetch(file, file.size(), 100, blockSize * 2, remainingReads));
+        TEST_ASSERT_EQUAL_UINT32(1, file.readCount());
+        TEST_ASSERT_EQUAL_UINT32(0, remainingReads);
+
+        uint8_t byte = 0;
+        TEST_ASSERT_TRUE(cache.read(file, file.size(), 100, &byte, 1));
+        TEST_ASSERT_EQUAL_HEX8(0x5A, byte);
+        TEST_ASSERT_EQUAL_UINT32(1, file.readCount());
+        TEST_ASSERT_TRUE(cache.read(file, file.size(), blockSize + 100, &byte, 1));
+        TEST_ASSERT_EQUAL_UINT32(2, file.readCount());
+    }
+
     void test_resident_metrics_avoid_file_reads_until_bitmap_rendering() {
         const std::array glyphs{
             ui::fonts::AlphaGlyph{.width = 3,
@@ -222,6 +240,71 @@ namespace {
         constexpr std::array<uint8_t, 3> invalidOffset{0x00, 0x00, 0x00};
         TEST_ASSERT_FALSE(RFont4::decompressLz4Block(invalidOffset, decoded));
         TEST_ASSERT_FALSE(RFont4::decompressLz4Block(encoded, std::span<uint8_t>{decoded}.first(8)));
+    }
+
+    void test_oversized_compressed_run_reads_each_glyph_once() {
+        constexpr size_t glyphCount = 9;
+        constexpr size_t glyphBytes = 1024;
+        constexpr std::array<uint8_t, 8> encoded{0x1F, 0xFF, 0x01, 0x00, 0xFF, 0xFF, 0xFF, 0xEF};
+        std::string fileBytes;
+        fileBytes.reserve(glyphCount * encoded.size());
+        std::array<ui::fonts::AlphaGlyph, glyphCount> glyphs{};
+        std::array<ui::fonts::AlphaGlyphIdentity, glyphCount> identities{};
+        std::array<uint8_t, RFont4::kPageMapBytes> pageMap;
+        std::array<uint8_t, RFont4::kPageTableEntries * sizeof(uint16_t)> pageTable;
+        pageMap.fill(UINT8_MAX);
+        pageMap[0] = 0;
+        pageTable.fill(UINT8_MAX);
+        std::string text;
+        for (size_t index = 0; index < glyphCount; ++index) {
+            fileBytes.append(reinterpret_cast<const char*>(encoded.data()), encoded.size());
+            glyphs[index] = {.bitmapOffset = static_cast<uint32_t>(index * encoded.size()),
+                             .width = 32,
+                             .height = 64,
+                             .rowStride = 16,
+                             .xAdvance = 32,
+                             .bitmapBytes = encoded.size()};
+            const uint32_t codepoint = static_cast<uint32_t>('A' + index);
+            identities[index] = {codepoint, static_cast<uint16_t>(index)};
+            const uint16_t glyphIndex = static_cast<uint16_t>(index);
+            std::memcpy(pageTable.data() + codepoint * sizeof(glyphIndex), &glyphIndex, sizeof(glyphIndex));
+            text.push_back(static_cast<char>(codepoint));
+        }
+
+        File file{std::move(fileBytes)};
+        const ui::fonts::AlphaFont font{
+            .glyphs = glyphs.data(),
+            .identities = identities.data(),
+            .glyphCount = glyphs.size(),
+            .yAdvance = 64,
+            .ascent = 64,
+            .pageMap = pageMap.data(),
+            .pageTableCount = 1,
+            .pixelsPerEm = 64,
+            .file = std::ref(file),
+            .fileSize = static_cast<uint32_t>(file.size()),
+            .fileStrike = {.bitmapEncoding = RFont4::BitmapEncoding::lz4,
+                           .bitmapSize = static_cast<uint32_t>(file.size())},
+            .bitsPerPixel = 4,
+            .bitmapEncoding = RFont4::BitmapEncoding::lz4,
+            .pageTableData = pageTable.data(),
+        };
+        Arduino_GFX gfx{320, 80};
+        ui::fonts::AlphaTextRenderer<320> renderer{gfx};
+        TEST_ASSERT_TRUE(renderer.begin());
+        renderer.setFont(font);
+        renderer.setTextColor(0xFFFF, 0);
+
+        TEST_ASSERT_EQUAL_INT16(glyphCount * 32, renderer.drawString(text, 0, 64));
+        TEST_ASSERT_EQUAL_UINT32(glyphCount, file.readCount());
+
+        Arduino_GFX clippedGfx{64, 80};
+        ui::fonts::AlphaTextRenderer<64> clippedRenderer{clippedGfx};
+        TEST_ASSERT_TRUE(clippedRenderer.begin());
+        clippedRenderer.setFont(font);
+        clippedRenderer.setTextColor(0xFFFF, 0);
+        TEST_ASSERT_EQUAL_INT16(glyphCount * 32, clippedRenderer.drawString(text, -224, 64));
+        TEST_ASSERT_EQUAL_UINT32(glyphCount + 2, file.readCount());
     }
 
 } // namespace
@@ -344,8 +427,10 @@ void test_compact_strike_renders_one_bit_rows() {
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_file_cache_coalesces_small_reads_into_blocks);
+    RUN_TEST(test_file_cache_prefetch_respects_the_read_budget);
     RUN_TEST(test_resident_metrics_avoid_file_reads_until_bitmap_rendering);
     RUN_TEST(test_lz4_block_decoder_checks_bounds_and_overlap);
+    RUN_TEST(test_oversized_compressed_run_reads_each_glyph_once);
     RUN_TEST(test_all_rfont4_assets_are_fully_validated_off_device);
     RUN_TEST(test_shaper_reuses_rfont4_nominal_glyphs_and_advances);
     RUN_TEST(test_compact_strike_renders_one_bit_rows);

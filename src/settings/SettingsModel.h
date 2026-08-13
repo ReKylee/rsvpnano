@@ -12,8 +12,6 @@
 #include "text/UnicodeText.h"
 namespace settings {
 
-    inline constexpr size_t kMaximumBookLanguages = 8;
-    inline constexpr size_t kMaximumBookFontSelections = kMaximumBookLanguages + 1;
     inline constexpr std::string_view kMathFontTarget = "math";
 
     enum class ReadingMode : uint8_t {

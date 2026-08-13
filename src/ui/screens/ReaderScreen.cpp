@@ -32,6 +32,11 @@ namespace screens {
         constexpr int32_t kMaximumParagraphRate = 5'000;
         constexpr size_t kPhantomBeforeTargets[] = {64, 96, 144};
         constexpr size_t kPhantomAfterTargets[] = {96, 144, 208};
+#if defined(BOARD_HAS_PSRAM)
+        constexpr size_t kFontReadAheadWords = ui::fonts::RFontFileCache::kBlockCount;
+        constexpr size_t kFontReadAheadTargetBlocks = 8;
+        constexpr uint32_t kFontReadAheadMinimumSlackMs = 10;
+#endif
 
         int focusOrdinal(int length) {
             if (length <= 1)
@@ -66,14 +71,22 @@ namespace screens {
     }
 
     void ReaderScreen::refreshTypography() {
-        if (settings_.mode == settings::ReadingMode::page)
+        refreshTypography(settings_, session.state.overrides);
+    }
+
+    void ReaderScreen::refreshTypography(const settings::ReadingSettings& settings,
+                                         const settings::ReadingOverrides& overrides) {
+        if (settings.mode == settings::ReadingMode::page)
             pagePreview_ = false;
-        typography_ = settings_.typography;
+        typography_ = settings.typography;
         fonts.clearLoaded();
         loadedWordIndex_ = SIZE_MAX;
         loadedFamilyIndex_ = SIZE_MAX;
         renderedWordIndex_ = SIZE_MAX;
         prefetchedWordIndex_ = SIZE_MAX;
+        readAheadWordIndex_ = SIZE_MAX;
+        readAheadFamilyIndex_ = SIZE_MAX;
+        readAheadBlockCount_ = 0;
         rsvpBidi_.clear();
         rsvpLine_.clear();
         rsvpParagraph_ = {};
@@ -84,7 +97,7 @@ namespace screens {
             return;
         std::vector<uint8_t> prepared(families.size());
         std::vector<size_t> firstWords(families.size(), SIZE_MAX);
-        const size_t sizeIndex = settings_.mode == settings::ReadingMode::page
+        const size_t sizeIndex = settings.mode == settings::ReadingMode::page
                                    ? RFont4::kCompactStrikeIndex
                                    : static_cast<size_t>(typography_.fontSizeIndex);
         const auto prepare = [&](size_t wordIndex, std::string_view locale, uint32_t scripts) {
@@ -92,7 +105,7 @@ namespace screens {
                 if ((scripts & script.mask) == 0)
                     continue;
                 const std::string_view requested = settings::fontForText(
-                    session.state.overrides, locale, script.mask, typography_.fontId);
+                    overrides, locale, script.mask, typography_.fontId);
                 const size_t family = FontCatalog::selectFamily(families, requested, locale, script.mask);
                 if (family != 0 && !prepared[family]) {
                     fonts.loadFace(family, sizeIndex);
@@ -108,12 +121,12 @@ namespace screens {
             prepare(run.wordIndex, locale, run.scriptMask);
         }
 
-        if (settings_.mode != settings::ReadingMode::rsvp)
+        if (settings.mode != settings::ReadingMode::rsvp)
             return;
         for (size_t family = 1; family < firstWords.size(); ++family) {
             const size_t wordIndex = firstWords[family];
             if (wordIndex == SIZE_MAX || wordIndex >= ReadingLoop::wordCount(session)
-                || fontChoice(wordIndex) != family)
+                || fontChoice(wordIndex, settings, overrides) != family)
                 continue;
             const FontCatalog::Face face = fonts.loadFace(family, sizeIndex);
             activateFace(face);
@@ -137,11 +150,16 @@ namespace screens {
     }
 
     size_t ReaderScreen::fontChoice(size_t wordIndex) const {
+        return fontChoice(wordIndex, settings_, session.state.overrides);
+    }
+
+    size_t ReaderScreen::fontChoice(size_t wordIndex, const settings::ReadingSettings& settings,
+                                    const settings::ReadingOverrides& overrides) const {
         const std::string_view word = ReadingLoop::wordAt(session, wordIndex);
         const std::string_view locale = session.metadata.localeAt(wordIndex);
         const uint32_t requiredScripts = UnicodeText::scriptsIn(word);
         const std::string_view requested = settings::fontForText(
-            session.state.overrides, locale, requiredScripts, typography_.fontId);
+            overrides, locale, requiredScripts, settings.typography.fontId);
         const auto families = fonts.families();
         if (families.empty())
             return 0;
@@ -168,10 +186,58 @@ namespace screens {
         activateFace(face_);
     }
 
-    void ReaderScreen::prefetchNextWord() {
+    void ReaderScreen::prefetchUpcomingFont(uint32_t nowMs) {
+#if defined(BOARD_HAS_PSRAM)
+        if (!session.playing || readAheadWordIndex_ == session.currentIndex)
+            return;
+        readAheadWordIndex_ = session.currentIndex;
+
+        const size_t currentFamily = fontChoice(session.currentIndex);
+        if (readAheadFamilyIndex_ == currentFamily) {
+            readAheadFamilyIndex_ = SIZE_MAX;
+            readAheadBlockCount_ = 0;
+        }
+
+        const uint32_t baseWordDurationMs = 60'000UL / settings_.wpm;
+        const auto hasSlack = [&](uint32_t currentMs) {
+            return currentMs - session.lastAdvanceMs + kFontReadAheadMinimumSlackMs < baseWordDurationMs;
+        };
+        if (!hasSlack(nowMs))
+            return;
+
+        const size_t wordCount = ReadingLoop::wordCount(session);
+        const size_t end = std::min(wordCount, session.currentIndex + 1 + kFontReadAheadWords);
+        for (size_t first = session.currentIndex + 1; first < end; ++first) {
+            const size_t family = fontChoice(first);
+            if (family == currentFamily)
+                continue;
+            const FontCatalog::Face upcoming = fonts.loadFace(family, typography_.fontSizeIndex);
+            if (upcoming.shaper)
+                return;
+            if (upcoming.raster.get().bitmap != nullptr)
+                continue;
+
+            if (readAheadFamilyIndex_ != family) {
+                readAheadFamilyIndex_ = family;
+                readAheadBlockCount_ = 0;
+            }
+            for (size_t index = first;
+                 index < end && readAheadBlockCount_ < kFontReadAheadTargetBlocks && hasSlack(millis()); ++index) {
+                if (fontChoice(index) != family)
+                    break;
+                readAheadBlockCount_ += ui::fonts::prefetchGlyphBitmaps(
+                    upcoming.raster.get(), ReadingLoop::wordAt(session, index), 1);
+            }
+            return;
+        }
+#endif
+    }
+
+    void ReaderScreen::prefetchNextWord(uint32_t nowMs) {
         if (settings_.mode == settings::ReadingMode::page || pagePreview_
             || renderedWordIndex_ != session.currentIndex)
             return;
+        prefetchUpcomingFont(nowMs);
         const size_t next = session.currentIndex + 1;
         if (next == prefetchedWordIndex_ || next >= ReadingLoop::wordCount(session))
             return;
@@ -202,6 +268,7 @@ namespace screens {
             return false;
         }
         finishBookOpen(preferences, loadedIndex, loadedPath, nowMs);
+        refreshTypography();
         return true;
     }
 
@@ -229,7 +296,6 @@ namespace screens {
         } else {
             preferences.putString("book", session.path.c_str());
         }
-        refreshTypography();
     }
 
     void ReaderScreen::loadInitialBook(ui::Context& ui, StorageManager& storage, Preferences& preferences,
@@ -448,11 +514,6 @@ namespace screens {
             gfx.drawFastVLine(anchor, guideTop, 5, marker);
             gfx.drawFastVLine(anchor, static_cast<int16_t>(guideBottom - 4), 5, marker);
 
-            if (!before.empty()) {
-                text_.setTextColor(ui.blend(ui::themes::ColorRole::Foreground, 62), background_);
-                text_.drawString(before, static_cast<int16_t>(x - 24 - text_.textAdvance(before, typography_.tracking)),
-                                 baseline, typography_.tracking);
-            }
             if (!shaped)
                 text_.prepare(word);
             if (shaped) {
@@ -477,10 +538,17 @@ namespace screens {
                 drawWord(rsvpVisual_, x, baseline, wordOffset, focus, ui);
             else
                 drawWord(word, x, baseline, focus, ui);
-            if (!after.empty()) {
-                text_.setTextColor(ui.blend(ui::themes::ColorRole::Foreground, 62), background_);
-                text_.drawString(after, static_cast<int16_t>(x + wordWidth + 24), baseline, typography_.tracking);
-            }
+            const bool rightToLeft = bidi && rsvpBidi_.rightToLeft();
+            if (!before.empty())
+                drawPhantom(before, rightToLeft,
+                            rightToLeft ? static_cast<int16_t>(x + wordWidth + 24)
+                                        : static_cast<int16_t>(x - 24),
+                            !rightToLeft, baseline, ui);
+            if (!after.empty())
+                drawPhantom(after, rightToLeft,
+                            rightToLeft ? static_cast<int16_t>(x - 24)
+                                        : static_cast<int16_t>(x + wordWidth + 24),
+                            rightToLeft, baseline, ui);
 
             gfx.setFont(static_cast<const GFXfont*>(nullptr));
             gfx.setTextWrap(false);
@@ -731,7 +799,7 @@ namespace screens {
             finishPause(preferences, nowMs);
             return;
         }
-        prefetchNextWord();
+        prefetchNextWord(nowMs);
         nowMs = millis();
         if (!session.playing)
             return;
@@ -828,10 +896,15 @@ namespace screens {
     std::string ReaderScreen::phantomBefore(const ReadingSession& reader, uint8_t sizeIndex) const {
         if (ReadingLoop::wordCount(reader) == 0)
             return "";
+        const ReadingLoop::TextParagraph paragraph = ReadingLoop::paragraphAt(reader, reader.currentIndex);
+        const TextDirection direction = reader.metadata.directionAt(reader.currentIndex);
         const size_t target = kPhantomBeforeTargets[std::min<size_t>(sizeIndex, 2)];
         size_t start = reader.currentIndex;
         size_t characters = 0;
-        while (start > 0 && characters < target) {
+        while (start > paragraph.firstWord && characters < target) {
+            if (reader.metadata.directionAt(start - 1) != direction
+                || fontChoice(start - 1) != loadedFamilyIndex_)
+                break;
             --start;
             characters += ReadingLoop::wordAt(reader, start).length() + (start + 1 < reader.currentIndex);
         }
@@ -848,10 +921,14 @@ namespace screens {
     std::string ReaderScreen::phantomAfter(const ReadingSession& reader, uint8_t sizeIndex) const {
         if (reader.currentIndex + 1 >= ReadingLoop::wordCount(reader))
             return "";
+        const ReadingLoop::TextParagraph paragraph = ReadingLoop::paragraphAt(reader, reader.currentIndex);
+        const TextDirection direction = reader.metadata.directionAt(reader.currentIndex);
         const size_t target = kPhantomAfterTargets[std::min<size_t>(sizeIndex, 2)];
         size_t end = reader.currentIndex + 1;
         size_t characters = 0;
-        while (end < ReadingLoop::wordCount(reader) && characters < target) {
+        while (end < paragraph.lastWord && characters < target) {
+            if (reader.metadata.directionAt(end) != direction || fontChoice(end) != loadedFamilyIndex_)
+                break;
             characters += ReadingLoop::wordAt(reader, end).length() + (end > reader.currentIndex + 1);
             ++end;
         }
@@ -901,6 +978,72 @@ namespace screens {
             previousValid = true;
         }
         return advance;
+    }
+
+    void ReaderScreen::drawPhantom(std::string_view value, bool rightToLeft, int16_t edge, bool extendsLeft,
+                                   int16_t baseline, ui::Context& ui) {
+        if (value.empty())
+            return;
+
+        phantomLine_.clear();
+        phantomVisual_.clear();
+        phantomGlyphs_.clear();
+        const bool bidi = rightToLeft
+                       || (UnicodeText::scriptsIn(value)
+                           & (UnicodeText::ScriptHebrew | UnicodeText::ScriptArabic)) != 0;
+        if (bidi) {
+            const TextDirection direction = rightToLeft ? TextDirection::rtl : TextDirection::ltr;
+            if (!phantomBidi_.reset(value, direction)
+                || !phantomBidi_.resolve({0, value.size()}, phantomLine_))
+                phantomLine_.assign(1, {0, value.size(), rightToLeft});
+        } else {
+            phantomLine_.assign(1, {0, value.size(), false});
+        }
+
+        bool shaped = face_.shaper.has_value();
+        int32_t width = 0;
+        if (shaped) {
+            const std::string_view locale = session.metadata.localeAt(session.currentIndex);
+            for (const BidiText::Run& run: phantomLine_) {
+                const auto result = face_.shaper->get().shape(
+                    value, run.offset, run.length, run.rightToLeft, locale, text_, phantomGlyphs_);
+                if (!result) {
+                    shaped = false;
+                    phantomGlyphs_.clear();
+                    break;
+                }
+                width += *result;
+            }
+        }
+        if (!shaped) {
+            if (bidi) {
+                BidiText::visualCodepoints(value, phantomLine_, phantomVisual_);
+                width = wordAdvance(phantomVisual_);
+            } else {
+                width = text_.textAdvance(value, typography_.tracking);
+            }
+        }
+
+        int16_t x = edge;
+        if (extendsLeft)
+            x = static_cast<int16_t>(x - std::clamp<int32_t>(width, 0, INT16_MAX));
+        text_.setTextColor(ui.blend(ui::themes::ColorRole::Foreground, 62), background_);
+        if (shaped) {
+            text_.drawGlyphs(phantomGlyphs_, x, baseline);
+        } else if (bidi) {
+            uint32_t previous = 0;
+            bool previousValid = false;
+            for (const BidiText::Codepoint& codepoint: phantomVisual_) {
+                if (previousValid && !codepoint.rightToLeft)
+                    x = static_cast<int16_t>(x + text_.kerningAdjust(previous, codepoint.value));
+                x = static_cast<int16_t>(x + text_.drawCodepoint(codepoint.value, x, baseline)
+                                         + typography_.tracking);
+                previous = codepoint.value;
+                previousValid = true;
+            }
+        } else {
+            text_.drawString(value, x, baseline, typography_.tracking);
+        }
     }
 
     void ReaderScreen::drawWord(std::string_view word, int16_t x, int16_t baseline, int focus, ui::Context& ui) {

@@ -29,6 +29,8 @@ namespace screens {
         void begin(const ui::themes::Theme& theme);
         void applyTheme(const ui::themes::Theme& theme);
         void refreshTypography();
+        void refreshTypography(const settings::ReadingSettings& settings,
+                               const settings::ReadingOverrides& overrides);
         bool openBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, size_t index, uint32_t nowMs);
         void prepareBookOpen(Preferences& preferences, uint32_t nowMs);
         void finishBookOpen(Preferences& preferences, size_t loadedIndex, std::string_view loadedPath, uint32_t nowMs);
@@ -47,6 +49,8 @@ namespace screens {
     private:
         int focusOffset(std::string_view word) const;
         int16_t wordAdvance(std::span<const BidiText::Codepoint> word) const;
+        void drawPhantom(std::string_view value, bool rightToLeft, int16_t edge, bool extendsLeft,
+                         int16_t baseline, ui::Context& ui);
         void drawWord(std::string_view word, int16_t x, int16_t baseline, int focus, ui::Context& ui);
         void drawWord(std::span<const BidiText::Codepoint> word, int16_t x, int16_t baseline,
                       size_t wordOffset, int focus, ui::Context& ui);
@@ -71,9 +75,12 @@ namespace screens {
         bool shouldFinishPause(uint32_t nowMs) const;
         void finishPause(Preferences& preferences, uint32_t nowMs);
         size_t fontChoice(size_t wordIndex) const;
+        size_t fontChoice(size_t wordIndex, const settings::ReadingSettings& settings,
+                          const settings::ReadingOverrides& overrides) const;
         void activateFace(const FontCatalog::Face& face);
         void refreshTypeface();
-        void prefetchNextWord();
+        void prefetchUpcomingFont(uint32_t nowMs);
+        void prefetchNextWord(uint32_t nowMs);
         FontCatalog::Face pageTypeface(size_t wordIndex);
 
         Arduino_GFX& gfx_;
@@ -84,6 +91,9 @@ namespace screens {
         size_t loadedFamilyIndex_ = SIZE_MAX;
         size_t renderedWordIndex_ = SIZE_MAX;
         size_t prefetchedWordIndex_ = SIZE_MAX;
+        size_t readAheadWordIndex_ = SIZE_MAX;
+        size_t readAheadFamilyIndex_ = SIZE_MAX;
+        size_t readAheadBlockCount_ = 0;
         uint8_t loadedFontSizeIndex_ = 0xFF;
         uint32_t fontRevision_ = 0;
         uint32_t typographyRevision_ = 0;
@@ -108,6 +118,10 @@ namespace screens {
         BidiText::Line rsvpLine_;
         std::vector<BidiText::Codepoint> rsvpVisual_;
         std::vector<ui::fonts::PositionedGlyph> rsvpGlyphs_;
+        BidiText::Analysis phantomBidi_;
+        BidiText::Line phantomLine_;
+        std::vector<BidiText::Codepoint> phantomVisual_;
+        std::vector<ui::fonts::PositionedGlyph> phantomGlyphs_;
         bool pagePreview_ = false;
         uint32_t paragraphTickMs_ = 0;
         int32_t paragraphRemainder_ = 0;

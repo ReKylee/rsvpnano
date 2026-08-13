@@ -80,6 +80,15 @@ public:
     }
     Face loadFace(size_t familyIndex, size_t sizeIndex);
     void clearLoaded();
+#if defined(RSVP_BENCHMARK_MODE)
+    void resetFileCacheStats() {
+        if (fileCache_)
+            fileCache_->resetStats();
+    }
+    ui::fonts::RFontFileCache::Stats fileCacheStats() const {
+        return fileCache_ ? fileCache_->stats() : ui::fonts::RFontFileCache::Stats{};
+    }
+#endif
     static size_t selectFamily(std::span<const Family> families, std::string_view requested,
                                std::string_view locale, uint32_t requiredScripts) {
         if (families.empty())

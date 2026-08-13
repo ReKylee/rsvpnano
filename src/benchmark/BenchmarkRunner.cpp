@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <memory>
 #include <numeric>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -345,9 +346,46 @@ namespace {
         return runTimed(name, 1, std::forward<Operation>(operation), bytes);
     }
 
+    void logWpmSweep(std::string_view phase, std::span<const uint32_t> sortedSamples) {
+        if (sortedSamples.empty())
+            return;
+
+        using Wpm = decltype(settings::ReadingSettings::wpm);
+        const uint64_t total = std::accumulate(sortedSamples.begin(), sortedSamples.end(), uint64_t{0});
+        const uint32_t averageUs = static_cast<uint32_t>(total / sortedSamples.size());
+        const auto percentile = [&](size_t percent) {
+            return sortedSamples[(sortedSamples.size() - 1) * percent / 100];
+        };
+
+        size_t transitionCount = 0;
+        size_t previousMisses = sortedSamples.size() + 1;
+        for (uint16_t wpm = Wpm::min(); wpm <= Wpm::max(); wpm += Wpm::step()) {
+            const uint32_t deadlineUs = 60'000'000UL / wpm;
+            const auto firstLate = std::ranges::upper_bound(sortedSamples, deadlineUs);
+            const size_t misses = static_cast<size_t>(sortedSamples.end() - firstLate);
+            if (misses == previousMisses)
+                continue;
+            previousMisses = misses;
+            ++transitionCount;
+            ESP_LOGI("bench",
+                     "wpm_transition phase=%.*s wpm=%u deadline_misses=%u",
+                     static_cast<int>(phase.size()), phase.data(), static_cast<unsigned>(wpm),
+                     static_cast<unsigned>(misses));
+        }
+        ESP_LOGI("bench",
+                 "wpm_sweep phase=%.*s min_wpm=%u max_wpm=%u step_wpm=%u transitions=%u samples=%u "
+                 "avg_us=%lu p50_us=%lu p95_us=%lu p99_us=%lu max_us=%lu",
+                 static_cast<int>(phase.size()), phase.data(), static_cast<unsigned>(Wpm::min()),
+                 static_cast<unsigned>(Wpm::max()), static_cast<unsigned>(Wpm::step()),
+                 static_cast<unsigned>(transitionCount), static_cast<unsigned>(sortedSamples.size()),
+                 static_cast<unsigned long>(averageUs), static_cast<unsigned long>(percentile(50)),
+                 static_cast<unsigned long>(percentile(95)), static_cast<unsigned long>(percentile(99)),
+                 static_cast<unsigned long>(sortedSamples.back()));
+    }
+
     void logLatencyDistribution(std::string_view name, bool ok, std::vector<uint32_t> samples,
                                 uint32_t deadlineUs = 0, uint32_t heapBefore = 0, uint32_t heapAfter = 0,
-                                uint32_t minimumHeap = 0) {
+                                uint32_t minimumHeap = 0, bool sweepWpm = false) {
         if (samples.empty()) {
             logMetric(name, false, 0, 0, 0, heapBefore, heapAfter, minimumHeap);
             return;
@@ -370,6 +408,8 @@ namespace {
         logMetric(prefix + "_p95", ok, percentile(95));
         logMetric(prefix + "_p99", ok, percentile(99));
         logMetric(prefix + "_max", ok, samples.back());
+        if (sweepWpm)
+            logWpmSweep(name, samples);
     }
 
     bool openReadingFixture(screens::ReaderScreen& reader, std::string_view path, std::string_view metric) {
@@ -394,19 +434,33 @@ namespace {
 
     bool benchmarkSequentialReading(screens::ReaderScreen& reader, settings::ReadingSettings& settings,
                                     const StorageManager& storage, const Board::Power::BatteryState& battery,
-                                    Preferences& preferences, std::string_view name, size_t requestedFrames) {
+                                    Preferences& preferences, std::string_view name, size_t requestedFrames,
+                                    bool sweepWpm = false) {
         const size_t frameCount = std::min(requestedFrames, ReadingLoop::wordCount(reader.session));
         if (frameCount == 0)
             return false;
 
+        using Wpm = decltype(settings::ReadingSettings::wpm);
+        const uint16_t savedWpm = settings.wpm;
+        if (sweepWpm)
+            settings.wpm = Wpm::max();
+
         std::vector<uint32_t> frameLatency;
         std::vector<uint32_t> updateLatency;
+        std::vector<uint32_t> cycleLatency;
         frameLatency.reserve(frameCount);
         updateLatency.reserve(frameCount - 1);
+        cycleLatency.reserve(frameCount - 1);
         size_t slowestIndex = reader.session.currentIndex;
         uint32_t slowestUs = 0;
+        uint32_t slowestDrawUs = 0;
+        uint32_t slowestFlushUs = 0;
+        ui::fonts::RFontFileCache::Stats slowestIo;
         bool ok = true;
         const uint32_t deadlineUs = 60'000'000UL / settings.wpm;
+        const uint32_t acceptanceDeadlineUs = sweepWpm ? 60'000U : deadlineUs;
+        bool frameDeadlineMet = true;
+        bool cycleDeadlineMet = true;
 
         gDisplay.invalidate();
         ReadingLoop::start(reader.session, millis());
@@ -414,33 +468,67 @@ namespace {
         const bool monitorHeap = heap_caps_monitor_local_minimum_free_size_start() == ESP_OK;
         for (size_t frame = 0; frame < frameCount; ++frame) {
             const size_t wordIndex = reader.session.currentIndex;
+            if (sweepWpm)
+                reader.fonts.resetFileCacheStats();
             const uint32_t startedUs = micros();
             gDisplay.beginFrame(static_cast<uint8_t>(screens::Screen::Reader));
             reader.draw(gDisplay, storage, battery, millis());
+            const uint32_t drawUs = micros() - startedUs;
+            const uint32_t flushStartedUs = micros();
             gDisplay.endFrame();
+            const uint32_t flushUs = micros() - flushStartedUs;
             const uint32_t elapsedUs = micros() - startedUs;
             frameLatency.push_back(elapsedUs);
             if (elapsedUs > slowestUs) {
                 slowestUs = elapsedUs;
                 slowestIndex = wordIndex;
+                slowestDrawUs = drawUs;
+                slowestFlushUs = flushUs;
+                if (sweepWpm)
+                    slowestIo = reader.fonts.fileCacheStats();
             }
-            if (elapsedUs > deadlineUs) {
+            if (elapsedUs > acceptanceDeadlineUs) {
+                frameDeadlineMet = false;
                 const std::string_view word = ReadingLoop::wordAt(reader.session, wordIndex);
                 const std::string_view locale = reader.session.metadata.localeAt(wordIndex);
-                ESP_LOGI("bench", "reading_miss phase=%.*s index=%u us=%lu locale=%.*s scripts=%lu bytes=%u",
+                const auto io = reader.fonts.fileCacheStats();
+                ESP_LOGI("bench", "reading_miss phase=%.*s index=%u us=%lu draw=%lu flush=%lu locale=%.*s "
+                           "scripts=%lu bytes=%u font_reads=%lu blocks=%lu seeks=%lu loaded=%lu",
                          static_cast<int>(name.size()), name.data(), static_cast<unsigned>(wordIndex),
-                         static_cast<unsigned long>(elapsedUs), static_cast<int>(locale.size()), locale.data(),
-                         static_cast<unsigned long>(UnicodeText::scriptsIn(word)), static_cast<unsigned>(word.size()));
+                         static_cast<unsigned long>(elapsedUs), static_cast<unsigned long>(drawUs),
+                         static_cast<unsigned long>(flushUs), static_cast<int>(locale.size()), locale.data(),
+                         static_cast<unsigned long>(UnicodeText::scriptsIn(word)), static_cast<unsigned>(word.size()),
+                         static_cast<unsigned long>(io.logicalReads), static_cast<unsigned long>(io.blockReads),
+                         static_cast<unsigned long>(io.seeks), static_cast<unsigned long>(io.loadedBytes));
             }
 
             if (frame + 1 == frameCount)
                 break;
             const uint32_t duration = ReadingLoop::currentWordDurationMs(reader.session, settings);
-            reader.session.lastAdvanceMs = millis() - duration;
             const size_t previousIndex = reader.session.currentIndex;
+            if (sweepWpm)
+                reader.fonts.resetFileCacheStats();
             const uint32_t updateStartedUs = micros();
             reader.update(preferences, millis());
-            updateLatency.push_back(micros() - updateStartedUs);
+            if (reader.session.currentIndex == previousIndex) {
+                reader.session.lastAdvanceMs = millis() - duration;
+                reader.update(preferences, millis());
+            }
+            const uint32_t updateUs = micros() - updateStartedUs;
+            const uint32_t cycleUs = micros() - startedUs;
+            updateLatency.push_back(updateUs);
+            cycleLatency.push_back(cycleUs);
+            if (cycleUs > acceptanceDeadlineUs) {
+                cycleDeadlineMet = false;
+                const auto io = reader.fonts.fileCacheStats();
+                ESP_LOGI("bench", "reading_cycle_miss phase=%.*s index=%u us=%lu frame=%lu update=%lu "
+                           "font_reads=%lu blocks=%lu seeks=%lu loaded=%lu",
+                         static_cast<int>(name.size()), name.data(), static_cast<unsigned>(wordIndex),
+                         static_cast<unsigned long>(cycleUs), static_cast<unsigned long>(elapsedUs),
+                         static_cast<unsigned long>(updateUs), static_cast<unsigned long>(io.logicalReads),
+                         static_cast<unsigned long>(io.blockReads), static_cast<unsigned long>(io.seeks),
+                         static_cast<unsigned long>(io.loadedBytes));
+            }
             if (reader.session.currentIndex != previousIndex + 1) {
                 ok = false;
                 break;
@@ -453,16 +541,25 @@ namespace {
             heap_caps_monitor_local_minimum_free_size_stop();
 
         const std::string prefix{name};
-        logLatencyDistribution(prefix + "_frame", ok, std::move(frameLatency), deadlineUs,
-                               heapBefore, heapAfter, minimumHeap);
+        logLatencyDistribution(prefix + "_frame", ok && frameDeadlineMet, std::move(frameLatency),
+                               acceptanceDeadlineUs,
+                               heapBefore, heapAfter, minimumHeap, sweepWpm);
         logLatencyDistribution(prefix + "_update", ok, std::move(updateLatency));
+        logLatencyDistribution(prefix + "_cycle", ok && cycleDeadlineMet, std::move(cycleLatency),
+                               acceptanceDeadlineUs, 0, 0, 0, sweepWpm);
         const std::string_view word = ReadingLoop::wordAt(reader.session, slowestIndex);
         const std::string_view locale = reader.session.metadata.localeAt(slowestIndex);
-        ESP_LOGI("bench", "reading_peak phase=%s index=%u us=%lu locale=%.*s scripts=%lu bytes=%u",
+        ESP_LOGI("bench", "reading_peak phase=%s index=%u us=%lu draw=%lu flush=%lu locale=%.*s scripts=%lu "
+                           "bytes=%u font_reads=%lu blocks=%lu seeks=%lu loaded=%lu word=%.*s",
                  prefix.c_str(), static_cast<unsigned>(slowestIndex), static_cast<unsigned long>(slowestUs),
+                 static_cast<unsigned long>(slowestDrawUs), static_cast<unsigned long>(slowestFlushUs),
                  static_cast<int>(locale.size()), locale.data(),
-                 static_cast<unsigned long>(UnicodeText::scriptsIn(word)), static_cast<unsigned>(word.size()));
-        return ok;
+                 static_cast<unsigned long>(UnicodeText::scriptsIn(word)), static_cast<unsigned>(word.size()),
+                 static_cast<unsigned long>(slowestIo.logicalReads), static_cast<unsigned long>(slowestIo.blockReads),
+                 static_cast<unsigned long>(slowestIo.seeks), static_cast<unsigned long>(slowestIo.loadedBytes),
+                 static_cast<int>(word.size()), word.data());
+        settings.wpm = savedWpm;
+        return ok && frameDeadlineMet && cycleDeadlineMet;
     }
 
     bool benchmarkPageScrubbing(screens::ReaderScreen& reader, const StorageManager& storage,
@@ -739,6 +836,7 @@ namespace {
                     return true;
                 }, 0, false);
                 logFontIo(prefix + "_prefetch_next", face);
+                clearRenderArea();
                 resetFontIo(face);
                 ok &= runTimed(prefix + "_render_prefetched", kRenderIterations, [&] {
                     return gText.drawString(sample.nextWord, static_cast<int16_t>(area.x + 12),
@@ -842,7 +940,7 @@ namespace {
             });
             ok = benchmarkSequentialReading(*reader, settings, storage, battery, preferences,
                                             "reading_multilingual_rsvp",
-                                            ReadingLoop::wordCount(reader->session)) && ok;
+                                            ReadingLoop::wordCount(reader->session), true) && ok;
 
             ReadingLoop::seekTo(reader->session, 0);
             settings.mode = settings::ReadingMode::page;

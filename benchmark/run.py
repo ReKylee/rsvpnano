@@ -9,11 +9,12 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
 
-from compare import parse_log, write_summary
+from compare import parse_log, parse_wpm_sweep, write_summary
 
 
 DEFAULT_ENV = "benchmark_waveshare_esp32s3_touch_lcd_349_rev1"
@@ -290,17 +291,22 @@ def write_results(log_path: Path, logs_dir: Path) -> Path:
     if not rows:
         raise RuntimeError(f"benchmark completed without metrics: {log_path}")
     result_path = log_path.with_suffix(".md")
-    write_summary(rows, result_path)
+    write_summary(rows, result_path, parse_wpm_sweep(log_path))
     all_rows = []
+    all_wpm_rows = []
     for path in sorted(logs_dir.glob("*.log"), key=lambda item: item.stat().st_mtime):
         all_rows.extend(parse_log(path))
-    write_summary(all_rows, logs_dir / "summary.md")
+        all_wpm_rows.extend(parse_wpm_sweep(path))
+    write_summary(all_rows, logs_dir / "summary.md", all_wpm_rows)
     print(f"[bench-script] wrote results={result_path}", flush=True)
     print(f"[bench-script] wrote summary={logs_dir / 'summary.md'}", flush=True)
     return result_path
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(description="Prepare SD, build, upload, run, and archive benchmark firmware.")
     parser.add_argument("--env", default=DEFAULT_ENV, help="PlatformIO benchmark environment")
     parser.add_argument("--port", default="", help="Upload/monitor serial port, for example COM3")

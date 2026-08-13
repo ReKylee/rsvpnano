@@ -6,12 +6,13 @@ namespace screens {
         if (const Action action = detail::navigation(ui, Screen::Ota, screen); action != Action::None)
             return action;
         const ui::Rect content = detail::tabContent(ui);
-        ui::Column column{content, 8};
-        if (ui.button(column.next(detail::kBackButtonHeight), "<<"))
+        constexpr int16_t gap = 6;
+        ui::Grid actions{content, 3, 56, gap};
+        if (ui.button(actions.next(), "<<"))
             screen = Screen::Device;
-        if (ui.button(column.next(40), ui.text(UiText::CheckOnly)))
+        if (ui.button(actions.next(), ui.text(UiText::CheckOnly)))
             return Action::OtaCheck;
-        if (ui.button(column.next(40), ui.text(UiText::InstallUpdate)))
+        if (ui.button(actions.next(), ui.text(UiText::InstallUpdate)))
             return Action::OtaInstall;
         const uint8_t versionSize = firmwareVersion.size() * 12U <= static_cast<size_t>(content.w) ? 2 : 1;
         ui.label({content.x, static_cast<int16_t>(content.y + content.h - 24), content.w, 24}, firmwareVersion,

@@ -22,36 +22,34 @@ namespace screens {
 
     void NetworkScreen::draw(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
         const ui::Rect content = detail::content(ui);
-        if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, "<<"))
+        constexpr int16_t gap = 4;
+        constexpr int16_t backWidth = 56;
+        const int16_t rowHeight = static_cast<int16_t>((content.h - gap * 3) / 4);
+        if (ui.button({content.x, content.y, backWidth, rowHeight}, "<<"))
             screen = Screen::Settings;
-        ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
-                 ui.text(UiText::NetworkUpdates), 2);
-
-        constexpr int16_t gap = 6;
-        const int16_t sectionY = static_cast<int16_t>(content.y + 30);
-        ui.separator({content.x, sectionY, content.w, 10}, ui.text(UiText::ConnectionReleaseSection));
-        const int16_t firstRowY = static_cast<int16_t>(sectionY + 14);
-        const int16_t networkWidth = static_cast<int16_t>((content.w - gap) * 3 / 5);
-        if (ui.setting({content.x, firstRowY, networkWidth, 34}, ui.text(UiText::Network),
+        if (ui.setting({static_cast<int16_t>(content.x + backWidth + gap), content.y,
+                        static_cast<int16_t>(content.w - backWidth - gap), rowHeight},
+                       ui.text(UiText::Network),
                        ssid.empty() ? ui.text(UiText::NotSet) : std::string_view{ssid}, ui::SettingLayout::Inline)) {
             openWifiScan();
             screen = Screen::WifiScan;
         }
-        if (ui.toggle({static_cast<int16_t>(content.x + networkWidth + gap), firstRowY,
-                       static_cast<int16_t>(content.w - networkWidth - gap), 34},
-                      ui.text(UiText::StartupCheck), store.settings().updates.checkOnStartup)) {
+
+        const int16_t secondRowY = static_cast<int16_t>(content.y + rowHeight + gap);
+        if (ui.toggle({content.x, secondRowY, content.w, rowHeight}, ui.text(UiText::StartupCheck),
+                      store.settings().updates.checkOnStartup)) {
             store.acceptChanges();
         }
-        const int16_t secondRowY = static_cast<int16_t>(firstRowY + 36);
+        const int16_t thirdRowY = static_cast<int16_t>(secondRowY + rowHeight + gap);
         const int16_t halfWidth = static_cast<int16_t>((content.w - gap) / 2);
-        if (ui.setting({content.x, secondRowY, halfWidth, 34}, ui.text(UiText::OtaOwner),
+        if (ui.setting({content.x, thirdRowY, halfWidth, rowHeight}, ui.text(UiText::OtaOwner),
                        owner.empty() ? ui.text(UiText::Default) : std::string_view{owner})) {
             editField_ = EditField::Owner;
             editValue_ = owner;
             keyboard_ = {};
             screen = Screen::NetworkEdit;
         }
-        if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), secondRowY, halfWidth, 34},
+        if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), thirdRowY, halfWidth, rowHeight},
                        ui.text(UiText::ReleaseTag), tag.empty() ? ui.text(UiText::Latest) : std::string_view{tag})) {
             editField_ = EditField::Tag;
             editValue_ = tag;
@@ -59,10 +57,11 @@ namespace screens {
             screen = Screen::NetworkEdit;
         }
 
-        ui::Grid actions{{content.x, static_cast<int16_t>(sectionY + 88), content.w,
-                          static_cast<int16_t>(content.h - 88)},
+        const int16_t actionsY = static_cast<int16_t>(thirdRowY + rowHeight + gap);
+        ui::Grid actions{{content.x, actionsY, content.w,
+                          static_cast<int16_t>(content.y + content.h - actionsY)},
                          static_cast<uint8_t>(ssidStored ? 3 : 2),
-                         36,
+                         static_cast<int16_t>(content.y + content.h - actionsY),
                          gap};
         if (ui.button(actions.next(), ui.text(UiText::CompanionSetup)))
             screen = Screen::Sync;
@@ -90,14 +89,6 @@ namespace screens {
 
     void NetworkScreen::drawWifiScan(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
         const ui::Rect content = detail::content(ui);
-        if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, "<<")) {
-            closeWifi();
-            screen = Screen::NetworkSettings;
-            return;
-        }
-        ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
-                 ui.text(UiText::WifiNetworks), 2);
-
         if (scanState_ == WifiScanState::Idle) {
             WiFi.mode(WIFI_STA);
             scanState_ = WiFi.scanNetworks(true) == WIFI_SCAN_RUNNING ? WifiScanState::Scanning : WifiScanState::Failed;
@@ -138,15 +129,28 @@ namespace screens {
             }
         }
 
-        const ui::Rect list{content.x, static_cast<int16_t>(content.y + detail::kBackButtonHeight), content.w,
-                            static_cast<int16_t>(content.h - detail::kBackButtonHeight)};
+        constexpr int16_t gap = 4;
+        constexpr int16_t backWidth = 56;
         if (scanState_ == WifiScanState::Idle || scanState_ == WifiScanState::Scanning) {
-            ui.label(list, ui.text(UiText::ScanningNetworks), 2, ui::themes::ColorRole::Muted, ui::TextAlign::Center);
+            if (ui.button({content.x, content.y, backWidth, detail::kBackButtonHeight}, "<<")) {
+                closeWifi();
+                screen = Screen::NetworkSettings;
+                return;
+            }
+            ui.label({static_cast<int16_t>(content.x + backWidth + gap), content.y,
+                      static_cast<int16_t>(content.w - backWidth - gap), content.h},
+                     ui.text(UiText::ScanningNetworks), 2, ui::themes::ColorRole::Muted, ui::TextAlign::Center);
             return;
         }
         if (scanState_ == WifiScanState::Failed || networkCount_ == 0) {
-            ui::Column column{list, 8};
-            ui.label(column.next(32),
+            if (ui.button({content.x, content.y, backWidth, detail::kBackButtonHeight}, "<<")) {
+                closeWifi();
+                screen = Screen::NetworkSettings;
+                return;
+            }
+            ui::Column column{{static_cast<int16_t>(content.x + backWidth + gap), content.y,
+                               static_cast<int16_t>(content.w - backWidth - gap), content.h}, 8};
+            ui.label(column.next(56),
                      ui.text(scanState_ == WifiScanState::Failed ? UiText::ScanFailed : UiText::NoNetworksFound), 2,
                      ui::themes::ColorRole::Muted, ui::TextAlign::Center);
             if (ui.button(column.next(34), ui.text(UiText::Retry)))
@@ -154,7 +158,17 @@ namespace screens {
             return;
         }
 
-        ui::Grid grid{list, 2, 30, 0};
+        const uint8_t columns = content.w >= 600 ? 4 : 2;
+        const size_t itemCount = networkCount_ + 1;
+        const size_t rows = (itemCount + columns - 1) / columns;
+        const int16_t rowGapTotal = static_cast<int16_t>(gap * (rows - 1));
+        const int16_t rowHeight = static_cast<int16_t>((content.h - rowGapTotal) / rows);
+        ui::Grid grid{content, columns, rowHeight, gap};
+        if (ui.button(grid.next(), "<<")) {
+            closeWifi();
+            screen = Screen::NetworkSettings;
+            return;
+        }
         for (size_t index = 0; index < networkCount_; ++index) {
             const WifiNetwork& network = networks_[index];
             const std::string signal = std::to_string(network.rssi) + " dBm";

@@ -7,25 +7,22 @@ namespace screens {
     bool readerSettings(ui::Context& ui, settings::ReadingSettings& config, Screen& screen) {
         bool changed = false;
         const ui::Rect content = detail::content(ui);
-        if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, "<<"))
-            screen = Screen::Settings;
-        ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
-                 ui.text(UiText::ReaderScreen), 2);
-
         constexpr int16_t gap = 4;
-        const int16_t sectionsY = static_cast<int16_t>(content.y + 30);
-        ui.separator({content.x, sectionsY, content.w, 10}, ui.text(UiText::BehaviorMetricsSection));
-        ui::Grid grid{{content.x, static_cast<int16_t>(sectionsY + 14), content.w,
-                      static_cast<int16_t>(content.h - 44)},
-                      2,
-                      34,
-                      gap};
-        if (ui.setting(grid.next(), ui.text(UiText::ReaderHand),
+        constexpr int16_t backWidth = 56;
+        constexpr int16_t rowHeight = 40;
+        if (ui.button({content.x, content.y, backWidth, rowHeight}, "<<"))
+            screen = Screen::Settings;
+        const int16_t remainingWidth = static_cast<int16_t>(content.w - backWidth - gap * 2);
+        const int16_t firstSettingWidth = static_cast<int16_t>(remainingWidth / 2);
+        if (ui.setting({static_cast<int16_t>(content.x + backWidth + gap), content.y, firstSettingWidth, rowHeight},
+                       ui.text(UiText::ReaderHand),
                        ui.text(config.leftHanded ? UiText::Left : UiText::Right), ui::SettingLayout::Inline)) {
             config.leftHanded = !config.leftHanded;
             changed = true;
         }
-        if (ui.setting(grid.next(), ui.text(UiText::ChapterScroll),
+        if (ui.setting({static_cast<int16_t>(content.x + backWidth + gap * 2 + firstSettingWidth), content.y,
+                        static_cast<int16_t>(remainingWidth - firstSettingWidth), rowHeight},
+                       ui.text(UiText::ChapterScroll),
                        ui.text(config.chapterScrollReversed ? UiText::Reversed : UiText::Normal),
                        ui::SettingLayout::Inline)) {
             config.chapterScrollReversed = !config.chapterScrollReversed;
@@ -35,7 +32,10 @@ namespace screens {
         const UiText footer = config.footerMetric == settings::FooterMetric::chapterTime ? UiText::ChapterTime
                             : config.footerMetric == settings::FooterMetric::bookTime    ? UiText::BookTime
                                                                                          : UiText::Percentage;
-        if (ui.setting(grid.next(), ui.text(UiText::Footer), ui.text(footer), ui::SettingLayout::Inline)) {
+        const int16_t secondRowY = static_cast<int16_t>(content.y + rowHeight + gap);
+        const int16_t halfWidth = static_cast<int16_t>((content.w - gap) / 2);
+        if (ui.setting({content.x, secondRowY, halfWidth, rowHeight}, ui.text(UiText::Footer), ui.text(footer),
+                       ui::SettingLayout::Inline)) {
             config.footerMetric = settings::cycleEnum(config.footerMetric);
             changed = true;
         }
@@ -43,17 +43,18 @@ namespace screens {
         const UiText battery = config.batteryLabel == settings::BatteryLabel::timeRemaining ? UiText::TimeLeft
                              : config.batteryLabel == settings::BatteryLabel::voltage       ? UiText::Voltage
                                                                                             : UiText::Percentage;
-        if (ui.setting(grid.next(), ui.text(UiText::BatteryLabel), ui.text(battery), ui::SettingLayout::Inline)) {
+        if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), secondRowY, halfWidth, rowHeight},
+                       ui.text(UiText::BatteryLabel), ui.text(battery), ui::SettingLayout::Inline)) {
             config.batteryLabel = settings::cycleEnum(config.batteryLabel);
             changed = true;
         }
 
-        const int16_t visibilityY = static_cast<int16_t>(sectionsY + 86);
+        const int16_t visibilityY = static_cast<int16_t>(secondRowY + rowHeight + gap);
         ui.separator({content.x, visibilityY, content.w, 10}, ui.text(UiText::VisibleWhileReadingSection));
         ui::Grid visibility{{content.x, static_cast<int16_t>(visibilityY + 10), content.w,
-                             static_cast<int16_t>(content.h - 107)},
+                             static_cast<int16_t>(content.y + content.h - visibilityY - 10)},
                             3,
-                            30,
+                            static_cast<int16_t>(content.y + content.h - visibilityY - 10),
                             gap};
         changed |= ui.toggle(visibility.next(), ui.text(UiText::Battery), config.batteryVisibleWhileReading);
         changed |= ui.toggle(visibility.next(), ui.text(UiText::Chapter), config.chapterVisibleWhileReading);

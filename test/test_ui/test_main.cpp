@@ -18,6 +18,7 @@
 #include "ui/Localization.h"
 #include "ui/Ui.h"
 #include "ui/screens/PageReaderScreen.h"
+#include "ui/screens/Screens.h"
 
 namespace {
 
@@ -57,6 +58,51 @@ namespace {
         const uint8_t* lastFont = nullptr;
         int fontSelections = 0;
         std::vector<uint8_t> text;
+    };
+
+    class BoundsRecordingGfx final : public Arduino_GFX {
+    public:
+        using Arduino_GFX::Arduino_GFX;
+
+        void fillRect(int16_t x, int16_t y, int16_t width, int16_t height, uint16_t color) override {
+            record(x, y, width, height);
+            Arduino_GFX::fillRect(x, y, width, height, color);
+        }
+
+        void drawRect(int16_t x, int16_t y, int16_t width, int16_t height, uint16_t color) override {
+            record(x, y, width, height);
+            Arduino_GFX::drawRect(x, y, width, height, color);
+        }
+
+        void fillRoundRect(int16_t x, int16_t y, int16_t width, int16_t height, int16_t radius,
+                           uint16_t color) override {
+            record(x, y, width, height);
+            Arduino_GFX::fillRoundRect(x, y, width, height, radius, color);
+        }
+
+        void drawRoundRect(int16_t x, int16_t y, int16_t width, int16_t height, int16_t radius,
+                           uint16_t color) override {
+            record(x, y, width, height);
+            Arduino_GFX::drawRoundRect(x, y, width, height, radius, color);
+        }
+
+        void drawFastHLine(int16_t x, int16_t y, int16_t width, uint16_t color) override {
+            record(x, y, width, 1);
+            Arduino_GFX::drawFastHLine(x, y, width, color);
+        }
+
+        void fillCircle(int16_t x, int16_t y, int16_t radius, uint16_t color) override {
+            record(static_cast<int16_t>(x - radius), static_cast<int16_t>(y - radius),
+                   static_cast<int16_t>(radius * 2 + 1), static_cast<int16_t>(radius * 2 + 1));
+            Arduino_GFX::fillCircle(x, y, radius, color);
+        }
+
+        int16_t maximumBottom = 0;
+
+    private:
+        void record(int16_t, int16_t y, int16_t, int16_t height) {
+            maximumBottom = std::max(maximumBottom, static_cast<int16_t>(y + height));
+        }
     };
 
     void appendLe16(std::vector<uint8_t>& out, uint16_t value) {
@@ -1216,6 +1262,36 @@ void test_steps_follow_the_long_axis() {
     TEST_ASSERT_LESS_THAN(gfx.lastCircleY, gfx.firstCircleY);
 }
 
+void test_compact_settings_screens_stay_inside_the_content_area() {
+    {
+        BoundsRecordingGfx gfx(320, 172);
+        ui::Context context(gfx);
+        context.setTheme(theme());
+        settings::ReadingSettings settings;
+        screens::Screen screen = screens::Screen::ReadingSettings;
+
+        context.beginFrame(static_cast<uint8_t>(screen));
+        screens::readingSettings(context, settings, screen);
+        context.endFrame();
+
+        TEST_ASSERT_LESS_OR_EQUAL(164, gfx.maximumBottom);
+    }
+
+    {
+        BoundsRecordingGfx gfx(320, 172);
+        ui::Context context(gfx);
+        context.setTheme(theme());
+        settings::PacingSettings settings;
+        screens::Screen screen = screens::Screen::PacingSettings;
+
+        context.beginFrame(static_cast<uint8_t>(screen));
+        screens::pacingSettings(context, settings, screen);
+        context.endFrame();
+
+        TEST_ASSERT_LESS_OR_EQUAL(164, gfx.maximumBottom);
+    }
+}
+
 void test_hourglass_source_follows_glass_and_fallen_sand_settles_at_base() {
     Arduino_GFX gfx(640, 172);
     ui::Context context(gfx);
@@ -1289,6 +1365,7 @@ int main(int, char**) {
     RUN_TEST(test_orientation_owns_graphics_touch_and_hourglass_cache);
     RUN_TEST(test_focus_timer_text_does_not_redraw_hourglass);
     RUN_TEST(test_steps_follow_the_long_axis);
+    RUN_TEST(test_compact_settings_screens_stay_inside_the_content_area);
     RUN_TEST(test_hourglass_source_follows_glass_and_fallen_sand_settles_at_base);
     return UNITY_END();
 }

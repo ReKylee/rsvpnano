@@ -9,7 +9,7 @@
 namespace {
 
     constexpr size_t kTextCount = static_cast<size_t>(UiText::Count);
-    static_assert(kTextCount == 172, "UiText count mismatch");
+    static_assert(kTextCount == 166, "UiText count mismatch");
 
     using TextRow = std::array<std::string_view, kTextCount>;
 
@@ -30,7 +30,6 @@ namespace {
         /* LongWords                */ "Long words",
         /* Complexity               */ "Complexity",
         /* Punctuation              */ "Punctuation",
-        /* ResetPacing              */ "Reset pacing",
         /* Night                    */ "Night",
         /* Dark                     */ "Dark",
         /* Light                    */ "Light",
@@ -72,9 +71,8 @@ namespace {
         /* Device                   */ "Device",
         /* Focus                    */ "Focus",
         /* Reading                  */ "Reading",
-        /* ReaderScreen             */ "Reader screen",
+        /* ReaderLayout             */ "Reader layout",
         /* NetworkUpdates           */ "Network & updates",
-        /* Interface                */ "Interface",
         /* ReadingSection           */ "READING",
         /* SystemSection            */ "SYSTEM",
         /* WordsPerMinute           */ "Words per minute",
@@ -91,11 +89,9 @@ namespace {
         /* Reaction                 */ "Reaction",
         /* ScreenOff                */ "Screen off",
         /* Life                     */ "Life",
-        /* AdditionalDelaySection   */ "ADDITIONAL DELAY",
         /* FontSection              */ "FONT",
         /* GeometrySection          */ "GEOMETRY",
         /* FocusLetter              */ "Focus letter",
-        /* BehaviorMetricsSection   */ "BEHAVIOR & METRICS",
         /* ReaderHand               */ "Reader hand",
         /* Left                     */ "Left",
         /* Right                    */ "Right",
@@ -112,7 +108,6 @@ namespace {
         /* VisibleWhileReadingSection */ "SHOW WHILE READING",
         /* Battery                  */ "Battery",
         /* Progress                 */ "Progress",
-        /* ConnectionReleaseSection */ "CONNECTION & RELEASE",
         /* Network                  */ "Network",
         /* NotSet                   */ "Not set",
         /* StartupCheck             */ "Startup check",
@@ -175,7 +170,6 @@ namespace {
         /* Sync                     */ "Sync",
         /* ChapterShort             */ "CH",
         /* BookShort                */ "BOOK",
-        /* WifiNetworks             */ "Wi-Fi networks",
         /* ScanningNetworks         */ "Scanning networks",
         /* ScanFailed               */ "Scan failed",
         /* NoNetworksFound          */ "No networks found",

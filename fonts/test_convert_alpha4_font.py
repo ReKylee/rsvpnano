@@ -11,10 +11,12 @@ from fonts.convert_alpha4_font import (
     RFONT4_STRIKE_FORMAT,
     SCRIPT_MATH,
     capability_mask,
+    glyph_bitmap_order,
     mapped_codepoints,
     parse_locales,
     parse_scripts,
     parse_size_spec,
+    read_hex_order,
     script_mask,
 )
 from RSVPNanoCompanion.tools.generate_multilingual_corpus import PARAGRAPHS
@@ -22,11 +24,23 @@ from RSVPNanoCompanion.tools.generate_multilingual_corpus import PARAGRAPHS
 
 class FontMapTest(TestCase):
     def test_default_compact_strike_is_readable_outline_size(self) -> None:
-        self.assertEqual(12, dict(parse_size_spec(DEFAULT_SIZE_SPEC))["compact"])
+        self.assertEqual(14, dict(parse_size_spec(DEFAULT_SIZE_SPEC))["compact"])
 
     def test_auto_map_uses_only_the_fonts_unicode_cmap(self) -> None:
         with mock.patch("fonts.convert_alpha4_font.cmap_for_font", return_value={0x05D0: "alef", 0x05D1: "bet"}):
             self.assertEqual(mapped_codepoints(Path("font.ttf"), "auto"), [0x20, 0x3F, 0x05D0, 0x05D1])
+
+    def test_locality_map_orders_ranked_glyphs_first_without_reordering_records(self) -> None:
+        identities = [[0x4E00, 30], [0x3002, 10], [0x4E8C, 20], [0xFFFFFFFF, 40]]
+        ranks = {0x3002: 0, 0x4E8C: 1}
+        self.assertEqual([1, 2, 0, 3], glyph_bitmap_order(identities, ranks, {}))
+        self.assertEqual([1, 2, 0, 3], glyph_bitmap_order(identities, {}, {10: 0, 20: 1}))
+
+    def test_locality_map_parser_rejects_invalid_or_duplicate_codepoints(self) -> None:
+        path = Path("fonts/test-locality-map.tmp")
+        with mock.patch.object(Path, "read_text", return_value="3002 4E00 # punctuation\n4E00"):
+            with self.assertRaisesRegex(ValueError, "duplicate codepoint"):
+                read_hex_order(path, 0x10FFFF, "codepoint")
 
     def test_reader_script_maps_keep_shared_text_but_exclude_other_scripts(self) -> None:
         cmap = {
@@ -132,14 +146,14 @@ class FontMapTest(TestCase):
     def test_generated_fonts_use_the_default_compact_strike(self) -> None:
         for path in Path("fonts").glob("*/font.rfont4"):
             strike = rfont4_compact_strike(path)
-            self.assertEqual(12, strike[8], path)
+            self.assertEqual(14, strike[8], path)
             self.assertEqual(1, strike[9], path)
             self.assertGreater(strike[6], 3, path)
             self.assertGreater(strike[7], 3, path)
 
         fallback = Path("src/fonts/LiterataFallbackAlpha4.h").read_text(encoding="utf-8")
-        self.assertIn("LiterataFallbackAlpha4_12", fallback)
-        self.assertNotIn("LiterataFallbackAlpha4_10", fallback)
+        self.assertIn("LiterataFallbackAlpha4_14", fallback)
+        self.assertNotIn("LiterataFallbackAlpha4_12", fallback)
 
 
 def rfont4_codepoints(path: Path) -> set[int]:

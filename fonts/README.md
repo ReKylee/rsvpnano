@@ -34,14 +34,14 @@ src/fonts/
 ```
 
 `convert_alpha4_font.py` is the single-family compiler. `large`, `medium`, `small`, and `compact` default to
-`52`, `43`, `33`, and `12` px. The compact strike remains 1-bit, but 12 px gives outline reader faces a readable
+`52`, `43`, `33`, and `14` px. The compact strike remains 1-bit, but 14 px gives outline reader faces a readable
 minimum comparable to the hand-drawn 8–10 px UI fonts. Override the sizes with:
 
 ```bash
 uv run --with freetype-py --with fonttools --with lz4 python fonts/convert_alpha4_font.py \
   --font path/to/MyFont.ttf \
   --name "My Font" \
-  --sizes large=56,medium=44,small=34,compact=12
+  --sizes large=56,medium=44,small=34,compact=14
 ```
 
 `generate_fonts.py` owns the current source-to-preset mapping. With no arguments it regenerates every installable
@@ -102,7 +102,7 @@ Generate the built-in fallback header only when firmware fallback data must chan
 
 ```bash
 uv run --with freetype-py --with fonttools --with lz4 python fonts/convert_alpha4_font.py \
-  --font "third_party/literata/Literata-Italic[opsz,wght].ttf" \
+  --font third_party/literata/Literata-Regular.ttf \
   --name LiterataFallbackAlpha4 \
   --header
 ```

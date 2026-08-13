@@ -28,7 +28,7 @@ from fontTools.ttLib import TTFont
 from fontTools.unicodedata import script as unicode_script, script_extension
 
 DEFAULT_MAP = "32-126,160-383,512-591,1024-1279,8208-8230,8240,8249,8250,8364,8470"
-DEFAULT_SIZE_SPEC = "large=52,medium=43,small=33,compact=12"
+DEFAULT_SIZE_SPEC = "large=52,medium=43,small=33,compact=14"
 DEFAULT_ALPHA_CUTOFF = 32
 DEFAULT_GAMMA = 1.15
 MISSING_GLYPH_INDEX = 0xFFFF
@@ -931,7 +931,51 @@ def parse_record_entries(block: str) -> list[list[int]]:
     return entries
 
 
-def generated_strike(symbol: str, body: str, stats: dict[str, int | float]) -> dict[str, object]:
+def read_hex_order(path: Path | None, maximum: int, value_name: str) -> dict[int, int]:
+    if path is None:
+        return {}
+
+    ranks: dict[int, int] = {}
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        for token in line.partition("#")[0].split():
+            try:
+                value = int(token, 16)
+            except ValueError as error:
+                raise ValueError(f"{path}:{line_number}: invalid {value_name} {token!r}") from error
+            if not 0 <= value <= maximum:
+                raise ValueError(f"{path}:{line_number}: {value_name} out of range: {token}")
+            if value in ranks:
+                raise ValueError(f"{path}:{line_number}: duplicate {value_name}: {token}")
+            ranks[value] = len(ranks)
+    return ranks
+
+
+def glyph_bitmap_order(
+    identity_entries: list[list[int]],
+    codepoint_ranks: dict[int, int],
+    glyph_id_ranks: dict[int, int],
+) -> list[int]:
+    ranks = glyph_id_ranks or codepoint_ranks
+    identity_column = 1 if glyph_id_ranks else 0
+    if not ranks:
+        return list(range(len(identity_entries)))
+    unranked = len(ranks)
+    return sorted(
+        range(len(identity_entries)),
+        key=lambda index: ranks.get(
+            identity_entries[index][identity_column],
+            unranked + identity_entries[index][identity_column],
+        ),
+    )
+
+
+def generated_strike(
+    symbol: str,
+    body: str,
+    stats: dict[str, int | float],
+    codepoint_ranks: dict[int, int] | None = None,
+    glyph_id_ranks: dict[int, int] | None = None,
+) -> dict[str, object]:
     bitmap = parse_byte_array(body, f"{symbol}Bitmap")
     page_map = parse_byte_array(body, f"{symbol}PageMap")
     if len(page_map) != 256:
@@ -940,6 +984,8 @@ def generated_strike(symbol: str, body: str, stats: dict[str, int | float]) -> d
     glyph_entries = parse_record_entries(array_block(body, f"{symbol}Glyphs"))
     kern_entries = parse_record_entries(array_block(body, f"{symbol}Kerning"))
     identity_entries = parse_record_entries(array_block(body, f"{symbol}Identities"))
+    if len(identity_entries) != len(glyph_entries):
+        raise ValueError(f"glyph identities for {symbol} do not match its glyph records")
 
     bits_per_pixel = int(stats["bits_per_pixel"])
     bitmap_encoding = 0 if bits_per_pixel == 1 else 1
@@ -949,7 +995,8 @@ def generated_strike(symbol: str, body: str, stats: dict[str, int | float]) -> d
             import lz4.block
         except ImportError as error:
             raise RuntimeError("RFont4 generation requires the lz4 Python package") from error
-    for entry in glyph_entries:
+    for index in glyph_bitmap_order(identity_entries, codepoint_ranks or {}, glyph_id_ranks or {}):
+        entry = glyph_entries[index]
         source_offset = entry[0]
         decoded_bytes = entry[8]
         raw = bitmap[source_offset:source_offset + decoded_bytes]
@@ -1138,6 +1185,17 @@ def main() -> int:
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--name", default=None)
     parser.add_argument("--locales", default="", help="comma-separated BCP 47 locale affinities")
+    locality = parser.add_mutually_exclusive_group()
+    locality.add_argument(
+        "--locality-map",
+        type=Path,
+        help="generation-only codepoint order used to place common glyph bitmaps together",
+    )
+    locality.add_argument(
+        "--glyph-locality-map",
+        type=Path,
+        help="generation-only source glyph order used to place common shaped glyph bitmaps together",
+    )
     parser.add_argument("--scripts", default="", help="additional complete ISO 15924 capabilities")
     parser.add_argument("--sizes", default=DEFAULT_SIZE_SPEC)
     parser.add_argument(
@@ -1158,6 +1216,8 @@ def main() -> int:
     args = parser.parse_args()
 
     codepoints = mapped_codepoints(args.font, args.map)
+    codepoint_ranks = read_hex_order(args.locality_map, 0x10FFFF, "codepoint")
+    glyph_id_ranks = read_hex_order(args.glyph_locality_map, 0xFFFF, "glyph ID")
     named_sizes = parse_size_spec(args.sizes)
     layout_upm, source_glyph_count, layout_tables, shaping_glyph_ids = (
         font_layout(args.font, codepoints) if args.shaping and not args.header else (0, 0, {}, set())
@@ -1263,7 +1323,9 @@ def main() -> int:
                 max_neighbors,
                 1 if label == "compact" else 4,
             )
-            generated_strikes.append(generated_strike(symbol, body, stats))
+            generated_strikes.append(
+                generated_strike(symbol, body, stats, codepoint_ranks, glyph_id_ranks)
+            )
             all_stats.append(stats)
         family_script_mask = capability_mask(
             [int(stats["script_mask"]) for stats in all_stats], declared_scripts

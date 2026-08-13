@@ -3,7 +3,11 @@ import sys
 from pathlib import Path
 from unittest import TestCase
 
+import uharfbuzz as hb
+
+from fonts.convert_alpha4_font import read_hex_order
 from fonts.generate_fonts import CONVERTER, FONT_ROOT, PRESETS, converter_command, selected_presets
+from RSVPNanoCompanion.tools.generate_multilingual_corpus import PARAGRAPHS
 
 
 class FontPresetTest(TestCase):
@@ -16,6 +20,30 @@ class FontPresetTest(TestCase):
         self.assertEqual(1, sum(preset.header for preset in PRESETS))
         self.assertTrue(all(preset.source.is_file() for preset in PRESETS))
         self.assertTrue(all((preset.source.parent / "OFL.txt").is_file() for preset in PRESETS))
+        self.assertTrue(all(preset.locality_map is None or preset.locality_map.is_file() for preset in PRESETS))
+        self.assertTrue(
+            all(preset.glyph_locality_map is None or preset.glyph_locality_map.is_file() for preset in PRESETS)
+        )
+
+        fallback = next(preset for preset in PRESETS if preset.header)
+        self.assertEqual("Literata-Regular.ttf", fallback.source.name)
+
+        localized = {preset.id: preset.locality_map for preset in PRESETS if preset.locality_map}
+        self.assertEqual({"noto-serif-japanese", "noto-serif-simplified-chinese"}, set(localized))
+        shaped = {preset.id: preset.glyph_locality_map for preset in PRESETS if preset.glyph_locality_map}
+        self.assertEqual({"amiri", "noto-naskh-arabic"}, set(shaped))
+
+    def test_shaped_locality_maps_cover_the_arabic_benchmark_text(self) -> None:
+        text = next(text for locale, _direction, text in PARAGRAPHS if locale == "ar") + " العربية"
+        for preset in (preset for preset in PRESETS if preset.glyph_locality_map):
+            buffer = hb.Buffer()
+            buffer.add_str(text)
+            buffer.direction = "rtl"
+            buffer.script = "Arab"
+            buffer.language = "ar"
+            hb.shape(hb.Font(hb.Face(preset.source.read_bytes())), buffer)
+            ranks = read_hex_order(preset.glyph_locality_map, 0xFFFF, "glyph ID")
+            self.assertLessEqual({info.codepoint for info in buffer.glyph_infos if info.codepoint}, ranks.keys())
 
     def test_selection_keeps_canonical_generation_order(self) -> None:
         selected = selected_presets(["stix-two-math", "amiri"])
@@ -30,5 +58,6 @@ class FontPresetTest(TestCase):
         self.assertEqual(sys.executable, command[0])
         self.assertEqual(str(CONVERTER), command[1])
         self.assertIn("--shaping", command)
+        self.assertIn("--glyph-locality-map", command)
         self.assertEqual("Arab", command[command.index("--map") + 1])
         self.assertNotIn("--sizes", command)

@@ -26,6 +26,8 @@ class FontPreset:
     source: Path
     codepoint_map: str | None = None
     locales: str = ""
+    locality_map: Path | None = None
+    glyph_locality_map: Path | None = None
     shaping: bool = False
     header: bool = False
 
@@ -34,7 +36,7 @@ PRESETS = (
     FontPreset(
         "literata-fallback",
         "LiterataFallbackAlpha4",
-        REPO_ROOT / "third_party" / "literata" / "Literata-Italic[opsz,wght].ttf",
+        REPO_ROOT / "third_party" / "literata" / "Literata-Regular.ttf",
         header=True,
     ),
     FontPreset(
@@ -43,6 +45,7 @@ PRESETS = (
         REPO_ROOT / "third_party" / "amiri" / "Amiri-Regular.ttf",
         "Arab",
         "ar",
+        glyph_locality_map=FONT_ROOT / "locality" / "amiri-glyphs.txt",
         shaping=True,
     ),
     FontPreset("andika", "Andika", REPO_ROOT / "third_party" / "andika" / "Andika-Regular.ttf"),
@@ -70,6 +73,7 @@ PRESETS = (
         REPO_ROOT / "third_party" / "noto-naskh-arabic" / "NotoNaskhArabic[wght].ttf",
         "Arab",
         "ar",
+        glyph_locality_map=FONT_ROOT / "locality" / "noto-naskh-arabic-glyphs.txt",
         shaping=True,
     ),
     FontPreset(
@@ -86,6 +90,7 @@ PRESETS = (
         REPO_ROOT / "third_party" / "noto-serif-japanese" / "NotoSerifJP-Regular.otf",
         "Jpan",
         "ja",
+        FONT_ROOT / "locality" / "ja.txt",
     ),
     FontPreset(
         "noto-serif-simplified-chinese",
@@ -93,6 +98,7 @@ PRESETS = (
         REPO_ROOT / "third_party" / "noto-serif-simplified-chinese" / "NotoSerifSC-Regular.otf",
         "Hani",
         "zh-Hans",
+        FONT_ROOT / "locality" / "zh-Hans.txt",
     ),
     FontPreset(
         "opendyslexic",
@@ -130,6 +136,10 @@ def converter_command(
         command.extend(("--map", preset.codepoint_map))
     if preset.locales:
         command.extend(("--locales", preset.locales))
+    if preset.locality_map:
+        command.extend(("--locality-map", str(preset.locality_map)))
+    if preset.glyph_locality_map:
+        command.extend(("--glyph-locality-map", str(preset.glyph_locality_map)))
     if preset.shaping:
         command.append("--shaping")
     if sizes:
@@ -207,7 +217,12 @@ def main() -> int:
     except ValueError as error:
         parser.error(str(error))
 
-    missing = [preset.source for preset in selected if not preset.source.is_file()]
+    missing = [
+        path
+        for preset in selected
+        for path in (preset.source, preset.locality_map, preset.glyph_locality_map)
+        if path is not None and not path.is_file()
+    ]
     if missing:
         parser.error("missing source font(s):\n  " + "\n  ".join(str(path) for path in missing))
 

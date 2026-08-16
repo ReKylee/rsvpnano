@@ -11,31 +11,33 @@ ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "RSVPNanoCompanion" / "testdata" / "multilingual"
 TITLE = "Multilingual Reader Corpus"
 PARAGRAPHS = (
-    ("en", "ltr", "Alice was beginning to get very tired of sitting by her sister on the bank."),
-    ("es", "ltr", "En un lugar de la Mancha, de cuyo nombre no quiero acordarme."),
-    ("fr", "ltr", "Il y avait en Westphalie, dans le château de monsieur le baron."),
-    ("de", "ltr", "Habe nun, ach! Philosophie, Juristerei und Medizin mit heißem Bemühn studiert."),
-    ("ro", "ltr", "A fost odată ca-n povești, a fost ca niciodată, din rude mari împărătești."),
-    ("pl", "ltr", "Litwo! Ojczyzno moja! ty jesteś jak zdrowie."),
-    ("ru", "ltr", "12-го августа, ровно в третий день после дня моего рождения, я проснулся рано."),
-    ("he", "rtl", "שָׁלוֹם רָב שׁוּבֵךְ, צִפּוֹרָה נֶחְמֶדֶת, מֵאַרְצוֹת הַחֹם אֶל חַלּוֹנִי."),
-    ("ar", "rtl", "بلغني أيها الملك السعيد، ذو الرأي الرشيد، أن 123 حكاية رويت."),
-    ("ja", "ltr", "吾輩は猫である。名前はまだ無い。"),
-    ("zh-Hans", "ltr", "上古之世，人民少而禽兽众，人民不胜禽兽虫蛇。"),
-    ("en", "ltr", "English 123 (עברית 45) العربية 67; 日本語と中文; ∀x∈ℝ, x²≥0 and ∫₀¹x²dx=⅓."),
+    ("en", "ltr", "English", "Alice was beginning to get very tired of sitting by her sister on the bank."),
+    ("es", "ltr", "Español", "En un lugar de la Mancha, de cuyo nombre no quiero acordarme."),
+    ("fr", "ltr", "Français", "Il y avait en Westphalie, dans le château de monsieur le baron."),
+    ("de", "ltr", "Deutsch", "Habe nun, ach! Philosophie, Juristerei und Medizin mit heißem Bemühn studiert."),
+    ("ro", "ltr", "Română", "A fost odată ca-n povești, a fost ca niciodată, din rude mari împărătești."),
+    ("pl", "ltr", "Polski", "Litwo! Ojczyzno moja! ty jesteś jak zdrowie."),
+    ("ru", "ltr", "Русский", "12-го августа, ровно в третий день после дня моего рождения, я проснулся рано."),
+    ("he", "rtl", "עברית", "שָׁלוֹם רָב שׁוּבֵךְ, צִפּוֹרָה נֶחְמֶדֶת, מֵאַרְצוֹת הַחֹם אֶל חַלּוֹנִי."),
+    ("ar", "rtl", "العربية", "بلغني أيها الملك السعيد، ذو الرأي الرشيد، أن 123 حكاية رويت."),
+    ("ja", "ltr", "日本語", "吾輩は猫である。名前はまだ無い。"),
+    ("zh-Hans", "ltr", "简体中文", "上古之世，人民少而禽兽众，人民不胜禽兽虫蛇。"),
+    ("en", "ltr", "Mixed scripts", "English 123 (עברית 45) العربية 67; 日本語と中文; ∀x∈ℝ, x²≥0 and ∫₀¹x²dx=⅓."),
 )
 
 
 def text_document() -> str:
-    return f"# {TITLE}\n\n" + "\n\n".join(text for _locale, _direction, text in PARAGRAPHS) + "\n"
+    chapters = "\n\n".join(f"## {chapter}\n\n{text}" for _locale, _direction, chapter, text in PARAGRAPHS)
+    return f"# {TITLE}\n\n{chapters}\n"
 
 
 def html_document(xhtml: bool = False) -> str:
     declaration = '<?xml version="1.0" encoding="utf-8"?>\n' if xhtml else "<!doctype html>\n"
     namespace = ' xmlns="http://www.w3.org/1999/xhtml"' if xhtml else ""
     body = "\n".join(
+        f'    <h2>{escape_html(chapter)}</h2>\n'
         f'    <p lang="{locale}" dir="{direction}">{escape_html(text)}</p>'
-        for locale, direction, text in PARAGRAPHS
+        for locale, direction, chapter, text in PARAGRAPHS
     )
     return (
         f'{declaration}<html{namespace} lang="en">\n<head><meta charset="utf-8"/>'
@@ -47,9 +49,8 @@ def rsvp_document() -> str:
     lines = ["@rsvp 1", f"@title {TITLE}", "@source public-domain multilingual excerpts", "", f"@chapter {TITLE}"]
     current_locale = ""
     current_direction = "auto"
-    for index, (locale, direction, text) in enumerate(PARAGRAPHS):
-        if index:
-            lines.extend(("", "@para"))
+    for locale, direction, chapter, text in PARAGRAPHS:
+        lines.extend(("", f"@chapter {chapter}"))
         if locale != current_locale:
             lines.append(f"@language {locale}")
             current_locale = locale

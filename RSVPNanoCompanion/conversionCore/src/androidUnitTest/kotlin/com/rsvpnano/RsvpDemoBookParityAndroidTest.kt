@@ -44,6 +44,13 @@ class RsvpDemoBookParityAndroidTest {
         assertTrue(epub.contains("@language ar\n"))
         assertTrue(epub.contains("@language ja\n@direction ltr\n"))
         assertEquals(false, epub.contains("@language en\n@direction ltr\n@language ar\n"))
+        assertEquals(
+            listOf(
+                "Multilingual Reader Corpus", "English", "Español", "Français", "Deutsch", "Română",
+                "Polski", "Русский", "עברית", "العربية", "日本語", "简体中文", "Mixed scripts",
+            ),
+            epub.lineSequence().filter { it.startsWith("@chapter ") }.map { it.removePrefix("@chapter ") }.toList(),
+        )
     }
 
     private fun demoBookFile(name: String): File {

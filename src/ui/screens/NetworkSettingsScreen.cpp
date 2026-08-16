@@ -20,7 +20,7 @@ namespace screens {
         startupCheckPending = persisted.updates.checkOnStartup && !ssid.empty();
     }
 
-    void NetworkScreen::draw(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
+    Action NetworkScreen::draw(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
         const ui::Rect content = detail::content(ui);
         constexpr int16_t gap = 4;
         constexpr int16_t backWidth = 56;
@@ -64,7 +64,7 @@ namespace screens {
                          static_cast<int16_t>(content.y + content.h - actionsY),
                          gap};
         if (ui.button(actions.next(), ui.text(UiText::CompanionSetup)))
-            screen = Screen::Sync;
+            return Action::CompanionSync;
         if (ui.button(actions.next(), ui.text(UiText::FirmwareUpdates)))
             screen = Screen::Ota;
         if (ssidStored && ui.button(actions.next(), ui.text(UiText::ForgetNetwork))) {
@@ -74,6 +74,7 @@ namespace screens {
             ssidStored = false;
             startupCheckPending = false;
         }
+        return Action::None;
     }
 
     void NetworkScreen::openWifiScan() {

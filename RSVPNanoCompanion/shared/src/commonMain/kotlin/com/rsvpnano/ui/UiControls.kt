@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +17,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -115,6 +118,31 @@ fun SegmentedChoiceRow(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ChoiceChipRow(
+    label: String,
+    selected: String,
+    options: List<Pair<String, String>>,
+    onSelected: (String) -> Unit,
+    description: String? = null,
+) {
+    SettingControl(label = label, description = description) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            options.forEach { (value, title) ->
+                FilterChip(
+                    selected = value == selected,
+                    onClick = { onSelected(value) },
+                    label = { Text(title) },
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun SliderRow(
     label: String,
@@ -123,8 +151,10 @@ fun SliderRow(
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int,
     snapValue: (Float) -> Float = { it },
+    onValueChange: ((Float) -> Unit)? = null,
     onValueChangeFinished: (Float) -> Unit,
     description: String? = null,
+    prominentHeader: Boolean = false,
 ) {
     var sliderValue by remember(value) { mutableStateOf(snapValue(value)) }
     Column(
@@ -139,16 +169,33 @@ fun SliderRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = label, style = MaterialTheme.typography.labelLarge)
+                Text(
+                    text = label,
+                    style = if (prominentHeader) {
+                        MaterialTheme.typography.titleMedium
+                    } else {
+                        MaterialTheme.typography.labelLarge
+                    },
+                )
                 if (description != null) {
                     SettingsDescription(description)
                 }
             }
-            Text(text = valueLabel(sliderValue), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = valueLabel(sliderValue),
+                style = if (prominentHeader) {
+                    MaterialTheme.typography.titleMedium
+                } else {
+                    MaterialTheme.typography.bodyMedium
+                },
+            )
         }
         Slider(
             value = sliderValue.coerceIn(valueRange.start, valueRange.endInclusive),
-            onValueChange = { sliderValue = snapValue(it).coerceIn(valueRange.start, valueRange.endInclusive) },
+            onValueChange = {
+                sliderValue = snapValue(it).coerceIn(valueRange.start, valueRange.endInclusive)
+                onValueChange?.invoke(sliderValue)
+            },
             valueRange = valueRange,
             steps = steps,
             onValueChangeFinished = { onValueChangeFinished(sliderValue) },
@@ -239,13 +286,14 @@ fun PullRefreshBox(
 fun DestructiveIconButton(
     contentDescription: String,
     onClick: () -> Unit,
+    enabled: Boolean = true,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
         shape = MaterialTheme.shapes.small,
     ) {
-        IconButton(onClick = onClick) {
+        IconButton(onClick = onClick, enabled = enabled) {
             Icon(imageVector = Icons.Outlined.Delete, contentDescription = contentDescription)
         }
     }

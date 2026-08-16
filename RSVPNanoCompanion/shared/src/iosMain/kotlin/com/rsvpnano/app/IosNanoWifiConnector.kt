@@ -131,10 +131,6 @@ class IosNanoWifiConnector : NanoWifiConnector {
         cancelNanoRequest()
     }
 
-    override suspend fun <T> withNanoNetwork(block: suspend () -> T): T {
-        return block()
-    }
-
     private companion object {
         const val DISCOVERY_TIMEOUT_MS = 2_500L
         const val HOTSPOT_ALREADY_ASSOCIATED_ERROR_CODE = 13

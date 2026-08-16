@@ -8,6 +8,7 @@
 
 #include "board/BoardDisplay.h"
 #include "board/BoardPower.h"
+#include "companion/CompanionApi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "input/Input.h"
@@ -16,7 +17,6 @@
 #include "settings/SettingsStore.h"
 #include "storage/StorageManager.h"
 #include "storage/fs/SdDiagnostics.h"
-#include "sync/CompanionSyncManager.h"
 #include "ui/Ui.h"
 #include "ui/screens/ChaptersScreen.h"
 #include "ui/screens/LibraryScreen.h"
@@ -68,6 +68,7 @@ private:
     void showTransientStatus(std::string_view title, std::string_view line1, std::string_view line2,
                              uint32_t durationMs, screens::Screen destination, int progressPercent = -1);
     void applySettings();
+    void loadAppearanceSettings();
     void reloadUiAssets();
     void enterUsbTransfer(uint32_t nowMs);
     void exitUsbTransfer(screens::Screen destination = screens::Screen::Reader);
@@ -96,9 +97,10 @@ private:
     screens::NetworkScreen networkScreen_;
     StorageManager storage_;
     Preferences prefs_;
-    CompanionSyncManager sync_{settingsStore_, localeCatalog_, readerScreen_.fonts};
-    UsbMassStorageManager usbTransfer_;
     screens::FocusScreen focusScreen_;
+    CompanionApi companionApi_{settingsStore_,   storage_,       localeCatalog_, immediateUi_, readerScreen_,
+                               interfaceScreen_, networkScreen_, libraryScreen_, focusScreen_};
+    UsbMassStorageManager usbTransfer_;
     screens::StandbyScreen standbyScreen_;
     QueueHandle_t jobQueue_ = nullptr;
     JobKind jobKind_ = JobKind::None;

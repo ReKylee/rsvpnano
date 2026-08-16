@@ -88,8 +88,7 @@ namespace screens {
         std::optional<std::reference_wrapper<const locales::Catalog>> languages_;
     };
     bool pacingSettings(ui::Context& ui, settings::PacingSettings& settings, Screen& screen);
-    bool typographySettings(ui::Context& ui, settings::TypographySettings& config, FontCatalog& fonts,
-                            Screen& screen);
+    bool typographySettings(ui::Context& ui, settings::TypographySettings& config, FontCatalog& fonts, Screen& screen);
     bool bookFonts(ui::Context& ui, const BookMetadata& metadata, settings::ReadingOverrides& overrides,
                    const locales::Catalog& localeCatalog, FontCatalog& fonts, Screen& screen);
     bool readerSettings(ui::Context& ui, settings::ReadingSettings& settings, Screen& screen);
@@ -102,7 +101,7 @@ namespace screens {
         bool ssidStored = false;
 
         void begin(settings::SettingsStore& store);
-        void draw(ui::Context& ui, settings::SettingsStore& store, Screen& screen);
+        Action draw(ui::Context& ui, settings::SettingsStore& store, Screen& screen);
         void openWifiScan();
         void closeWifi();
         void drawWifiScan(ui::Context& ui, settings::SettingsStore& store, Screen& screen);
@@ -142,7 +141,6 @@ namespace screens {
     Action device(ui::Context& ui, bool storageReady, size_t bookCount, settings::NvsEncryptionState encryptionState,
                   Screen& screen);
     Action storageEncryption(ui::Context& ui, settings::NvsEncryptionState encryptionState, Screen& screen);
-    Action sync(ui::Context& ui, Screen& screen);
     Action ota(ui::Context& ui, std::string_view firmwareVersion, Screen& screen);
     class FocusScreen {
     public:
@@ -150,6 +148,7 @@ namespace screens {
         void begin(fs::FS& filesystem);
         bool update(uint32_t nowMs);
         Action draw(ui::Context& ui, uint32_t nowMs, Screen& screen);
+        void setTimers(focus::Timers timers);
         void close();
 
     private:

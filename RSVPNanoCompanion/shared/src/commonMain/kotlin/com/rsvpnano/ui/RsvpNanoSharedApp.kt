@@ -103,6 +103,9 @@ fun RsvpNanoSharedApp(
         var showRssDialog by rememberSaveable { mutableStateOf(false) }
         var showConnectionDialog by rememberSaveable { mutableStateOf(false) }
         var showHelpDialog by rememberSaveable { mutableStateOf(false) }
+        LaunchedEffect(uiState.isConnected, uiState.canRememberCurrentNano) {
+            if (uiState.isConnected && uiState.canRememberCurrentNano) showConnectionDialog = true
+        }
         val filePicker = rememberFilePickerLauncher(
             type = FileKitType.File(extensions = listOf("epub", "txt", "html", "htm", "rsvp")),
         ) { file ->
@@ -154,15 +157,57 @@ fun RsvpNanoSharedApp(
             } else {
                 settingsDestination
             }
-            LaunchedEffect(selectedScreen, activeSettingsDestination) {
-                if (selectedScreen == CompanionScreen.Settings) {
-                    when (activeSettingsDestination) {
-                        SettingsDestination.Themes -> if (uiState.themeCatalog.isEmpty()) presenter.refreshThemeCatalog()
-                        SettingsDestination.Locales -> if (uiState.localeCatalog.isEmpty()) presenter.refreshLocaleCatalog()
-                        SettingsDestination.Fonts -> if (uiState.fontCatalog.isEmpty()) presenter.refreshFontCatalog()
-                        else -> Unit
-                    }
+            LaunchedEffect(uiState.isConnected, selectedScreen, selectedBookId) {
+                if (!uiState.isConnected || selectedScreen != CompanionScreen.Library) return@LaunchedEffect
+                if (selectedBookId == null) {
+                    presenter.refreshLibrary()
+                } else {
+                    if (uiState.settings == null) presenter.refreshSettings()
+                    if (uiState.availableFonts.isEmpty()) presenter.refreshFonts()
                 }
+            }
+            LaunchedEffect(uiState.isConnected, selectedScreen, activeSettingsDestination) {
+                if (!uiState.isConnected || selectedScreen != CompanionScreen.Settings) return@LaunchedEffect
+                when (activeSettingsDestination) {
+                    null -> presenter.refreshSettings()
+                    SettingsDestination.Device -> {
+                        presenter.refreshSettings()
+                        presenter.refreshWifiSettings()
+                    }
+                    SettingsDestination.Reading,
+                    SettingsDestination.Display,
+                    -> presenter.refreshSettings()
+                    SettingsDestination.Typography -> {
+                        presenter.refreshSettings()
+                        presenter.refreshFonts()
+                    }
+                    SettingsDestination.FocusTimers -> presenter.refreshFocusTimers()
+                    SettingsDestination.Themes -> {
+                        presenter.refreshSettings()
+                        presenter.refreshThemes()
+                    }
+                    SettingsDestination.Locales -> {
+                        presenter.refreshSettings()
+                        presenter.refreshLocales()
+                    }
+                    SettingsDestination.Fonts -> {
+                        presenter.refreshSettings()
+                        presenter.refreshFonts()
+                    }
+                    SettingsDestination.About -> Unit
+                }
+            }
+            LaunchedEffect(uiState.settings, selectedScreen, activeSettingsDestination) {
+                if (uiState.settings == null || selectedScreen != CompanionScreen.Settings) return@LaunchedEffect
+                when (activeSettingsDestination) {
+                    SettingsDestination.Themes -> if (uiState.themeCatalog.isEmpty()) presenter.refreshThemeCatalog()
+                    SettingsDestination.Locales -> if (uiState.localeCatalog.isEmpty()) presenter.refreshLocaleCatalog()
+                    SettingsDestination.Fonts -> if (uiState.fontCatalog.isEmpty()) presenter.refreshFontCatalog()
+                    else -> Unit
+                }
+            }
+            LaunchedEffect(uiState.isConnected, showRssDialog) {
+                if (uiState.isConnected && showRssDialog) presenter.refreshRssFeeds()
             }
             val openBook = selectedBook.takeIf { selectedScreen == CompanionScreen.Library }
             val viewingBook = openBook != null
@@ -210,7 +255,7 @@ fun RsvpNanoSharedApp(
                                 } else {
                                     selectedScreen.label
                                 },
-                                modifier = Modifier.weight(1f, fill = false),
+                                modifier = Modifier.weight(1f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -289,6 +334,7 @@ fun RsvpNanoSharedApp(
                             book = openBook,
                             availableFonts = uiState.availableFonts,
                             globalFontId = uiState.settings?.reading?.typography?.fontId.orEmpty(),
+                            wpm = uiState.settings?.reading?.wpm ?: 300,
                             onSetPosition = { presenter.setBookPosition(openBook, it) },
                             onSetLanguageFonts = { presenter.setBookLanguageFonts(openBook, it) },
                         )
@@ -296,7 +342,7 @@ fun RsvpNanoSharedApp(
                         when (selectedScreen) {
                             CompanionScreen.Library -> LibraryScreen(
                                 uiState = uiState,
-                                onRefresh = presenter::refresh,
+                                onRefresh = presenter::refreshLibrary,
                                 needsArticleFetch = PendingUpload::needsArticleFetch,
                                 onEditDraft = {
                                     presenter.editDraft(it)
@@ -455,9 +501,7 @@ private fun ConnectionButton(
                 uiState.isConnected -> uiState.currentNano?.ssid ?: "Nano"
                 else -> "Connect"
             },
-            modifier = Modifier.widthIn(max = 112.dp),
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
         )
     }
 }

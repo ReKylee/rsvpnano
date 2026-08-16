@@ -8,12 +8,12 @@
 #include <array>
 #include <expected>
 #include <iterator>
-#include <numeric>
 #include <ranges>
 #include <string>
 #include <vector>
 #include "board/BoardStorage.h"
 
+#include "hash/Fnv1a.h"
 #include "net/WifiConnection.h"
 #include "rss/FeedParser.h"
 #include "rss/RssConfig.h"
@@ -34,10 +34,6 @@ namespace {
     constexpr uint8_t kMaxItemsPerFeed = 5;
     constexpr uint8_t kMaxArticlesPerCheck = 12;
     constexpr uint8_t kMaxFeedRedirects = 3;
-
-    bool isSafeFilenameChar(char c) {
-        return AsciiText::isAlphaNumeric(c) || c == '-' || c == '_' || c == ' ' || c == '.';
-    }
 
     constexpr const char* kUserAgent = "RSVP-Nano-RSS/1.0";
 
@@ -137,19 +133,14 @@ namespace {
         return std::string{baseUrl.substr(0, slash + 1)} + std::string{location};
     }
 
-    uint32_t fnv1a(std::string_view value) {
-        return std::accumulate(value.begin(), value.end(), uint32_t{2166136261UL}, [](uint32_t hash, char c) {
-            return (hash ^ static_cast<uint8_t>(c)) * 16777619UL;
-        });
-    }
-
     std::string_view itemIdentity(const feedparser::FeedItem& item) {
         return item.link.empty() ? item.title : item.link;
     }
 
     std::string seenKeyForItem(const feedparser::FeedItem& item) {
         char key[16];
-        std::snprintf(key, sizeof(key), "rss%08lx", static_cast<unsigned long>(fnv1a(itemIdentity(item))));
+        std::snprintf(key, sizeof(key), "rss%08lx",
+                      static_cast<unsigned long>(Fnv1a::hash(itemIdentity(item))));
         return key;
     }
 
@@ -162,12 +153,8 @@ namespace {
     }
 
     std::string filenameForItem(const feedparser::FeedItem& item) {
-        std::string cleaned;
-        cleaned.reserve(80);
-        std::ranges::transform(item.title | std::views::take(72), std::back_inserter(cleaned), [](char c) {
-            return isSafeFilenameChar(c) ? c : '-';
-        });
-        cleaned = AsciiText::trim(cleaned);
+        std::string cleaned = StoragePaths::sanitizeFilename(
+            std::string_view{item.title}.substr(0, std::min<size_t>(item.title.size(), 72)));
         while (cleaned.contains("--")) {
             const size_t position = cleaned.find("--");
             cleaned.erase(position, 1);
@@ -176,7 +163,8 @@ namespace {
             cleaned = "rss-article";
         }
         char suffix[16];
-        std::snprintf(suffix, sizeof(suffix), "-%08lx", static_cast<unsigned long>(fnv1a(itemIdentity(item))));
+        std::snprintf(suffix, sizeof(suffix), "-%08lx",
+                      static_cast<unsigned long>(Fnv1a::hash(itemIdentity(item))));
         return cleaned + suffix + ".rsvp";
     }
 
@@ -192,19 +180,6 @@ namespace {
             return;
         }
         callback(context, kStatusTitle, line1, line2, progressPercent);
-    }
-
-    bool connectWiFi(const std::string& wifiSsid, const std::string& wifiPassword, RssFeeds::StatusCallback callback,
-                     void* context) {
-        return net::connectStation(wifiSsid.c_str(), wifiPassword.c_str(),
-                                   [&](int percent) {
-                                       report(callback, context, "Connecting Wi-Fi", wifiSsid.c_str(), percent);
-                                   })
-            .has_value();
-    }
-
-    void disconnectWiFi() {
-        net::disconnect();
     }
 
     std::expected<std::string, std::string> fetchUrl(std::string_view url, uint8_t feedIndex, uint8_t feedCount,
@@ -469,16 +444,19 @@ RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::Devic
         return result;
     }
 
-    if (!connectWiFi(wifiSsid, wifiPassword, callback, context)) {
-        disconnectWiFi();
+    auto connected = net::connectStation(wifiSsid.c_str(), wifiPassword.c_str(), [&](int percent) {
+        report(callback, context, "Connecting Wi-Fi", wifiSsid.c_str(), percent);
+    });
+    if (!connected) {
+        net::disconnect();
         result.summary = "Wi-Fi failed";
-        result.detail = "Check credentials";
+        result.detail = connected.error().message();
         return result;
     }
 
     auto config = rss::load(Board::Storage::filesystem());
     if (!config) {
-        disconnectWiFi();
+        net::disconnect();
         result.summary = config.error() == std::errc::no_such_file_or_directory ? "No feeds" : "Invalid feeds";
         result.detail = StoragePaths::kRssConfigPath;
         return result;
@@ -486,7 +464,7 @@ RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::Devic
 
     const size_t feedCount = std::min(config->feeds.size(), static_cast<size_t>(kMaxFeedsPerCheck));
     if (feedCount == 0) {
-        disconnectWiFi();
+        net::disconnect();
         result.summary = "No feed URLs";
         result.detail = StoragePaths::kRssConfigPath;
         return result;
@@ -524,7 +502,7 @@ RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::Devic
         processFeed(line, *feedBody, preferences, result, displayIndex, displayFeedCount, callback, context);
     }
 
-    disconnectWiFi();
+    net::disconnect();
 
     if (result.feedsChecked == 0) {
         result.summary = "Feeds unavailable";

@@ -1,8 +1,10 @@
 #pragma once
 
 #include <cstddef>
+#include <expected>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 #include "storage/library/BookLibrary.h"
 
@@ -30,6 +32,9 @@ public:
     bool begin();
     void end();
     void refreshBooks(bool includeMetadata = true);
+    std::expected<void, std::error_code> installBook(std::string_view stagedPath,
+                                                      std::string_view destinationPath);
+    std::expected<void, std::error_code> removeBook(std::string_view path);
     bool mounted() const {
         return mounted_;
     }

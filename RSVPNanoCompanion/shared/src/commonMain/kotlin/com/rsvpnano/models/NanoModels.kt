@@ -11,7 +11,7 @@ data class NanoChapter(
 @Serializable
 data class NanoBookLanguage(
     val locale: String,
-    val scriptMask: Int = 0,
+    val scripts: List<String> = emptyList(),
 )
 
 @Serializable
@@ -19,9 +19,7 @@ data class NanoBook(
     val id: String,
     val name: String,
     val bytes: Int = 0,
-    val category: String,
     val metadata: NanoBookMetadata,
-    val source: NanoBookSource? = null,
     val reading: NanoReadingProgress? = null,
 ) {
     val displayTitle: String
@@ -33,29 +31,15 @@ data class NanoBookMetadata(
     val title: String,
     val author: String = "",
     val wordCount: Int = 0,
-    val chapterCount: Int = 0,
     val locale: String = "",
-    val direction: String = "auto",
-    val scriptMask: Int = 0,
     val scripts: List<String> = emptyList(),
     val languages: List<NanoBookLanguage> = emptyList(),
-    val requiredCapabilities: List<String> = emptyList(),
     val chapters: List<NanoChapter> = emptyList(),
-)
-
-@Serializable
-data class NanoBookSource(
-    val size: Long,
-    val fingerprint: Long,
 )
 
 @Serializable
 data class NanoReadingProgress(
     val wordIndex: Int,
-    val percent: Int,
-    val remainingWords: Int,
-    val estimatedMinutes: Int,
-    val currentChapter: NanoCurrentChapter? = null,
     val languageFonts: List<NanoLanguageFont> = emptyList(),
 )
 
@@ -63,12 +47,6 @@ data class NanoReadingProgress(
 data class NanoLanguageFont(
     val locale: String,
     val fontId: String,
-)
-
-@Serializable
-data class NanoCurrentChapter(
-    val number: Int,
-    val title: String,
 )
 
 @Serializable
@@ -82,26 +60,13 @@ data class PendingUpload(
 
 @Serializable
 data class NanoInfo(
-    val name: String,
-    val apiVersion: Int,
-    val mode: String? = null,
-    val networkSsid: String? = null,
-    val firmwareVersion: String = "",
-    val otaAsset: String = "",
-)
-
-@Serializable
-data class NanoUploadResponse(
-    val path: String? = null,
-    val id: String? = null,
-    val deleted: Boolean? = null,
-    val wordIndex: Int? = null,
-    val percent: Int? = null,
+    val firmwareVersion: String,
+    val otaAsset: String,
 )
 
 @Serializable
 data class NanoRssFeeds(
-    val feeds: List<String> = emptyList(),
+    val feeds: List<String>,
 )
 
 @Serializable
@@ -114,12 +79,31 @@ data class NanoFocusTimer(
 
 @Serializable
 data class NanoFocusTimers(
-    val timers: List<NanoFocusTimer> = emptyList(),
+    val timers: List<NanoFocusTimer>,
 )
+
+object NanoFocusTimerRules {
+    const val MAX_TIMERS = 6
+    const val MAX_NAME_BYTES = 14
+    const val MIN_FOCUS_MINUTES = 1
+    const val MAX_FOCUS_MINUTES = 180
+    const val MIN_BREAK_MINUTES = 1
+    const val MAX_BREAK_MINUTES = 60
+    const val MIN_ROUNDS = 1
+    const val MAX_ROUNDS = 12
+
+    fun valid(timer: NanoFocusTimer): Boolean =
+        timer.name.isNotBlank() &&
+            timer.name.encodeToByteArray().size <= MAX_NAME_BYTES &&
+            timer.name.none { it.isISOControl() } &&
+            timer.focusMinutes in MIN_FOCUS_MINUTES..MAX_FOCUS_MINUTES &&
+            timer.breakMinutes in MIN_BREAK_MINUTES..MAX_BREAK_MINUTES &&
+            timer.rounds in MIN_ROUNDS..MAX_ROUNDS
+}
 
 @Serializable
 data class NanoWifiSettings(
-    val passwordSet: Boolean = false,
+    val ssid: String,
 )
 
 @Serializable
@@ -133,7 +117,7 @@ data class NanoFontCatalogItem(
     val id: String,
     val name: String,
     val locales: List<String> = emptyList(),
-    val scriptMask: Int = 0,
+    val scripts: List<String> = emptyList(),
     val file: String,
     val shaping: Boolean = false,
 )
@@ -144,20 +128,13 @@ data class NanoFontSummary(
     val name: String,
     val locales: List<String> = emptyList(),
     val scripts: List<String> = emptyList(),
-    val scriptMask: Int = 0,
     val builtIn: Boolean = false,
-    val shaping: Boolean = false,
 ) {
-    fun usableFor(locale: String, requiredScripts: Int): Boolean =
-        requiredScripts == 0 || (scriptMask and requiredScripts) == requiredScripts ||
+    fun usableFor(locale: String, requiredScripts: Collection<String>): Boolean =
+        requiredScripts.isEmpty() || requiredScripts.all(scripts::contains) ||
             (locales.any { locale == it || locale.startsWith("$it-") } &&
-                (scriptMask and requiredScripts) != 0)
+                requiredScripts.any(scripts::contains))
 }
-
-@Serializable
-data class NanoFontsResponse(
-    val fonts: List<NanoFontSummary> = emptyList(),
-)
 
 @Serializable
 data class NanoThemeCatalogItem(
@@ -173,22 +150,10 @@ data class NanoThemeSummary(
 )
 
 @Serializable
-data class NanoThemesResponse(
-    val themes: List<NanoThemeSummary> = emptyList(),
-)
-
-@Serializable
 data class NanoLocaleSummary(
     val id: String,
-    val version: String,
-    val locale: String = "",
-    val nativeName: String,
-    val englishName: String,
-    val direction: String,
-    val translationStatus: String,
-    val scriptMask: Int = 0,
-    val requiredCapabilities: List<String> = emptyList(),
-    val scripts: List<String> = emptyList(),
+    val name: String,
+    val locale: String,
 )
 
 @Serializable
@@ -205,27 +170,15 @@ data class NanoLocaleCatalogItem(
 )
 
 @Serializable
-data class NanoLocaleIssue(
-    val id: String,
-    val reason: String,
-)
-
-@Serializable
-data class NanoLocalesResponse(
-    val locales: List<NanoLocaleSummary> = emptyList(),
-    val rejected: List<NanoLocaleIssue> = emptyList(),
-)
-
-@Serializable
 data class NanoSettings(
     val reading: Reading = Reading(),
     val `interface`: Interface = Interface(),
-    val network: Network = Network(),
     val updates: Updates = Updates(),
 ) {
     @Serializable
     data class Reading(
         val wpm: Int = 300,
+        val mode: String = NanoSettingsSchema.READING_MODE_RSVP,
         val pauseMode: String = NanoSettingsSchema.PAUSE_MODE_SENTENCE_END,
         val phantomWords: Boolean = true,
         val chapterScrollReversed: Boolean = false,
@@ -262,19 +215,14 @@ data class NanoSettings(
     data class Interface(
         val brightnessPercent: Int = 70,
         val locale: String = NanoLocales.DEFAULT,
-        val standbyTimerIndex: Int = NanoSettingsSchema.STANDBY_TIMER_NEVER,
+        val standbyTimerIndex: Int = NanoSettingsSchema.STANDBY_TIMER_1_MIN,
         val screensaver: String = NanoSettingsSchema.SCREENSAVER_LIFE,
         val selectedThemeId: String = NanoSettingsSchema.THEME_DEFAULT,
     )
 
     @Serializable
-    data class Network(
-        val wifiSsid: String = "",
-    )
-
-    @Serializable
     data class Updates(
-        val automatic: Boolean = false,
+        val checkOnStartup: Boolean = false,
         val repositoryOwner: String = "",
         val releaseTag: String = "",
     )
@@ -305,6 +253,9 @@ data class NanoSettings(
                 pacing = reading.pacing.copy(punctuationDelayMs = NanoSettingsSchema.snapPacingMs(value)),
             ),
         )
+
+    fun withDefaultPacing(): NanoSettings =
+        copy(reading = reading.copy(pacing = Pacing()))
 
     fun withBrightnessPercent(value: Int): NanoSettings =
         copy(`interface` = `interface`.copy(brightnessPercent = NanoSettingsSchema.coerceBrightnessPercent(value)))
@@ -395,12 +346,14 @@ data class NanoSettings(
     fun withUpdateTag(value: String): NanoSettings =
         copy(updates = updates.copy(releaseTag = value))
 
-    fun withAutomaticUpdateChecks(value: Boolean): NanoSettings =
-        copy(updates = updates.copy(automatic = value))
+    fun withUpdateChecksOnStartup(value: Boolean): NanoSettings =
+        copy(updates = updates.copy(checkOnStartup = value))
 }
 
 object NanoSettingsSchema {
     const val THEME_DEFAULT = "default"
+    const val READING_MODE_RSVP = "rsvp"
+    const val READING_MODE_PAGE = "page"
     const val PAUSE_MODE_SENTENCE_END = "sentenceEnd"
     const val PAUSE_MODE_INSTANT = "instant"
     const val HANDEDNESS_LEFT = "left"

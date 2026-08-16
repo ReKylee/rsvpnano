@@ -71,13 +71,12 @@ public:
     FontCatalog();
 
     void loadFromSd();
+    std::expected<Family, std::string> install(std::string_view stagedPath);
+    std::expected<void, std::string> remove(std::string_view id);
     std::span<const Family> families() const {
         return families_;
     }
     std::optional<std::reference_wrapper<const Family>> find(std::string_view id) const;
-    void addFamily(Family family) {
-        families_.push_back(std::move(family));
-    }
     Face loadFace(size_t familyIndex, size_t sizeIndex);
     void clearLoaded();
 #if defined(RSVP_BENCHMARK_MODE)

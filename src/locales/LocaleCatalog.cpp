@@ -9,6 +9,7 @@
 #include <optional>
 #include <ranges>
 
+#include "converter/EpubZip.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 #include "text/UnicodeText.h"
@@ -112,39 +113,35 @@ namespace locales {
 
         std::expected<void, std::string> inspectAsset(fs::FS& filesystem, std::string_view directory,
                                                       const Asset& asset, std::string_view name) {
-            auto file = openAsset(filesystem, directory, asset, name);
-            if (!file)
-                return std::unexpected(file.error());
-            file->close();
-            return {};
+            return openAsset(filesystem, directory, asset, name).transform([](File file) mutable { file.close(); });
         }
 
         std::expected<void, std::string> verifyAssetHash(fs::FS& filesystem, std::string_view directory,
                                                          const Asset& asset, std::string_view name) {
-            auto opened = openAsset(filesystem, directory, asset, name);
-            if (!opened)
-                return std::unexpected(opened.error());
-            File file = std::move(*opened);
-            SHA256Builder hash;
-            hash.begin();
-            std::array<uint8_t, 512> buffer;
-            uint32_t remaining = asset.bytes;
-            while (remaining > 0) {
-                const size_t requested = std::min<size_t>(buffer.size(), remaining);
-                const size_t count = file.read(buffer.data(), requested);
-                if (count != requested) {
-                    file.close();
-                    return std::unexpected(std::string{name} + " could not be read");
+            return openAsset(filesystem, directory, asset, name)
+                .and_then([&asset, name](File file) mutable -> std::expected<void, std::string> {
+                SHA256Builder hash;
+                hash.begin();
+                std::array<uint8_t, 512> buffer;
+                uint32_t remaining = asset.bytes;
+                while (remaining > 0) {
+                    const size_t requested = std::min<size_t>(buffer.size(), remaining);
+                    const size_t count = file.read(buffer.data(), requested);
+                    if (count != requested) {
+                        file.close();
+                        return std::unexpected(std::string{name} + " could not be read");
+                    }
+                    hash.add(buffer.data(), count);
+                    remaining -= count;
                 }
-                hash.add(buffer.data(), count);
-                remaining -= count;
-            }
-            file.close();
-            hash.calculate();
-            const String digest = hash.toString();
-            if (std::string_view{digest.c_str()} != asset.sha256)
-                return std::unexpected(std::string{name} + " failed SHA-256 validation");
-            return {};
+                file.close();
+                hash.calculate();
+                const String digest = hash.toString();
+                if (std::string_view{digest.c_str()} != asset.sha256) {
+                    return std::unexpected(std::string{name} + " failed SHA-256 validation");
+                }
+                return {};
+            });
         }
 
         std::expected<void, std::string> inspectPackFiles(fs::FS& filesystem, const InstalledPack& pack) {
@@ -162,16 +159,15 @@ namespace locales {
         std::expected<InstalledPack, std::string> loadPack(fs::FS& filesystem, const std::string& directory,
                                                            std::string_view id) {
             const std::string manifestPath = directory + "/manifest.toml";
-            auto content = StorageFiles::readTextFile(filesystem, manifestPath.c_str(), kMaximumManifestBytes);
-            if (!content)
-                return std::unexpected("manifest.toml is missing or unreadable");
-            auto manifest = decodeManifest(*content, id);
-            if (!manifest)
-                return std::unexpected(manifest.error());
-            uint32_t scriptMask = 0;
-            for (const std::string_view script: manifest->scripts)
-                scriptMask |= UnicodeText::scriptMask(script);
-            return InstalledPack{directory, std::move(*manifest), scriptMask};
+            return StorageFiles::readTextFile(filesystem, manifestPath.c_str(), kMaximumManifestBytes)
+                .transform_error([](std::error_code) { return std::string{"manifest.toml is missing or unreadable"}; })
+                .and_then([&](const std::string& content) { return decodeManifest(content, id); })
+                .transform([&directory](Manifest manifest) {
+                    uint32_t scriptMask = 0;
+                    for (const std::string_view script: manifest.scripts)
+                        scriptMask |= UnicodeText::scriptMask(script);
+                    return InstalledPack{directory, std::move(manifest), scriptMask};
+                });
         }
 
         std::expected<std::vector<uint8_t>, std::string> readAsset(fs::FS& filesystem, std::string_view directory,
@@ -195,12 +191,12 @@ namespace locales {
                                                                     const InstalledPack& pack) {
             if (!pack.manifest.ui || !pack.manifest.ui->font)
                 return std::unexpected("locale pack has no UI font");
-            auto bytes = readAsset(filesystem, pack.directory, *pack.manifest.ui->font);
-            if (!bytes)
-                return std::unexpected(bytes.error());
-            if (auto valid = validateU8g2Font(*bytes); !valid)
-                return std::unexpected(valid.error());
-            return std::move(*bytes);
+            return readAsset(filesystem, pack.directory, *pack.manifest.ui->font)
+                .and_then([](std::vector<uint8_t> bytes) {
+                    return validateU8g2Font(bytes).transform([bytes = std::move(bytes)]() mutable {
+                        return std::move(bytes);
+                    });
+                });
         }
 
     } // namespace
@@ -261,7 +257,7 @@ namespace locales {
     std::expected<UiAssets, std::string> loadUiAssets(fs::FS& filesystem, const Catalog& catalog,
                                                        std::string_view locale, size_t expectedStrings) {
         UiAssets assets;
-        const auto selected = detail::findPackForLocale(catalog, locale);
+        const auto selected = findPackForLocale(catalog, locale);
         if (!selected)
             return assets;
         const InstalledPack& pack = selected->get();
@@ -368,6 +364,70 @@ namespace locales {
         return {};
     }
 
+    std::expected<std::string, std::string> installArchive(fs::FS& filesystem, Catalog& catalog,
+                                                            std::string_view archivePath) {
+        constexpr size_t kMaximumFiles = 4;
+        EpubZip::Archive archive;
+        if (!archive.open(archivePath))
+            return std::unexpected("Locale pack is not a supported ZIP archive");
+
+        const auto entries = archive.entries();
+        if (entries.empty() || entries.size() > kMaximumFiles)
+            return std::unexpected("Locale pack has an invalid file count");
+
+        std::string id;
+        for (const auto& entry: entries) {
+            const auto candidate = packIdFromArchiveManifest(entry.name);
+            if (!candidate)
+                continue;
+            if (!id.empty())
+                return std::unexpected("Locale pack must contain one valid manifest path");
+            id = *candidate;
+        }
+        if (id.empty())
+            return std::unexpected("Locale pack manifest is missing");
+
+        const std::string root = "locales/" + id + "/";
+        if (auto staged = beginStaging(filesystem, id); !staged)
+            return std::unexpected(staged.error());
+
+        for (size_t index = 0; index < entries.size(); ++index) {
+            const auto& entry = entries[index];
+            if (!entry.name.starts_with(root))
+                return std::unexpected("Locale pack contains files outside its package folder");
+            const std::string_view relative = std::string_view{entry.name}.substr(root.size());
+            if (!isValidPackFilePath(relative))
+                return std::unexpected("Locale pack contains an invalid file path");
+            for (size_t previous = 0; previous < index; ++previous) {
+                if (entries[previous].name == entry.name)
+                    return std::unexpected("Locale pack contains duplicate files");
+            }
+
+            const size_t maximum = relative == "manifest.toml" ? kMaximumManifestBytes
+                                  : relative == "ui/font.u8g2" ? kMaximumUiFontBytes
+                                                               : kMaximumResidentUiBytes;
+            std::string contents;
+            if (!archive.extractToString(entry.name, contents, maximum))
+                return std::unexpected("Locale pack contains an invalid compressed file");
+            auto target = prepareStagedFile(filesystem, id, relative);
+            if (!target)
+                return std::unexpected(target.error());
+            File output = filesystem.open(target->c_str(), FILE_WRITE);
+            if (!output || output.write(reinterpret_cast<const uint8_t*>(contents.data()), contents.size())
+                           != contents.size()) {
+                if (output)
+                    output.close();
+                return std::unexpected("Locale pack file could not be staged");
+            }
+            output.close();
+        }
+
+        archive.close();
+        if (auto activated = activateStaged(filesystem, catalog, id); !activated)
+            return std::unexpected(activated.error());
+        return id;
+    }
+
     std::expected<void, std::string> removeInstalled(fs::FS& filesystem, Catalog& catalog, std::string_view id) {
         if (!isValidPackId(id))
             return std::unexpected("invalid pack ID");
@@ -409,7 +469,7 @@ namespace locales {
     std::string_view localeName(const Catalog& catalog, std::string_view locale) {
         if (locale == "en")
             return "English";
-        const auto pack = detail::findPackForLocale(catalog, locale);
+        const auto pack = findPackForLocale(catalog, locale);
         return pack ? std::string_view{pack->get().manifest.englishName} : locale;
     }
 

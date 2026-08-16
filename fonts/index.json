@@ -5,7 +5,9 @@
     "locales": [
       "ar"
     ],
-    "scriptMask": 16,
+    "scripts": [
+      "Arab"
+    ],
     "file": "Amiri/font.rfont4",
     "shaping": true
   },
@@ -13,7 +15,10 @@
     "id": "andika",
     "name": "Andika",
     "locales": [],
-    "scriptMask": 3,
+    "scripts": [
+      "Latn",
+      "Cyrl"
+    ],
     "file": "Andika/font.rfont4",
     "shaping": false
   },
@@ -21,7 +26,9 @@
     "id": "atkinson-hyperlegible",
     "name": "Atkinson Hyperlegible",
     "locales": [],
-    "scriptMask": 1,
+    "scripts": [
+      "Latn"
+    ],
     "file": "Atkinson Hyperlegible/font.rfont4",
     "shaping": false
   },
@@ -29,7 +36,9 @@
     "id": "courier-prime",
     "name": "Courier Prime",
     "locales": [],
-    "scriptMask": 1,
+    "scripts": [
+      "Latn"
+    ],
     "file": "Courier Prime/font.rfont4",
     "shaping": false
   },
@@ -39,7 +48,9 @@
     "locales": [
       "he"
     ],
-    "scriptMask": 8,
+    "scripts": [
+      "Hebr"
+    ],
     "file": "Frank Ruhl Libre/font.rfont4",
     "shaping": true
   },
@@ -49,7 +60,9 @@
     "locales": [
       "ar"
     ],
-    "scriptMask": 16,
+    "scripts": [
+      "Arab"
+    ],
     "file": "Noto Naskh Arabic/font.rfont4",
     "shaping": true
   },
@@ -59,7 +72,9 @@
     "locales": [
       "he"
     ],
-    "scriptMask": 8,
+    "scripts": [
+      "Hebr"
+    ],
     "file": "Noto Serif Hebrew/font.rfont4",
     "shaping": true
   },
@@ -69,7 +84,11 @@
     "locales": [
       "ja"
     ],
-    "scriptMask": 224,
+    "scripts": [
+      "Hani",
+      "Hira",
+      "Kana"
+    ],
     "file": "Noto Serif Japanese/font.rfont4",
     "shaping": false
   },
@@ -79,7 +98,9 @@
     "locales": [
       "zh-Hans"
     ],
-    "scriptMask": 32,
+    "scripts": [
+      "Hani"
+    ],
     "file": "Noto Serif Simplified Chinese/font.rfont4",
     "shaping": false
   },
@@ -87,7 +108,9 @@
     "id": "opendyslexic",
     "name": "OpenDyslexic",
     "locales": [],
-    "scriptMask": 1,
+    "scripts": [
+      "Latn"
+    ],
     "file": "OpenDyslexic/font.rfont4",
     "shaping": false
   },
@@ -95,7 +118,9 @@
     "id": "stix-two-math",
     "name": "STIX Two Math",
     "locales": [],
-    "scriptMask": 512,
+    "scripts": [
+      "Zmth"
+    ],
     "file": "STIX Two Math/font.rfont4",
     "shaping": false
   }

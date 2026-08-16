@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "board/BoardStorage.h"
+#include "hash/Fnv1a.h"
 #include "logging/Logger.h"
 #include "rss/RssConfig.h"
 #include "rss/RssConfigStorage.h"
@@ -555,19 +556,11 @@ void App::migrateLegacyStorage() {
     }
 
     bool settingsPersisted = true;
-    if (legacySettingsSeen) {
-        if (auto result = settingsStore_.replace(std::move(candidate), settings::SettingsSource::Programmatic);
-            !result) {
-            settingsPersisted = false;
-            ESP_LOGE("migration", "settings import failed: %s", result.error().message.c_str());
-        }
-    }
+    if (legacySettingsSeen)
+        settingsStore_.replace(std::move(candidate), settings::SettingsSource::Programmatic);
     if (settingsPersisted && legacySecretsSeen) {
         settingsStore_.secrets() = std::move(secrets);
-        if (auto result = settingsStore_.acceptSecretChanges(); !result) {
-            settingsPersisted = false;
-            ESP_LOGE("migration", "secret import failed: %s", result.error().message.c_str());
-        }
+        settingsStore_.acceptSecretChanges();
     }
     if (settingsPersisted && (legacySettingsSeen || legacySecretsSeen)) {
         if (auto result = settingsStore_.flush(); !result) {
@@ -869,11 +862,7 @@ void App::migrateLegacyStorage() {
                 continue;
             }
 
-            uint32_t pathHash = 2166136261UL;
-            for (const unsigned char character: bookPath) {
-                pathHash ^= character;
-                pathHash *= 16777619UL;
-            }
+            const uint32_t pathHash = Fnv1a::hash(bookPath);
             auto progressKey = [&](char prefix) {
                 std::array<char, 11> key{};
                 std::snprintf(key.data(), key.size(), "%c%08lx", prefix, static_cast<unsigned long>(pathHash));

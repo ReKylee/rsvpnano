@@ -2,7 +2,9 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include <hb.h>
 
@@ -65,6 +67,24 @@ namespace UnicodeText {
         CapabilityTag{CapabilityCjkSegmentation, "segmentation.cjk"},
         CapabilityTag{CapabilityMathSymbols, "math-symbols"},
     };
+
+    template<typename Tags>
+    inline std::vector<std::string> tagsForMask(uint32_t mask, const Tags& supported) {
+        std::vector<std::string> tags;
+        tags.reserve(supported.size());
+        for (const auto& entry: supported)
+            if ((mask & entry.mask) != 0)
+                tags.emplace_back(entry.tag);
+        return tags;
+    }
+
+    inline std::vector<std::string> scriptTags(uint32_t mask) {
+        return tagsForMask(mask, SupportedScripts);
+    }
+
+    inline std::vector<std::string> capabilityTags(uint32_t mask) {
+        return tagsForMask(mask, SupportedCapabilities);
+    }
 
     constexpr uint32_t capabilityMask(std::string_view capability) {
         for (const CapabilityTag& supported: SupportedCapabilities) {

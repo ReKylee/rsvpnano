@@ -1,73 +1,72 @@
 package com.rsvpnano.app
 
-import com.rsvpnano.api.NanoClient
+import com.rsvpnano.api.NanoApi
+import com.rsvpnano.api.RepositoryClient
 import com.rsvpnano.converters.RsvpBookFile
 import com.rsvpnano.converters.SharedArticle
 import com.rsvpnano.models.NanoBook
+import com.rsvpnano.models.NanoFontSummary
+import com.rsvpnano.models.NanoFocusTimers
+import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoRssFeeds
+import com.rsvpnano.models.NanoReadingProgress
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoThemeCatalogItem
-import com.rsvpnano.models.NanoThemeSummary
 import com.rsvpnano.models.NanoFontCatalogItem
-import com.rsvpnano.models.NanoFontSummary
 import com.rsvpnano.models.NanoWifiSettings
-import com.rsvpnano.models.NanoLocalesResponse
 import com.rsvpnano.models.NanoLocaleCatalogItem
 import com.rsvpnano.models.NanoLanguageFont
+import com.rsvpnano.models.NanoLocaleSummary
 import com.rsvpnano.models.PendingUpload
+import com.rsvpnano.models.NanoThemeSummary
 import com.rsvpnano.models.needsArticleFetch
 import com.rsvpnano.sync.RssFeedNormalizer
-import kotlinx.coroutines.delay
+
+enum class NanoSettingsResource {
+    Reading,
+    Display,
+    Updates,
+}
 
 /**
  * Shared workflow controller for app-level device operations.
  *
- * Platform ViewModels should own UI state, but this class owns the repeated sequencing between
- * local companion data, device sync calls, and post-mutation refreshes.
+ * Platform ViewModels own UI state; this class coordinates local drafts with device resources.
  */
 class NanoCompanionController(
     private val draftService: PendingDraftService,
-    private val client: NanoClient,
+    private val nanoApi: NanoApi,
+    private val repository: RepositoryClient,
 ) {
+    fun close() {
+        nanoApi.close()
+        if (repository !== nanoApi) repository.close()
+    }
+
     suspend fun refreshLocal(): List<PendingUpload> = draftService.loadDrafts()
 
-    suspend fun connect(baseUrl: String): CompanionConnectSnapshot {
-        val device = NanoDeviceSnapshot(
-            info = client.fetchInfo(baseUrl),
-            books = runCatching { client.listBooks(baseUrl) }.getOrDefault(emptyList()),
-            settings = runCatching { client.fetchSettings(baseUrl) }.getOrNull(),
-            themes = runCatching { client.fetchThemes(baseUrl) }.getOrDefault(emptyList()),
-            fonts = runCatching { client.fetchFonts(baseUrl) }.getOrDefault(emptyList()),
-            locales = runCatching { client.fetchLocales(baseUrl) }.getOrDefault(NanoLocalesResponse()),
-            wifiSettings = runCatching { client.fetchWifiSettings(baseUrl) }.getOrNull(),
-            rssFeeds = runCatching { client.fetchRssFeeds(baseUrl) }.getOrNull(),
-            focusTimers = runCatching { client.fetchFocusTimers(baseUrl) }.getOrNull(),
-        )
-        val deviceFeeds = RssFeedNormalizer.normalize(device.rssFeeds?.feeds.orEmpty())
-        return CompanionConnectSnapshot(
-            device = device,
-            rssFeeds = deviceFeeds,
-            drafts = draftService.loadDrafts(),
-        )
-    }
+    suspend fun connect(baseUrl: String): NanoInfo = nanoApi.fetchDevice(baseUrl)
 
-    suspend fun connectWithRetry(
-        baseUrl: String,
-        attempts: Int = DEFAULT_CONNECTION_ATTEMPTS,
-        retryDelayMillis: Long = DEFAULT_CONNECTION_RETRY_DELAY_MILLIS,
-    ): CompanionConnectSnapshot {
-        return retryDeviceOperation(attempts, retryDelayMillis) {
-            connect(baseUrl)
-        }
-    }
+    suspend fun refreshLibrary(baseUrl: String): List<NanoBook> = nanoApi.listLibrary(baseUrl)
+
+    suspend fun refreshSettings(baseUrl: String): NanoSettings = nanoApi.fetchSettings(baseUrl)
+
+    suspend fun refreshThemes(baseUrl: String): List<NanoThemeSummary> = nanoApi.listThemes(baseUrl)
+
+    suspend fun refreshFonts(baseUrl: String): List<NanoFontSummary> = nanoApi.listFonts(baseUrl)
+
+    suspend fun refreshLocales(baseUrl: String): List<NanoLocaleSummary> = nanoApi.listLocales(baseUrl)
+
+    suspend fun refreshWifiSettings(baseUrl: String): NanoWifiSettings = nanoApi.fetchWifiSettings(baseUrl)
+
+    suspend fun refreshFocusTimers(baseUrl: String): NanoFocusTimers = nanoApi.fetchFocusTimers(baseUrl)
 
     suspend fun syncPendingUploads(baseUrl: String, items: List<PendingUpload>): CompanionPendingSyncSnapshot {
-        verifyReachable(baseUrl)
         val readyItems = items.filterNot(PendingUpload::needsArticleFetch)
-        val remaining = draftService.syncPendingUploads(client = client, baseUrl = baseUrl, items = readyItems)
+        val remaining = draftService.syncPendingUploads(client = nanoApi, baseUrl = baseUrl, items = readyItems)
         return CompanionPendingSyncSnapshot(
             drafts = remaining,
-            books = client.listBooks(baseUrl),
+            books = nanoApi.listLibrary(baseUrl),
             syncedCount = readyItems.size,
         )
     }
@@ -113,16 +112,13 @@ class NanoCompanionController(
         baseUrl: String,
         feeds: List<String>,
     ): List<String> {
-        verifyReachable(baseUrl)
         val normalized = RssFeedNormalizer.normalize(feeds)
-        val deviceFeeds = client.updateRssFeeds(baseUrl, NanoRssFeeds(feeds = normalized)).feeds
-        val syncedFeeds = RssFeedNormalizer.normalize(deviceFeeds)
-        return syncedFeeds
+        nanoApi.updateRssFeeds(baseUrl, NanoRssFeeds(feeds = normalized))
+        return normalized
     }
 
     suspend fun refreshRssFeeds(baseUrl: String): List<String> {
-        verifyReachable(baseUrl)
-        val deviceFeeds = client.fetchRssFeeds(baseUrl).feeds
+        val deviceFeeds = nanoApi.fetchRssFeeds(baseUrl).feeds
         val syncedFeeds = RssFeedNormalizer.normalize(deviceFeeds)
         return syncedFeeds
     }
@@ -132,45 +128,50 @@ class NanoCompanionController(
         file: RsvpBookFile,
         category: String,
         onProgress: ((sent: Long, total: Long) -> Unit)? = null,
-    ): List<NanoBook> {
-        verifyReachable(baseUrl)
-        client.uploadBook(
+    ): NanoBook {
+        return nanoApi.uploadBook(
             baseUrl = baseUrl,
             name = file.filename,
             data = file.data,
             category = category,
             onProgress = onProgress,
         )
-        return client.listBooks(baseUrl)
     }
 
-    suspend fun fetchThemeCatalog(catalogUrl: String): List<NanoThemeCatalogItem> = client.fetchThemeCatalog(catalogUrl)
+    suspend fun fetchThemeCatalog(catalogUrl: String): List<NanoThemeCatalogItem> =
+        repository.fetchThemeCatalog(catalogUrl)
 
-    suspend fun fetchFontCatalog(catalogUrl: String): List<NanoFontCatalogItem> = client.fetchFontCatalog(catalogUrl)
+    suspend fun fetchFontCatalog(catalogUrl: String): List<NanoFontCatalogItem> =
+        repository.fetchFontCatalog(catalogUrl)
 
     suspend fun fetchLocaleCatalog(catalogUrl: String): List<NanoLocaleCatalogItem> =
-        client.fetchLocaleCatalog(catalogUrl)
+        repository.fetchLocaleCatalog(catalogUrl)
 
-    suspend fun downloadTheme(catalogUrl: String, theme: NanoThemeCatalogItem): CompanionThemeFile {
+    suspend fun downloadTheme(
+        catalogUrl: String,
+        theme: NanoThemeCatalogItem,
+        onProgress: ((received: Long, total: Long?) -> Unit)? = null,
+    ): CompanionThemeFile {
         require(theme.file.isNotBlank() && '/' !in theme.file && '\\' !in theme.file) {
             "Theme catalog file path is invalid."
         }
         return CompanionThemeFile(
-            id = theme.id,
             filename = theme.file,
-            data = client.downloadTheme(catalogFileUrl(catalogUrl, theme.file)),
+            data = repository.downloadTheme(catalogFileUrl(catalogUrl, theme.file), onProgress),
         )
     }
 
-    suspend fun downloadFont(catalogUrl: String, font: NanoFontCatalogItem): CompanionFontFile {
+    suspend fun downloadFont(
+        catalogUrl: String,
+        font: NanoFontCatalogItem,
+        onProgress: ((received: Long, total: Long?) -> Unit)? = null,
+    ): CompanionFontFile {
         require(isSafeFontCatalogPath(font.file)) {
             "Font catalog file path is invalid."
         }
         return CompanionFontFile(
-            id = font.id,
-            family = font.name,
             filename = font.file.substringAfterLast('/'),
-            data = client.downloadFont(catalogFileUrl(catalogUrl, font.file)),
+            data = repository.downloadFont(catalogFileUrl(catalogUrl, font.file), onProgress),
         )
     }
 
@@ -179,72 +180,48 @@ class NanoCompanionController(
         filename: String,
         data: ByteArray,
         onProgress: ((sent: Long, total: Long) -> Unit)? = null,
-    ): CompanionSettingsSnapshot {
-        verifyReachable(baseUrl)
-        val uploaded = client.uploadTheme(
+    ): NanoThemeSummary {
+        return nanoApi.uploadTheme(
             baseUrl = baseUrl,
             name = filename,
             data = data,
             onProgress = onProgress,
-        )
-        val refreshed = client.fetchSettings(baseUrl)
-        val selected = uploaded.id
-            ?.let { id -> client.updateSettings(baseUrl, refreshed.withThemeId(id)) }
-            ?: refreshed
-        return CompanionSettingsSnapshot(
-            settings = selected,
-            wifiSettings = null,
-            themes = client.fetchThemes(baseUrl),
         )
     }
 
     suspend fun uploadFont(
         baseUrl: String,
-        family: String,
         filename: String,
         data: ByteArray,
         onProgress: ((sent: Long, total: Long) -> Unit)? = null,
-    ): CompanionSettingsSnapshot {
-        verifyReachable(baseUrl)
-        client.uploadFont(
+    ): NanoFontSummary {
+        return nanoApi.uploadFont(
             baseUrl = baseUrl,
-            family = family,
             name = filename,
             data = data,
             onProgress = onProgress,
         )
-        return CompanionSettingsSnapshot(
-            settings = client.fetchSettings(baseUrl),
-            wifiSettings = null,
-            fonts = client.fetchFonts(baseUrl),
-        )
     }
 
-    suspend fun removeFont(baseUrl: String, id: String): CompanionSettingsSnapshot {
-        verifyReachable(baseUrl)
-        client.deleteFont(baseUrl, id)
-        return CompanionSettingsSnapshot(
-            settings = client.fetchSettings(baseUrl),
-            wifiSettings = null,
-            fonts = client.fetchFonts(baseUrl),
-        )
-    }
+    suspend fun removeTheme(baseUrl: String, id: String) =
+        nanoApi.deleteTheme(baseUrl, id)
 
-    suspend fun downloadLocalePack(catalogUrl: String, pack: NanoLocaleCatalogItem): CompanionLocalePackFile {
+    suspend fun removeFont(baseUrl: String, id: String) =
+        nanoApi.deleteFont(baseUrl, id)
+
+    suspend fun downloadLocalePack(
+        catalogUrl: String,
+        pack: NanoLocaleCatalogItem,
+        onProgress: ((received: Long, total: Long?) -> Unit)? = null,
+    ): CompanionLocalePackFile {
         require(pack.file.isNotBlank() && '/' !in pack.file && '\\' !in pack.file &&
             pack.file.endsWith(".zip", ignoreCase = true)) {
             "Locale-pack catalog file path is invalid."
         }
         return CompanionLocalePackFile(
-            id = pack.id,
             filename = pack.file,
-            data = client.downloadLocalePack(catalogFileUrl(catalogUrl, pack.file)),
+            data = repository.downloadLocalePack(catalogFileUrl(catalogUrl, pack.file), onProgress),
         )
-    }
-
-    suspend fun refreshLocales(baseUrl: String): NanoLocalesResponse {
-        verifyReachable(baseUrl)
-        return client.fetchLocales(baseUrl)
     }
 
     suspend fun installLocalePack(
@@ -252,108 +229,82 @@ class NanoCompanionController(
         filename: String,
         data: ByteArray,
         onProgress: ((sent: Long, total: Long) -> Unit)? = null,
-    ): NanoLocalesResponse {
-        verifyReachable(baseUrl)
-        client.uploadLocalePack(baseUrl, filename, data, onProgress)
-        return client.fetchLocales(baseUrl)
-    }
+    ): NanoLocaleSummary = nanoApi.uploadLocalePack(baseUrl, filename, data, onProgress)
 
-    suspend fun removeLocalePack(baseUrl: String, id: String): NanoLocalesResponse {
-        verifyReachable(baseUrl)
-        client.deleteLocalePack(baseUrl, id)
-        return client.fetchLocales(baseUrl)
-    }
+    suspend fun removeLocalePack(baseUrl: String, id: String) =
+        nanoApi.deleteLocalePack(baseUrl, id)
 
-    suspend fun deleteBooks(baseUrl: String, bookIds: List<String>): List<NanoBook> {
-        verifyReachable(baseUrl)
-        bookIds.forEach { bookId ->
-            client.deleteBook(baseUrl, bookId)
-        }
-        return client.listBooks(baseUrl)
-    }
+    suspend fun deleteBooks(baseUrl: String, bookIds: List<String>) =
+        bookIds.forEach { bookId -> nanoApi.deleteBook(baseUrl, bookId) }
 
-    suspend fun setBookPosition(baseUrl: String, book: NanoBook, wordIndex: Int): List<NanoBook> {
+    suspend fun setBookPosition(baseUrl: String, book: NanoBook, wordIndex: Int): NanoBook {
         val wordCount = book.metadata.wordCount
-        require(book.source != null && wordCount > 0) {
+        require(wordCount > 0) {
             "Book position is unavailable."
         }
-        verifyReachable(baseUrl)
-        client.setBookPosition(
+        val savedIndex = wordIndex.coerceIn(0, wordCount - 1)
+        nanoApi.setBookPosition(
             baseUrl = baseUrl,
             id = book.id,
-            wordIndex = wordIndex.coerceIn(0, wordCount - 1),
+            wordIndex = savedIndex,
         )
-        return client.listBooks(baseUrl)
+        return book.copy(reading = (book.reading ?: NanoReadingProgress(savedIndex)).copy(wordIndex = savedIndex))
     }
 
     suspend fun setBookLanguageFonts(
         baseUrl: String,
         book: NanoBook,
         languageFonts: List<NanoLanguageFont>,
-    ): List<NanoBook> {
-        require(book.source != null) { "Book language settings are unavailable." }
-        verifyReachable(baseUrl)
-        client.setBookLanguageFonts(baseUrl, book.id, languageFonts)
-        return client.listBooks(baseUrl)
-    }
-
-    suspend fun refreshSettings(baseUrl: String): CompanionSettingsSnapshot {
-        verifyReachable(baseUrl)
-        return CompanionSettingsSnapshot(
-            settings = client.fetchSettings(baseUrl),
-            wifiSettings = runCatching { client.fetchWifiSettings(baseUrl) }.getOrNull(),
+    ): NanoBook {
+        require(book.metadata.wordCount > 0) { "Book language settings are unavailable." }
+        nanoApi.setBookLanguageFonts(baseUrl, book.id, languageFonts)
+        return book.copy(
+            reading = (book.reading ?: NanoReadingProgress(0)).copy(languageFonts = languageFonts),
         )
     }
 
-    suspend fun saveSettings(baseUrl: String, settings: NanoSettings): CompanionSettingsSnapshot {
-        verifyReachable(baseUrl)
-        return CompanionSettingsSnapshot(
-            settings = client.updateSettings(baseUrl, settings),
-            wifiSettings = null,
-        )
+    suspend fun saveSettings(
+        baseUrl: String,
+        settings: NanoSettings,
+        resources: Set<NanoSettingsResource>,
+    ): NanoSettings {
+        if (NanoSettingsResource.Reading in resources) {
+            nanoApi.updateReadingSettings(baseUrl, settings.reading)
+        }
+        if (NanoSettingsResource.Display in resources) {
+            nanoApi.updateDisplaySettings(baseUrl, settings.`interface`)
+        }
+        if (NanoSettingsResource.Updates in resources) {
+            nanoApi.updateUpdateSettings(baseUrl, settings.updates)
+        }
+        return settings
+    }
+
+    suspend fun selectTheme(baseUrl: String, id: String): String {
+        nanoApi.selectTheme(baseUrl, id)
+        return id
+    }
+
+    suspend fun selectFont(baseUrl: String, id: String): String {
+        nanoApi.selectFont(baseUrl, id)
+        return id
+    }
+
+    suspend fun selectLocale(baseUrl: String, id: String): String {
+        nanoApi.selectLocale(baseUrl, id)
+        return id
     }
 
     suspend fun saveWifiSettings(baseUrl: String, ssid: String, password: String): NanoWifiSettings {
-        verifyReachable(baseUrl)
-        return client.updateWifi(baseUrl, ssid, password)
+        nanoApi.updateWifi(baseUrl, ssid, password)
+        return NanoWifiSettings(ssid)
     }
 
-    suspend fun clearWifiSettings(baseUrl: String): NanoWifiSettings {
-        verifyReachable(baseUrl)
-        return client.forgetWifi(baseUrl)
-    }
+    suspend fun clearWifiSettings(baseUrl: String) = nanoApi.forgetWifi(baseUrl)
 
-    suspend fun verifyReachable(baseUrl: String) {
-        client.fetchInfo(baseUrl)
-    }
-
-    suspend fun verifyReachableWithRetry(
-        baseUrl: String,
-        attempts: Int = DEFAULT_CONNECTION_ATTEMPTS,
-        retryDelayMillis: Long = DEFAULT_CONNECTION_RETRY_DELAY_MILLIS,
-    ) {
-        retryDeviceOperation(attempts, retryDelayMillis) {
-            client.fetchInfo(baseUrl)
-        }
-    }
-
-    private suspend fun <T> retryDeviceOperation(
-        attempts: Int,
-        retryDelayMillis: Long,
-        operation: suspend () -> T,
-    ): T {
-        var lastError: Throwable? = null
-        repeat(attempts.coerceAtLeast(1)) { index ->
-            try {
-                return operation()
-            } catch (error: Throwable) {
-                lastError = error
-                if (index < attempts - 1 && retryDelayMillis > 0) {
-                    delay(retryDelayMillis)
-                }
-            }
-        }
-        throw lastError ?: IllegalStateException("Device operation failed.")
+    suspend fun saveFocusTimers(baseUrl: String, timers: NanoFocusTimers): NanoFocusTimers {
+        nanoApi.updateFocusTimers(baseUrl, timers)
+        return timers
     }
 
     private fun catalogFileUrl(catalogUrl: String, file: String): String =
@@ -366,17 +317,7 @@ class NanoCompanionController(
             ".." !in file.split('/') &&
             file.endsWith(".rfont4", ignoreCase = true)
 
-    companion object {
-        const val DEFAULT_CONNECTION_ATTEMPTS = 4
-        const val DEFAULT_CONNECTION_RETRY_DELAY_MILLIS = 750L
-    }
 }
-
-data class CompanionConnectSnapshot(
-    val device: NanoDeviceSnapshot,
-    val rssFeeds: List<String>,
-    val drafts: List<PendingUpload>,
-)
 
 data class CompanionPendingSyncSnapshot(
     val drafts: List<PendingUpload>,
@@ -391,27 +332,16 @@ data class CompanionDraftSaveSnapshot(
 )
 
 data class CompanionThemeFile(
-    val id: String,
     val filename: String,
     val data: ByteArray,
 )
 
 data class CompanionFontFile(
-    val id: String,
-    val family: String,
     val filename: String,
     val data: ByteArray,
 )
 
 data class CompanionLocalePackFile(
-    val id: String,
     val filename: String,
     val data: ByteArray,
-)
-
-data class CompanionSettingsSnapshot(
-    val settings: NanoSettings,
-    val wifiSettings: NanoWifiSettings?,
-    val themes: List<NanoThemeSummary> = emptyList(),
-    val fonts: List<NanoFontSummary> = emptyList(),
 )

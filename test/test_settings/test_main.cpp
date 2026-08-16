@@ -3,18 +3,21 @@
 #include <glaze/toml.hpp>
 
 #include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
+#include "companion/CompanionApiModels.h"
 #include "drivers/power/BatteryCurve.h"
 #include "reader/ReadingSession.h"
 #include "settings/SettingsCodec.h"
 #include "settings/SettingsGlaze.h"
-#include "sync/CompanionSyncJson.h"
 #include "text/UnicodeText.h"
 
 void setUp() {}
 void tearDown() {}
 
-void test_defaults_round_trip_through_toml_and_json() {
+void test_defaults_round_trip_through_toml_and_companion_json() {
     const settings::DeviceSettings defaults;
     auto toml = settings::codec::encodeToml(defaults, settings::SettingsSource::Programmatic);
     TEST_ASSERT_TRUE_MESSAGE(toml.has_value(), toml ? "" : toml.error().message.c_str());
@@ -25,10 +28,10 @@ void test_defaults_round_trip_through_toml_and_json() {
     TEST_ASSERT_TRUE_MESSAGE(fromToml.has_value(), fromToml ? "" : fromToml.error().message.c_str());
     TEST_ASSERT_TRUE(defaults == *fromToml);
 
-    auto json = settings::codec::encodeJson(defaults, settings::SettingsSource::Programmatic);
-    TEST_ASSERT_TRUE_MESSAGE(json.has_value(), json ? "" : json.error().message.c_str());
-    auto fromJson = settings::codec::decodeJson(*json, settings::SettingsSource::Companion);
-    TEST_ASSERT_TRUE_MESSAGE(fromJson.has_value(), fromJson ? "" : fromJson.error().message.c_str());
+    std::string json;
+    TEST_ASSERT_TRUE(companion::api::encode(defaults, json).has_value());
+    auto fromJson = companion::api::decode<settings::DeviceSettings>(json);
+    TEST_ASSERT_TRUE_MESSAGE(fromJson.has_value(), fromJson ? "" : fromJson.error().c_str());
     TEST_ASSERT_TRUE(defaults == *fromJson);
 }
 
@@ -87,91 +90,139 @@ void test_invalid_input_cannot_mutate_a_live_value() {
 }
 
 void test_unknown_keys_are_ignored_and_invalid_enums_still_fail() {
-    auto unknown = settings::codec::decodeJson(R"({"surprise":true})", settings::SettingsSource::Companion);
+    auto unknown = companion::api::decode<settings::DeviceSettings>(R"({"surprise":true})");
     TEST_ASSERT_TRUE(unknown.has_value());
     TEST_ASSERT_TRUE(unknown->reading.batteryIconVisible);
 
-    auto invalidEnum =
-        settings::codec::decodeJson(R"({"reading":{"pauseMode":"later"}})", settings::SettingsSource::Companion);
+    auto invalidEnum = companion::api::decode<settings::DeviceSettings>(R"({"reading":{"pauseMode":"later"}})");
     TEST_ASSERT_FALSE(invalidEnum.has_value());
-    TEST_ASSERT_EQUAL(settings::SettingsErrorCategory::InvalidEnum, invalidEnum.error().category);
 }
 
-void test_companion_envelope_encodes_lvalue_without_owning_it() {
-    const companion::api::NetworkResponse response{true};
+void test_companion_patch_preserves_omitted_fields() {
+    auto reading = settings::DeviceSettings{}.reading;
+    reading.wpm = 540;
+    constexpr std::string_view patch = R"({"leftHanded":true})";
+    const auto error = glz::read<glz::opts{.error_on_unknown_keys = false}>(reading, patch);
+    TEST_ASSERT_FALSE(error);
+    TEST_ASSERT_EQUAL_UINT16(540, reading.wpm);
+    TEST_ASSERT_TRUE(reading.leftHanded);
+}
+
+void test_companion_resource_encodes_directly() {
+    const companion::api::NetworkResponse response{"Home"};
     std::string json;
-    TEST_ASSERT_TRUE(companion::api::encodeData(response, json).has_value());
-    TEST_ASSERT_EQUAL_STRING("{\"data\":{\"passwordSet\":true}}", json.c_str());
+    TEST_ASSERT_TRUE(companion::api::encode(response, json).has_value());
+    TEST_ASSERT_EQUAL_STRING("{\"ssid\":\"Home\"}", json.c_str());
 }
 
 void test_companion_theme_list_uses_ids_and_names() {
-    const companion::api::ThemesResponse response{{{"default", "Default"}, {"night", "Night"}}};
+    const std::vector<companion::api::ThemeSummary> response{{"default", "Default"}, {"night", "Night"}};
     std::string json;
-    TEST_ASSERT_TRUE(companion::api::encodeData(response, json).has_value());
-    TEST_ASSERT_EQUAL_STRING(R"({"data":{"themes":[{"id":"default","name":"Default"},{"id":"night","name":"Night"}]}})",
-                             json.c_str());
+    TEST_ASSERT_TRUE(companion::api::encode(response, json).has_value());
+    TEST_ASSERT_EQUAL_STRING(R"([{"id":"default","name":"Default"},{"id":"night","name":"Night"}])", json.c_str());
 }
 
 void test_companion_font_list_uses_ids_and_names() {
-    const companion::api::FontsResponse response{
-        {{.id = "literata",
-          .name = "Literata",
-          .scripts = {"Latn", "Cyrl"},
-          .scriptMask = UnicodeText::ScriptLatin | UnicodeText::ScriptCyrillic,
-          .builtIn = true},
-         {.id = "hebrew", .name = "Noto Serif Hebrew", .locales = {"he"}, .scripts = {"Hebr"},
-          .scriptMask = UnicodeText::ScriptHebrew, .shaping = true}}};
+    const std::vector<companion::api::FontSummary>
+        response{{.id = "literata", .name = "Literata", .scripts = {"Latn", "Cyrl"}, .builtIn = true},
+                 {.id = "hebrew", .name = "Noto Serif Hebrew", .locales = {"he"}, .scripts = {"Hebr"}}};
     std::string json;
-    TEST_ASSERT_TRUE(companion::api::encodeData(response, json).has_value());
+    TEST_ASSERT_TRUE(companion::api::encode(response, json).has_value());
     TEST_ASSERT_EQUAL_STRING(
-        R"({"data":{"fonts":[{"id":"literata","name":"Literata","locales":[],"scripts":["Latn","Cyrl"],"scriptMask":3,"builtIn":true,"shaping":false},{"id":"hebrew","name":"Noto Serif Hebrew","locales":["he"],"scripts":["Hebr"],"scriptMask":8,"builtIn":false,"shaping":true}]}})",
+        R"([{"id":"literata","name":"Literata","locales":[],"scripts":["Latn","Cyrl"],"builtIn":true},{"id":"hebrew","name":"Noto Serif Hebrew","locales":["he"],"scripts":["Hebr"],"builtIn":false}])",
         json.c_str());
 }
 
-void test_companion_locale_list_exposes_metadata_and_rejections() {
-    const companion::api::LocalesResponse response{
-        {{.id = "ja",
-          .version = "1.0.0",
-          .locale = "ja",
-          .nativeName = "Japanese",
-          .englishName = "Japanese",
-          .direction = "ltr",
-          .translationStatus = "preview",
-          .scriptMask = UnicodeText::ScriptHan | UnicodeText::ScriptHiragana | UnicodeText::ScriptKatakana,
-          .requiredCapabilities = {"bidi"}}},
-        {{.id = "broken", .reason = "manifest.toml is missing"}},
+void test_companion_library_is_a_bare_array() {
+    companion::api::LibraryItem item;
+    item.id = "book-id";
+    item.name = "books/example.rsvp";
+    item.metadata.title = "Example";
+    item.metadata.author = "Reader";
+    item.metadata.wordCount = 42;
+    item.metadata.scripts = {"Latn"};
+    item.metadata.languages = {{"en", {"Latn"}}};
+    const std::vector<companion::api::LibraryItem> response{std::move(item)};
+    std::string json;
+    TEST_ASSERT_TRUE(companion::api::encode(response, json).has_value());
+    TEST_ASSERT_TRUE(json.starts_with(R"([{"id":)"));
+    TEST_ASSERT_FALSE(json.contains(R"("items":)"));
+    TEST_ASSERT_TRUE(json.contains(R"("languages":[{"locale":"en","scripts":["Latn"]}])"));
+    TEST_ASSERT_TRUE(json.contains(R"("metadata":{"title":"Example","author":"Reader","wordCount":42)"));
+    TEST_ASSERT_FALSE(json.contains("scriptMask"));
+}
+
+void test_companion_appearance_selection_decodes_one_id() {
+    auto selection = companion::api::decode<companion::api::AppearanceSelection>(R"({"id":"night"})");
+    TEST_ASSERT_TRUE(selection.has_value());
+    TEST_ASSERT_EQUAL_STRING("night", selection->id.c_str());
+}
+
+void test_companion_device_is_identity_only() {
+    const companion::api::DeviceInfo response{
+        .firmwareVersion = "preview-v0.0.9+abc",
+        .otaAsset = "reader-ota.bin",
     };
     std::string json;
-    TEST_ASSERT_TRUE(companion::api::encodeData(response, json).has_value());
+    TEST_ASSERT_TRUE(companion::api::encode(response, json).has_value());
+    TEST_ASSERT_EQUAL_STRING(R"({"firmwareVersion":"preview-v0.0.9+abc","otaAsset":"reader-ota.bin"})", json.c_str());
+}
+
+void test_companion_catalog_creations_return_one_resource() {
+    std::string json;
+    TEST_ASSERT_TRUE(companion::api::encode(companion::api::ThemeSummary{"night", "Night"}, json).has_value());
+    TEST_ASSERT_TRUE(json.contains(R"("id":"night")"));
+    TEST_ASSERT_FALSE(json.contains(R"("fonts":)"));
+    TEST_ASSERT_FALSE(json.contains(R"("settings":)"));
+
+    TEST_ASSERT_TRUE(companion::api::encode(companion::api::FontSummary{.id = "andika", .name = "Andika"}, json)
+                         .has_value());
+    TEST_ASSERT_TRUE(json.contains(R"("id":"andika")"));
+    TEST_ASSERT_FALSE(json.contains(R"("themes":)"));
+    TEST_ASSERT_FALSE(json.contains(R"("settings":)"));
+
+    TEST_ASSERT_TRUE(companion::api::encode(companion::api::LocaleSummary{.id = "ja", .locale = "ja"}, json)
+                         .has_value());
     TEST_ASSERT_TRUE(json.contains(R"("id":"ja")"));
-    TEST_ASSERT_TRUE(json.contains(R"("locale":"ja")"));
-    TEST_ASSERT_TRUE(json.contains(R"("id":"broken")"));
+    TEST_ASSERT_FALSE(json.contains(R"("themes":)"));
+    TEST_ASSERT_FALSE(json.contains(R"("fonts":)"));
+}
+
+void test_companion_locale_list_is_minimal() {
+    const std::vector<companion::api::LocaleSummary> response{
+        {.id = "ja", .name = "日本語", .locale = "ja"},
+    };
+    std::string json;
+    TEST_ASSERT_TRUE(companion::api::encode(response, json).has_value());
+    TEST_ASSERT_EQUAL_STRING(R"([{"id":"ja","name":"日本語","locale":"ja"}])", json.c_str());
 }
 
 void test_secrets_are_not_part_of_public_documents() {
     settings::DeviceSettings publicSettings;
     publicSettings.network.wifiSsid = "reader";
     auto toml = settings::codec::encodeToml(publicSettings, settings::SettingsSource::Programmatic);
-    auto json = settings::codec::encodeJson(publicSettings, settings::SettingsSource::Programmatic);
+    std::string json;
+    const auto encoded = companion::api::encode(publicSettings, json);
     TEST_ASSERT_TRUE(toml.has_value());
-    TEST_ASSERT_TRUE(json.has_value());
+    TEST_ASSERT_TRUE(encoded.has_value());
     TEST_ASSERT_EQUAL(std::string::npos, toml->find("wifiPassword"));
-    TEST_ASSERT_EQUAL(std::string::npos, json->find("wifiPassword"));
+    TEST_ASSERT_EQUAL(std::string::npos, json.find("wifiPassword"));
 }
 
 void test_book_language_font_selection_uses_global_fallback() {
     settings::ReadingOverrides book;
-    TEST_ASSERT_EQUAL_STRING("global-font", settings::fontForText(book, "ja", UnicodeText::ScriptHan,
-                                                                   "global-font").data());
+    TEST_ASSERT_EQUAL_STRING("global-font",
+                             settings::fontForText(book, "ja", UnicodeText::ScriptHan, "global-font").data());
     book.languageFonts.push_back({.locale = "ja", .fontId = "japanese-font"});
-    TEST_ASSERT_EQUAL_STRING("japanese-font", settings::fontForText(book, "ja", UnicodeText::ScriptHan,
-                                                                     "global-font").data());
-    TEST_ASSERT_EQUAL_STRING("global-font", settings::fontForText(book, "en", UnicodeText::ScriptLatin,
-                                                                   "global-font").data());
+    TEST_ASSERT_EQUAL_STRING("japanese-font",
+                             settings::fontForText(book, "ja", UnicodeText::ScriptHan, "global-font").data());
+    TEST_ASSERT_EQUAL_STRING("global-font",
+                             settings::fontForText(book, "en", UnicodeText::ScriptLatin, "global-font").data());
     book.languageFonts.push_back({.locale = std::string{settings::kMathFontTarget}, .fontId = "math-font"});
-    TEST_ASSERT_EQUAL_STRING("math-font", settings::fontForText(book, "en", UnicodeText::ScriptLatin
-                                                                                | UnicodeText::ScriptMath,
-                                                                 "global-font").data());
+    TEST_ASSERT_EQUAL_STRING("math-font",
+                             settings::fontForText(book, "en", UnicodeText::ScriptLatin | UnicodeText::ScriptMath,
+                                                   "global-font")
+                                 .data());
 }
 
 void test_book_locale_follows_text_run_boundaries() {
@@ -188,8 +239,7 @@ void test_book_reading_overrides_round_trip_through_toml() {
     ReadingSession::BookState state;
     state.wordIndex = 42;
     state.overrides.languageFonts.push_back({.locale = "ar", .fontId = "arabic-font"});
-    state.overrides.languageFonts.push_back(
-        {.locale = std::string{settings::kMathFontTarget}, .fontId = "math-font"});
+    state.overrides.languageFonts.push_back({.locale = std::string{settings::kMathFontTarget}, .fontId = "math-font"});
     state.overrides.locale = "ar";
     state.overrides.pacing = settings::ReadingPacing::cjkPhrase;
 
@@ -210,18 +260,23 @@ void test_book_reading_overrides_round_trip_through_toml() {
 
 int main() {
     UNITY_BEGIN();
-    RUN_TEST(test_defaults_round_trip_through_toml_and_json);
+    RUN_TEST(test_defaults_round_trip_through_toml_and_companion_json);
     RUN_TEST(test_battery_curve_reaches_full);
     RUN_TEST(test_enum_names_are_human_readable);
     RUN_TEST(test_missing_fields_retain_defaults);
+    RUN_TEST(test_companion_patch_preserves_omitted_fields);
     RUN_TEST(test_bounded_values_clamp_during_deserialization);
     RUN_TEST(test_bounded_values_clamp_on_every_assignment);
     RUN_TEST(test_invalid_input_cannot_mutate_a_live_value);
     RUN_TEST(test_unknown_keys_are_ignored_and_invalid_enums_still_fail);
-    RUN_TEST(test_companion_envelope_encodes_lvalue_without_owning_it);
+    RUN_TEST(test_companion_resource_encodes_directly);
+    RUN_TEST(test_companion_library_is_a_bare_array);
+    RUN_TEST(test_companion_appearance_selection_decodes_one_id);
+    RUN_TEST(test_companion_device_is_identity_only);
+    RUN_TEST(test_companion_catalog_creations_return_one_resource);
     RUN_TEST(test_companion_theme_list_uses_ids_and_names);
     RUN_TEST(test_companion_font_list_uses_ids_and_names);
-    RUN_TEST(test_companion_locale_list_exposes_metadata_and_rejections);
+    RUN_TEST(test_companion_locale_list_is_minimal);
     RUN_TEST(test_secrets_are_not_part_of_public_documents);
     RUN_TEST(test_book_language_font_selection_uses_global_fallback);
     RUN_TEST(test_book_locale_follows_text_run_boundaries);

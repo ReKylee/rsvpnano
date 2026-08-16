@@ -7,11 +7,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,30 +41,34 @@ internal fun AboutPage(modifier: Modifier = Modifier) {
             .fillMaxSize()
             .widthIn(max = 560.dp)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 48.dp),
+            .padding(horizontal = 24.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        FilledTonalButton(onClick = { uriHandler.openUri("https://github.com/ReKylee/rsvpnano") }) {
+            Icon(
+                GitHubIcon,
+                contentDescription = null,
+                modifier = Modifier.size(ButtonDefaults.IconSize),
+            )
+            Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+            Text("View on GitHub")
+        }
+        Text(
+            "The RSVP Nano companion keeps your reading library in one place. Use it to add books and articles to your RSVP Nano reader, adjust how reading feels, and manage its themes, fonts, and interface languages.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
         Image(
             painter = painterResource(Res.drawable.rekylee_avatar),
-            contentDescription = "Kylee's GitHub profile picture",
+            contentDescription = "ReKylee's GitHub profile picture",
             modifier = Modifier
                 .size(112.dp)
                 .border(3.dp, MaterialTheme.colorScheme.primaryContainer, CircleShape)
                 .clip(CircleShape),
         )
-        Text("RSVP Nano", style = MaterialTheme.typography.headlineMedium)
-        Text(
-            "A quiet companion for adding reading material and configuring your reader.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
         Text("Created by ReKylee", style = MaterialTheme.typography.titleSmall)
-        FilledTonalButton(onClick = { uriHandler.openUri("https://github.com/ReKylee/rsvpnano") }) {
-            Icon(GitHubIcon, contentDescription = null)
-            Text("View on GitHub")
-        }
     }
 }
 

@@ -1,6 +1,7 @@
 #include <glaze/json.hpp>
 #include <unity.h>
 
+#include "hash/Fnv1a.h"
 #include "rss/FeedParser.h"
 #include "rss/RssConfig.h"
 #include "text/AsciiText.h"
@@ -234,6 +235,13 @@ void test_ui_metadata_replaces_scripts_the_builtin_font_cannot_show() {
                              RsvpText::uiSafeMetadata("Alice 愛麗絲 - Алиса").c_str());
 }
 
+void test_fnv1a_supports_whole_and_incremental_hashing() {
+    constexpr std::string_view text = "hello";
+    TEST_ASSERT_EQUAL_HEX32(0x4F9F2CABU, Fnv1a::hash(text));
+    TEST_ASSERT_EQUAL_HEX32(Fnv1a::hash(text),
+                            Fnv1a::append(Fnv1a::append(Fnv1a::kOffsetBasis, text.substr(0, 2)), text.substr(2)));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_parses_rss_item_fields);
@@ -253,5 +261,6 @@ int main(void) {
     RUN_TEST(test_standard_error_codes_are_preserved);
     RUN_TEST(test_text_normalizer_preserves_utf8_and_rejects_malformed_bytes);
     RUN_TEST(test_ui_metadata_replaces_scripts_the_builtin_font_cannot_show);
+    RUN_TEST(test_fnv1a_supports_whole_and_incremental_hashing);
     return UNITY_END();
 }

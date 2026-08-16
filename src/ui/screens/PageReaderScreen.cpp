@@ -433,7 +433,7 @@ namespace screens::PageReader {
         if (current >= state.pageEnd)
             layout(state, text, typeface, typography, session, area, current);
 
-        uint32_t pageSignature = ui::Context::combine(2166136261U, static_cast<uint32_t>(state.pageStart));
+        uint32_t pageSignature = ui::Context::combine(Fnv1a::kOffsetBasis, static_cast<uint32_t>(state.pageStart));
         pageSignature = ui::Context::combine(pageSignature, static_cast<uint32_t>(state.pageEnd));
         pageSignature = ui::Context::combine(pageSignature, typographyRevision);
         const uint32_t signature = ui::Context::signature(overlay, pageSignature);

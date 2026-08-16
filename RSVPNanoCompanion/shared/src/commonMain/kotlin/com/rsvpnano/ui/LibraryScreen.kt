@@ -104,7 +104,7 @@ internal fun LibraryScreen(
         matchesFilter && matchesQuery
     }
     PullRefreshBox(
-        isRefreshing = uiState.isRefreshing,
+        isRefreshing = CompanionResource.Library in uiState.loadingResources,
         onRefresh = onRefresh,
     ) {
         LazyColumn(
@@ -166,6 +166,8 @@ internal fun LibraryScreen(
                         text = when {
                             !uiState.isConnected -> "Connect to view the reader library."
                             searchQuery.isNotBlank() || filter != LibraryFilter.All -> "No items match this search."
+                            CompanionResource.Library in uiState.loadingResources -> "Loading reader library..."
+                            CompanionResource.Library !in uiState.loadedResources -> "Reader library could not be loaded."
                             visibleDrafts.isNotEmpty() -> "No other items are on the reader yet."
                             else -> "Your reader library is empty."
                         },
@@ -296,8 +298,7 @@ private fun PendingArticleRow(
 }
 
 private const val FONT_TARGET_MATH = "math"
-
-private const val SCRIPT_MATH = 1 shl 9
+private const val MATH_SCRIPT = "Zmth"
 
 @Composable
 private fun LibraryEmptyState(text: String, onAddContent: (() -> Unit)?) {
@@ -355,7 +356,7 @@ private fun LibraryBookRow(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            book.reading?.percent?.let { progress ->
+            book.readPercent?.let { progress ->
                 LinearProgressIndicator(
                     progress = { progress.coerceIn(0, 100) / 100f },
                     modifier = Modifier.fillMaxWidth().height(2.dp),
@@ -373,8 +374,8 @@ internal val NanoBook.librarySubtitle: String
     get() = buildList {
         metadata.author.takeIf(String::isNotBlank)?.let(::add)
         metadata.wordCount.takeIf { it > 0 }?.let { add("$it words") }
-        if (!isArticle) metadata.chapterCount.takeIf { it > 0 }?.let { add("$it chapters") }
-        reading?.percent?.let { add("$it% read") }
+        if (!isArticle) metadata.chapters.size.takeIf { it > 0 }?.let { add("$it chapters") }
+        readPercent?.let { add("$it% read") }
     }.joinToString(INLINE_DIVIDER)
 
 @Composable
@@ -382,13 +383,14 @@ internal fun BookDetailScreen(
     book: NanoBook,
     availableFonts: List<NanoFontSummary>,
     globalFontId: String,
+    wpm: Int,
     onSetPosition: (Int) -> Unit,
     onSetLanguageFonts: (List<NanoLanguageFont>) -> Unit,
 ) {
     val metadata = book.metadata
     val reading = book.reading
     val wordCount = metadata.wordCount
-    val canSetProgress = book.source != null && wordCount > 0
+    val canSetProgress = wordCount > 0
     val currentIndex = if (canSetProgress) {
         (reading?.wordIndex ?: 0).coerceIn(0, wordCount - 1)
     } else {
@@ -465,13 +467,11 @@ internal fun BookDetailScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         MetadataField("Words", metadata.wordCount.toString())
-                        MetadataField("Chapters", metadata.chapterCount.toString())
+                        MetadataField("Chapters", metadata.chapters.size.toString())
                         MetadataField("File size", book.byteLabel)
                         metadata.locale.takeIf(String::isNotBlank)?.let { MetadataField("Language", it) }
                         metadata.scripts.takeIf { it.isNotEmpty() }
                             ?.let { MetadataField("Scripts", it.joinToString()) }
-                        metadata.direction.takeIf { it != "auto" }
-                            ?.let { MetadataField("Direction", it.uppercase()) }
                     }
                 }
             }
@@ -488,12 +488,18 @@ internal fun BookDetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(28.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            reading?.currentChapter?.let {
-                                MetadataField("Current chapter", "${it.number}. ${it.title}")
-                            }
                             reading?.let {
-                                MetadataField("Remaining", "${it.remainingWords} words")
-                                MetadataField("Reading time", "About ${it.estimatedMinutes} min")
+                                val chapterIndex = chapters.indexOfLast { chapter -> chapter.wordIndex <= currentIndex }
+                                if (chapterIndex >= 0) {
+                                    MetadataField(
+                                        "Current chapter",
+                                        "${chapterIndex + 1}. ${chapters[chapterIndex].title}",
+                                    )
+                                }
+                                val remainingWords = (wordCount - currentIndex - 1).coerceAtLeast(0)
+                                MetadataField("Remaining", "$remainingWords words")
+                                val minutes = if (wpm <= 0) 0 else (remainingWords + wpm - 1) / wpm
+                                MetadataField("Reading time", "About $minutes min")
                             }
                         }
                     } else {
@@ -615,12 +621,12 @@ private fun BookLanguageFontsDialog(
     val languages = book.metadata.languages.ifEmpty {
         listOfNotNull(
             book.metadata.locale.takeIf(String::isNotBlank)?.let {
-                NanoBookLanguage(it, book.metadata.scriptMask)
+                NanoBookLanguage(it, book.metadata.scripts)
             },
         )
-    }.map { it.copy(scriptMask = it.scriptMask and SCRIPT_MATH.inv()) }
-        .filter { it.scriptMask != 0 }
-    val hasMath = (book.metadata.scriptMask and SCRIPT_MATH) != 0
+    }.map { it.copy(scripts = it.scripts.filterNot(MATH_SCRIPT::equals)) }
+        .filter { it.scripts.isNotEmpty() }
+    val hasMath = MATH_SCRIPT in book.metadata.scripts
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(imageVector = Icons.Outlined.Language, contentDescription = null) },
@@ -629,7 +635,7 @@ private fun BookLanguageFontsDialog(
             LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 items(languages, key = { it.locale }) { bookLanguage ->
                     val locale = bookLanguage.locale
-                    val requiredScripts = bookLanguage.scriptMask
+                    val requiredScripts = bookLanguage.scripts
                     val compatible = availableFonts.filter { it.usableFor(locale, requiredScripts) }
                     val selectedId = selections.firstOrNull { it.locale == locale }?.fontId
                     FontTargetOptions(locale, selectedId, compatible, availableFonts, globalFontId) { fontId ->
@@ -640,7 +646,9 @@ private fun BookLanguageFontsDialog(
                 }
                 if (hasMath) {
                     item(key = "math") {
-                        val compatible = availableFonts.filter { (it.scriptMask and SCRIPT_MATH) == SCRIPT_MATH }
+                        val compatible = availableFonts.filter {
+                            MATH_SCRIPT in it.scripts
+                        }
                         val selectedId = selections.firstOrNull { it.locale == FONT_TARGET_MATH }?.fontId
                         FontTargetOptions("Math", selectedId, compatible, availableFonts, globalFontId) { fontId ->
                             selections = selections.filterNot { it.locale == FONT_TARGET_MATH } +
@@ -705,7 +713,13 @@ private fun MetadataField(label: String, value: String) {
 }
 
 val NanoBook.isArticle: Boolean
-    get() = category == "article"
+    get() = name.startsWith("articles/")
+
+val NanoBook.readPercent: Int?
+    get() = reading?.let {
+        val lastIndex = (metadata.wordCount - 1).coerceAtLeast(1)
+        (it.wordIndex.coerceIn(0, lastIndex) * 100) / lastIndex
+    }
 
 val NanoBook.byteLabel: String
     get() = bytes.toByteLabel()

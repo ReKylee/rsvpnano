@@ -34,9 +34,9 @@ namespace settings {
             return secrets_;
         }
 
-        SettingsResult<> acceptChanges();
-        SettingsResult<> acceptSecretChanges();
-        SettingsResult<> replace(DeviceSettings candidate, SettingsSource source);
+        void acceptChanges();
+        void acceptSecretChanges();
+        void replace(DeviceSettings candidate, SettingsSource source);
         void update(uint32_t nowMs);
         SettingsResult<> flush();
         void closeNvs();

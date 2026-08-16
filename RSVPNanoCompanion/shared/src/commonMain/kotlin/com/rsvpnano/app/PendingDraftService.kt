@@ -1,7 +1,7 @@
 package com.rsvpnano.app
 
 import com.rsvpnano.api.ArticleFetchClient
-import com.rsvpnano.api.NanoClient
+import com.rsvpnano.api.NanoApi
 import com.rsvpnano.converters.ArticleFormatter
 import com.rsvpnano.converters.RsvpBookFile
 import com.rsvpnano.converters.RsvpConverter
@@ -47,7 +47,7 @@ class PendingDraftService(
         )
     }
 
-    suspend fun syncPendingUploads(client: NanoClient, baseUrl: String, items: List<PendingUpload>): List<PendingUpload> {
+    suspend fun syncPendingUploads(client: NanoApi, baseUrl: String, items: List<PendingUpload>): List<PendingUpload> {
         items.forEach { item ->
             val file = bookFileFor(item)
             client.uploadBook(baseUrl = baseUrl, name = file.filename, data = file.data, category = "article")

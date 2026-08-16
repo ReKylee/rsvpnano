@@ -1,8 +1,9 @@
 # Multilingual reader corpus
 
 `generate_multilingual_corpus.py` produces equivalent TXT, Markdown, HTML, XHTML, EPUB 2, EPUB 3, and RSVP
-documents. Short excerpts cover every bundled reader capability; the final synthetic paragraph exercises mixed
-LTR/RTL text, European and Arabic numerals, CJK, punctuation, and linear Unicode math.
+documents. Each excerpt is its own chapter named for the language in that language. Short excerpts cover every
+bundled reader capability; the final synthetic chapter exercises mixed LTR/RTL text, European and Arabic numerals,
+CJK, punctuation, and linear Unicode math.
 
 The excerpts are attributed to public-domain works:
 

@@ -282,9 +282,9 @@ namespace locales {
             return std::unexpected("manifest has invalid script metadata");
         if (!manifest.ui || !manifest.ui->strings)
             return std::unexpected("locale pack has no UI strings");
-        if (auto valid = validateAssets(manifest); !valid)
-            return std::unexpected(valid.error());
-        return manifest;
+        return validateAssets(manifest).transform([manifest = std::move(manifest)]() mutable {
+            return std::move(manifest);
+        });
     }
 
 } // namespace locales

@@ -1051,6 +1051,19 @@ void test_slider_redraws_with_its_active_color() {
     TEST_ASSERT_EQUAL_HEX16(0x2222, gfx.lastFillColor);
 }
 
+void test_wide_slider_uses_larger_label_and_value_text() {
+    Arduino_GFX gfx(640, 172);
+    ui::Context context(gfx);
+    context.setTheme(theme());
+    int wordsPerMinute = 300;
+
+    context.beginFrame(3);
+    context.slider({0, 0, 578, 44}, "Words per minute", wordsPerMinute, 50, 1500, 25, " WPM");
+    context.endFrame();
+
+    TEST_ASSERT_EQUAL_UINT8(3, gfx.lastTextSize);
+}
+
 void test_keyboard_edits_and_submits() {
     Arduino_GFX gfx;
     ui::Context context(gfx);
@@ -1361,6 +1374,7 @@ int main(int, char**) {
     RUN_TEST(test_labels_align_and_battery_owns_its_drawing);
     RUN_TEST(test_setting_gives_long_values_the_full_card_width);
     RUN_TEST(test_slider_redraws_with_its_active_color);
+    RUN_TEST(test_wide_slider_uses_larger_label_and_value_text);
     RUN_TEST(test_keyboard_edits_and_submits);
     RUN_TEST(test_orientation_owns_graphics_touch_and_hourglass_cache);
     RUN_TEST(test_focus_timer_text_does_not_redraw_hourglass);

@@ -63,6 +63,14 @@ namespace screens {
         return Action::None;
     }
 
+    void FocusScreen::setTimers(focus::Timers timers) {
+        timers_ = std::move(timers);
+        editIndex_ = 0;
+        activeIndex_ = 0;
+        creating_ = false;
+        deleteConfirm_ = false;
+    }
+
     void FocusScreen::close() {
         session_.stop();
     }

@@ -1,5 +1,6 @@
 package com.rsvpnano.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,16 +9,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Brightness6
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Info
@@ -25,22 +30,28 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
@@ -51,10 +62,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.rsvpnano.models.NanoLocales
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoSettingsSchema
@@ -70,6 +91,7 @@ internal enum class SettingsDestination(
     Device("Reader & network", Icons.Outlined.Wifi, "Connect to your reader, configure its Wi-Fi, and choose its update source."),
     Reading("Reading", Icons.AutoMirrored.Outlined.MenuBook, "Set reading speed, pacing, pauses, footer information, and controls."),
     Typography("Typography", Icons.Outlined.TextFields, "Adjust reader text size, tracking, focus highlight, and guide placement."),
+    FocusTimers("Focus timers", Icons.Outlined.Timer, "Create up to six focus and break routines for your reader."),
     Display("Display", Icons.Outlined.Brightness6, "Choose brightness, standby behavior, and screensaver settings."),
     Themes("Themes", Icons.Outlined.Palette, "Choose the active theme or install themes from the configured repository."),
     Locales("Languages", Icons.Outlined.Language, "Choose the interface language or install a locale pack. Reader language support comes from fonts."),
@@ -92,6 +114,18 @@ internal fun SettingsScreen(
     onDestinationSelected: (SettingsDestination) -> Unit,
 ) {
     val selected = destination ?: SettingsDestination.Device
+    val refreshingResources = when (selected) {
+        SettingsDestination.Device -> setOf(CompanionResource.Settings, CompanionResource.Wifi)
+        SettingsDestination.Reading,
+        SettingsDestination.Display,
+        -> setOf(CompanionResource.Settings)
+        SettingsDestination.Typography -> setOf(CompanionResource.Settings, CompanionResource.Fonts)
+        SettingsDestination.FocusTimers -> setOf(CompanionResource.FocusTimers)
+        SettingsDestination.Themes -> setOf(CompanionResource.Themes)
+        SettingsDestination.Locales -> setOf(CompanionResource.Locales)
+        SettingsDestination.Fonts -> setOf(CompanionResource.Fonts)
+        SettingsDestination.About -> emptySet()
+    }
     val content: @Composable (Modifier) -> Unit = { modifier ->
         SettingsContent(
             destination = selected,
@@ -108,12 +142,35 @@ internal fun SettingsScreen(
     }
 
     PullRefreshBox(
-        isRefreshing = uiState.isRefreshing,
-        onRefresh = when (selected) {
-            SettingsDestination.Themes -> presenter::refreshThemeCatalog
-            SettingsDestination.Locales -> presenter::refreshLocaleCatalog
-            SettingsDestination.Fonts -> presenter::refreshFontCatalog
-            else -> presenter::refresh
+        isRefreshing = uiState.loadingResources.any(refreshingResources::contains),
+        onRefresh = {
+            when (selected) {
+                SettingsDestination.Device -> {
+                    presenter.refreshSettings()
+                    presenter.refreshWifiSettings()
+                }
+                SettingsDestination.Reading,
+                SettingsDestination.Display,
+                -> presenter.refreshSettings()
+                SettingsDestination.Typography -> {
+                    presenter.refreshSettings()
+                    presenter.refreshFonts()
+                }
+                SettingsDestination.FocusTimers -> presenter.refreshFocusTimers()
+                SettingsDestination.Themes -> {
+                    presenter.refreshThemes()
+                    if (uiState.settings != null) presenter.refreshThemeCatalog()
+                }
+                SettingsDestination.Locales -> {
+                    presenter.refreshLocales()
+                    if (uiState.settings != null) presenter.refreshLocaleCatalog()
+                }
+                SettingsDestination.Fonts -> {
+                    presenter.refreshFonts()
+                    if (uiState.settings != null) presenter.refreshFontCatalog()
+                }
+                SettingsDestination.About -> Unit
+            }
         },
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -205,10 +262,11 @@ private fun SettingsContent(
 
             SettingsDestination.Themes -> ThemeSettings(
                 uiState = uiState,
-                onUpdateSettings = presenter::updateSettings,
+                onSelectTheme = presenter::selectTheme,
                 onRefreshThemeCatalog = presenter::refreshThemeCatalog,
                 onInstallOnlineTheme = presenter::installOnlineTheme,
                 onUploadTheme = onUploadTheme,
+                onRemoveTheme = presenter::removeTheme,
             )
 
             SettingsDestination.Typography -> TypographySettings(
@@ -216,9 +274,14 @@ private fun SettingsContent(
                 onUpdateSettings = presenter::updateSettings,
             )
 
+            SettingsDestination.FocusTimers -> FocusTimersSettings(
+                uiState = uiState,
+                onSave = presenter::saveFocusTimers,
+            )
+
             SettingsDestination.Locales -> LocaleSettings(
                 uiState = uiState,
-                onUpdateSettings = presenter::updateSettings,
+                onSelectLocale = presenter::selectLocale,
                 onUploadLocalePack = onUploadLocalePack,
                 onRemoveLocalePack = presenter::removeLocalePack,
                 onRefreshLocaleCatalog = presenter::refreshLocaleCatalog,
@@ -227,7 +290,7 @@ private fun SettingsContent(
 
             SettingsDestination.Fonts -> FontSettings(
                 uiState = uiState,
-                onUpdateSettings = presenter::updateSettings,
+                onSelectFont = presenter::selectFont,
                 onRefreshFontCatalog = presenter::refreshFontCatalog,
                 onInstallOnlineFont = presenter::installOnlineFont,
                 onUploadFont = onUploadFont,
@@ -240,7 +303,7 @@ private fun SettingsContent(
 }
 
 @Composable
-private fun SettingsPage(
+internal fun SettingsPage(
     content: @Composable () -> Unit,
 ) {
     Column(
@@ -270,13 +333,13 @@ private fun DeviceSettings(
     SettingsPage {
         SettingsSection(
             title = "Reader",
-            subtitle = "The app finds the Nano on shared Wi-Fi, then offers its direct network when needed.",
+            subtitle = "Connection details for your RSVP Nano reader.",
         ) {
             if (!hasPermissions) {
                 SettingsStatusRow(
                     icon = Icons.Outlined.WarningAmber,
                     title = "Wi-Fi permission needed",
-                    body = "Allow nearby-network access to find Nano devices.",
+                    body = "Allow nearby devices so the app can find your reader.",
                     action = {
                         TextButton(onClick = onGrantPermissions) {
                             Text(text = "Grant")
@@ -290,9 +353,9 @@ private fun DeviceSettings(
                 icon = if (remembered != null) Icons.Outlined.CheckCircle else Icons.Outlined.Wifi,
                 title = if (remembered != null) "Remembered Nano" else "No Nano remembered",
                 body = remembered?.ssid ?: if (uiState.isConnected) {
-                    "Use the Remember action above to save this Nano for direct connection."
+                    "Remember this reader to connect directly later."
                 } else {
-                    "Connect once to remember its direct network for times without regular Wi-Fi."
+                    "Connect to a reader to remember it."
                 },
                 action = remembered?.let {
                     {
@@ -307,44 +370,55 @@ private fun DeviceSettings(
         if (uiState.settings != null && uiState.isConnected) {
             SettingsSection(
                 title = "Internet Wi-Fi",
-                subtitle = "Saved on the Nano for RSS and device updates.",
+                subtitle = "Used by the reader for RSS feeds and updates.",
             ) {
-                val wifiStatus = uiState.settings.network.wifiSsid
-                    .takeIf(String::isNotBlank)
-                    ?.let { "Saved network: $it" }
-                    ?: "No saved network"
-                SettingsStatusRow(
-                    icon = Icons.Outlined.Wifi,
-                    title = "Nano internet network",
-                    body = wifiStatus,
-                )
-                OutlinedTextField(
-                    value = uiState.wifiSsidDraft,
-                    onValueChange = onWifiSsidChange,
-                    label = { Text("Network name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = uiState.wifiPasswordDraft,
-                    onValueChange = onWifiPasswordChange,
-                    label = { Text("Password") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onSaveWifi) {
-                        Text(text = "Save Wi-Fi")
+                if (CompanionResource.Wifi !in uiState.loadedResources) {
+                    if (CompanionResource.Wifi in uiState.loadingResources) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    } else {
+                        Text(
+                            "Network settings could not be loaded.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                    FilledTonalButton(
-                        onClick = onClearWifi,
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                        ),
-                    ) {
-                        Text(text = "Forget network")
+                } else {
+                    val wifiStatus = uiState.wifiSettings?.ssid.orEmpty()
+                        .takeIf(String::isNotBlank)
+                        ?.let { "Saved network: $it" }
+                        ?: "No saved network"
+                    SettingsStatusRow(
+                        icon = Icons.Outlined.Wifi,
+                        title = "Nano internet network",
+                        body = wifiStatus,
+                    )
+                    OutlinedTextField(
+                        value = uiState.wifiSsidDraft,
+                        onValueChange = onWifiSsidChange,
+                        label = { Text("Network name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = uiState.wifiPasswordDraft,
+                        onValueChange = onWifiPasswordChange,
+                        label = { Text("Password") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = onSaveWifi) {
+                            Text(text = "Save Wi-Fi")
+                        }
+                        FilledTonalButton(
+                            onClick = onClearWifi,
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            ),
+                        ) {
+                            Text(text = "Forget network")
+                        }
                     }
                 }
             }
@@ -352,7 +426,7 @@ private fun DeviceSettings(
 
         SettingsSection(
             title = "Firmware updates",
-            subtitle = "Use the Nano's release source and notify when its exact OTA image is available.",
+            subtitle = "Choose where the reader gets firmware updates.",
         ) {
             val settings = uiState.settings
             if (settings != null && uiState.isConnected) {
@@ -400,23 +474,23 @@ private fun DeviceSettings(
                     Text("Save release source")
                 }
                 SwitchRow(
-                    label = "Check on the Nano",
-                    description = "Let the reader check this source automatically when it has internet access.",
-                    checked = settings.updates.automatic,
+                    label = "Check at startup",
+                    description = "Check for updates when the reader starts with Wi-Fi.",
+                    checked = settings.updates.checkOnStartup,
                     onCheckedChange = { enabled ->
-                        onUpdateSettings { it.withAutomaticUpdateChecks(enabled) }
+                        onUpdateSettings { it.withUpdateChecksOnStartup(enabled) }
                     },
                 )
             } else {
                 SettingsStatusRow(
                     icon = Icons.Outlined.SystemUpdate,
-                    title = "Connect to configure releases",
-                    body = "The source, current version, and OTA image come directly from your Nano.",
+                    title = "Connect to manage updates",
+                    body = "Update settings come from the reader.",
                 )
             }
             SwitchRow(
                 label = "Update notifications",
-                description = "Allow the app to check about once a day and notify once per release.",
+                description = "Check daily and notify you when a new release is available.",
                 checked = uiState.firmwareNotificationsEnabled,
                 onCheckedChange = onFirmwareNotificationsChange,
             )
@@ -436,19 +510,16 @@ private fun ReadingSettings(
             return@SettingsPage
         }
 
-        SettingsSection(
-            title = "Reading pace",
-            subtitle = "Speed and pause behavior while reading.",
-        ) {
+        SettingsSection(title = "Speed and pauses") {
             SliderRow(
-                label = "Base speed",
-                description = "Words shown per minute.",
+                label = "Words per minute",
                 valueLabel = { value -> "${NanoSettingsSchema.snapWpm(value.toInt())} WPM" },
                 value = settings.reading.wpm.toFloat(),
                 valueRange = NanoSettingsSchema.WPM_MIN.toFloat()..NanoSettingsSchema.WPM_MAX.toFloat(),
                 steps = 0,
                 snapValue = { value -> NanoSettingsSchema.snapWpm(value.toInt()).toFloat() },
                 onValueChangeFinished = { value -> onUpdateSettings { it.withWpm(value.toInt()) } },
+                prominentHeader = true,
             )
             SegmentedChoiceRow(
                 label = "Pause behavior",
@@ -462,10 +533,7 @@ private fun ReadingSettings(
             )
         }
 
-        SettingsSection(
-            title = "Extra delay",
-            subtitle = "Add time where text needs more attention.",
-        ) {
+        SettingsSection(title = "Timing adjustments") {
             PacingSlider(
                 label = "Long words",
                 value = settings.reading.pacing.longWordDelayMs,
@@ -482,16 +550,11 @@ private fun ReadingSettings(
                 onChanged = { value -> onUpdateSettings { it.withPacingPunctuationMs(value) } },
             )
             TextButton(
-                onClick = {
-                    onUpdateSettings {
-                        it.withPacingLongWordMs(0)
-                            .withPacingComplexWordMs(0)
-                            .withPacingPunctuationMs(0)
-                    }
-                },
+                onClick = { onUpdateSettings(NanoSettings::withDefaultPacing) },
+                enabled = settings.reading.pacing != NanoSettings.Pacing(),
             ) {
                 Icon(imageVector = Icons.Outlined.Sync, contentDescription = null)
-                Text(text = "Reset pacing")
+                Text(text = "Reset to defaults")
             }
         }
     }
@@ -511,6 +574,7 @@ private fun PacingSlider(
         steps = 11,
         snapValue = { sliderValue -> NanoSettingsSchema.snapPacingMs(sliderValue.toInt()).toFloat() },
         onValueChangeFinished = { sliderValue -> onChanged(sliderValue.toInt()) },
+        prominentHeader = true,
     )
 }
 
@@ -526,10 +590,7 @@ private fun DisplaySettings(
             return@SettingsPage
         }
 
-        SettingsSection(
-            title = "Display",
-            subtitle = "Brightness and one-handed layout.",
-        ) {
+        SettingsSection(title = "Display") {
             SliderRow(
                 label = "Brightness",
                 description = "Applied immediately.",
@@ -538,10 +599,11 @@ private fun DisplaySettings(
                 valueRange = NanoSettingsSchema.BRIGHTNESS_MIN.toFloat()..NanoSettingsSchema.BRIGHTNESS_MAX.toFloat(),
                 steps = 18,
                 onValueChangeFinished = { value -> onUpdateSettings { it.withBrightnessPercent(value.toInt()) } },
+                prominentHeader = true,
             )
             SegmentedChoiceRow(
                 label = "Reader hand",
-                description = "Moves navigation controls for one-handed use.",
+                description = "Places the previous-sentence tap area on this side.",
                 selected = if (settings.reading.leftHanded) {
                     NanoSettingsSchema.HANDEDNESS_LEFT
                 } else {
@@ -559,7 +621,7 @@ private fun DisplaySettings(
             title = "Reader status",
             subtitle = "Choose what the footer and reading screen show.",
         ) {
-            DropdownRow(
+            ChoiceChipRow(
                 label = "Footer label",
                 selected = settings.reading.footerMetric,
                 options = listOf(
@@ -569,7 +631,7 @@ private fun DisplaySettings(
                 ),
                 onSelected = { metric -> onUpdateSettings { it.withFooterMetric(metric) } },
             )
-            DropdownRow(
+            ChoiceChipRow(
                 label = "Battery label",
                 selected = settings.reading.batteryLabel,
                 options = listOf(
@@ -643,62 +705,90 @@ private fun DisplaySettings(
 @Composable
 private fun ThemeSettings(
     uiState: CompanionUiState,
-    onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
+    onSelectTheme: (String) -> Unit,
     onRefreshThemeCatalog: () -> Unit,
     onInstallOnlineTheme: (String) -> Unit,
     onUploadTheme: () -> Unit,
+    onRemoveTheme: (String) -> Unit,
 ) {
+    var pendingRemoval by remember { mutableStateOf<Pair<String, String>?>(null) }
     SettingsPage {
         val settings = uiState.settings
         if (settings == null) {
             UnavailableSettings(uiState.isConnected)
             return@SettingsPage
         }
-        SettingsSection(title = "Active theme") {
-            DropdownRow(
-                label = "Theme",
-                description = "Colors and typeface settings used by the Nano.",
-                selected = settings.`interface`.selectedThemeId,
-                options = uiState.availableThemes
-                    .map { theme -> theme.id to theme.name }
-                    .ifEmpty { listOf(settings.`interface`.selectedThemeId to settings.`interface`.selectedThemeId) },
-                onSelected = { themeId -> onUpdateSettings { it.withThemeId(themeId) } },
-            )
-        }
-        SettingsSection(title = "Installed") {
-            if (uiState.availableThemes.isEmpty()) {
-                Text("No themes reported by the reader.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            uiState.availableThemes.forEach { theme ->
-                AssetRow(theme.name, "Available on the reader", action = null, onAction = {})
-            }
-        }
-        val installedIds = uiState.availableThemes.mapTo(mutableSetOf()) { it.id }
+        val install = uiState.catalogInstall
+        val installedLoaded = CompanionResource.Themes in uiState.loadedResources
+        val controlsEnabled = install == null && installedLoaded
+        val installedById = uiState.availableThemes.associateBy { it.id }
+        val catalogById = uiState.themeCatalog.associateBy { it.id }
+        val themeIds = buildList {
+            add(NanoSettingsSchema.THEME_DEFAULT)
+            addAll(uiState.themeCatalog.map { it.id })
+            addAll(uiState.availableThemes.map { it.id })
+        }.distinct()
         SettingsSection(
-            title = "Available from ${catalogSource(settings)}",
+            title = "Themes",
+            subtitle = "Choose an installed theme as the default, or install one from ${catalogSource(settings)}.",
             action = {
-                IconButton(onClick = onRefreshThemeCatalog) {
+                IconButton(onClick = onRefreshThemeCatalog, enabled = controlsEnabled) {
                     Icon(Icons.Outlined.Sync, contentDescription = "Refresh theme catalog")
                 }
             },
         ) {
-            val available = uiState.themeCatalog.filterNot { it.id in installedIds }
-            if (available.isEmpty()) {
+            if (!installedLoaded) {
+                if (CompanionResource.Themes in uiState.loadingResources) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                } else {
+                    Text("Installed themes could not be loaded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (installedLoaded) themeIds.forEach { id ->
+                val installedTheme = installedById[id]
+                val catalogTheme = catalogById[id]
+                val installed = id == NanoSettingsSchema.THEME_DEFAULT || installedTheme != null
+                val name = installedTheme?.name ?: catalogTheme?.name ?: "Default"
+                CatalogAssetRow(
+                    title = name,
+                    subtitle = when {
+                        id == NanoSettingsSchema.THEME_DEFAULT -> "Built in"
+                        installed -> "Installed"
+                        else -> "Available to install"
+                    },
+                    selected = installed && settings.`interface`.selectedThemeId == id,
+                    enabled = controlsEnabled,
+                    install = install?.takeIf { it.asset == CatalogAsset.Theme && it.id == id },
+                    onSelect = if (installed) {
+                        { onSelectTheme(id) }
+                    } else null,
+                    onDelete = if (installed && id != NanoSettingsSchema.THEME_DEFAULT) {
+                        { pendingRemoval = id to name }
+                    } else null,
+                    onInstall = if (!installed && catalogTheme != null) {
+                        { onInstallOnlineTheme(id) }
+                    } else null,
+                )
+            }
+            if (uiState.themeCatalog.isEmpty() && uiState.themeCatalogUrl.isNotBlank()) {
                 Text(
-                    if (uiState.themeCatalog.isEmpty()) "The online theme catalog is unavailable." else "All available themes are installed.",
+                    "The online theme catalog is unavailable.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            available.forEach { theme ->
-                AssetRow(
-                    title = theme.name,
-                    subtitle = "Theme",
-                    action = "Install",
-                    onAction = { onInstallOnlineTheme(theme.id) },
-                )
-            }
-            UploadRow("Install local theme file", onUploadTheme)
+            UploadRow("Install local theme file", controlsEnabled, onUploadTheme)
         }
+    }
+    pendingRemoval?.let { (id, name) ->
+        ConfirmCatalogRemoval(
+            type = "theme",
+            name = name,
+            onDismiss = { pendingRemoval = null },
+            onConfirm = {
+                pendingRemoval = null
+                onRemoveTheme(id)
+            },
+        )
     }
 }
 
@@ -707,156 +797,444 @@ private fun TypographySettings(
     uiState: CompanionUiState,
     onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
 ) {
-    SettingsPage {
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .widthIn(max = 760.dp)
+            .padding(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 16.dp),
+    ) {
         val settings = uiState.settings
         if (settings == null) {
             UnavailableSettings(uiState.isConnected)
-            return@SettingsPage
+            return@BoxWithConstraints
         }
 
-        SettingsSection(
-            title = "Text",
-            subtitle = "Reader text size and spacing.",
+        var previewTypography by remember(settings.reading.typography) {
+            mutableStateOf(settings.reading.typography)
+        }
+        var previewPhantomWords by remember(settings.reading.phantomWords) {
+            mutableStateOf(settings.reading.phantomWords)
+        }
+        val previewHeight = if (maxHeight < 560.dp) 128.dp else 152.dp
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            SegmentedChoiceRow(
-                label = "Font size",
-                selected = settings.reading.typography.fontSizeIndex.toString(),
-                options = listOf("0" to "Large", "1" to "Medium", "2" to "Small", "3" to "Compact"),
-                onSelected = { value -> onUpdateSettings { it.withFontSizeIndex(value.toInt()) } },
+            TypographySizeSelector(
+                selected = previewTypography.fontSizeIndex.toString(),
+                onSelected = { value ->
+                    val index = value.toInt()
+                    previewTypography = previewTypography.copy(fontSizeIndex = index)
+                    onUpdateSettings { it.withFontSizeIndex(index) }
+                },
             )
-            SliderRow(
-                label = "Tracking",
-                description = "Space between letters.",
-                valueLabel = { value -> value.toInt().toString() },
-                value = settings.reading.typography.tracking.toFloat(),
-                valueRange = NanoSettingsSchema.TRACKING_MIN.toFloat()..NanoSettingsSchema.TRACKING_MAX.toFloat(),
-                steps = 4,
-                onValueChangeFinished = { value -> onUpdateSettings { it.withTracking(value.toInt()) } },
-            )
-        }
 
-        SettingsSection(
-            title = "Reading focus",
-            subtitle = "Control the anchor and surrounding context.",
+            TypographyPreview(
+                typography = previewTypography,
+                phantomWords = previewPhantomWords,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(previewHeight),
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TypographyToggle(
+                    label = "Focus highlight",
+                    description = "Color the focus letter",
+                    checked = previewTypography.focusHighlight,
+                    onCheckedChange = { checked ->
+                        previewTypography = previewTypography.copy(focusHighlight = checked)
+                        onUpdateSettings { it.withFocusHighlight(checked) }
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                TypographyToggle(
+                    label = "Phantom words",
+                    description = "Show nearby words",
+                    checked = previewPhantomWords,
+                    onCheckedChange = { checked ->
+                        previewPhantomWords = checked
+                        onUpdateSettings { it.withPhantomWords(checked) }
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    TypographySlider(
+                        label = "Tracking",
+                        valueLabel = { it.toInt().toString() },
+                        value = previewTypography.tracking.toFloat(),
+                        valueRange = NanoSettingsSchema.TRACKING_MIN.toFloat()..NanoSettingsSchema.TRACKING_MAX.toFloat(),
+                        steps = 4,
+                        onValueChange = { value ->
+                            previewTypography = previewTypography.copy(tracking = value.toInt())
+                        },
+                        onValueChangeFinished = { value -> onUpdateSettings { it.withTracking(value.toInt()) } },
+                    )
+                    TypographySlider(
+                        label = "Anchor",
+                        valueLabel = { "${it.toInt()}%" },
+                        value = previewTypography.anchor.toFloat(),
+                        valueRange = NanoSettingsSchema.ANCHOR_PERCENT_MIN.toFloat()..NanoSettingsSchema.ANCHOR_PERCENT_MAX.toFloat(),
+                        steps = 9,
+                        onValueChange = { value ->
+                            previewTypography = previewTypography.copy(anchor = value.toInt())
+                        },
+                        onValueChangeFinished = { value -> onUpdateSettings { it.withAnchorPercent(value.toInt()) } },
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    TypographySlider(
+                        label = "Guide width",
+                        valueLabel = { "${it.toInt()} px" },
+                        value = previewTypography.guideWidth.toFloat(),
+                        valueRange = NanoSettingsSchema.GUIDE_WIDTH_MIN.toFloat()..NanoSettingsSchema.GUIDE_WIDTH_MAX.toFloat(),
+                        steps = 8,
+                        snapValue = { NanoSettingsSchema.snapGuideWidth(it.toInt()).toFloat() },
+                        onValueChange = { value ->
+                            previewTypography = previewTypography.copy(guideWidth = value.toInt())
+                        },
+                        onValueChangeFinished = { value -> onUpdateSettings { it.withGuideWidth(value.toInt()) } },
+                    )
+                    TypographySlider(
+                        label = "Guide gap",
+                        valueLabel = { "${it.toInt()} px" },
+                        value = previewTypography.guideGap.toFloat(),
+                        valueRange = NanoSettingsSchema.GUIDE_GAP_MIN.toFloat()..NanoSettingsSchema.GUIDE_GAP_MAX.toFloat(),
+                        steps = 5,
+                        onValueChange = { value ->
+                            previewTypography = previewTypography.copy(guideGap = value.toInt())
+                        },
+                        onValueChangeFinished = { value -> onUpdateSettings { it.withGuideGap(value.toInt()) } },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TypographySizeSelector(
+    selected: String,
+    onSelected: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Reading size", style = MaterialTheme.typography.labelLarge)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            SwitchRow(
-                label = "Focus highlight",
-                description = "Highlights the current word's focus point.",
-                checked = settings.reading.typography.focusHighlight,
-                onCheckedChange = { checked -> onUpdateSettings { it.withFocusHighlight(checked) } },
-            )
-            SwitchRow(
-                label = "Phantom words",
-                description = "Shows adjacent words as faint context.",
-                checked = settings.reading.phantomWords,
-                onCheckedChange = { checked -> onUpdateSettings { it.withPhantomWords(checked) } },
-            )
-            SliderRow(
-                label = "Anchor position",
-                valueLabel = { value -> "${value.toInt()}%" },
-                value = settings.reading.typography.anchor.toFloat(),
-                valueRange = NanoSettingsSchema.ANCHOR_PERCENT_MIN.toFloat()..NanoSettingsSchema.ANCHOR_PERCENT_MAX.toFloat(),
-                steps = 9,
-                onValueChangeFinished = { value -> onUpdateSettings { it.withAnchorPercent(value.toInt()) } },
-            )
-            SliderRow(
-                label = "Guide width",
-                valueLabel = { value -> NanoSettingsSchema.snapGuideWidth(value.toInt()).toString() },
-                value = settings.reading.typography.guideWidth.toFloat(),
-                valueRange = NanoSettingsSchema.GUIDE_WIDTH_MIN.toFloat()..NanoSettingsSchema.GUIDE_WIDTH_MAX.toFloat(),
-                steps = 8,
-                snapValue = { value -> NanoSettingsSchema.snapGuideWidth(value.toInt()).toFloat() },
-                onValueChangeFinished = { value -> onUpdateSettings { it.withGuideWidth(value.toInt()) } },
-            )
-            SliderRow(
-                label = "Guide gap",
-                valueLabel = { value -> value.toInt().toString() },
-                value = settings.reading.typography.guideGap.toFloat(),
-                valueRange = NanoSettingsSchema.GUIDE_GAP_MIN.toFloat()..NanoSettingsSchema.GUIDE_GAP_MAX.toFloat(),
-                steps = 5,
-                onValueChangeFinished = { value -> onUpdateSettings { it.withGuideGap(value.toInt()) } },
+            listOf("0" to "Large", "1" to "Medium", "2" to "Small", "3" to "Compact").forEach { (value, label) ->
+                val isSelected = value == selected
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .selectable(
+                            selected = isSelected,
+                            role = Role.RadioButton,
+                            onClick = { onSelected(value) },
+                        ),
+                    shape = MaterialTheme.shapes.small,
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surfaceContainer,
+                    contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                ) {
+                    Text(
+                        text = label,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 9.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TypographyToggle(
+    label: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.toggleable(
+            value = checked,
+            role = Role.Switch,
+            onValueChange = onCheckedChange,
+        ),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 2)
+                Text(
+                    description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+            Switch(checked = checked, onCheckedChange = null)
+        }
+    }
+}
+
+@Composable
+private fun TypographySlider(
+    label: String,
+    valueLabel: (Float) -> String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: (Float) -> Unit,
+    snapValue: (Float) -> Float = { it },
+) {
+    var sliderValue by remember(value) { mutableStateOf(snapValue(value)) }
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            Text(
+                valueLabel(sliderValue),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        Slider(
+            value = sliderValue.coerceIn(valueRange.start, valueRange.endInclusive),
+            onValueChange = {
+                sliderValue = snapValue(it).coerceIn(valueRange.start, valueRange.endInclusive)
+                onValueChange(sliderValue)
+            },
+            valueRange = valueRange,
+            steps = steps,
+            onValueChangeFinished = { onValueChangeFinished(sliderValue) },
+        )
+    }
+}
 
+@Composable
+private fun TypographyPreview(
+    typography: NanoSettings.Typography,
+    phantomWords: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val foreground = MaterialTheme.colorScheme.onSurface
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+    val accent = MaterialTheme.colorScheme.primary
+    val textMeasurer = rememberTextMeasurer()
+    val wordStyle = TextStyle(
+        color = foreground,
+        fontSize = when (typography.fontSizeIndex) {
+            0 -> 42.sp
+            1 -> 36.sp
+            2 -> 30.sp
+            else -> 24.sp
+        },
+        letterSpacing = typography.tracking.sp,
+    )
+    val phantomStyle = wordStyle.copy(
+        color = muted,
+        fontSize = (wordStyle.fontSize.value * 0.58f).sp,
+    )
+    val focusWord = buildAnnotatedString {
+        append("Re")
+        withStyle(SpanStyle(color = if (typography.focusHighlight) accent else foreground)) {
+            append("a")
+        }
+        append("ding")
+    }
+    val wordLayout = remember(focusWord, wordStyle) {
+        textMeasurer.measure(text = focusWord, style = wordStyle, maxLines = 1, softWrap = false)
+    }
+    val beforeLayout = remember(phantomStyle) {
+        textMeasurer.measure(text = "one word", style = phantomStyle, maxLines = 1, softWrap = false)
+    }
+    val afterLayout = remember(phantomStyle) {
+        textMeasurer.measure(text = "at a time", style = phantomStyle, maxLines = 1, softWrap = false)
+    }
+
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val anchor = size.width * typography.anchor / 100f
+            val wordStart = anchor - wordLayout.getBoundingBox(2).center.x
+            val wordTop = (size.height - wordLayout.size.height) / 2f
+            val guideWidth = typography.guideWidth.dp.toPx()
+            val guideGap = typography.guideGap.dp.toPx()
+            val guideTop = wordTop - 10.dp.toPx()
+            val guideBottom = wordTop + wordLayout.size.height + 10.dp.toPx()
+            val guideColor = foreground.copy(alpha = 0.38f)
+            val markerColor = if (typography.focusHighlight) accent else guideColor
+            val stroke = 1.dp.toPx()
+
+            listOf(guideTop, guideBottom).forEach { y ->
+                drawLine(
+                    color = guideColor,
+                    start = Offset(anchor - guideWidth, y),
+                    end = Offset(anchor - guideGap, y),
+                    strokeWidth = stroke,
+                )
+                drawLine(
+                    color = guideColor,
+                    start = Offset(anchor + guideGap, y),
+                    end = Offset(anchor + guideWidth, y),
+                    strokeWidth = stroke,
+                )
+            }
+            drawLine(
+                color = markerColor,
+                start = Offset(anchor, guideTop),
+                end = Offset(anchor, guideTop + 7.dp.toPx()),
+                strokeWidth = stroke,
+            )
+            drawLine(
+                color = markerColor,
+                start = Offset(anchor, guideBottom - 7.dp.toPx()),
+                end = Offset(anchor, guideBottom),
+                strokeWidth = stroke,
+            )
+
+            drawText(wordLayout, topLeft = Offset(wordStart, wordTop))
+            if (phantomWords) {
+                val phantomGap = 22.dp.toPx()
+                drawText(
+                    beforeLayout,
+                    topLeft = Offset(
+                        wordStart - phantomGap - beforeLayout.size.width,
+                        (size.height - beforeLayout.size.height) / 2f,
+                    ),
+                )
+                drawText(
+                    afterLayout,
+                    topLeft = Offset(
+                        wordStart + wordLayout.size.width + phantomGap,
+                        (size.height - afterLayout.size.height) / 2f,
+                    ),
+                )
+            }
+        }
     }
 }
 
 @Composable
 private fun LocaleSettings(
     uiState: CompanionUiState,
-    onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
+    onSelectLocale: (String) -> Unit,
     onUploadLocalePack: () -> Unit,
     onRemoveLocalePack: (String) -> Unit,
     onRefreshLocaleCatalog: () -> Unit,
     onInstallOnlineLocale: (String) -> Unit,
 ) {
+    var pendingRemoval by remember { mutableStateOf<Pair<String, String>?>(null) }
     SettingsPage {
         val settings = uiState.settings
         if (settings == null) {
             UnavailableSettings(uiState.isConnected)
             return@SettingsPage
         }
+        val install = uiState.catalogInstall
+        val installedLoaded = CompanionResource.Locales in uiState.loadedResources
+        val controlsEnabled = install == null && installedLoaded
+        val installedById = uiState.availableLocales.associateBy { it.id }
+        val catalogById = uiState.localeCatalog.associateBy { it.id }
+        val localeIds = buildList {
+            add(NanoLocales.DEFAULT)
+            addAll(uiState.localeCatalog.filterNot { it.locale == NanoLocales.DEFAULT }.map { it.id })
+            addAll(uiState.availableLocales.filterNot { it.locale == NanoLocales.DEFAULT }.map { it.id })
+        }.distinct()
         SettingsSection(
-            title = "Interface locale",
-            subtitle = "Reader language support comes from installed fonts.",
-        ) {
-            DropdownRow(
-                label = "Interface language",
-                selected = settings.`interface`.locale,
-                options = buildList {
-                    add(NanoLocales.DEFAULT to "English")
-                    uiState.availableLocales.filter { it.locale.isNotBlank() }
-                        .forEach { add(it.locale to it.nativeName) }
-                }.distinctBy { it.first },
-                onSelected = { locale -> onUpdateSettings { it.withLocale(locale) } },
-            )
-        }
-        SettingsSection(
-            title = "Installed",
-            subtitle = "These affect only interface text and its compact UI font.",
-        ) {
-            if (uiState.availableLocales.isEmpty()) {
-                Text("No external locale packs installed.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            uiState.availableLocales.forEach { localePack ->
-                AssetRow(
-                    title = localePack.nativeName,
-                    subtitle = localeDetails(
-                        localePack.englishName,
-                        localePack.direction,
-                        localePack.translationStatus,
-                    ),
-                    action = "Remove",
-                    onAction = { onRemoveLocalePack(localePack.id) },
-                )
-            }
-        }
-        val installedIds = uiState.availableLocales.mapTo(mutableSetOf()) { it.id }
-        SettingsSection(
-            title = "Available from ${catalogSource(settings)}",
+            title = "Interface languages",
+            subtitle = "Choose an installed UI language, or install one from ${catalogSource(settings)}. Reader language support comes from fonts.",
             action = {
-                IconButton(onClick = onRefreshLocaleCatalog) {
+                IconButton(onClick = onRefreshLocaleCatalog, enabled = controlsEnabled) {
                     Icon(Icons.Outlined.Sync, contentDescription = "Refresh locale catalog")
                 }
             },
         ) {
-            val available = uiState.localeCatalog.filterNot { it.id in installedIds }
-            if (available.isEmpty()) {
+            if (!installedLoaded) {
+                if (CompanionResource.Locales in uiState.loadingResources) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                } else {
+                    Text("Installed languages could not be loaded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (installedLoaded) localeIds.forEach { id ->
+                if (id == NanoLocales.DEFAULT) {
+                    CatalogAssetRow(
+                        title = "English",
+                        subtitle = "Built in${INLINE_DIVIDER}Left-to-right",
+                        selected = settings.`interface`.locale == NanoLocales.DEFAULT,
+                        enabled = controlsEnabled,
+                        onSelect = { onSelectLocale(NanoLocales.DEFAULT) },
+                    )
+                    return@forEach
+                }
+
+                val installedPack = installedById[id]
+                val catalogPack = catalogById[id]
+                val installed = installedPack != null
+                val name = installedPack?.name ?: catalogPack?.name ?: id
+                CatalogAssetRow(
+                    title = name,
+                    subtitle = catalogPack?.let {
+                        localeDetails(it.englishName, it.direction, it.translationStatus, it.version)
+                    }.orEmpty(),
+                    selected = installed && settings.`interface`.locale == installedPack.locale,
+                    enabled = controlsEnabled,
+                    install = install?.takeIf { it.asset == CatalogAsset.Locale && it.id == id },
+                    onSelect = installedPack?.let { pack ->
+                        { onSelectLocale(pack.locale) }
+                    },
+                    onDelete = if (installed) {
+                        { pendingRemoval = id to name }
+                    } else null,
+                    onInstall = if (!installed && catalogPack != null) {
+                        { onInstallOnlineLocale(id) }
+                    } else null,
+                )
+            }
+            if (uiState.localeCatalog.isEmpty() && uiState.localeCatalogUrl.isNotBlank()) {
                 Text(
-                    if (uiState.localeCatalog.isEmpty()) "The online locale catalog is unavailable." else "All available locale packs are installed.",
+                    "The online locale catalog is unavailable.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            available.forEach { pack ->
-                AssetRow(
-                    title = pack.name,
-                    subtitle = localeDetails(pack.englishName, pack.direction, pack.translationStatus, pack.version),
-                    action = "Install",
-                    onAction = { onInstallOnlineLocale(pack.id) },
-                )
-            }
-            UploadRow("Install locale pack from ZIP", onUploadLocalePack)
+            UploadRow("Install locale pack from ZIP", controlsEnabled, onUploadLocalePack)
         }
+    }
+    pendingRemoval?.let { (id, name) ->
+        ConfirmCatalogRemoval(
+            type = "interface language",
+            name = name,
+            onDismiss = { pendingRemoval = null },
+            onConfirm = {
+                pendingRemoval = null
+                onRemoveLocalePack(id)
+            },
+        )
     }
 }
 
@@ -868,10 +1246,12 @@ private fun SettingsIndex(
     val settings = uiState.settings
     val summaries = mapOf(
         SettingsDestination.Device to if (uiState.isConnected) {
-            listOf(
-                "Connected to ${uiState.currentNano?.ssid ?: "Nano"}",
-                settings?.network?.wifiSsid?.takeIf(String::isNotBlank) ?: "No internet Wi-Fi",
-            ).joinToString(INLINE_DIVIDER)
+            buildList {
+                add("Connected to ${uiState.currentNano?.ssid ?: "Nano"}")
+                if (CompanionResource.Wifi in uiState.loadedResources) {
+                    add(uiState.wifiSettings?.ssid?.takeIf(String::isNotBlank) ?: "No internet Wi-Fi")
+                }
+            }.joinToString(INLINE_DIVIDER)
         } else {
             "Not connected"
         },
@@ -886,6 +1266,14 @@ private fun SettingsIndex(
                 .getOrElse(it.reading.typography.fontSizeIndex) { "Default" }
             listOf(font, size, "Tracking ${it.reading.typography.tracking}").joinToString(INLINE_DIVIDER)
         }.orEmpty(),
+        SettingsDestination.FocusTimers to if (CompanionResource.FocusTimers in uiState.loadedResources) {
+            val count = uiState.focusTimers.timers.size
+            "$count ${if (count == 1) "routine" else "routines"}"
+        } else if (!uiState.isConnected) {
+            "Not connected"
+        } else {
+            ""
+        },
         SettingsDestination.Display to settings?.let {
             listOf("${it.`interface`.brightnessPercent}% brightness", it.`interface`.screensaver)
                 .joinToString(INLINE_DIVIDER)
@@ -893,18 +1281,32 @@ private fun SettingsIndex(
         SettingsDestination.Themes to settings?.let {
             val theme = uiState.availableThemes.firstOrNull { installed -> installed.id == it.`interface`.selectedThemeId }?.name
                 ?: it.`interface`.selectedThemeId
-            listOf(theme, "${uiState.availableThemes.size} installed").joinToString(INLINE_DIVIDER)
+            buildList {
+                add(theme)
+                if (CompanionResource.Themes in uiState.loadedResources) {
+                    add("${uiState.availableThemes.size} installed")
+                }
+            }.joinToString(INLINE_DIVIDER)
         }.orEmpty(),
         SettingsDestination.Locales to settings?.let {
-            val locale = uiState.availableLocales.firstOrNull { pack -> pack.locale == it.`interface`.locale }?.nativeName
-                ?: "English"
-            listOf(locale, "${uiState.availableLocales.size} locale packs installed").joinToString(INLINE_DIVIDER)
+            val locale = uiState.availableLocales.firstOrNull { pack -> pack.locale == it.`interface`.locale }?.name
+                ?: if (it.`interface`.locale == NanoLocales.DEFAULT) "English" else it.`interface`.locale
+            buildList {
+                add(locale)
+                if (CompanionResource.Locales in uiState.loadedResources) {
+                    add("${uiState.availableLocales.size} locale packs installed")
+                }
+            }.joinToString(INLINE_DIVIDER)
         }.orEmpty(),
         SettingsDestination.Fonts to settings?.let {
             val font = uiState.availableFonts.firstOrNull { installed -> installed.id == it.reading.typography.fontId }?.name
                 ?: it.reading.typography.fontId
-            listOf(font, "${uiState.availableFonts.count { installed -> !installed.builtIn }} reader fonts installed")
-                .joinToString(INLINE_DIVIDER)
+            buildList {
+                add(font)
+                if (CompanionResource.Fonts in uiState.loadedResources) {
+                    add("${uiState.availableFonts.count { installed -> !installed.builtIn }} reader fonts installed")
+                }
+            }.joinToString(INLINE_DIVIDER)
         }.orEmpty(),
     )
     Column(
@@ -935,104 +1337,210 @@ private fun SettingsIndex(
 @Composable
 private fun FontSettings(
     uiState: CompanionUiState,
-    onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
+    onSelectFont: (String) -> Unit,
     onRefreshFontCatalog: () -> Unit,
     onInstallOnlineFont: (String) -> Unit,
     onUploadFont: () -> Unit,
     onRemoveFont: (String) -> Unit,
 ) {
+    var pendingRemoval by remember { mutableStateOf<Pair<String, String>?>(null) }
     SettingsPage {
         val settings = uiState.settings
         if (settings == null) {
             UnavailableSettings(uiState.isConnected)
             return@SettingsPage
         }
+        val install = uiState.catalogInstall
+        val installedLoaded = CompanionResource.Fonts in uiState.loadedResources
+        val controlsEnabled = install == null && installedLoaded
+        val installedById = uiState.availableFonts.associateBy { it.id }
+        val catalogById = uiState.fontCatalog.associateBy { it.id }
+        val fontIds = buildList {
+            addAll(uiState.availableFonts.filter { it.builtIn }.map { it.id })
+            addAll(uiState.fontCatalog.map { it.id })
+            addAll(uiState.availableFonts.map { it.id })
+        }.distinct()
         SettingsSection(
-            title = "Default reader font",
-            subtitle = "Used for every book unless that book selects a compatible font for a language.",
-        ) {
-            DropdownRow(
-                label = "Typeface",
-                selected = settings.reading.typography.fontId,
-                options = uiState.availableFonts.map { it.id to it.name }
-                    .ifEmpty { listOf(settings.reading.typography.fontId to settings.reading.typography.fontId) },
-                onSelected = { typeface -> onUpdateSettings { it.withTypeface(typeface) } },
-            )
-        }
-        SettingsSection(
-            title = "Installed",
-            subtitle = "Only compatible fonts appear when choosing a typeface for a book language.",
-        ) {
-            uiState.availableFonts.forEach { font ->
-                AssetRow(
-                    title = font.name,
-                    subtitle = fontDetails(font.scriptMask, font.builtIn, font.shaping),
-                    action = if (font.builtIn) null else "Remove",
-                    onAction = { onRemoveFont(font.id) },
-                )
-            }
-        }
-        val installedIds = uiState.availableFonts.mapTo(mutableSetOf()) { it.id }
-        SettingsSection(
-            title = "Available from ${catalogSource(settings)}",
+            title = "Reader fonts",
+            subtitle = "Choose an installed default, or install one from ${catalogSource(settings)}. Book language choices still show compatible fonts only.",
             action = {
-                IconButton(onClick = onRefreshFontCatalog) {
+                IconButton(onClick = onRefreshFontCatalog, enabled = controlsEnabled) {
                     Icon(imageVector = Icons.Outlined.Sync, contentDescription = "Refresh font catalog")
                 }
             },
         ) {
-            val available = uiState.fontCatalog.filterNot { it.id in installedIds }
-            if (available.isEmpty()) {
+            if (!installedLoaded) {
+                if (CompanionResource.Fonts in uiState.loadingResources) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                } else {
+                    Text("Installed fonts could not be loaded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else if (fontIds.isEmpty()) {
+                Text("No fonts reported by the reader.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (installedLoaded) fontIds.forEach { id ->
+                val installedFont = installedById[id]
+                val catalogFont = catalogById[id]
+                val installed = installedFont != null
+                val name = installedFont?.name ?: catalogFont?.name ?: id
+                CatalogAssetRow(
+                    title = name,
+                    subtitle = installedFont?.let {
+                        fontDetails(it.scripts, it.builtIn, shaping = false)
+                    } ?: catalogFont?.let {
+                        fontDetails(it.scripts, builtIn = false, shaping = it.shaping)
+                    }.orEmpty(),
+                    selected = installed && settings.reading.typography.fontId == id,
+                    enabled = controlsEnabled,
+                    install = install?.takeIf { it.asset == CatalogAsset.Font && it.id == id },
+                    onSelect = if (installed) {
+                        { onSelectFont(id) }
+                    } else null,
+                    onDelete = if (installedFont != null && !installedFont.builtIn) {
+                        { pendingRemoval = id to name }
+                    } else null,
+                    onInstall = if (!installed && catalogFont != null) {
+                        { onInstallOnlineFont(id) }
+                    } else null,
+                )
+            }
+            if (uiState.fontCatalog.isEmpty() && uiState.fontCatalogUrl.isNotBlank()) {
                 Text(
-                    if (uiState.fontCatalog.isEmpty()) "The online font catalog is unavailable." else "All available fonts are installed.",
+                    "The online font catalog is unavailable.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            available.forEach { font ->
-                AssetRow(
-                    title = font.name,
-                    subtitle = fontDetails(font.scriptMask, builtIn = false, shaping = font.shaping),
-                    action = "Install",
-                    onAction = { onInstallOnlineFont(font.id) },
-                )
-            }
-            UploadRow("Install local .rfont4 file", onUploadFont)
+            UploadRow("Install local .rfont4 file", controlsEnabled, onUploadFont)
         }
+    }
+    pendingRemoval?.let { (id, name) ->
+        ConfirmCatalogRemoval(
+            type = "font",
+            name = name,
+            onDismiss = { pendingRemoval = null },
+            onConfirm = {
+                pendingRemoval = null
+                onRemoveFont(id)
+            },
+        )
     }
 }
 
 @Composable
-private fun AssetRow(
+private fun CatalogAssetRow(
     title: String,
     subtitle: String,
-    action: String?,
-    onAction: () -> Unit,
+    selected: Boolean = false,
+    enabled: Boolean = true,
+    install: CatalogInstall? = null,
+    onSelect: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
+    onInstall: (() -> Unit)? = null,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Surface(
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (onSelect == null) Modifier else Modifier.selectable(
+                            selected = selected,
+                            enabled = enabled,
+                            role = Role.RadioButton,
+                            onClick = onSelect,
+                        ),
+                    )
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (onSelect != null) {
+                    RadioButton(selected = selected, enabled = enabled, onClick = null)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleSmall)
+                    if (selected) {
+                        Text(
+                            "Default",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                when {
+                    onDelete != null -> DestructiveIconButton(
+                        contentDescription = "Remove $title",
+                        onClick = onDelete,
+                        enabled = enabled,
+                    )
+                    onInstall != null -> TextButton(onClick = onInstall, enabled = enabled) { Text("Install") }
+                }
+            }
+            install?.let { job ->
+                val percent = job.progress?.coerceIn(0f, 1f)?.let { (it * 100).toInt() }
+                Text(
+                    text = job.stage.label + (percent?.let { "$INLINE_DIVIDER$it%" } ?: ""),
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                if (job.progress == null) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                } else {
+                    LinearProgressIndicator(
+                        progress = { job.progress.coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
         }
-        if (action != null) TextButton(onClick = onAction) { Text(action) }
     }
-    HorizontalDivider(modifier = Modifier.padding(start = 12.dp))
 }
 
 @Composable
-private fun UploadRow(label: String, onClick: () -> Unit) {
+private fun ConfirmCatalogRemoval(
+    type: String,
+    name: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Outlined.Delete,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+            )
+        },
+        title = { Text("Remove $type?") },
+        text = { Text("Remove $name from the reader? This cannot be undone.") },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            ) {
+                Text("Remove")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun UploadRow(label: String, enabled: Boolean, onClick: () -> Unit) {
     ListItem(
         headlineContent = { Text(label) },
         leadingContent = { Icon(Icons.Outlined.UploadFile, contentDescription = null) },
         trailingContent = { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null) },
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.clickable(enabled = enabled, onClick = onClick),
     )
 }
 
@@ -1054,24 +1562,25 @@ private fun localeDetails(
     version.takeIf(String::isNotBlank)?.let { "v$it" }.orEmpty(),
 ).filter(String::isNotBlank).joinToString(INLINE_DIVIDER)
 
-private val ScriptNames = listOf(
-    1 shl 0 to "Latin",
-    1 shl 1 to "Cyrillic",
-    1 shl 2 to "Greek",
-    1 shl 3 to "Hebrew",
-    1 shl 4 to "Arabic",
-    1 shl 5 to "Han",
-    1 shl 6 to "Hiragana",
-    1 shl 7 to "Katakana",
-    1 shl 8 to "Hangul",
-    1 shl 9 to "Math",
-)
-
-internal fun fontDetails(scriptMask: Int, builtIn: Boolean, shaping: Boolean): String =
-    (ScriptNames.filter { (mask) -> scriptMask and mask != 0 }.map { it.second } +
+internal fun fontDetails(scripts: List<String>, builtIn: Boolean, shaping: Boolean): String =
+    (scripts.map(::scriptName) +
         listOfNotNull("Built in".takeIf { builtIn }, "Shaping".takeIf { shaping }))
         .joinToString(INLINE_DIVIDER)
         .ifBlank { "Reader font" }
+
+private fun scriptName(tag: String): String = when (tag) {
+    "Latn" -> "Latin"
+    "Cyrl" -> "Cyrillic"
+    "Grek" -> "Greek"
+    "Hebr" -> "Hebrew"
+    "Arab" -> "Arabic"
+    "Hani" -> "Han"
+    "Hira" -> "Hiragana"
+    "Kana" -> "Katakana"
+    "Hang" -> "Hangul"
+    "Zmth" -> "Math"
+    else -> tag
+}
 
 @Composable
 private fun UnavailableSettings(isConnected: Boolean) {

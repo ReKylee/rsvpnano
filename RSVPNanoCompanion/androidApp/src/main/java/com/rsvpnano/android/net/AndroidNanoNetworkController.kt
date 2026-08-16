@@ -26,6 +26,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
+import java.net.InetAddress
+import java.net.Socket
+import javax.net.SocketFactory
 
 class AndroidNanoNetworkController(
     context: Context,
@@ -40,18 +43,14 @@ class AndroidNanoNetworkController(
     private var monitorCallback: ConnectivityManager.NetworkCallback? = null
     private var requestCallback: ConnectivityManager.NetworkCallback? = null
     private var requestedNetwork: Network? = null
+    @Volatile
     private var currentNetwork: Network? = null
+    val socketFactory: SocketFactory = NetworkSocketFactory { currentNetwork }
 
     override fun start() {
         if (monitorCallback != null) return
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                updateFromNetwork(network, source = NetworkEventSource.Monitor)
-            }
-
-            override fun onLosing(network: Network, maxMsToLive: Int) {
-                clearIfCurrent(network)
-            }
+            override fun onAvailable(network: Network) = Unit
 
             override fun onLost(network: Network) {
                 clearIfCurrent(network)
@@ -123,11 +122,6 @@ class AndroidNanoNetworkController(
         return object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
                     requestedNetwork = network
-                    updateFromRequestedNetwork(network)
-                }
-
-                override fun onLosing(network: Network, maxMsToLive: Int) {
-                    clearIfCurrent(network)
                 }
 
                 override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
@@ -211,17 +205,6 @@ class AndroidNanoNetworkController(
         }
 
         updateFromCapabilities(network, capabilities, source = NetworkEventSource.Monitor)
-    }
-
-    override suspend fun <T> withNanoNetwork(block: suspend () -> T): T {
-        val network = currentNetwork ?: return block()
-        val previous = connectivityManager.boundNetworkForProcess
-        return try {
-            connectivityManager.bindProcessToNetwork(network)
-            block()
-        } finally {
-            connectivityManager.bindProcessToNetwork(previous)
-        }
     }
 
     fun hasRequiredPermissions(): Boolean {
@@ -324,26 +307,6 @@ class AndroidNanoNetworkController(
         return endpoints.values.toList()
     }
 
-    private fun updateFromNetwork(network: Network, source: NetworkEventSource) {
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return
-        updateFromCapabilities(network, capabilities, source = source)
-    }
-
-    private fun updateFromRequestedNetwork(network: Network) {
-        val capabilities = connectivityManager.getNetworkCapabilities(network)
-        if (capabilities != null) {
-            updateFromCapabilities(network, capabilities, source = NetworkEventSource.Request)
-            return
-        }
-
-        currentNetwork = network
-        _snapshot.value = NanoWifiSnapshot(
-            currentNano = snapshot.value.currentNano,
-            isAttached = true,
-            isRequesting = false,
-        )
-    }
-
     private fun updateFromCapabilities(
         network: Network,
         capabilities: NetworkCapabilities,
@@ -393,4 +356,30 @@ class AndroidNanoNetworkController(
         Monitor,
         Request,
     }
+}
+
+private class NetworkSocketFactory(
+    private val network: () -> Network?,
+) : SocketFactory() {
+    private fun delegate(): SocketFactory = network()?.socketFactory ?: getDefault()
+
+    override fun createSocket(): Socket = delegate().createSocket()
+
+    override fun createSocket(host: String, port: Int): Socket = delegate().createSocket(host, port)
+
+    override fun createSocket(
+        host: String,
+        port: Int,
+        localHost: InetAddress,
+        localPort: Int,
+    ): Socket = delegate().createSocket(host, port, localHost, localPort)
+
+    override fun createSocket(host: InetAddress, port: Int): Socket = delegate().createSocket(host, port)
+
+    override fun createSocket(
+        address: InetAddress,
+        port: Int,
+        localAddress: InetAddress,
+        localPort: Int,
+    ): Socket = delegate().createSocket(address, port, localAddress, localPort)
 }

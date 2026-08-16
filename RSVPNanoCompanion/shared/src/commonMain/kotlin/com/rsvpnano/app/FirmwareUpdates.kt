@@ -1,6 +1,6 @@
 package com.rsvpnano.app
 
-import com.rsvpnano.api.NanoClient
+import com.rsvpnano.api.RepositoryClient
 import com.rsvpnano.models.CompanionAppSettings
 import com.rsvpnano.models.FirmwareUpdate
 import com.rsvpnano.models.FirmwareUpdateTarget
@@ -10,7 +10,7 @@ import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.persistence.AppSettingsStore
 
 class FirmwareUpdates(
-    private val client: NanoClient,
+    private val repository: RepositoryClient,
     private val settingsStore: AppSettingsStore,
 ) {
     suspend fun rememberDevice(info: NanoInfo, settings: NanoSettings) {
@@ -41,7 +41,7 @@ class FirmwareUpdates(
         if (!settings.firmwareNotificationsEnabled) return null
 
         val source = releaseSource(target.owner, target.tag) ?: return null
-        val release = client.fetchFirmwareRelease(source.owner, source.repository, source.tag)
+        val release = repository.fetchFirmwareRelease(source.owner, source.repository, source.tag)
         return pendingFirmwareUpdate(target, release, settings.lastNotifiedFirmwareVersion)
     }
 
@@ -72,8 +72,8 @@ internal data class FirmwareReleaseSource(
     val tag: String,
 )
 
-internal fun FirmwareReleaseSource.rawContentUrl(path: String): String =
-    "https://raw.githubusercontent.com/$owner/$repository/${tag.ifBlank { "main" }}/$path"
+internal fun FirmwareReleaseSource.catalogContentUrl(path: String): String =
+    "https://raw.githubusercontent.com/$owner/$repository/main/$path"
 
 internal fun releaseSource(ownerValue: String, tagValue: String): FirmwareReleaseSource? {
     var owner = ownerValue.trim()

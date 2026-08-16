@@ -4,6 +4,8 @@
 #include <climits>
 #include <cstdlib>
 
+#include "logging/Logger.h"
+#include "storage/fs/StoragePaths.h"
 #include "storage/index/IndexedBook.h"
 #include "ui/screens/ScreenCommon.h"
 
@@ -215,8 +217,14 @@ namespace screens {
                 const ReadingProgress::BookIdentity identity{header.sourceSize, header.sourceFingerprint,
                                                              header.wordCount};
                 const auto savedWordIndex = ReadingProgress::readBookStatePosition(path, identity);
-                hasPosition = savedWordIndex.has_value();
-                wordIndex = savedWordIndex.value_or(0);
+                if (savedWordIndex) {
+                    hasPosition = true;
+                    wordIndex = *savedWordIndex;
+                } else if (savedWordIndex.error() != std::errc::no_such_file_or_directory
+                           && savedWordIndex.error() != std::errc::state_not_recoverable) {
+                    Logger::failure("library", "read progress", StoragePaths::bookStatePathFor(path).c_str(),
+                                    savedWordIndex.error());
+                }
                 item.progress = hasPosition ? ReadingProgress::percent(wordIndex, header.wordCount) : 0;
                 if (const ChapterMarker* chapter = metadata.chapterAt(hasPosition ? wordIndex : 0)) {
                     item.chapter = chapter->title;

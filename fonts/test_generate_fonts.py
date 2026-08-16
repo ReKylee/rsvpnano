@@ -17,6 +17,8 @@ class FontPresetTest(TestCase):
         preset_ids = {preset.id for preset in PRESETS if not preset.header}
 
         self.assertEqual(catalog_ids, preset_ids)
+        self.assertTrue(all(entry["scripts"] for entry in catalog))
+        self.assertTrue(all("scriptMask" not in entry for entry in catalog))
         self.assertEqual(1, sum(preset.header for preset in PRESETS))
         self.assertTrue(all(preset.source.is_file() for preset in PRESETS))
         self.assertTrue(all((preset.source.parent / "OFL.txt").is_file() for preset in PRESETS))
@@ -34,7 +36,7 @@ class FontPresetTest(TestCase):
         self.assertEqual({"amiri", "noto-naskh-arabic"}, set(shaped))
 
     def test_shaped_locality_maps_cover_the_arabic_benchmark_text(self) -> None:
-        text = next(text for locale, _direction, text in PARAGRAPHS if locale == "ar") + " العربية"
+        text = next(text for locale, _direction, _chapter, text in PARAGRAPHS if locale == "ar") + " العربية"
         for preset in (preset for preset in PRESETS if preset.glyph_locality_map):
             buffer = hb.Buffer()
             buffer.add_str(text)

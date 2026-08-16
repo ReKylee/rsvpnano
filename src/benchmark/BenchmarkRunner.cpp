@@ -1,4 +1,3 @@
-#include "benchmark/BenchmarkRunner.h"
 #include <esp_log.h>
 
 #include <Arduino.h>
@@ -18,8 +17,11 @@
 #include "board/BoardInput.h"
 #include "converter/EpubConverter.h"
 #include "fonts/FontCatalog.h"
+#include "hash/Fnv1a.h"
 #include "input/Input.h"
+#include "logging/Logger.h"
 #include "reader/ReadingLoop.h"
+#include "settings/NvsSecurity.h"
 #include "storage/StorageManager.h"
 #include "storage/fs/SdCard.h"
 #include "storage/fs/StorageFiles.h"
@@ -99,8 +101,8 @@ namespace {
             return true;
         }
 
-        if (!StorageFiles::ensureDirectory(kBenchmarkDir)) {
-            ESP_LOGE("bench", "storage_prepare_directory_failed");
+        if (auto created = StorageFiles::ensureDirectory(kBenchmarkDir); !created) {
+            ESP_LOGE("bench", "storage_prepare_directory_failed error=%s", created.error().message().c_str());
             Board::Storage::end();
             return true;
         }
@@ -216,12 +218,7 @@ namespace {
     }
 
     uint32_t checksumBytes(const uint8_t* buffer, size_t bytes) {
-        uint32_t checksum = 2166136261UL;
-        for (size_t i = 0; i < bytes; ++i) {
-            checksum ^= buffer[i];
-            checksum *= 16777619UL;
-        }
-        return checksum;
+        return Fnv1a::hash(std::span{buffer, bytes});
     }
 
     bool benchmarkDisplayPush() {
@@ -232,7 +229,8 @@ namespace {
     }
 
     bool benchmarkSdWriteRead() {
-        if (!StorageFiles::ensureDirectory(kBenchmarkDir)) {
+        if (auto created = StorageFiles::ensureDirectory(kBenchmarkDir); !created) {
+            ESP_LOGE("bench", "sd_benchmark_directory_failed error=%s", created.error().message().c_str());
             return false;
         }
 
@@ -242,7 +240,7 @@ namespace {
             return false;
         }
 
-        uint32_t expectedChecksum = 2166136261UL;
+        uint32_t expectedChecksum = Fnv1a::kOffsetBasis;
         File file = Board::Storage::filesystem().open(kSdWritePath, FILE_WRITE);
         if (!file) {
             heap_caps_free(buffer);
@@ -252,7 +250,7 @@ namespace {
         for (size_t offset = 0; offset < kSdProbeBytes; offset += kSdChunkBytes) {
             const size_t chunk = min(kSdChunkBytes, kSdProbeBytes - offset);
             fillBytes(buffer, chunk, static_cast<uint32_t>(offset));
-            expectedChecksum = checksumBytes(buffer, chunk) ^ (expectedChecksum * 16777619UL);
+            expectedChecksum = checksumBytes(buffer, chunk) ^ (expectedChecksum * Fnv1a::kPrime);
             if (file.write(buffer, chunk) != chunk) {
                 file.close();
                 heap_caps_free(buffer);
@@ -262,7 +260,7 @@ namespace {
         file.flush();
         file.close();
 
-        uint32_t actualChecksum = 2166136261UL;
+        uint32_t actualChecksum = Fnv1a::kOffsetBasis;
         file = Board::Storage::filesystem().open(kSdWritePath, FILE_READ);
         if (!file) {
             heap_caps_free(buffer);
@@ -276,7 +274,7 @@ namespace {
                 heap_caps_free(buffer);
                 return false;
             }
-            actualChecksum = checksumBytes(buffer, chunk) ^ (actualChecksum * 16777619UL);
+            actualChecksum = checksumBytes(buffer, chunk) ^ (actualChecksum * Fnv1a::kPrime);
         }
         file.close();
         heap_caps_free(buffer);
@@ -907,8 +905,10 @@ namespace {
                      StorageFiles::fileExistsWithBytes(kMultilingualRsvpPath) ? 1U : 0U);
             return false;
         }
-        if (!StorageFiles::ensureDirectory(StoragePaths::kBooksPath))
+        if (auto created = StorageFiles::ensureDirectory(StoragePaths::kBooksPath); !created) {
+            ESP_LOGE("bench", "reading_books_directory_failed error=%s", created.error().message().c_str());
             return false;
+        }
 
         settings::ReadingSettings settings;
         settings.wpm = 600;
@@ -1088,3 +1088,26 @@ namespace Benchmark {
     }
 
 } // namespace Benchmark
+
+void setup() {
+    Serial.begin(115200);
+    Logger::begin();
+    delay(50);
+    Board::System::begin();
+    const uint32_t serialWaitStart = millis();
+    while (!Serial && millis() - serialWaitStart < 2000)
+        delay(10);
+    Board::System::logStartupDiagnostics();
+    if (!settings::initializeNvsEncryption()) {
+        ESP_LOGE("main", "encrypted NVS initialization failed; restarting");
+        delay(1000);
+        ESP.restart();
+        return;
+    }
+    ESP_LOGI("main", "benchmark setup");
+    Benchmark::run();
+}
+
+void loop() {
+    delay(1000);
+}

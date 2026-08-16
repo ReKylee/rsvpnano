@@ -1,6 +1,7 @@
 #include "storage/fs/StoragePaths.h"
 
 #include <algorithm>
+#include <iterator>
 
 #include "text/AsciiText.h"
 
@@ -25,6 +26,20 @@ namespace StoragePaths {
 
     bool hasEpubExtension(std::string_view path) {
         return hasExtension(path, kEpubExtension);
+    }
+
+    std::string sanitizeFilename(std::string_view name) {
+        std::string sanitized;
+        sanitized.reserve(name.size());
+        std::ranges::transform(name, std::back_inserter(sanitized), [](char character) {
+            return AsciiText::isAlphaNumeric(character) || character == '-' || character == '_'
+                    || character == '.' || character == ' '
+                     ? character
+                     : '-';
+        });
+        sanitized = AsciiText::trim(sanitized);
+        const size_t firstVisible = sanitized.find_first_not_of('.');
+        return firstVisible == std::string::npos ? std::string{} : sanitized.substr(firstVisible);
     }
 
     std::string parentDirectoryForPath(std::string_view path) {

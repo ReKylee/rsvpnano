@@ -11,6 +11,7 @@
 #include <system_error>
 #include "board/BoardStorage.h"
 
+#include "hash/Fnv1a.h"
 #include "text/LocaleTag.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
@@ -36,8 +37,6 @@ namespace IndexedBook {
 
         using namespace StoragePaths;
 
-        constexpr uint32_t kFnv1aOffsetBasis = 2166136261UL;
-        constexpr uint32_t kFnv1aPrime = 16777619UL;
         constexpr size_t kFingerprintSampleBytes = 512;
         constexpr size_t kParseBufferBytes = 4096;
         constexpr size_t kSidecarWriteBufferBytes = 16 * 1024;
@@ -106,23 +105,15 @@ namespace IndexedBook {
             return {source.begin(), end};
         }
 
-        uint32_t fnv1aUpdate(uint32_t hash, const uint8_t* data, size_t bytes) {
-            for (size_t i = 0; i < bytes; ++i) {
-                hash ^= data[i];
-                hash *= kFnv1aPrime;
-            }
-            return hash;
-        }
-
         uint32_t sourceFingerprint(File& file, uint32_t sourceSize) {
-            uint32_t hash = kFnv1aOffsetBasis;
+            uint32_t hash = Fnv1a::kOffsetBasis;
             const std::array<uint8_t, 4> sizeBytes = {{
                 static_cast<uint8_t>(sourceSize & 0xFF),
                 static_cast<uint8_t>((sourceSize >> 8) & 0xFF),
                 static_cast<uint8_t>((sourceSize >> 16) & 0xFF),
                 static_cast<uint8_t>((sourceSize >> 24) & 0xFF),
             }};
-            hash = fnv1aUpdate(hash, sizeBytes.data(), sizeBytes.size());
+            hash = Fnv1a::append(hash, sizeBytes);
 
             uint8_t buffer[kFingerprintSampleBytes];
             const bool hasFullSample = sourceSize > kFingerprintSampleBytes;
@@ -141,7 +132,7 @@ namespace IndexedBook {
                 const size_t wanted =
                     static_cast<size_t>(std::min<uint32_t>(kFingerprintSampleBytes, sourceSize - offset));
                 const size_t read = file.read(buffer, wanted);
-                hash = fnv1aUpdate(hash, buffer, read);
+                hash = Fnv1a::append(hash, std::span{buffer, read});
             }
 
             return hash;

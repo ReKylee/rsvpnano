@@ -65,10 +65,8 @@ namespace screens {
         }
         if (ui.button(actions.next(), ui.text(UiText::UsbTransfer), true, ui::Icon::None, 2))
             return Action::UsbTransfer;
-        if (ui.button(actions.next(), ui.text(UiText::CompanionSync), true, ui::Icon::None, 2)) {
-            screen = Screen::Sync;
+        if (ui.button(actions.next(), ui.text(UiText::CompanionSync), true, ui::Icon::None, 2))
             return Action::CompanionSync;
-        }
         if (ui.button(actions.next(), ui.text(UiText::RefreshRss), true, ui::Icon::None, 2))
             return Action::RssRefresh;
         if (ui.button(actions.next(), ui.text(UiText::OtaUpdate), true, ui::Icon::None, 2))

@@ -7,6 +7,7 @@ import com.rsvpnano.models.NanoBookMetadata
 internal fun sampleSettings(): NanoSettings = NanoSettings(
     reading = NanoSettings.Reading(
         wpm = 250,
+        mode = "page",
         pauseMode = "sentenceEnd",
         footerMetric = "percentage",
         batteryLabel = "percentage",
@@ -23,6 +24,7 @@ internal fun sampleSettings(): NanoSettings = NanoSettings(
         pacing = NanoSettings.Pacing(longWordDelayMs = 0, complexWordDelayMs = 0, punctuationDelayMs = 0),
     ),
     `interface` = NanoSettings.Interface(brightnessPercent = 10),
+    updates = NanoSettings.Updates(checkOnStartup = true),
 )
 
 internal fun sampleBook(
@@ -32,6 +34,5 @@ internal fun sampleBook(
 ): NanoBook = NanoBook(
     id = id,
     name = id,
-    category = "book",
     metadata = NanoBookMetadata(title = title, wordCount = wordCount),
 )

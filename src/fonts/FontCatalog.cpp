@@ -13,6 +13,7 @@
 
 #include "board/BoardStorage.h"
 #include "fonts/LiterataFallbackAlpha4.h"
+#include "logging/Logger.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 #include "text/AsciiText.h"
@@ -68,37 +69,47 @@ namespace {
     }
 
     std::expected<RFont4::Directory, std::string> readDirectory(File& file) {
-        RFont4::Directory directory;
-        auto header = readHeader(file);
-        if (!header || !RFont4::headerValid(*header, file.size()))
-            return std::unexpected(header ? "Unsupported or corrupt font format" : header.error());
-        directory.header = *header;
-        if (auto read = readSection(file, header->strikesOffset, std::span{directory.strikes}); !read)
-            return std::unexpected(read.error());
-        auto tables = std::span{directory.layoutTables}.first(header->layoutTableCount);
-        if (auto read = readSection(file, header->layoutTablesOffset, tables); !read)
-            return std::unexpected(read.error());
-        if (!RFont4::layoutValid(*header, directory.strikes, tables, file.size()))
-            return std::unexpected("Unsupported or corrupt font format");
-        return directory;
+        return readHeader(file).and_then([&](const RFont4::Header& header)
+                                             -> std::expected<RFont4::Directory, std::string> {
+            if (!RFont4::headerValid(header, file.size()))
+                return std::unexpected("Unsupported or corrupt font format");
+            RFont4::Directory directory;
+            directory.header = header;
+            return readSection(file, header.strikesOffset, std::span{directory.strikes})
+                .and_then([&] {
+                    return readSection(file, header.layoutTablesOffset,
+                                       std::span{directory.layoutTables}.first(header.layoutTableCount));
+                })
+                .and_then([&]() -> std::expected<RFont4::Directory, std::string> {
+                    const auto tables =
+                        std::span{directory.layoutTables}.first(header.layoutTableCount);
+                    if (!RFont4::layoutValid(header, directory.strikes, tables, file.size()))
+                        return std::unexpected("Unsupported or corrupt font format");
+                    return directory;
+                });
+        });
     }
 
     std::expected<std::string, std::string> readName(File& file, const RFont4::Header& header) {
         std::vector<uint8_t> bytes(header.nameSize);
-        if (auto read = readSection(file, header.nameOffset, std::span{bytes}); !read)
-            return std::unexpected(read.error());
-        if (bytes.back() != '\0')
-            return std::unexpected("Font name is invalid");
-        return std::string{reinterpret_cast<const char*>(bytes.data()), bytes.size() - 1};
+        return readSection(file, header.nameOffset, std::span{bytes})
+            .and_then([&]() -> std::expected<std::string, std::string> {
+                if (bytes.back() != '\0')
+                    return std::unexpected("Font name is invalid");
+                return std::string{reinterpret_cast<const char*>(bytes.data()), bytes.size() - 1};
+            });
     }
 
     std::expected<std::string, std::string> readLocales(File& file, const RFont4::Header& header) {
         if (header.localeSize == 0)
             return std::string{};
         std::string locales(header.localeSize, '\0');
-        if (auto read = readSection(file, header.localeOffset, std::span{locales}); !read || locales.back() != '\0')
-            return std::unexpected("Font locales are invalid");
-        return locales;
+        return readSection(file, header.localeOffset, std::span{locales})
+            .and_then([&]() -> std::expected<std::string, std::string> {
+                if (locales.back() != '\0')
+                    return std::unexpected("Font locales are invalid");
+                return locales;
+            });
     }
 
 } // namespace
@@ -117,7 +128,10 @@ void FontCatalog::reset() {
 
 void FontCatalog::loadFromSd() {
     reset();
-    StorageFiles::ensureDirectory(StoragePaths::kFontsPath);
+    if (auto created = StorageFiles::ensureDirectory(StoragePaths::kFontsPath); !created) {
+        Logger::failure("font", "create directory", StoragePaths::kFontsPath, created.error());
+        return;
+    }
 
     File root = Board::Storage::filesystem().open(StoragePaths::kFontsPath);
     if (!root || !root.isDirectory()) {
@@ -148,6 +162,63 @@ void FontCatalog::loadFromSd() {
     std::ranges::sort(families_.begin() + 1, families_.end(), {}, &Family::label);
     ESP_LOGI("font", "catalog ready installed=%u rejected=%u", static_cast<unsigned>(families_.size() - 1),
              static_cast<unsigned>(rejected));
+}
+
+std::expected<FontCatalog::Family, std::string> FontCatalog::install(std::string_view stagedPath) {
+    const std::string staged{stagedPath};
+    return inspectFontFile(stagedPath).and_then([this, &staged](const Family& inspected)
+                                                    -> std::expected<Family, std::string> {
+        if (inspected.id == kFallbackId || find(inspected.id))
+            return std::unexpected("Font family already exists");
+
+        const std::string directory = std::string{StoragePaths::kFontsPath} + "/" + inspected.id;
+        const std::string finalPath = directory + "/" + RFont4::kFilename;
+        return StorageFiles::ensureDirectory(StoragePaths::kFontsPath)
+            .transform_error([](std::error_code) { return std::string{"Fonts folder could not be created"}; })
+            .and_then([&] {
+                return StorageFiles::ensureDirectory(directory.c_str()).transform_error(
+                    [](std::error_code) { return std::string{"Font folder could not be created"}; });
+            })
+            .and_then([&]() -> std::expected<void, std::string> {
+                if (StorageFiles::fileExists(finalPath.c_str()))
+                    return std::unexpected("Font family already exists");
+                return StorageFiles::replaceFileAtomic(Board::Storage::filesystem(), finalPath.c_str(),
+                                                       staged.c_str(), (finalPath + ".bak").c_str())
+                    .transform_error([&](std::error_code) {
+                        Board::Storage::filesystem().rmdir(directory.c_str());
+                        return std::string{"Font file could not be installed"};
+                    });
+            })
+            .and_then([&]() -> std::expected<Family, std::string> {
+                const std::string id = inspected.id;
+                loadFromSd();
+                if (const auto family = find(id))
+                    return family->get();
+
+                Board::Storage::filesystem().remove(finalPath.c_str());
+                Board::Storage::filesystem().rmdir(directory.c_str());
+                loadFromSd();
+                return std::unexpected("Installed font could not be loaded");
+            });
+    });
+}
+
+std::expected<void, std::string> FontCatalog::remove(std::string_view id) {
+    const auto family = find(id);
+    if (!family)
+        return std::unexpected("Font not found");
+    if (family->get().builtIn)
+        return std::unexpected("Built-in font cannot be removed");
+
+    const std::string path = family->get().path;
+    clearLoaded();
+    if (!Board::Storage::filesystem().remove(path.c_str())) {
+        loadFromSd();
+        return std::unexpected("Font file could not be removed");
+    }
+    Board::Storage::filesystem().rmdir(StoragePaths::parentDirectoryForPath(path).c_str());
+    loadFromSd();
+    return {};
 }
 
 std::optional<std::reference_wrapper<const FontCatalog::Family>> FontCatalog::find(std::string_view id) const {
@@ -215,9 +286,10 @@ FontCatalog::loadRuntimeFamily(size_t familyIndex) {
     LoadedFamily& loaded = loadedFamilies_.emplace_back();
     loaded.familyIndex = familyIndex;
     loaded.file = Board::Storage::filesystem().open(families_[familyIndex].path.c_str(), FILE_READ);
-    const auto fail = [this](std::string error) {
+    const auto fail = [this](std::string error)
+        -> std::expected<std::reference_wrapper<LoadedFamily>, std::string> {
         loadedFamilies_.pop_back();
-        return std::expected<std::reference_wrapper<LoadedFamily>, std::string>{std::unexpected(std::move(error))};
+        return std::unexpected(std::move(error));
     };
     if (!loaded.file || loaded.file.isDirectory())
         return fail("Font file unavailable");
@@ -371,26 +443,21 @@ std::expected<FontCatalog::Family, std::string> FontCatalog::inspectFontFile(std
             file.close();
         return std::unexpected("Font file unavailable");
     }
-    auto directory = readDirectory(file);
-    if (!directory) {
-        file.close();
-        return std::unexpected(directory.error());
-    }
-    auto label = readName(file, directory->header);
-    auto locales = label ? readLocales(file, directory->header)
-                         : std::expected<std::string, std::string>{std::unexpected(label.error())};
-    file.close();
-    if (!label)
-        return std::unexpected(label.error());
-    if (!locales)
-        return std::unexpected(locales.error());
-    std::string id = normalizeId(*label);
-    if (id.empty())
-        return std::unexpected("Font name is invalid");
-    return Family{.id = std::move(id),
-                  .label = std::move(*label),
-                  .locales = std::move(*locales),
-                  .path = std::string{path},
-                  .shaping = directory->header.layoutTableCount != 0,
-                  .scriptMask = directory->header.scriptMask};
+    return readDirectory(file).and_then([&](const RFont4::Directory& directory) {
+        return readName(file, directory.header).and_then([&](std::string label)
+                                                              -> std::expected<Family, std::string> {
+            return readLocales(file, directory.header).and_then(
+                [&](std::string locales) -> std::expected<Family, std::string> {
+                    std::string id = normalizeId(label);
+                    if (id.empty())
+                        return std::unexpected("Font name is invalid");
+                    return Family{.id = std::move(id),
+                                  .label = std::move(label),
+                                  .locales = std::move(locales),
+                                  .path = std::string{path},
+                                  .shaping = directory.header.layoutTableCount != 0,
+                                  .scriptMask = directory.header.scriptMask};
+                });
+        });
+    });
 }

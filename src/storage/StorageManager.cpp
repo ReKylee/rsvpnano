@@ -7,6 +7,8 @@
 
 #include "book/BookMetadata.h"
 #include "storage/fs/SdCard.h"
+#include "storage/fs/StorageFiles.h"
+#include "storage/fs/StoragePaths.h"
 #include "storage/index/IndexedBook.h"
 #include "text/TextNormalizer.h"
 
@@ -72,6 +74,41 @@ void StorageManager::end() {
 
 void StorageManager::refreshBooks(bool includeMetadata) {
     refreshBookPaths(includeMetadata);
+}
+
+std::expected<void, std::error_code> StorageManager::installBook(std::string_view stagedPath,
+                                                                 std::string_view destinationPath) {
+    if (!mounted_)
+        return std::unexpected(std::make_error_code(std::errc::no_such_device));
+    const std::string parent = StoragePaths::parentDirectoryForPath(destinationPath);
+    const bool supported = StoragePaths::hasRsvpExtension(destinationPath)
+                        || StoragePaths::hasTextExtension(destinationPath)
+                        || StoragePaths::hasEpubExtension(destinationPath);
+    if ((parent != StoragePaths::kBookFilesPath && parent != StoragePaths::kArticleFilesPath) || !supported)
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+
+    const std::string staged{stagedPath};
+    const std::string destination{destinationPath};
+    const std::string backup = destination + ".bak";
+    return StorageFiles::replaceFileAtomic(Board::Storage::filesystem(), destination.c_str(), staged.c_str(),
+                                           backup.c_str())
+        .transform([this] { refreshBookPaths(false); });
+}
+
+std::expected<void, std::error_code> StorageManager::removeBook(std::string_view path) {
+    if (!mounted_)
+        return std::unexpected(std::make_error_code(std::errc::no_such_device));
+    if (bookIndex(path) < 0)
+        return std::unexpected(std::make_error_code(std::errc::no_such_file_or_directory));
+
+    const std::string ownedPath{path};
+    if (!Board::Storage::filesystem().remove(ownedPath.c_str()))
+        return std::unexpected(std::make_error_code(std::errc::io_error));
+    Board::Storage::filesystem().remove(StoragePaths::indexedIndexPathFor(path).c_str());
+    Board::Storage::filesystem().remove(StoragePaths::indexedDataPathFor(path).c_str());
+    Board::Storage::filesystem().remove(StoragePaths::bookStatePathFor(path).c_str());
+    refreshBookPaths(false);
+    return {};
 }
 
 size_t StorageManager::bookCount() const {

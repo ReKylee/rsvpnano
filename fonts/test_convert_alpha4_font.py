@@ -105,17 +105,17 @@ class FontMapTest(TestCase):
             "math": rfont4_codepoints(Path("fonts/STIX Two Math/font.rfont4")),
         }
         builtin_ascii = set(range(0x20, 0x7F))
-        for locale, _direction, text in PARAGRAPHS[:-1]:
+        for locale, _direction, chapter, text in PARAGRAPHS[:-1]:
             target = fonts.get(locale, fonts["latin"]) | builtin_ascii
-            self.assertEqual(set(), {ord(char) for char in text if not char.isspace()} - target, locale)
+            self.assertEqual(set(), {ord(char) for char in chapter + text if not char.isspace()} - target, locale)
 
         for locale, name in (("he", "Frank Ruhl Libre"), ("ar", "Amiri")):
             codepoints = rfont4_codepoints(Path(f"fonts/{name}/font.rfont4"))
             required = {
                 ord(char)
-                for language, _direction, text in PARAGRAPHS
+                for language, _direction, chapter, text in PARAGRAPHS
                 if language == locale
-                for char in text
+                for char in chapter + text
                 if not char.isspace()
             }
             self.assertLessEqual(required, codepoints | builtin_ascii)
@@ -123,7 +123,7 @@ class FontMapTest(TestCase):
             self.assertTrue(set(range(ord("a"), ord("z") + 1)).isdisjoint(codepoints), name)
 
         available = set().union(*fonts.values(), builtin_ascii)
-        mixed = PARAGRAPHS[-1][2]
+        mixed = PARAGRAPHS[-1][3]
         self.assertEqual(set(), {ord(char) for char in mixed if not char.isspace()} - available)
         self.assertLessEqual({ord(char) for char in "∀∈ℝ²≥∫₀¹⅓"}, fonts["math"])
 

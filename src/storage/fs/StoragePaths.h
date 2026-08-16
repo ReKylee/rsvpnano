@@ -37,6 +37,7 @@ namespace StoragePaths {
     bool hasTextExtension(std::string_view path);
     bool hasRsvpExtension(std::string_view path);
     bool hasEpubExtension(std::string_view path);
+    std::string sanitizeFilename(std::string_view name);
     std::string parentDirectoryForPath(std::string_view path);
     std::string siblingPathWithExtension(std::string_view path, std::string_view extension);
     std::string epubSiblingPathForRsvp(std::string_view rsvpPath);

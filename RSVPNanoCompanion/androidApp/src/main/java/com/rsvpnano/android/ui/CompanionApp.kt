@@ -12,7 +12,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rsvpnano.android.net.AndroidNanoNetworkController
 import com.rsvpnano.android.FirmwareUpdateJobService
@@ -48,7 +48,7 @@ fun CompanionApp(
         )
     )
     val presenter = viewModel.presenter
-    val uiState by presenter.uiState.collectAsState()
+    val uiState by presenter.uiState.collectAsStateWithLifecycle()
     var permissionRequestAttempted by remember { mutableStateOf(false) }
     var permissionBlockedFallback by remember { mutableStateOf(PermissionFallback.WifiSettings) }
 

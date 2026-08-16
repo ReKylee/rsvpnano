@@ -227,6 +227,8 @@ fun RssFeedsDialog(
     onDeleteFeed: (String) -> Unit,
 ) {
     var feedToDelete by remember { mutableStateOf<String?>(null) }
+    val feedsLoaded = CompanionResource.RssFeeds in uiState.loadedResources
+    val feedsLoading = CompanionResource.RssFeeds in uiState.loadingResources
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
@@ -243,20 +245,31 @@ fun RssFeedsDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onAddFeed, enabled = uiState.isConnected) {
+                    Button(onClick = onAddFeed, enabled = uiState.isConnected && feedsLoaded) {
                         Icon(imageVector = Icons.Outlined.RssFeed, contentDescription = null)
                         Text("Add")
                     }
-                    TextButton(onClick = onRefreshFeeds, enabled = uiState.isConnected) {
+                    TextButton(onClick = onRefreshFeeds, enabled = uiState.isConnected && !feedsLoading) {
                         Icon(imageVector = Icons.Outlined.Refresh, contentDescription = null)
                         Text("Refresh")
                     }
                 }
                 if (uiState.rssFeeds.isEmpty()) {
-                    Text(
-                        text = if (uiState.isConnected) "No RSS feeds saved on Nano." else "Connect to your Nano to load RSS feeds.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    when {
+                        !uiState.isConnected -> Text(
+                            "Connect to your Nano to load RSS feeds.",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        feedsLoading -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        feedsLoaded -> Text(
+                            "No RSS feeds saved on Nano.",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        else -> Text(
+                            "RSS feeds could not be loaded.",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 } else {
                     uiState.rssFeeds.forEach { feed ->
                         Surface(

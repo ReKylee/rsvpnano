@@ -1,199 +1,178 @@
 package com.rsvpnano
 
-import com.rsvpnano.api.NanoClient
+import com.rsvpnano.api.NanoApi
+import com.rsvpnano.api.NanoClientError
+import com.rsvpnano.api.RepositoryClient
 import com.rsvpnano.app.NanoCompanionController
+import com.rsvpnano.app.NanoSettingsResource
 import com.rsvpnano.app.PendingDraftService
 import com.rsvpnano.converters.RsvpBookFile
+import com.rsvpnano.models.FirmwareRelease
 import com.rsvpnano.models.NanoBook
-import com.rsvpnano.models.NanoBookSource
-import com.rsvpnano.models.NanoReadingProgress
+import com.rsvpnano.models.NanoFocusTimers
+import com.rsvpnano.models.NanoFontCatalogItem
+import com.rsvpnano.models.NanoFontSummary
 import com.rsvpnano.models.NanoInfo
+import com.rsvpnano.models.NanoLanguageFont
+import com.rsvpnano.models.NanoLocaleCatalogItem
+import com.rsvpnano.models.NanoLocaleSummary
+import com.rsvpnano.models.NanoReadingProgress
 import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoSettings
-import com.rsvpnano.models.NanoUploadResponse
+import com.rsvpnano.models.NanoThemeCatalogItem
+import com.rsvpnano.models.NanoThemeSummary
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.PendingUpload
-import com.rsvpnano.persistence.PendingUploadStore
 import com.rsvpnano.persistence.PendingUploadRepository
+import com.rsvpnano.persistence.PendingUploadStore
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class NanoCompanionControllerTest {
     @Test
-    fun connectLoadsDeviceFeedsAndDrafts() = runBlocking {
-        val pendingStore = InMemoryPendingStore(listOf(samplePendingUpload()))
-        val client = RecordingNanoClient(
-            deviceFeeds = listOf(" https://device.example/feed ", "https://device.example/feed"),
-        )
-        val controller = controller(pendingStore, client)
-
-        val snapshot = controller.connect(baseUrl = "http://device.local")
-
-        assertEquals("Nano", snapshot.device.info?.name)
-        assertEquals(listOf("https://device.example/feed"), snapshot.rssFeeds)
-        assertEquals(listOf("https://device.example/feed"), snapshot.rssFeeds)
-        assertEquals(1, snapshot.drafts.size)
-    }
-
-    @Test
-    fun syncPendingUploadsUploadsDraftsAndRefreshesBooks() = runBlocking {
-        val pending = samplePendingUpload()
-        val pendingStore = InMemoryPendingStore(listOf(pending))
+    fun connectRequestsOnlyDeviceIdentity() = runBlocking {
         val client = RecordingNanoClient()
-        val controller = controller(pendingStore, client)
 
-        val snapshot = controller.syncPendingUploads(
-            baseUrl = "http://device.local",
-            items = listOf(pending),
-        )
+        val device = controller(InMemoryPendingStore(), client).connect("http://device.local")
 
-        assertEquals(1, snapshot.syncedCount)
-        assertEquals(emptyList(), snapshot.drafts)
-        assertEquals("Example.rsvp", client.uploadedFilename)
-        assertEquals(listOf(sampleBook(id = "Example.rsvp", title = "Example")), snapshot.books)
+        assertEquals("preview-v0.0.9+abc", device.firmwareVersion)
+        assertEquals(1, client.fetchDeviceCalls)
+        assertEquals(0, client.listLibraryCalls)
     }
 
     @Test
-    fun draftMutationsReturnLatestDrafts() = runBlocking {
-        val existing = samplePendingUpload()
-        val pendingStore = InMemoryPendingStore(listOf(existing))
-        val controller = controller(pendingStore, RecordingNanoClient())
-        val added = existing.copy(id = "2", title = "Second")
+    fun unavailableLibraryDoesNotPreventConnecting() = runBlocking {
+        val client = RecordingNanoClient(failLibrary = true)
+        val controller = controller(InMemoryPendingStore(), client)
 
-        val saved = controller.saveDraft(added)
-        val deleted = controller.deleteDraft(existing)
+        assertEquals("preview-v0.0.9+abc", controller.connect("http://device.local").firmwareVersion)
+        assertFailsWith<NanoClientError> {
+            controller.refreshLibrary("http://device.local")
+        }
 
-        assertEquals(listOf("Second", "Example"), saved.map { it.title })
-        assertEquals(listOf("Second"), deleted.map { it.title })
+        assertEquals(1, client.fetchDeviceCalls)
+        assertEquals(1, client.listLibraryCalls)
     }
 
     @Test
-    fun saveRssFeedsWritesNormalizedFeedsToDevice() = runBlocking {
+    fun connectDoesNotHideFailureBehindRetries() = runBlocking {
+        val client = RecordingNanoClient(deviceFailures = 1)
+
+        assertFailsWith<NanoClientError> {
+            controller(InMemoryPendingStore(), client).connect("http://device.local")
+        }
+
+        assertEquals(1, client.fetchDeviceCalls)
+        assertEquals(0, client.listLibraryCalls)
+    }
+
+    @Test
+    fun uploadReturnsCreatedBookAndDeleteReturnsNoDuplicateLibrary() = runBlocking {
         val client = RecordingNanoClient()
         val controller = controller(InMemoryPendingStore(), client)
 
-        val snapshot = controller.saveRssFeeds(
-            baseUrl = "http://device.local",
-            feeds = listOf(" https://local.example/feed ", "https://local.example/feed"),
+        val uploaded = controller.uploadBook(
+            "http://device.local",
+            RsvpBookFile("Manual.rsvp", byteArrayOf(1, 2, 3), "Manual", 1, 1),
+            "book",
         )
-
-        assertEquals(listOf("https://local.example/feed"), client.savedFeeds)
-        assertEquals(listOf("https://local.example/feed"), snapshot)
-    }
-
-    @Test
-    fun uploadBookUploadsFileAndRefreshesBooks() = runBlocking {
-        val client = RecordingNanoClient()
-        val controller = controller(InMemoryPendingStore(), client)
-
-        val snapshot = controller.uploadBook(
-            baseUrl = "http://device.local",
-            file = RsvpBookFile(
-                filename = "Manual.rsvp",
-                data = byteArrayOf(1, 2, 3),
-                title = "Manual",
-                wordCount = 1,
-                chapterCount = 1,
-            ),
-            category = "book",
-        )
+        controller.deleteBooks("http://device.local", listOf(uploaded.id))
 
         assertEquals("Manual.rsvp", client.uploadedFilename)
         assertEquals("book", client.uploadedCategory)
-        assertEquals(listOf(sampleBook(id = "Manual.rsvp", title = "Manual")), snapshot)
+        assertEquals(listOf("Manual.rsvp"), client.deletedIds)
+        assertEquals(emptyList(), client.books)
+        assertEquals(0, client.listLibraryCalls)
     }
 
     @Test
-    fun deleteBooksDeletesEachBookAndRefreshesBooks() = runBlocking {
-        val client = RecordingNanoClient(
-            initialBooks = listOf(
-                sampleBook(id = "b00000001", title = "One"),
-                sampleBook(id = "b00000002", title = "Two"),
-            )
-        )
-        val controller = controller(InMemoryPendingStore(), client)
-
-        val snapshot = controller.deleteBooks(
-            baseUrl = "http://device.local",
-            bookIds = listOf("b00000001", "b00000002"),
-        )
-
-        assertEquals(listOf("b00000001", "b00000002"), client.deletedFilenames)
-        assertEquals(emptyList(), snapshot)
-    }
-
-    @Test
-    fun setBookPositionSavesAndRefreshesBooks() = runBlocking {
+    fun bookPositionReturnsOnlyTheUpdatedBook() = runBlocking {
         val book = sampleBook(id = "b12345678", title = "Manual", wordCount = 1000).copy(
-            source = NanoBookSource(size = 1234, fingerprint = 3456),
-            reading = NanoReadingProgress(
-                wordIndex = 100,
-                percent = 10,
-                remainingWords = 899,
-                estimatedMinutes = 3,
-            ),
+            reading = NanoReadingProgress(100),
         )
         val client = RecordingNanoClient(initialBooks = listOf(book))
-        val controller = controller(InMemoryPendingStore(), client)
 
-        val snapshot = controller.setBookPosition(
-            baseUrl = "http://device.local",
-            book = book,
-            wordIndex = 250,
+        val updated = controller(InMemoryPendingStore(), client).setBookPosition(
+            "http://device.local",
+            book,
+            250,
         )
 
         assertEquals("b12345678", client.savedPositionId)
         assertEquals(250, client.savedPositionWordIndex)
-        assertEquals(listOf(book), snapshot)
+        assertEquals(250, updated.reading?.wordIndex)
     }
 
     @Test
-    fun saveSettingsPersistsDeviceSettings() = runBlocking {
+    fun themeUploadReturnsOnlyTheCreatedTheme() = runBlocking {
+        val client = RecordingNanoClient()
+
+        val response = controller(InMemoryPendingStore(), client).uploadTheme(
+            "http://device.local",
+            "night.toml",
+            "theme-data".encodeToByteArray(),
+        )
+
+        assertEquals("night.toml", client.uploadedThemeFilename)
+        assertEquals(NanoThemeSummary("night", "Night"), response)
+    }
+
+    @Test
+    fun settingsWifiAndFeedsReturnTheSavedResourcesWithoutRefreshes() = runBlocking {
         val client = RecordingNanoClient()
         val controller = controller(InMemoryPendingStore(), client)
         val settings = sampleSettings().withWpm(320).withBrightnessPercent(20)
 
-        val snapshot = controller.saveSettings(
-            baseUrl = "http://device.local",
-            settings = settings,
+        assertEquals(
+            settings,
+            controller.saveSettings(
+                "http://device.local",
+                settings,
+                setOf(NanoSettingsResource.Reading, NanoSettingsResource.Display),
+            ),
         )
-
+        assertEquals(NanoWifiSettings("Home"), controller.saveWifiSettings("http://device.local", "Home", "secret"))
+        controller.clearWifiSettings("http://device.local")
+        assertEquals(
+            listOf("https://local.example/feed"),
+            controller.saveRssFeeds(
+                "http://device.local",
+                listOf(" https://local.example/feed ", "https://local.example/feed"),
+            ),
+        )
         assertEquals(settings, client.savedSettings)
-        assertEquals(settings, snapshot.settings)
-        assertEquals(null, snapshot.wifiSettings)
+        assertEquals(
+            listOf(NanoSettingsResource.Reading, NanoSettingsResource.Display),
+            client.savedSettingsResources,
+        )
+        assertEquals("Home" to "secret", client.savedWifi)
+        assertEquals(listOf("https://local.example/feed"), client.savedFeeds)
+        assertEquals(0, client.fetchDeviceCalls)
     }
 
     @Test
-    fun wifiMutationsReturnUpdatedWifiSnapshot() = runBlocking {
+    fun appearanceSelectionsUpdateOnlyTheirRequestedResource() = runBlocking {
         val client = RecordingNanoClient()
         val controller = controller(InMemoryPendingStore(), client)
 
-        val saved = controller.saveWifiSettings(
-            baseUrl = "http://device.local",
-            ssid = "Home",
-            password = "secret",
-        )
-        val cleared = controller.clearWifiSettings(baseUrl = "http://device.local")
-
-        assertEquals("Home" to "secret", client.savedWifi)
-        assertEquals(NanoWifiSettings(passwordSet = true), saved)
-        assertEquals(NanoWifiSettings(passwordSet = false), cleared)
+        assertEquals("night", controller.selectTheme("http://device.local", "night"))
+        assertEquals("andika", controller.selectFont("http://device.local", "andika"))
+        assertEquals("he", controller.selectLocale("http://device.local", "he"))
+        assertEquals("night", client.selectedThemeId)
+        assertEquals("andika", client.selectedFontId)
+        assertEquals("he", client.selectedLocaleId)
+        assertEquals(null, client.savedSettings)
     }
 
-    private fun controller(
-        pendingStore: PendingUploadStore,
-        client: NanoClient,
-    ): NanoCompanionController {
-        return NanoCompanionController(
-            draftService = PendingDraftService(
-                repository = PendingUploadRepository(pendingStore),
-            ),
-            client = client,
-        )
-    }
+    private fun controller(store: PendingUploadStore, client: RecordingNanoClient) = NanoCompanionController(
+        draftService = PendingDraftService(PendingUploadRepository(store)),
+        nanoApi = client,
+        repository = client,
+    )
 
-    private fun samplePendingUpload(): PendingUpload = PendingUpload(
+    private fun samplePendingUpload() = PendingUpload(
         id = "1",
         title = "Example",
         sourceUrl = "https://example.com/story",
@@ -204,88 +183,134 @@ class NanoCompanionControllerTest {
     private class RecordingNanoClient(
         private val deviceFeeds: List<String> = emptyList(),
         initialBooks: List<NanoBook> = emptyList(),
-    ) : NanoClient {
-        private var books: List<NanoBook> = initialBooks
+        private val failLibrary: Boolean = false,
+        private var deviceFailures: Int = 0,
+    ) : NanoApi, RepositoryClient {
+        override fun close() = Unit
+
+        var books: List<NanoBook> = initialBooks
+        var fetchDeviceCalls = 0
+        var listLibraryCalls = 0
         var uploadedFilename: String? = null
         var uploadedCategory: String? = null
+        var uploadedThemeFilename: String? = null
         var savedFeeds: List<String>? = null
         var savedSettings: NanoSettings? = null
+        val savedSettingsResources = mutableListOf<NanoSettingsResource>()
         var savedWifi: Pair<String, String>? = null
         var savedPositionId: String? = null
         var savedPositionWordIndex: Int? = null
-        val deletedFilenames = mutableListOf<String>()
+        var selectedThemeId: String? = null
+        var selectedFontId: String? = null
+        var selectedLocaleId: String? = null
+        val deletedIds = mutableListOf<String>()
 
-        override suspend fun fetchInfo(baseUrl: String): NanoInfo = NanoInfo(name = "Nano", apiVersion = 1)
-
-        override suspend fun listBooks(baseUrl: String): List<NanoBook> = books
-
-        override suspend fun fetchSettings(baseUrl: String): NanoSettings = sampleSettings()
-
-        override suspend fun updateSettings(baseUrl: String, settings: NanoSettings): NanoSettings {
-            savedSettings = settings
-            return settings
+        override suspend fun fetchDevice(baseUrl: String): NanoInfo {
+            fetchDeviceCalls++
+            if (deviceFailures-- > 0) throw NanoClientError("device not ready")
+            return NanoInfo("preview-v0.0.9+abc", "reader-ota.bin")
         }
 
-        override suspend fun fetchWifiSettings(baseUrl: String): NanoWifiSettings =
-            NanoWifiSettings(passwordSet = false)
+        override suspend fun listLibrary(baseUrl: String): List<NanoBook> {
+            listLibraryCalls++
+            if (failLibrary) throw NanoClientError("library unavailable")
+            return books
+        }
 
-        override suspend fun updateWifi(baseUrl: String, ssid: String, password: String): NanoWifiSettings {
+        override suspend fun listThemes(baseUrl: String) = listOf(NanoThemeSummary("night", "Night"))
+        override suspend fun listFonts(baseUrl: String) = emptyList<NanoFontSummary>()
+        override suspend fun listLocales(baseUrl: String) = emptyList<NanoLocaleSummary>()
+
+        override suspend fun fetchSettings(baseUrl: String) = sampleSettings()
+        override suspend fun updateReadingSettings(baseUrl: String, settings: NanoSettings.Reading) {
+            savedSettingsResources += NanoSettingsResource.Reading
+            savedSettings = (savedSettings ?: sampleSettings()).copy(reading = settings)
+        }
+        override suspend fun updateDisplaySettings(baseUrl: String, settings: NanoSettings.Interface) {
+            savedSettingsResources += NanoSettingsResource.Display
+            savedSettings = (savedSettings ?: sampleSettings()).copy(`interface` = settings)
+        }
+        override suspend fun updateUpdateSettings(baseUrl: String, settings: NanoSettings.Updates) {
+            savedSettingsResources += NanoSettingsResource.Updates
+            savedSettings = (savedSettings ?: sampleSettings()).copy(updates = settings)
+        }
+        override suspend fun selectTheme(baseUrl: String, id: String) { selectedThemeId = id }
+        override suspend fun selectFont(baseUrl: String, id: String) { selectedFontId = id }
+        override suspend fun selectLocale(baseUrl: String, id: String) { selectedLocaleId = id }
+        override suspend fun fetchWifiSettings(baseUrl: String) = NanoWifiSettings("")
+        override suspend fun updateWifi(baseUrl: String, ssid: String, password: String) {
             savedWifi = ssid to password
-            return NanoWifiSettings(passwordSet = true)
         }
-
-        override suspend fun forgetWifi(baseUrl: String): NanoWifiSettings =
-            NanoWifiSettings(passwordSet = false)
-
-        override suspend fun fetchRssFeeds(baseUrl: String): NanoRssFeeds =
-            NanoRssFeeds(feeds = deviceFeeds)
-
-        override suspend fun updateRssFeeds(baseUrl: String, config: NanoRssFeeds): NanoRssFeeds {
-            savedFeeds = config.feeds
-            return config
-        }
+        override suspend fun forgetWifi(baseUrl: String) = Unit
+        override suspend fun fetchRssFeeds(baseUrl: String) = NanoRssFeeds(deviceFeeds)
+        override suspend fun updateRssFeeds(baseUrl: String, config: NanoRssFeeds) { savedFeeds = config.feeds }
+        override suspend fun fetchFocusTimers(baseUrl: String) = NanoFocusTimers(emptyList())
+        override suspend fun updateFocusTimers(baseUrl: String, timers: NanoFocusTimers) = Unit
 
         override suspend fun uploadBook(
             baseUrl: String,
             name: String,
             data: ByteArray,
             category: String?,
-            onProgress: ((sent: Long, total: Long) -> Unit)?,
-        ): NanoUploadResponse {
+            onProgress: ((Long, Long) -> Unit)?,
+        ): NanoBook {
             onProgress?.invoke(data.size.toLong(), data.size.toLong())
             uploadedFilename = name
             uploadedCategory = category
-            books = listOf(sampleBook(id = name))
-            return NanoUploadResponse(path = "/books/$name")
+            books = listOf(sampleBook(id = name, title = name.substringBeforeLast('.')))
+            return books.single()
         }
 
-        override suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse {
-            deletedFilenames += id
+        override suspend fun deleteBook(baseUrl: String, id: String) {
+            deletedIds += id
             books = books.filterNot { it.id == id }
-            return NanoUploadResponse(id = id, deleted = true)
         }
 
-        override suspend fun setBookPosition(
-            baseUrl: String,
-            id: String,
-            wordIndex: Int,
-        ): NanoUploadResponse {
+        override suspend fun setBookPosition(baseUrl: String, id: String, wordIndex: Int) {
             savedPositionId = id
             savedPositionWordIndex = wordIndex
-            return NanoUploadResponse(id = id, wordIndex = wordIndex)
+            books = books.map { book ->
+                if (book.id != id) book else book.copy(reading = book.reading?.copy(wordIndex = wordIndex))
+            }
         }
+
+        override suspend fun setBookLanguageFonts(
+            baseUrl: String,
+            id: String,
+            languageFonts: List<NanoLanguageFont>,
+        ) = Unit
+
+        override suspend fun uploadTheme(
+            baseUrl: String,
+            name: String,
+            data: ByteArray,
+            onProgress: ((Long, Long) -> Unit)?,
+        ): NanoThemeSummary {
+            uploadedThemeFilename = name
+            return NanoThemeSummary("night", "Night")
+        }
+
+        override suspend fun deleteTheme(baseUrl: String, id: String) = Unit
+        override suspend fun uploadFont(baseUrl: String, name: String, data: ByteArray, onProgress: ((Long, Long) -> Unit)?) =
+            NanoFontSummary("font", "Font")
+        override suspend fun deleteFont(baseUrl: String, id: String) = Unit
+        override suspend fun uploadLocalePack(baseUrl: String, name: String, data: ByteArray, onProgress: ((Long, Long) -> Unit)?) =
+            NanoLocaleSummary("ja", "日本語", "ja")
+        override suspend fun deleteLocalePack(baseUrl: String, id: String) = Unit
+
+        override suspend fun fetchThemeCatalog(url: String): List<NanoThemeCatalogItem> = emptyList()
+        override suspend fun fetchFirmwareRelease(owner: String, repository: String, tag: String) =
+            FirmwareRelease("", emptyList())
+        override suspend fun downloadTheme(url: String, onProgress: ((Long, Long?) -> Unit)?) = byteArrayOf()
+        override suspend fun fetchFontCatalog(url: String): List<NanoFontCatalogItem> = emptyList()
+        override suspend fun downloadFont(url: String, onProgress: ((Long, Long?) -> Unit)?) = byteArrayOf()
+        override suspend fun fetchLocaleCatalog(url: String): List<NanoLocaleCatalogItem> = emptyList()
+        override suspend fun downloadLocalePack(url: String, onProgress: ((Long, Long?) -> Unit)?) = byteArrayOf()
     }
 
     private class InMemoryPendingStore(var items: List<PendingUpload> = emptyList()) : PendingUploadStore {
-        override suspend fun loadAll(): List<PendingUpload> = items
-
-        override suspend fun saveAll(items: List<PendingUpload>) {
-            this.items = items
-        }
-
-        override suspend fun remove(id: String) {
-            items = items.filterNot { it.id == id }
-        }
+        override suspend fun loadAll() = items
+        override suspend fun saveAll(items: List<PendingUpload>) { this.items = items }
+        override suspend fun remove(id: String) { items = items.filterNot { it.id == id } }
     }
-
 }

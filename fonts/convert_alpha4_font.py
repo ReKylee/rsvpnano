@@ -1355,7 +1355,7 @@ def main() -> int:
             "id": normalize_catalog_id(font_display_name),
             "name": font_display_name,
             "locales": list(locales),
-            "scriptMask": family_script_mask,
+            "scripts": [tag for tag, mask in SCRIPT_TAGS.items() if family_script_mask & mask],
             "file": str(target.relative_to(output_root)).replace('\\', '/'),
             "shaping": bool(layout_tables),
         }

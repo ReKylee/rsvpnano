@@ -1,5 +1,6 @@
 package com.rsvpnano
 
+import com.rsvpnano.models.NanoSettings
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -49,6 +50,17 @@ class NanoSettingsUpdateHelpersTest {
         assertEquals(30, updated.reading.typography.anchor)
         assertEquals(20, updated.reading.typography.guideWidth)
         assertEquals(8, updated.reading.typography.guideGap)
+    }
+
+    @Test
+    fun pacingResetRestoresReaderDefaults() {
+        val reset = sampleSettings()
+            .withPacingLongWordMs(0)
+            .withPacingComplexWordMs(600)
+            .withPacingPunctuationMs(50)
+            .withDefaultPacing()
+
+        assertEquals(NanoSettings.Pacing(), reset.reading.pacing)
     }
 
     @Test

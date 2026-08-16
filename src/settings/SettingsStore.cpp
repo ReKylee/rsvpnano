@@ -7,9 +7,10 @@
 #include <string>
 #include <utility>
 
-#include "text/LocaleTag.h"
+#include "hash/Fnv1a.h"
 #include "settings/SettingsRules.h"
 #include "storage/fs/StoragePaths.h"
+#include "text/LocaleTag.h"
 
 namespace settings {
     namespace {
@@ -69,12 +70,8 @@ namespace settings {
             return content;
         }
 
-        uint32_t hash(std::string_view content) {
-            uint32_t value = 2166136261UL;
-            for (const char character: content) {
-                value ^= static_cast<uint8_t>(character);
-                value *= 16777619UL;
-            }
+        uint32_t storedHash(std::string_view content) {
+            const uint32_t value = Fnv1a::hash(content);
             return value == 0 ? 1 : value;
         }
 
@@ -158,7 +155,7 @@ namespace settings {
         });
 
         const uint32_t savedHash = preferences_.getUInt(kFileHashKey, 0);
-        const bool fileWasEdited = fileContent && (savedHash == 0 || hash(*fileContent) != savedHash);
+        const bool fileWasEdited = fileContent && (savedHash == 0 || storedHash(*fileContent) != savedHash);
         const bool invalidFile = fileContent && !fileSettings;
 
         const bool hasNvsSettings = nvsSettings.has_value();
@@ -203,33 +200,30 @@ namespace settings {
         return {};
     }
 
-    SettingsResult<> SettingsStore::acceptChanges() {
+    void SettingsStore::acceptChanges() {
         sanitize(settings_);
         if (settings_ == lastAccepted_)
-            return {};
+            return;
         lastAccepted_ = settings_;
         dirty_ = true;
         dirtyAtMs_ = millis();
-        return {};
     }
 
-    SettingsResult<> SettingsStore::acceptSecretChanges() {
+    void SettingsStore::acceptSecretChanges() {
         sanitize(secrets_);
         if (secrets_ == lastAcceptedSecrets_)
-            return {};
+            return;
         lastAcceptedSecrets_ = secrets_;
         secretsDirty_ = true;
         dirtyAtMs_ = millis();
-        return {};
     }
 
-    SettingsResult<> SettingsStore::replace(DeviceSettings candidate, SettingsSource /*source*/) {
+    void SettingsStore::replace(DeviceSettings candidate, SettingsSource /*source*/) {
         sanitize(candidate);
         settings_ = std::move(candidate);
         lastAccepted_ = settings_;
         dirty_ = true;
         dirtyAtMs_ = millis();
-        return {};
     }
 
     void SettingsStore::update(uint32_t nowMs) {
@@ -246,7 +240,7 @@ namespace settings {
             return {};
         if (auto result = writeFile(canonicalToml); !result)
             return result;
-        if (preferences_.putUInt(kFileHashKey, hash(canonicalToml)) == 0)
+        if (preferences_.putUInt(kFileHashKey, storedHash(canonicalToml)) == 0)
             return std::unexpected(error(SettingsErrorCategory::Io, SettingsSource::Nvs,
                                          "settings file hash write failed", kFileHashKey));
         return {};

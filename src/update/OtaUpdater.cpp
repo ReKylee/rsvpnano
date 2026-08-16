@@ -39,10 +39,6 @@ namespace {
         std::string detail;
     };
 
-    std::string trimCopy(std::string_view value) {
-        return std::string{AsciiText::trim(value)};
-    }
-
     bool isUrlUnreserved(char value) {
         return (value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9')
             || value == '-' || value == '.' || value == '_' || value == '~';
@@ -79,15 +75,17 @@ namespace {
     }
 
     ReleaseSource releaseSourceForConfig(const OtaUpdater::Config& config) {
-        ReleaseSource source{trimCopy(config.githubOwner), trimCopy(config.githubRepo), trimCopy(config.githubTag)};
+        ReleaseSource source{std::string{AsciiText::trim(config.githubOwner)},
+                             std::string{AsciiText::trim(config.githubRepo)},
+                             std::string{AsciiText::trim(config.githubTag)}};
 
         splitOwnerRepo(source.owner, source.owner, source.repo);
         splitOwnerRepo(source.repo, source.owner, source.repo);
 
         const size_t at = source.tag.find('@');
         if (at > 0 && at + 1 < source.tag.length()) {
-            std::string repoPart = trimCopy(std::string_view{source.tag}.substr(0, at));
-            source.tag = trimCopy(std::string_view{source.tag}.substr(at + 1));
+            std::string repoPart{AsciiText::trim(std::string_view{source.tag}.substr(0, at))};
+            source.tag = std::string{AsciiText::trim(std::string_view{source.tag}.substr(at + 1))};
             if (!splitOwnerRepo(repoPart, source.owner, source.repo) && !repoPart.empty()) {
                 source.repo = repoPart;
             }

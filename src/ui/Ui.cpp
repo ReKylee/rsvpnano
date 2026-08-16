@@ -467,7 +467,21 @@ namespace ui {
                               suffix.data());
                 const std::string_view valueView{valueText};
                 const int16_t headerWidth = static_cast<int16_t>(visual.w - 14);
-                if (visual.h >= 44) {
+                const bool largeInline = visual.h >= 40
+                                      && textHeightFor(label, 3) <= visual.h - 10
+                                      && textHeightFor(valueView, 3) <= visual.h - 10
+                                      && textWidthFor(label, 3) + textWidthFor(valueView, 3) + 8 <= headerWidth;
+                if (largeInline) {
+                    const int16_t valueWidth = textWidthFor(valueView, 3);
+                    const int16_t labelWidth = static_cast<int16_t>(headerWidth - valueWidth - 8);
+                    const int16_t textHeight = static_cast<int16_t>(visual.h - 10);
+                    drawText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 1), labelWidth,
+                              textHeight},
+                             label, 3, color(ui::themes::ColorRole::Foreground));
+                    drawText({static_cast<int16_t>(visual.x + visual.w - valueWidth - 7),
+                              static_cast<int16_t>(visual.y + 1), valueWidth, textHeight},
+                             valueView, 3, color(activeRole), TextAlign::Right);
+                } else if (visual.h >= 44) {
                     drawText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 2), headerWidth, 16},
                              label, 2, color(ui::themes::ColorRole::Foreground));
                     drawText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 18), headerWidth, 16},
@@ -850,15 +864,11 @@ namespace ui {
     }
 
     uint32_t Context::signature(std::string_view text, uint32_t seed) {
-        for (const char value: text) {
-            seed ^= static_cast<uint8_t>(value);
-            seed *= 16777619U;
-        }
-        return seed;
+        return Fnv1a::append(seed, text);
     }
 
     uint32_t Context::combine(uint32_t seed, uint32_t value) {
-        return (seed ^ value) * 16777619U;
+        return (seed ^ value) * Fnv1a::kPrime;
     }
 
     Context::Claim Context::claim(Kind kind, Rect rect, uint32_t state) {

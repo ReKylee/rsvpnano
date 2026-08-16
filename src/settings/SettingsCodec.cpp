@@ -1,6 +1,5 @@
 #include "settings/SettingsCodec.h"
 
-#include <glaze/json.hpp>
 #include <glaze/toml.hpp>
 
 #include <utility>
@@ -12,11 +11,6 @@ namespace settings::codec {
 
         constexpr glz::opts kSettingsTomlReadOptions{
             .format = glz::TOML,
-            .error_on_unknown_keys = false,
-        };
-
-        constexpr glz::opts kSettingsJsonReadOptions{
-            .format = glz::JSON,
             .error_on_unknown_keys = false,
         };
 
@@ -70,18 +64,6 @@ namespace settings::codec {
     SettingsResult<std::string> encodeToml(const DeviceSettings& value, SettingsSource source) {
         return encode(value, source, [](auto& input, std::string& output) {
             return glz::write_toml(input, output);
-        });
-    }
-
-    SettingsResult<DeviceSettings> decodeJson(std::string_view input, SettingsSource source) {
-        return decode<DeviceSettings>(input, source, kMaxSettingsBytes, [](auto& value, std::string_view text) {
-            return glz::read<kSettingsJsonReadOptions>(value, text);
-        });
-    }
-
-    SettingsResult<std::string> encodeJson(const DeviceSettings& value, SettingsSource source) {
-        return encode(value, source, [](auto& input, std::string& output) {
-            return glz::write_json(input, output);
         });
     }
 

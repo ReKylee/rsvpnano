@@ -7,6 +7,7 @@ import com.rsvpnano.models.NanoSettingsSchema
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -22,12 +23,32 @@ class NanoSettingsWireFormatTest {
     fun serializesTheFirmwareDeviceSettingsShapeWithoutLegacyFields() {
         val document = json.parseToJsonElement(json.encodeToString(sampleSettings())).jsonObject
 
-        assertEquals(setOf("reading", "interface", "network", "updates"), document.keys)
+        assertEquals(setOf("reading", "interface", "updates"), document.keys)
         assertFalse("display" in document)
         assertFalse("themes" in document)
         assertFalse("fonts" in document)
 
         val reading = document.getValue("reading").jsonObject
+        assertEquals(
+            setOf(
+                "wpm",
+                "mode",
+                "pauseMode",
+                "phantomWords",
+                "chapterScrollReversed",
+                "footerMetric",
+                "batteryLabel",
+                "batteryIconVisible",
+                "batteryVisibleWhileReading",
+                "chapterVisibleWhileReading",
+                "progressVisibleWhileReading",
+                "leftHanded",
+                "typography",
+                "pacing",
+            ),
+            reading.keys,
+        )
+        assertEquals("page", reading.getValue("mode").jsonPrimitive.content)
         assertEquals(
             setOf("fontId", "fontSizeIndex", "focusHighlight", "tracking", "anchor", "guideWidth", "guideGap"),
             reading.getValue("typography").jsonObject.keys,
@@ -36,20 +57,42 @@ class NanoSettingsWireFormatTest {
             setOf("longWordDelayMs", "complexWordDelayMs", "punctuationDelayMs"),
             reading.getValue("pacing").jsonObject.keys,
         )
+        assertEquals(
+            setOf("checkOnStartup", "repositoryOwner", "releaseTag"),
+            document.getValue("updates").jsonObject.keys,
+        )
+        assertEquals(
+            setOf("brightnessPercent", "locale", "standbyTimerIndex", "screensaver", "selectedThemeId"),
+            document.getValue("interface").jsonObject.keys,
+        )
+        assertFalse("automatic" in document.getValue("updates").jsonObject)
     }
 
     @Test
     fun decodesStableEnumNamesFromFirmware() {
         val settings = json.decodeFromString<NanoSettings>(
-            """{"obsolete":true,"interface":{"locale":"ru","screensaver":"screenOff"},"reading":{"pauseMode":"sentenceEnd","footerMetric":"bookTime","batteryLabel":"timeRemaining"}}""",
+            """{"obsolete":true,"interface":{"locale":"ru","screensaver":"screenOff"},"reading":{"mode":"page","pauseMode":"sentenceEnd","footerMetric":"bookTime","batteryLabel":"timeRemaining"},"updates":{"checkOnStartup":true}}""",
         )
 
         assertEquals("ru", settings.`interface`.locale)
         assertEquals("screenOff", settings.`interface`.screensaver)
         assertEquals("sentenceEnd", settings.reading.pauseMode)
+        assertEquals("page", settings.reading.mode)
         assertEquals("bookTime", settings.reading.footerMetric)
         assertEquals("timeRemaining", settings.reading.batteryLabel)
         assertTrue(settings.reading.batteryIconVisible)
+        assertTrue(settings.updates.checkOnStartup)
+    }
+
+    @Test
+    fun defaultsMatchFirmwareSettingsModel() {
+        val settings = NanoSettings()
+
+        assertEquals(300, settings.reading.wpm)
+        assertEquals(NanoSettingsSchema.READING_MODE_RSVP, settings.reading.mode)
+        assertEquals(NanoSettingsSchema.STANDBY_TIMER_1_MIN, settings.`interface`.standbyTimerIndex)
+        assertEquals(NanoSettingsSchema.TYPEFACE_DEFAULT, settings.reading.typography.fontId)
+        assertFalse(settings.updates.checkOnStartup)
     }
 
     @Test
@@ -62,15 +105,15 @@ class NanoSettingsWireFormatTest {
 
     @Test
     fun localeAffinityKeepsMixedScriptFontsSelectable() {
-        val font = NanoFontSummary("hebrew", "Noto Serif Hebrew", listOf("he"), scriptMask = 8)
+        val font = NanoFontSummary("hebrew", "Noto Serif Hebrew", listOf("he"), scripts = listOf("Hebr"))
 
-        assertTrue(font.usableFor("he", 9))
-        assertTrue(font.usableFor("he-IL", 9))
-        assertFalse(font.usableFor("en", 9))
+        assertTrue(font.usableFor("he", listOf("Latn", "Hebr")))
+        assertTrue(font.usableFor("he-IL", listOf("Latn", "Hebr")))
+        assertFalse(font.usableFor("en", listOf("Latn", "Hebr")))
 
-        val math = NanoFontSummary("math", "STIX Two Math", scriptMask = 1 shl 9)
-        assertFalse(math.usableFor("en", (1 shl 9) or 1))
-        assertTrue(math.usableFor("en", 1 shl 9))
-        assertFalse(math.usableFor("en", 1))
+        val math = NanoFontSummary("math", "STIX Two Math", scripts = listOf("Zmth"))
+        assertFalse(math.usableFor("en", listOf("Zmth", "Latn")))
+        assertTrue(math.usableFor("en", listOf("Zmth")))
+        assertFalse(math.usableFor("en", listOf("Latn")))
     }
 }

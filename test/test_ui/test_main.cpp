@@ -943,7 +943,7 @@ void test_multilingual_ui_keeps_each_visible_locale_font_loaded() {
     TEST_ASSERT_EQUAL_STRING("zh-Hans", gLoadedUiPacks[1].c_str());
 }
 
-void test_locale_text_uses_visual_bounds_and_physical_alignment() {
+void test_ui_text_uses_visual_bounds_for_every_alignment() {
     FontRecordingGfx gfx(320, 172);
     gfx.measuredInkX = -2;
     gfx.measuredInkWidth = 20;
@@ -967,10 +967,15 @@ void test_locale_text_uses_visual_bounds_and_physical_alignment() {
     gfx.text.clear();
     context.drawText({10, 20, 100, 18}, "\xD8\xA7\xD9\x84\xD8\xB9\xD8\xB1\xD8\xA8\xD9\x8A\xD8\xA9", 1,
                      0xFFFF, ui::TextAlign::Right, 1, "ar");
-    TEST_ASSERT_EQUAL_INT16(68, gfx.cursorX);
+    TEST_ASSERT_EQUAL_INT16(92, gfx.cursorX);
     const std::string rightAligned{gfx.text.begin(), gfx.text.end()};
     TEST_ASSERT_EQUAL_STRING("\xD8\xA9\xD9\x8A\xD8\xA8\xD8\xB1\xD8\xB9\xD9\x84\xD8\xA7",
                              rightAligned.c_str());
+
+    gfx.text.clear();
+    context.drawText({10, 40, 100, 18}, "Title", 1, 0xFFFF, ui::TextAlign::Left);
+    TEST_ASSERT_EQUAL_STRING("Title", gfx.measuredText.c_str());
+    TEST_ASSERT_EQUAL_INT16(12, gfx.cursorX);
 }
 
 void test_labels_redraw_when_text_or_locale_changes() {
@@ -1469,7 +1474,7 @@ int main(int, char**) {
     RUN_TEST(test_compiled_localization_is_the_english_rescue_table);
     RUN_TEST(test_external_ui_strings_fallback_by_key_and_keep_their_font_separate);
     RUN_TEST(test_multilingual_ui_keeps_each_visible_locale_font_loaded);
-    RUN_TEST(test_locale_text_uses_visual_bounds_and_physical_alignment);
+    RUN_TEST(test_ui_text_uses_visual_bounds_for_every_alignment);
     RUN_TEST(test_labels_redraw_when_text_or_locale_changes);
     RUN_TEST(test_rtl_ui_text_uses_pack_direction_for_alignment_and_bidi);
     RUN_TEST(test_utf8_text_decodes_and_keeps_codepoint_boundaries);

@@ -1021,46 +1021,28 @@ namespace ui {
                     output.append(encoded.data(), Utf8Text::encode(codepoint.value, encoded));
             };
 
+            std::string rendered;
+            rendered.reserve(visible.size() + dots);
+            if (rightToLeft)
+                rendered.append(dots, '.');
+            appendVisual(rendered);
+            if (!rightToLeft)
+                rendered.append(dots, '.');
+
             int16_t inkX = 0;
-            const size_t renderedCodepoints = truncated ? capacity : lineCodepoints;
-            int16_t renderedWidth = static_cast<int16_t>(std::min<size_t>(
-                renderedCodepoints * static_cast<size_t>(cellWidth) * size, INT16_MAX));
-            std::string centered;
-            if (align == TextAlign::Center) {
-                centered.reserve(visible.size() + dots);
-                if (rightToLeft)
-                    centered.append(dots, '.');
-                appendVisual(centered);
-                if (!rightToLeft)
-                    centered.append(dots, '.');
-                int16_t inkY = 0;
-                uint16_t inkWidth = 0;
-                uint16_t inkHeight = 0;
-                gfx_.getTextBounds(centered.c_str(), 0, 0, &inkX, &inkY, &inkWidth, &inkHeight);
-                renderedWidth = static_cast<int16_t>(inkWidth);
-            }
+            int16_t inkY = 0;
+            uint16_t inkWidth = 0;
+            uint16_t inkHeight = 0;
+            gfx_.getTextBounds(rendered.c_str(), 0, 0, &inkX, &inkY, &inkWidth, &inkHeight);
+            const int16_t left = static_cast<int16_t>(rect.x - inkX);
             const int16_t x =
                 align == TextAlign::Center
-                    ? std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + (rect.w - renderedWidth) / 2 - inkX))
+                    ? std::max<int16_t>(left, static_cast<int16_t>(rect.x + (rect.w - inkWidth) / 2 - inkX))
                 : align == TextAlign::Right
-                    ? std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + rect.w - renderedWidth))
-                    : rect.x;
+                    ? std::max<int16_t>(left, static_cast<int16_t>(rect.x + rect.w - inkWidth - inkX))
+                    : left;
             gfx_.setCursor(x, static_cast<int16_t>(y + lineHeight - size));
-            if (!centered.empty()) {
-                drawBytes(centered);
-            } else {
-                if (rightToLeft)
-                    drawBytes(std::string_view{"...", dots});
-                if (!bidiReady) {
-                    drawBytes(visible);
-                } else {
-                    std::array<char, 4> encoded{};
-                    for (const BidiText::Codepoint& codepoint: bidiCodepoints_)
-                        drawBytes(std::string_view{encoded.data(), Utf8Text::encode(codepoint.value, encoded)});
-                }
-                if (!rightToLeft)
-                    drawBytes(std::string_view{"...", dots});
-            }
+            drawBytes(rendered);
         };
         drawLine(first, second.empty() ? codepoints : Utf8Text::count(first), firstY);
         if (!second.empty())

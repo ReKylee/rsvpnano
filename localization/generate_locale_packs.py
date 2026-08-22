@@ -23,6 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT = REPO_ROOT / "locale-packs"
 DEFAULT_BUILTIN_UI_FONT = REPO_ROOT / "src" / "fonts" / "UiFont6x9.h"
 MAX_UI_FONT_BYTES = 64 * 1024
+PACK_VERSION = "1.0.1"
 
 
 def compiled_u8g2_font(path: Path) -> bytes:
@@ -214,7 +215,7 @@ def manifest(
 	required_capabilities = ", ".join(json.dumps(capability) for capability in requires)
 	result = f'''schema_version = 2
 id = {json.dumps(language.code, ensure_ascii=False)}
-version = "1.0.0"
+version = "{PACK_VERSION}"
 locale = {json.dumps(language.code, ensure_ascii=False)}
 native_name = {json.dumps(language.label, ensure_ascii=False)}
 english_name = {json.dumps(language.name, ensure_ascii=False)}
@@ -268,7 +269,7 @@ def outputs(
 		if language.name == model.default_language:
 			continue
 		prepared_strings = ui_strings(model, language)
-		required = required_ui_codepoints(prepared_strings)
+		required = required_ui_codepoints([*prepared_strings, language.label])
 		strings = string_table(prepared_strings)
 		font = ui_font(language, required, built_in)
 		files = {
@@ -283,7 +284,7 @@ def outputs(
 				"id": language.code,
 				"name": language.label,
 				"englishName": language.name,
-				"version": "1.0.0",
+				"version": PACK_VERSION,
 				"locale": language.code,
 				"direction": language.direction,
 				"scripts": list(language.scripts),

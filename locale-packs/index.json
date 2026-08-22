@@ -3,7 +3,7 @@
     "id": "es",
     "name": "Español",
     "englishName": "Spanish",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "locale": "es",
     "direction": "ltr",
     "scripts": [
@@ -16,7 +16,7 @@
     "id": "fr",
     "name": "Français",
     "englishName": "French",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "locale": "fr",
     "direction": "ltr",
     "scripts": [
@@ -29,7 +29,7 @@
     "id": "de",
     "name": "Deutsch",
     "englishName": "German",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "locale": "de",
     "direction": "ltr",
     "scripts": [
@@ -42,7 +42,7 @@
     "id": "ro",
     "name": "Română",
     "englishName": "Romanian",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "locale": "ro",
     "direction": "ltr",
     "scripts": [
@@ -55,7 +55,7 @@
     "id": "pl",
     "name": "Polski",
     "englishName": "Polish",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "locale": "pl",
     "direction": "ltr",
     "scripts": [
@@ -68,7 +68,7 @@
     "id": "ru",
     "name": "Русский",
     "englishName": "Russian",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "locale": "ru",
     "direction": "ltr",
     "scripts": [
@@ -81,7 +81,7 @@
     "id": "he",
     "name": "עברית",
     "englishName": "Hebrew",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "locale": "he",
     "direction": "rtl",
     "scripts": [
@@ -94,7 +94,7 @@
     "id": "ar",
     "name": "العربية",
     "englishName": "Arabic",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "locale": "ar",
     "direction": "rtl",
     "scripts": [
@@ -107,7 +107,7 @@
     "id": "ja",
     "name": "日本語",
     "englishName": "Japanese",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "locale": "ja",
     "direction": "ltr",
     "scripts": [
@@ -122,7 +122,7 @@
     "id": "ko",
     "name": "한국어",
     "englishName": "Korean",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "locale": "ko",
     "direction": "ltr",
     "scripts": [
@@ -135,7 +135,7 @@
     "id": "zh-Hans",
     "name": "简体中文",
     "englishName": "ChineseSimplified",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "locale": "zh-Hans",
     "direction": "ltr",
     "scripts": [
@@ -148,7 +148,7 @@
     "id": "zh-Hant",
     "name": "繁體中文",
     "englishName": "ChineseTraditional",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "locale": "zh-Hant",
     "direction": "ltr",
     "scripts": [

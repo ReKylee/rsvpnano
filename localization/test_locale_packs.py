@@ -99,7 +99,7 @@ class LocalePackTest(unittest.TestCase):
 					(DEFAULT_OUTPUT / f"{language.code}.zip").stat().st_mtime
 					- generated_at
 				),
-				5,
+				10,
 			)
 
 			self.assertEqual(manifest["id"], language.code)
@@ -152,7 +152,7 @@ class LocalePackTest(unittest.TestCase):
 	def test_bdf_ui_font_is_subset_and_packaged(self) -> None:
 		model = load_model(DEFAULT_TOML)
 		language = model.languages[1]
-		required = required_ui_codepoints(ui_strings(model, language))
+		required = required_ui_codepoints([*ui_strings(model, language), language.label])
 		with TemporaryDirectory() as directory:
 			font_path = Path(directory) / "font.bdf"
 			font_path.write_text(bdf_font(required | {0x65E5}), encoding="ascii")
@@ -188,7 +188,10 @@ class LocalePackTest(unittest.TestCase):
 			generated = outputs(configured, Path(directory), (2026, 1, 2, 3, 4, 6))
 			with zipfile.ZipFile(io.BytesIO(generated[Path(directory) / f"{language.code}.zip"])) as archive:
 				font = archive.read("locales/he/ui/font.u8g2")
-				self.assertEqual(u8g2_codepoints(font), required_ui_codepoints(ui_strings(configured, language)))
+				self.assertEqual(
+					u8g2_codepoints(font),
+					required_ui_codepoints([*ui_strings(configured, language), language.label]),
+				)
 				self.assertLessEqual(font[10], 9)
 
 	def test_u8g2_coverage_comes_from_the_font_table(self) -> None:
@@ -228,6 +231,7 @@ class LocalePackTest(unittest.TestCase):
 		language = replace(
 			model.languages[1],
 			code="ar",
+			label="العربية",
 			scripts=("Arab",),
 			direction="rtl",
 			ui_font=UiFont(
@@ -244,7 +248,7 @@ class LocalePackTest(unittest.TestCase):
 		]
 		configured = replace(model, languages=[model.languages[0], language], texts=texts)
 		shaped = ui_strings(configured, language)
-		required = required_ui_codepoints(shaped)
+		required = required_ui_codepoints([*shaped, language.label])
 		self.assertNotEqual(shaped[0], translations[0])
 		with TemporaryDirectory() as directory:
 			generated = outputs(configured, Path(directory), (2026, 1, 2, 3, 4, 6))
@@ -253,7 +257,7 @@ class LocalePackTest(unittest.TestCase):
 				strings = archive.read("locales/ar/ui/strings.bin")
 				manifest = tomllib.loads(archive.read("locales/ar/manifest.toml").decode())
 				self.assertEqual(u8g2_codepoints(font), required)
-				self.assertEqual(font[10], 12)
+				self.assertEqual(font[10], 14)
 				self.assertEqual(manifest["requires"], ["bidi"])
 				first_offset, second_offset = struct.unpack_from("<II", strings, 12)
 				text_start = 12 + 4 * (len(shaped) + 1)

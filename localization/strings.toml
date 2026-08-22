@@ -21,8 +21,8 @@ language_order = [
 
 # Add ui_font = { source = "localization/fonts/<locale>.u8g2", license = "..." }
 # to a language only when the compiled UI font does not cover it. CJK locales use
-# Fusion Pixel Font's 10px proportional regional builds; generation emits only
-# the locale's glyphs.
+# Fusion Pixel Font's 10px proportional regional builds; generation emits the
+# translated UI and native locale-name glyphs.
 # Hebrew uses ui_font = { source = "third_party/able-font/Able5.ttf",
 # pixel_size = 8, license = "Able license; credit Joseph Fatula" }.
 # Arabic uses ui_font = { source = "third_party/pixel-ae/PixelAE-Regular.ttf",

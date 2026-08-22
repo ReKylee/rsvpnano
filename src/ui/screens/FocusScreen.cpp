@@ -11,22 +11,22 @@
 
 namespace screens {
     void FocusScreen::begin() {
-        filesystem_.reset();
+        filesystem_ = nullptr;
         timers_ = focus::defaultTimers();
         writable_ = false;
         orientation_.begin();
     }
 
     void FocusScreen::begin(fs::FS& filesystem) {
-        filesystem_ = std::ref(filesystem);
+        filesystem_ = &filesystem;
         timers_ = focus::defaultTimers();
         writable_ = true;
         {
-            auto loaded = focus::load(filesystem_->get());
+            auto loaded = focus::load(*filesystem_);
             if (loaded) {
                 timers_ = std::move(*loaded);
             } else if (loaded.error() == std::errc::no_such_file_or_directory) {
-                auto saved = focus::save(filesystem_->get(), timers_);
+                auto saved = focus::save(*filesystem_, timers_);
                 writable_ = saved.has_value();
                 if (!saved)
                     Logger::failure("focus", "save defaults", StoragePaths::kFocusConfigPath, saved.error());
@@ -378,7 +378,7 @@ namespace screens {
     bool FocusScreen::persist(const focus::Timers& timers) {
         if (!writable_ || !filesystem_)
             return false;
-        auto saved = focus::save(filesystem_->get(), timers);
+        auto saved = focus::save(*filesystem_, timers);
         if (!saved)
             Logger::failure("focus", "save", StoragePaths::kFocusConfigPath, saved.error());
         return saved.has_value();

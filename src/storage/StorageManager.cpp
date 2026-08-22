@@ -3,14 +3,13 @@
 
 #include <Arduino.h>
 #include <cstdint>
+#include <limits>
 #include "board/BoardStorage.h"
 
-#include "book/BookMetadata.h"
 #include "storage/fs/SdCard.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 #include "storage/index/IndexedBook.h"
-#include "text/TextNormalizer.h"
 
 #ifndef RSVP_ON_DEVICE_EPUB_CONVERSION
 #define RSVP_ON_DEVICE_EPUB_CONVERSION 0
@@ -19,13 +18,6 @@
 namespace {
 
     constexpr uint64_t kBytesPerMegabyte = 1024ULL * 1024ULL;
-
-    void prepareUiMetadata(BookMetadata& metadata) {
-        metadata.title = RsvpText::uiSafeMetadata(metadata.title);
-        metadata.author = RsvpText::uiSafeMetadata(metadata.author);
-        for (ChapterMarker& chapter: metadata.chapters)
-            chapter.title = RsvpText::uiSafeMetadata(chapter.title);
-    }
 
 } // namespace
 
@@ -92,13 +84,15 @@ std::expected<void, std::error_code> StorageManager::installBook(std::string_vie
     const std::string backup = destination + ".bak";
     return StorageFiles::replaceFileAtomic(Board::Storage::filesystem(), destination.c_str(), staged.c_str(),
                                            backup.c_str())
-        .transform([this] { refreshBookPaths(false); });
+        .transform([this] {
+            refreshBookPaths(false);
+        });
 }
 
 std::expected<void, std::error_code> StorageManager::removeBook(std::string_view path) {
     if (!mounted_)
         return std::unexpected(std::make_error_code(std::errc::no_such_device));
-    if (bookIndex(path) < 0)
+    if (findBook(path) < 0)
         return std::unexpected(std::make_error_code(std::errc::no_such_file_or_directory));
 
     const std::string ownedPath{path};
@@ -111,48 +105,49 @@ std::expected<void, std::error_code> StorageManager::removeBook(std::string_view
     return {};
 }
 
-size_t StorageManager::bookCount() const {
-    return library_.paths.size();
-}
-
-int StorageManager::bookIndex(std::string_view path) const {
+int StorageManager::findBook(std::string_view path) const {
     return BookLibrary::indexOfPath(library_, path);
 }
 
-std::string StorageManager::bookPath(size_t index) const {
-    return BookLibrary::pathAt(library_, index);
+const BookLibrary::Entry* StorageManager::book(size_t index) const {
+    return BookLibrary::at(library_, index);
 }
 
-bool StorageManager::bookIsArticle(size_t index) const {
-    return BookLibrary::isArticle(library_, index);
-}
+std::optional<reading::BookIdentity> StorageManager::readBookMetadata(size_t index, BookMetadata& metadata) {
+    if (index >= library_.size()) {
+        metadata.clear();
+        return std::nullopt;
+    }
+    BookLibrary::Entry& entry = library_[index];
 
-std::string StorageManager::bookDisplayName(size_t index) const {
-    return BookLibrary::displayName(library_, index);
-}
+    if (entry.bytes > std::numeric_limits<uint32_t>::max()) {
+        ESP_LOGW("storage", "unsupported library item: %s size=%llu", entry.path.c_str(),
+                 static_cast<unsigned long long>(entry.bytes));
+        metadata.clear();
+        return std::nullopt;
+    }
 
-std::string StorageManager::bookAuthorName(size_t index) const {
-    return BookLibrary::authorName(library_, index);
+    metadata.clear();
+    IndexedBookStore::Header header;
+    const bool loaded = IndexedBook::readMetadata(entry.path, metadata, &header);
+    BookLibrary::refreshMetadata(entry);
+    if (!loaded)
+        return std::nullopt;
+    return header.identity;
 }
 
 bool StorageManager::loadIndexedBook(size_t index, IndexedBookStore& store, BookMetadata& metadata,
-                                     const IndexedBookLoadOptions& options) {
+                                     IndexedBook::OpenRequest request) {
     if (!mounted_) {
         ESP_LOGE("storage", "SD not mounted, cannot load indexed book");
         statusCallback_(statusContext_, "Book open failed", "SD not mounted", "Check card", 100);
         return false;
     }
 
-    IndexedBook::OpenRequest request;
-    request.loadedPath = options.loadedPath;
-    request.loadedIndex = options.loadedIndex;
-    request.allowIndexBuild = options.allowIndexBuild;
-    request.allowEpubConversion = options.allowEpubConversion;
     request.statusCallback = statusCallback_;
     request.statusContext = statusContext_;
     if (!IndexedBook::load(index, library_, store, metadata, request))
         return false;
-    prepareUiMetadata(metadata);
     return true;
 }
 
@@ -166,10 +161,10 @@ void StorageManager::refreshBookPaths(bool includeMetadata) {
     statusCallback_(statusContext_, "SD", "Reading library", includeMetadata ? "Reading metadata" : "Finding books",
                     96);
     BookLibrary::refresh(library_, includeMetadata, RSVP_ON_DEVICE_EPUB_CONVERSION);
-    ESP_LOGI("storage", "library scan ready books=%u metadata=%u", static_cast<unsigned>(library_.paths.size()),
+    ESP_LOGI("storage", "library scan ready books=%u metadata=%u", static_cast<unsigned>(library_.size()),
              includeMetadata ? 1U : 0U);
 }
 
 void StorageManager::clearBookCache() {
-    BookLibrary::clear(library_);
+    library_.clear();
 }

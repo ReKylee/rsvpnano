@@ -80,6 +80,16 @@ public:
         cursorX = x;
         cursorY = y;
     }
+    virtual void getTextBounds(const char* text, int16_t x, int16_t y, int16_t* x1, int16_t* y1, uint16_t* width,
+                               uint16_t* height) {
+        size_t codepoints = 0;
+        for (const auto* byte = reinterpret_cast<const unsigned char*>(text); *byte != 0; ++byte)
+            codepoints += (*byte & 0xC0U) != 0x80U;
+        *x1 = x;
+        *y1 = y;
+        *width = static_cast<uint16_t>(codepoints * 6 * lastTextSize);
+        *height = static_cast<uint16_t>(9 * lastTextSize);
+    }
     virtual void draw16bitRGBBitmap(int16_t, int16_t, uint16_t*, int16_t, int16_t) {
         ++writes;
         ++bitmapWrites;

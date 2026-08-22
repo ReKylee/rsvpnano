@@ -242,8 +242,9 @@ void test_hungarian_double_acute_vowel_affects_syllable_bonus(void) {
 }
 
 void test_sami_custom_letter_counts_as_readable(void) {
-    TEST_ASSERT_EQUAL(200u, duration(300, "\xC5\xA7"
-                                               "ahti",
+    TEST_ASSERT_EQUAL(200u, duration(300,
+                                     "\xC5\xA7"
+                                     "ahti",
                                      "ja"));
 }
 
@@ -364,50 +365,50 @@ void test_length_delay_quartered(void) {
 void test_seek_to_sets_index_and_word(void) {
     ReadingSession r = makeReader(300, {"zero", "one", "two", "three", "four"});
     ReadingLoop::seekTo(r, 2);
-    TEST_ASSERT_EQUAL(2u, r.currentIndex);
+    TEST_ASSERT_EQUAL(2u, r.state.wordIndex);
     TEST_ASSERT_EQUAL_STRING("two", r.currentWord.c_str());
 }
 
 void test_seek_to_clamps_at_end(void) {
     ReadingSession r = makeReader(300, {"a", "b", "c"});
     ReadingLoop::seekTo(r, 99);
-    TEST_ASSERT_EQUAL(2u, r.currentIndex);
+    TEST_ASSERT_EQUAL(2u, r.state.wordIndex);
     TEST_ASSERT_EQUAL_STRING("c", r.currentWord.c_str());
 }
 
 void test_scrub_forward(void) {
     ReadingSession r = makeReader(300, {"zero", "one", "two", "three", "four"});
     ReadingLoop::seekTo(r, 1);
-    ReadingLoop::seekRelative(r, r.currentIndex, 3);
-    TEST_ASSERT_EQUAL(4u, r.currentIndex);
+    ReadingLoop::seekRelative(r, r.state.wordIndex, 3);
+    TEST_ASSERT_EQUAL(4u, r.state.wordIndex);
 }
 
 void test_scrub_backward(void) {
     ReadingSession r = makeReader(300, {"zero", "one", "two", "three", "four"});
     ReadingLoop::seekTo(r, 3);
-    ReadingLoop::seekRelative(r, r.currentIndex, -2);
-    TEST_ASSERT_EQUAL(1u, r.currentIndex);
+    ReadingLoop::seekRelative(r, r.state.wordIndex, -2);
+    TEST_ASSERT_EQUAL(1u, r.state.wordIndex);
 }
 
 void test_scrub_clamped_at_start(void) {
     ReadingSession r = makeReader(300, {"a", "b", "c"});
     ReadingLoop::seekTo(r, 1);
-    ReadingLoop::seekRelative(r, r.currentIndex, -99);
-    TEST_ASSERT_EQUAL(0u, r.currentIndex);
+    ReadingLoop::seekRelative(r, r.state.wordIndex, -99);
+    TEST_ASSERT_EQUAL(0u, r.state.wordIndex);
 }
 
 void test_scrub_clamped_at_end(void) {
     ReadingSession r = makeReader(300, {"a", "b", "c"});
     ReadingLoop::seekTo(r, 1);
-    ReadingLoop::seekRelative(r, r.currentIndex, 99);
-    TEST_ASSERT_EQUAL(2u, r.currentIndex);
+    ReadingLoop::seekRelative(r, r.state.wordIndex, 99);
+    TEST_ASSERT_EQUAL(2u, r.state.wordIndex);
 }
 
 void test_seek_relative_via_base_index(void) {
     ReadingSession r = makeReader(300, {"a", "b", "c", "d", "e"});
     // seekRelative from base=0 +3 → index 3
     ReadingLoop::seekRelative(r, 0, 3);
-    TEST_ASSERT_EQUAL(3u, r.currentIndex);
+    TEST_ASSERT_EQUAL(3u, r.state.wordIndex);
     TEST_ASSERT_EQUAL_STRING("d", r.currentWord.c_str());
 }
 
@@ -416,18 +417,18 @@ void test_seek_paragraph_moves_between_sections(void) {
     r.metadata.paragraphStarts = {0, 2, 5};
     ReadingLoop::seekTo(r, 3);
     TEST_ASSERT_TRUE(ReadingLoop::seekParagraph(r, 1));
-    TEST_ASSERT_EQUAL(5u, r.currentIndex);
+    TEST_ASSERT_EQUAL(5u, r.state.wordIndex);
     TEST_ASSERT_TRUE(ReadingLoop::seekParagraph(r, -1));
-    TEST_ASSERT_EQUAL(2u, r.currentIndex);
+    TEST_ASSERT_EQUAL(2u, r.state.wordIndex);
 }
 
 void test_seek_paragraph_clamps_at_book_edges(void) {
     ReadingSession r = makeReader(300, {"zero", "one", "two", "three"});
     r.metadata.paragraphStarts = {0, 2};
     TEST_ASSERT_FALSE(ReadingLoop::seekParagraph(r, -1));
-    TEST_ASSERT_EQUAL(0u, r.currentIndex);
+    TEST_ASSERT_EQUAL(0u, r.state.wordIndex);
     TEST_ASSERT_TRUE(ReadingLoop::seekParagraph(r, 99));
-    TEST_ASSERT_EQUAL(2u, r.currentIndex);
+    TEST_ASSERT_EQUAL(2u, r.state.wordIndex);
     TEST_ASSERT_FALSE(ReadingLoop::seekParagraph(r, 1));
 }
 
@@ -435,7 +436,7 @@ void test_rewind_sentence_moves_to_current_sentence_start(void) {
     ReadingSession r = makeReader(300, {"One", "two.", "Three", "four", "five.", "Six"});
     ReadingLoop::seekTo(r, 3);
     ReadingLoop::rewindSentence(r);
-    TEST_ASSERT_EQUAL(2u, r.currentIndex);
+    TEST_ASSERT_EQUAL(2u, r.state.wordIndex);
     TEST_ASSERT_EQUAL_STRING("Three", r.currentWord.c_str());
 }
 
@@ -443,7 +444,7 @@ void test_rewind_sentence_at_sentence_start_moves_to_previous_sentence(void) {
     ReadingSession r = makeReader(300, {"One", "two.", "Three", "four", "five.", "Six"});
     ReadingLoop::seekTo(r, 2);
     ReadingLoop::rewindSentence(r);
-    TEST_ASSERT_EQUAL(0u, r.currentIndex);
+    TEST_ASSERT_EQUAL(0u, r.state.wordIndex);
     TEST_ASSERT_EQUAL_STRING("One", r.currentWord.c_str());
 }
 
@@ -451,7 +452,7 @@ void test_rewind_sentence_clamps_at_book_start(void) {
     ReadingSession r = makeReader(300, {"One", "two.", "Three"});
     ReadingLoop::seekTo(r, 0);
     ReadingLoop::rewindSentence(r);
-    TEST_ASSERT_EQUAL(0u, r.currentIndex);
+    TEST_ASSERT_EQUAL(0u, r.state.wordIndex);
     TEST_ASSERT_EQUAL_STRING("One", r.currentWord.c_str());
 }
 
@@ -459,7 +460,7 @@ void test_rewind_sentence_ignores_abbreviation_periods(void) {
     ReadingSession r = makeReader(300, {"Mr.", "Smith", "arrived.", "Then", "left."});
     ReadingLoop::seekTo(r, 4);
     ReadingLoop::rewindSentence(r);
-    TEST_ASSERT_EQUAL(3u, r.currentIndex);
+    TEST_ASSERT_EQUAL(3u, r.state.wordIndex);
     TEST_ASSERT_EQUAL_STRING("Then", r.currentWord.c_str());
 }
 

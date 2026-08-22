@@ -25,6 +25,12 @@ namespace {
 
     ui::TouchContact gContact;
     bool gTouchReadSucceeds;
+    std::vector<std::string> gLoadedUiPacks;
+
+    std::expected<std::vector<uint8_t>, std::string> loadUiFont(fs::FS&, const locales::InstalledPack& pack) {
+        gLoadedUiPacks.push_back(pack.manifest.id);
+        return std::vector<uint8_t>{std::begin(u8g2_font_rsvpnano_ui_6x9_tf), std::end(u8g2_font_rsvpnano_ui_6x9_tf)};
+    }
 
     ui::TouchSampleResult pollTouch(ui::TouchContact& contact) {
         if (!gTouchReadSucceeds)
@@ -54,8 +60,24 @@ namespace {
             return Arduino_GFX::write(byte);
         }
 
+        void getTextBounds(const char* value, int16_t x, int16_t y, int16_t* x1, int16_t* y1, uint16_t* width,
+                           uint16_t* height) override {
+            measuredText = value;
+            if (measuredInkWidth == 0) {
+                Arduino_GFX::getTextBounds(value, x, y, x1, y1, width, height);
+                return;
+            }
+            *x1 = measuredInkX;
+            *y1 = y;
+            *width = measuredInkWidth;
+            *height = 9;
+        }
+
         const uint8_t* externalFont = nullptr;
         const uint8_t* lastFont = nullptr;
+        std::string measuredText;
+        int16_t measuredInkX = 0;
+        uint16_t measuredInkWidth = 0;
         int fontSelections = 0;
         std::vector<uint8_t> text;
     };
@@ -549,7 +571,7 @@ void test_page_reader_uses_reader_typeface_after_skipping_a_colliding_page_range
     session.metadata.paragraphStarts = {0, 4, 8};
     screens::PageReader::State state;
     const auto typeface = [](size_t) -> FontCatalog::Face {
-        return {std::cref(kReaderFont), std::nullopt};
+        return {std::cref(kReaderFont), nullptr};
     };
     constexpr ui::Rect area{0, 0, 136, 17};
 
@@ -587,7 +609,7 @@ void test_page_reader_reanchors_distant_forward_seek_without_laying_out_intermed
     size_t selections = 0;
     const auto typeface = [&](size_t) -> FontCatalog::Face {
         ++selections;
-        return {std::cref(kReaderFont), std::nullopt};
+        return {std::cref(kReaderFont), nullptr};
     };
     constexpr ui::Rect area{0, 0, 136, 17};
 
@@ -621,7 +643,7 @@ void test_page_reader_uses_each_words_selected_typeface_for_layout() {
     std::array<bool, 3> selected{};
     const auto typeface = [&](size_t index) -> FontCatalog::Face {
         selected[index] = true;
-        return {std::cref(index == 1 ? kWideReaderFont : kReaderFont), std::nullopt};
+        return {std::cref(index == 1 ? kWideReaderFont : kReaderFont), nullptr};
     };
 
     context.beginFrame(1);
@@ -649,7 +671,7 @@ void test_page_reader_caches_visual_bidi_layout() {
     session.metadata.paragraphStarts = {0};
     screens::PageReader::State state;
     const auto typeface = [](size_t) -> FontCatalog::Face {
-        return {std::cref(kReaderFont), std::nullopt};
+        return {std::cref(kReaderFont), nullptr};
     };
 
     context.beginFrame(1);
@@ -675,14 +697,12 @@ void test_page_reader_only_runs_bidi_for_pages_that_need_it() {
     session.metadata.requiredCapabilities = UnicodeText::CapabilityBidi;
     session.metadata.paragraphStarts = {0, 2};
     session.metadata.textRuns = {
-        {.wordIndex = 0, .locale = "en", .direction = TextDirection::ltr,
-         .scriptMask = UnicodeText::ScriptLatin},
-        {.wordIndex = 2, .locale = "he", .direction = TextDirection::rtl,
-         .scriptMask = UnicodeText::ScriptHebrew},
+        {.wordIndex = 0, .locale = "en", .direction = TextDirection::ltr, .scriptMask = UnicodeText::ScriptLatin},
+        {.wordIndex = 2, .locale = "he", .direction = TextDirection::rtl, .scriptMask = UnicodeText::ScriptHebrew},
     };
     screens::PageReader::State state;
     const auto typeface = [](size_t) -> FontCatalog::Face {
-        return {std::cref(kReaderFont), std::nullopt};
+        return {std::cref(kReaderFont), nullptr};
     };
 
     context.beginFrame(1);
@@ -726,7 +746,7 @@ void test_page_reader_shapes_each_visible_word_once_and_caches_glyphs() {
     size_t selections = 0;
     const auto typeface = [&](size_t) -> FontCatalog::Face {
         ++selections;
-        return {std::cref(kReaderFont), std::ref(shaper)};
+        return {std::cref(kReaderFont), &shaper};
     };
 
     context.beginFrame(1);
@@ -800,8 +820,8 @@ void test_reader_streams_rfont4_glyphs_from_file() {
     std::array<RFont4::LayoutTableRecord, RFont4::kMaximumLayoutTableCount> tables{};
     std::memcpy(tables.data(), bytes.data() + header.layoutTablesOffset,
                 static_cast<size_t>(header.layoutTableCount) * sizeof(tables.front()));
-    TEST_ASSERT_TRUE(RFont4::layoutValid(header, strikes,
-                                         std::span{tables}.first(header.layoutTableCount), bytes.size()));
+    TEST_ASSERT_TRUE(RFont4::layoutValid(header, strikes, std::span{tables}.first(header.layoutTableCount),
+                                         bytes.size()));
     const RFont4::StrikeRecord& strike = strikes.back();
 
     std::array<uint8_t, RFont4::kPageMapBytes> pageMap;
@@ -820,7 +840,7 @@ void test_reader_streams_rfont4_glyphs_from_file() {
         .wordInkBottom = strike.wordInkBottom,
         .glyphMapCount = header.sourceGlyphCount,
         .scriptMask = header.scriptMask,
-        .file = std::ref(file),
+        .file = &file,
         .fileSize = header.totalSize,
         .fileHeader = header,
         .fileStrike = strike,
@@ -898,6 +918,51 @@ void test_external_ui_strings_fallback_by_key_and_keep_their_font_separate() {
     context.label({0, 0, 180, 18}, "Book title");
     context.endFrame();
     TEST_ASSERT_TRUE(gfx.externalFont != gfx.lastFont);
+}
+
+void test_multilingual_ui_keeps_each_visible_locale_font_loaded() {
+    FontRecordingGfx gfx(320, 172);
+    ui::Context context(gfx);
+    fs::FS filesystem;
+    const locales::Catalog catalog{
+        {.manifest = {.id = "ja", .locale = "ja"}, .scriptMask = UnicodeText::ScriptHan},
+        {.manifest = {.id = "zh-Hans", .locale = "zh-Hans"}, .scriptMask = UnicodeText::ScriptHan},
+    };
+    gLoadedUiPacks.clear();
+    context.setLanguageCatalog(&filesystem, &catalog, &loadUiFont);
+
+    context.beginFrame(3);
+    context.drawText({0, 0, 100, 18}, "\xE6\x97\xA5\xE6\x9C\xAC\xE8\xAA\x9E", 1, 0xFFFF, ui::TextAlign::Left, 1, "ja");
+    context.drawText({0, 20, 100, 18}, "\xE7\xAE\x80\xE4\xBD\x93\xE4\xB8\xAD\xE6\x96\x87", 1, 0xFFFF,
+                     ui::TextAlign::Left, 1, "zh-Hans");
+    context.drawText({0, 40, 100, 18}, "\xE6\x97\xA5\xE6\x9C\xAC\xE8\xAA\x9E", 1, 0xFFFF, ui::TextAlign::Left, 1, "ja");
+    context.endFrame();
+
+    TEST_ASSERT_EQUAL(2, gLoadedUiPacks.size());
+    TEST_ASSERT_EQUAL_STRING("ja", gLoadedUiPacks[0].c_str());
+    TEST_ASSERT_EQUAL_STRING("zh-Hans", gLoadedUiPacks[1].c_str());
+}
+
+void test_centered_locale_text_uses_the_loaded_fonts_ink_bounds() {
+    FontRecordingGfx gfx(320, 172);
+    gfx.measuredInkX = -2;
+    gfx.measuredInkWidth = 20;
+    ui::Context context(gfx);
+    fs::FS filesystem;
+    const locales::Catalog catalog{
+        {.manifest = {.id = "ar", .locale = "ar", .direction = TextDirection::rtl},
+         .scriptMask = UnicodeText::ScriptArabic},
+    };
+    context.setLanguageCatalog(&filesystem, &catalog, &loadUiFont);
+
+    context.beginFrame(3);
+    context.drawText({10, 0, 100, 18}, "\xD8\xA7\xD9\x84\xD8\xB9\xD8\xB1\xD8\xA8\xD9\x8A\xD8\xA9", 1, 0xFFFF,
+                     ui::TextAlign::Center, 1, "ar");
+    context.endFrame();
+
+    TEST_ASSERT_EQUAL_STRING("\xD8\xA9\xD9\x8A\xD8\xA8\xD8\xB1\xD8\xB9\xD9\x84\xD8\xA7",
+                             gfx.measuredText.c_str());
+    TEST_ASSERT_EQUAL_INT16(52, gfx.cursorX);
 }
 
 void test_rtl_ui_text_uses_pack_direction_for_alignment_and_bidi() {
@@ -1365,6 +1430,8 @@ int main(int, char**) {
     RUN_TEST(test_ui_font_measures_utf8_codepoints);
     RUN_TEST(test_compiled_localization_is_the_english_rescue_table);
     RUN_TEST(test_external_ui_strings_fallback_by_key_and_keep_their_font_separate);
+    RUN_TEST(test_multilingual_ui_keeps_each_visible_locale_font_loaded);
+    RUN_TEST(test_centered_locale_text_uses_the_loaded_fonts_ink_bounds);
     RUN_TEST(test_rtl_ui_text_uses_pack_direction_for_alignment_and_bidi);
     RUN_TEST(test_utf8_text_decodes_and_keeps_codepoint_boundaries);
     RUN_TEST(test_ui_font_preserves_widget_background);

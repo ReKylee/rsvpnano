@@ -55,6 +55,7 @@ namespace screens {
 
     enum class Action : uint8_t {
         None,
+        OpenBook,
         Resume,
         PowerOff,
         CompanionSync,
@@ -66,26 +67,20 @@ namespace screens {
         OtaInstall,
     };
 
-    struct ReadModel {
-        std::string title;
-        std::string author;
-        uint8_t progress = 0;
-    };
-
-    Action read(ui::Context& ui, const ReadModel& model, Screen& screen);
+    Action read(ui::Context& ui, std::string_view title, std::string_view author, uint8_t progress, Screen& screen);
     Action settings(ui::Context& ui, Screen& screen);
     bool readingSettings(ui::Context& ui, settings::ReadingSettings& settings, Screen& screen);
     class InterfaceScreen {
     public:
         ThemeStore themes;
 
-        void begin(ui::Context& ui, settings::InterfaceSettings& settings, const locales::Catalog& languages,
+        bool begin(ui::Context& ui, settings::InterfaceSettings& settings, const locales::Catalog& languages,
                    void (*setBrightness)(uint8_t));
         bool draw(ui::Context& ui, settings::InterfaceSettings& settings, std::span<const uint32_t> standbyDurations,
                   void (*setBrightness)(uint8_t), Screen& screen);
 
     private:
-        std::optional<std::reference_wrapper<const locales::Catalog>> languages_;
+        const locales::Catalog* languages_ = nullptr;
     };
     bool pacingSettings(ui::Context& ui, settings::PacingSettings& settings, Screen& screen);
     bool typographySettings(ui::Context& ui, settings::TypographySettings& config, FontCatalog& fonts, Screen& screen);
@@ -94,11 +89,7 @@ namespace screens {
     bool readerSettings(ui::Context& ui, settings::ReadingSettings& settings, Screen& screen);
     class NetworkScreen {
     public:
-        std::string ssid;
-        std::string owner;
-        std::string tag;
         bool startupCheckPending = false;
-        bool ssidStored = false;
 
         void begin(settings::SettingsStore& store);
         Action draw(ui::Context& ui, settings::SettingsStore& store, Screen& screen);
@@ -127,10 +118,11 @@ namespace screens {
             Tag,
         };
 
-        void saveNetwork(settings::SettingsStore& store);
+        void saveNetwork(settings::SettingsStore& store, std::string_view ssid);
 
         std::array<WifiNetwork, 8> networks_;
         size_t networkCount_ = 0;
+        size_t selectedNetworkIndex_ = networks_.size();
         std::string password_;
         std::string editValue_;
         ui::KeyboardState keyboard_;
@@ -149,6 +141,9 @@ namespace screens {
         bool update(uint32_t nowMs);
         Action draw(ui::Context& ui, uint32_t nowMs, Screen& screen);
         void setTimers(focus::Timers timers);
+        const focus::Timers& timers() const {
+            return timers_;
+        }
         void close();
 
     private:
@@ -159,7 +154,7 @@ namespace screens {
         void edit(size_t index, bool creating, Screen& screen);
         bool persist(const focus::Timers& timers);
 
-        std::optional<std::reference_wrapper<fs::FS>> filesystem_;
+        fs::FS* filesystem_ = nullptr;
         focus::Timers timers_;
         focus::Timer draft_;
         focus::Session session_;

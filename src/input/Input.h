@@ -18,10 +18,6 @@ namespace Input {
         ActionPowerOff = 1U << 5,
     };
 
-    struct Event {
-        ActionMask actions = ActionNone;
-    };
-
     struct PressActions {
         ActionMask shortPress = ActionNone;
         ActionMask longPress = ActionNone;
@@ -51,7 +47,7 @@ namespace Input {
     void end();
     void cancel();
     void resume();
-    bool poll(Event& event);
+    bool poll(ActionMask& actions);
     ui::TouchSampleResult pollTouch(ui::TouchContact& contact);
 
 } // namespace Input

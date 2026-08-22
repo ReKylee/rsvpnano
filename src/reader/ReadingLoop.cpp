@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <string_view>
 
+#include "text/AsciiText.h"
 #include "text/UnicodeText.h"
 #include "text/Utf8Text.h"
 
@@ -587,13 +588,20 @@ namespace {
                 continue;
             switch (codepoint) {
             case 0x3001U:
-            case 0xFF0CU: return ',';
-            case 0x3002U: return '.';
-            case 0xFF01U: return '!';
-            case 0xFF1AU: return ':';
-            case 0xFF1BU: return ';';
-            case 0xFF1FU: return '?';
-            default: return codepoint;
+            case 0xFF0CU:
+                return ',';
+            case 0x3002U:
+                return '.';
+            case 0xFF01U:
+                return '!';
+            case 0xFF1AU:
+                return ':';
+            case 0xFF1BU:
+                return ';';
+            case 0xFF1FU:
+                return '?';
+            default:
+                return codepoint;
             }
         }
         return 0;
@@ -656,23 +664,18 @@ namespace {
     }
 
     bool looksLikeAbbreviation(std::string_view word, bool nextWordStartsLowercase) {
-        std::string lowered;
-        lowered.reserve(word.size());
-        uint32_t codepoint = 0;
-        while (Utf8Text::next(word, codepoint))
-            Utf8Text::append(lowered, UnicodeText::toLowercase(codepoint));
-
         constexpr const char* kKnownAbbreviations[] = {
             "mr.",  "mrs.", "ms.", "dr.",  "prof.", "sr.",  "jr.",  "st.", "vs.",   "etc.", "e.g.",
             "i.e.", "cf.",  "no.", "fig.", "eq.",   "inc.", "ltd.", "co.", "dept.", "mt.",  "ft.",
         };
 
-        if (std::ranges::any_of(kKnownAbbreviations, [&lowered](const char* abbreviation) {
-                return lowered == abbreviation;
+        if (std::ranges::any_of(kKnownAbbreviations, [word](const char* abbreviation) {
+                return std::ranges::equal(word, std::string_view{abbreviation}, {}, AsciiText::toLower,
+                                          AsciiText::toLower);
             }))
             return true;
 
-        if (!lowered.ends_with(".")) {
+        if (!word.ends_with(".")) {
             return false;
         }
 
@@ -680,11 +683,11 @@ namespace {
             return true;
         }
 
-        if (codepointCount(lowered, UnicodeText::isWordCharacter) <= 2) {
+        if (codepointCount(word, UnicodeText::isWordCharacter) <= 2) {
             return true;
         }
 
-        if (nextWordStartsLowercase && codepointCount(lowered, UnicodeText::isWordCharacter) <= 4) {
+        if (nextWordStartsLowercase && codepointCount(word, UnicodeText::isWordCharacter) <= 4) {
             return true;
         }
 
@@ -832,7 +835,7 @@ namespace ReadingLoop {
             if (wordIndex >= wordCount(session))
                 return false;
 
-            const std::string word{wordAt(session, wordIndex)};
+            const std::string_view word = wordAt(session, wordIndex);
             if (word.empty())
                 return false;
 
@@ -865,8 +868,8 @@ namespace ReadingLoop {
             }
 
             if (session.bookStore != nullptr)
-                session.bookStore->prefetchAround(session.currentIndex);
-            session.currentWord = wordAt(session, session.currentIndex);
+                session.bookStore->prefetchAround(session.state.wordIndex);
+            session.currentWord = wordAt(session, session.state.wordIndex);
         }
 
         bool advance(ReadingSession& session, size_t steps) {
@@ -876,16 +879,17 @@ namespace ReadingLoop {
                 return false;
             }
 
-            const size_t previousIndex = session.currentIndex;
+            const size_t previousIndex = session.state.wordIndex;
             if (usingLoadedBook(session)) {
                 const size_t maxIndex = count - 1;
-                if (session.currentIndex < maxIndex)
-                    session.currentIndex += std::min(steps, maxIndex - session.currentIndex);
+                if (session.state.wordIndex < maxIndex)
+                    session.state.wordIndex +=
+                        static_cast<uint32_t>(std::min<size_t>(steps, maxIndex - session.state.wordIndex));
             } else {
-                session.currentIndex = (session.currentIndex + steps) % count;
+                session.state.wordIndex = (session.state.wordIndex + steps) % count;
             }
 
-            if (session.currentIndex == previousIndex)
+            if (session.state.wordIndex == previousIndex)
                 return false;
             setCurrentWordFromIndex(session);
             return true;
@@ -895,13 +899,13 @@ namespace ReadingLoop {
 
     void begin(ReadingSession& session, uint32_t nowMs) {
         session.playing = false;
-        session.currentIndex = 0;
+        session.state.wordIndex = 0;
         session.lastAdvanceMs = nowMs;
         setCurrentWordFromIndex(session);
     }
 
     void setWords(ReadingSession& session, std::span<const std::string> words, uint32_t nowMs) {
-        session.currentIndex = 0;
+        session.state.wordIndex = 0;
         session.lastAdvanceMs = nowMs;
         session.words = words;
         session.bookStore = nullptr;
@@ -910,7 +914,7 @@ namespace ReadingLoop {
     }
 
     void setBookStore(ReadingSession& session, const IndexedBookStore& store, uint32_t nowMs) {
-        session.currentIndex = 0;
+        session.state.wordIndex = 0;
         session.lastAdvanceMs = nowMs;
         session.words = {};
         session.bookStore = &store;
@@ -950,16 +954,17 @@ namespace ReadingLoop {
     }
 
     uint32_t currentWordDurationMs(const ReadingSession& session, const settings::ReadingSettings& settings) {
-        const size_t nextIndex = session.currentIndex + 1;
+        const size_t nextIndex = session.state.wordIndex + 1;
         const bool nextWordStartsLowercase =
             nextIndex < wordCount(session) && startsWithLowercaseLetter(wordAt(session, nextIndex));
 
         if (pacingMode(session) == settings::ReadingPacing::cjkPhrase) {
-            const uint32_t characters = static_cast<uint32_t>(
-                std::max(1, codepointCount(session.currentWord, UnicodeText::isWordCharacter)));
+            const uint32_t characters =
+                static_cast<uint32_t>(std::max(1, codepointCount(session.currentWord, UnicodeText::isWordCharacter)));
             const uint32_t base = (60'000UL * characters + settings.wpm - 1) / settings.wpm;
-            return base + scaledDelayMs(punctuationPausePercentForWord(session.currentWord, false),
-                                        settings.pacing.punctuationDelayMs);
+            return base
+                 + scaledDelayMs(punctuationPausePercentForWord(session.currentWord, false),
+                                 settings.pacing.punctuationDelayMs);
         }
         return durationForWord(session.currentWord, nextWordStartsLowercase, 60000UL / settings.wpm, settings.pacing);
     }
@@ -969,12 +974,12 @@ namespace ReadingLoop {
     }
 
     bool currentWordEndsSentence(const ReadingSession& session) {
-        return wordEndsSentenceAt(session, session.currentIndex);
+        return wordEndsSentenceAt(session, session.state.wordIndex);
     }
 
     bool atEnd(const ReadingSession& session) {
         const size_t count = wordCount(session);
-        return count == 0 || session.currentIndex + 1 >= count;
+        return count == 0 || session.state.wordIndex + 1 >= count;
     }
 
     void seekTo(ReadingSession& session, size_t wordIndex) {
@@ -983,7 +988,7 @@ namespace ReadingLoop {
             session.currentWord.clear();
             return;
         }
-        session.currentIndex = std::min(wordIndex, count - 1);
+        session.state.wordIndex = static_cast<uint32_t>(std::min(wordIndex, count - 1));
         setCurrentWordFromIndex(session);
     }
 
@@ -1001,7 +1006,7 @@ namespace ReadingLoop {
             if (nextIndex < 0)
                 nextIndex += static_cast<int>(count);
         }
-        session.currentIndex = static_cast<size_t>(nextIndex);
+        session.state.wordIndex = static_cast<size_t>(nextIndex);
         setCurrentWordFromIndex(session);
     }
 
@@ -1009,7 +1014,7 @@ namespace ReadingLoop {
         const auto& paragraphStarts = session.metadata.paragraphStarts;
         if (paragraphStarts.empty() || steps == 0)
             return false;
-        const auto next = std::ranges::upper_bound(paragraphStarts, session.currentIndex);
+        const auto next = std::ranges::upper_bound(paragraphStarts, session.state.wordIndex);
         const size_t current =
             next == paragraphStarts.begin() ? 0 : static_cast<size_t>(next - paragraphStarts.begin() - 1);
         const int64_t target = std::clamp<int64_t>(static_cast<int64_t>(current) + steps, 0,
@@ -1025,9 +1030,9 @@ namespace ReadingLoop {
         if (wordCount(session) == 0)
             return;
 
-        const size_t currentSentenceStart = sentenceStartAtOrBefore(session, session.currentIndex);
-        if (currentSentenceStart == session.currentIndex && session.currentIndex > 0) {
-            seekTo(session, sentenceStartAtOrBefore(session, session.currentIndex - 1));
+        const size_t currentSentenceStart = sentenceStartAtOrBefore(session, session.state.wordIndex);
+        if (currentSentenceStart == session.state.wordIndex && session.state.wordIndex > 0) {
+            seekTo(session, sentenceStartAtOrBefore(session, session.state.wordIndex - 1));
             return;
         }
         seekTo(session, currentSentenceStart);
@@ -1066,16 +1071,23 @@ namespace ReadingLoop {
         return kDemoWords[index];
     }
 
-    TextParagraph paragraphAt(const ReadingSession& session, size_t wordIndex) {
-        TextParagraph result;
+    std::pair<size_t, size_t> paragraphBoundsAt(const ReadingSession& session, size_t wordIndex) {
         const size_t count = wordCount(session);
         if (count == 0)
-            return result;
+            return {};
 
         wordIndex = std::min(wordIndex, count - 1);
         const auto next = std::ranges::upper_bound(session.metadata.paragraphStarts, wordIndex);
-        result.firstWord = next == session.metadata.paragraphStarts.begin() ? 0 : *std::prev(next);
-        result.lastWord = next == session.metadata.paragraphStarts.end() ? count : std::min(*next, count);
+        const size_t firstWord = next == session.metadata.paragraphStarts.begin() ? 0 : *std::prev(next);
+        const size_t lastWord = next == session.metadata.paragraphStarts.end() ? count : std::min(*next, count);
+        return {firstWord, lastWord};
+    }
+
+    TextParagraph paragraphAt(const ReadingSession& session, size_t wordIndex) {
+        TextParagraph result;
+        const auto [firstWord, lastWord] = paragraphBoundsAt(session, wordIndex);
+        result.firstWord = firstWord;
+        result.lastWord = lastWord;
         result.text.reserve((result.lastWord - result.firstWord) * 8);
         result.wordOffsets.reserve(result.lastWord - result.firstWord + 1);
         bool previousCjk = false;

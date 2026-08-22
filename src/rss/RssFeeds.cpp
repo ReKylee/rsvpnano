@@ -14,6 +14,7 @@
 #include "board/BoardStorage.h"
 
 #include "hash/Fnv1a.h"
+#include "logging/Logger.h"
 #include "net/WifiConnection.h"
 #include "rss/FeedParser.h"
 #include "rss/RssConfig.h"
@@ -139,8 +140,7 @@ namespace {
 
     std::string seenKeyForItem(const feedparser::FeedItem& item) {
         char key[16];
-        std::snprintf(key, sizeof(key), "rss%08lx",
-                      static_cast<unsigned long>(Fnv1a::hash(itemIdentity(item))));
+        std::snprintf(key, sizeof(key), "rss%08lx", static_cast<unsigned long>(Fnv1a::hash(itemIdentity(item))));
         return key;
     }
 
@@ -153,8 +153,9 @@ namespace {
     }
 
     std::string filenameForItem(const feedparser::FeedItem& item) {
-        std::string cleaned = StoragePaths::sanitizeFilename(
-            std::string_view{item.title}.substr(0, std::min<size_t>(item.title.size(), 72)));
+        std::string cleaned =
+            StoragePaths::sanitizeFilename(std::string_view{item.title}.substr(0, std::min<size_t>(item.title.size(),
+                                                                                                   72)));
         while (cleaned.contains("--")) {
             const size_t position = cleaned.find("--");
             cleaned.erase(position, 1);
@@ -163,8 +164,7 @@ namespace {
             cleaned = "rss-article";
         }
         char suffix[16];
-        std::snprintf(suffix, sizeof(suffix), "-%08lx",
-                      static_cast<unsigned long>(Fnv1a::hash(itemIdentity(item))));
+        std::snprintf(suffix, sizeof(suffix), "-%08lx", static_cast<unsigned long>(Fnv1a::hash(itemIdentity(item))));
         return cleaned + suffix + ".rsvp";
     }
 
@@ -413,8 +413,7 @@ namespace {
             const std::string saving = "Saving article " + std::to_string(itemCount);
             report(callback, context, saving.c_str(), item.title.c_str(), 24 + feedIndex * 7);
             if (auto saved = saveItem(item, preferences, result); !saved)
-                ESP_LOGE("rss", "save failed title=%s error=%s code=%d", item.title.c_str(),
-                         saved.error().message().c_str(), saved.error().value());
+                Logger::failure("rss", "save article", StoragePaths::kArticleFilesPath, saved.error());
         }
         const uint8_t savedHere = result.articlesSaved - savedBefore;
         const uint8_t skippedHere = result.articlesSkipped - skippedBefore;
@@ -434,18 +433,18 @@ namespace {
 
 RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::DeviceSettings& settings,
                                  const settings::DeviceSecrets& secrets, StatusCallback callback, void* context) {
-    const std::string& wifiSsid = settings.network.wifiSsid;
+    const std::string& ssid = settings.network.ssid;
     const std::string& wifiPassword = secrets.wifiPassword;
 
     Result result;
-    if (AsciiText::trim(wifiSsid).empty()) {
+    if (AsciiText::trim(ssid).empty()) {
         result.summary = "Wi-Fi not set";
         result.detail = "Settings -> Wi-Fi";
         return result;
     }
 
-    auto connected = net::connectStation(wifiSsid.c_str(), wifiPassword.c_str(), [&](int percent) {
-        report(callback, context, "Connecting Wi-Fi", wifiSsid.c_str(), percent);
+    auto connected = net::connectStation(ssid.c_str(), wifiPassword.c_str(), [&](int percent) {
+        report(callback, context, "Connecting Wi-Fi", ssid.c_str(), percent);
     });
     if (!connected) {
         net::disconnect();

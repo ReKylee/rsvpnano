@@ -54,9 +54,7 @@ namespace screens::PageReader {
         }
 
         bool sameFace(const FontCatalog::Face& left, const FontCatalog::Face& right) {
-            return &left.raster.get() == &right.raster.get()
-                && left.shaper.has_value() == right.shaper.has_value()
-                && (!left.shaper || &left.shaper->get() == &right.shaper->get());
+            return &left.raster.get() == &right.raster.get() && left.shaper == right.shaper;
         }
 
         uint8_t rememberFace(State& state, const FontCatalog::Face& face) {
@@ -73,9 +71,8 @@ namespace screens::PageReader {
             return state.faces[state.words[wordIndex - state.pageStart].faceIndex];
         }
 
-        State::Word& prepareWord(State& state, size_t index, uint8_t faceIndex,
-                                 ui::fonts::AlphaTextRenderer<640>& text, const FontCatalog::Face& face,
-                                 const settings::TypographySettings& typography,
+        State::Word& prepareWord(State& state, size_t index, uint8_t faceIndex, ui::fonts::AlphaTextRenderer<640>& text,
+                                 const FontCatalog::Face& face, const settings::TypographySettings& typography,
                                  const ReadingSession& session, ReadingLoop::TextParagraph& paragraph,
                                  BidiText::Analysis& bidiAnalysis, bool paragraphBidi, bool bidiReady,
                                  BidiText::Line& bidiLine) {
@@ -84,8 +81,7 @@ namespace screens::PageReader {
                 return state.words[localIndex];
 
             const std::string_view word = ReadingLoop::wordAt(session, index);
-            State::Word prepared{.faceIndex = faceIndex,
-                                 .cjk = UnicodeText::isCjkText(word)};
+            State::Word prepared{.faceIndex = faceIndex, .cjk = UnicodeText::isCjkText(word)};
             if (face.shaper) {
                 const size_t paragraphWord = index - paragraph.firstWord;
                 const size_t offset = paragraph.wordOffsets[paragraphWord];
@@ -101,16 +97,16 @@ namespace screens::PageReader {
                 int32_t width = 0;
                 if (paragraphBidi && bidiReady) {
                     if (const auto direction = bidiAnalysis.uniformRightToLeft(offset, word.size())) {
-                        const auto result = face.shaper->get().shape(paragraph.text, offset, word.size(), *direction,
-                                                                    locale, text, state.glyphs);
+                        const auto result = face.shaper->shape(paragraph.text, offset, word.size(), *direction, locale,
+                                                               text, state.glyphs);
                         shaped = result.has_value();
                         if (result)
                             width = *result;
                     } else if (bidiAnalysis.resolve({offset, word.size()}, bidiLine)) {
                         shaped = true;
                         for (const BidiText::Run& run: bidiLine) {
-                            const auto result = face.shaper->get().shape(
-                                paragraph.text, run.offset, run.length, run.rightToLeft, locale, text, state.glyphs);
+                            const auto result = face.shaper->shape(paragraph.text, run.offset, run.length,
+                                                                   run.rightToLeft, locale, text, state.glyphs);
                             if (!result) {
                                 shaped = false;
                                 break;
@@ -119,8 +115,8 @@ namespace screens::PageReader {
                         }
                     }
                 } else {
-                    const auto result = face.shaper->get().shape(paragraph.text, offset, word.size(), false, locale,
-                                                                text, state.glyphs);
+                    const auto result =
+                        face.shaper->shape(paragraph.text, offset, word.size(), false, locale, text, state.glyphs);
                     shaped = result.has_value();
                     if (result)
                         width = *result;
@@ -143,14 +139,13 @@ namespace screens::PageReader {
             return state.words[index - state.pageStart];
         }
 
-        int16_t lineAdvance(const State& state, const State::Line& line,
-                            ui::fonts::AlphaTextRenderer<640>& text,
+        int16_t lineAdvance(const State& state, const State::Line& line, ui::fonts::AlphaTextRenderer<640>& text,
                             const settings::TypographySettings& typography);
 
         void appendBidiParagraph(State& state, const ReadingSession& session,
                                  const ReadingLoop::TextParagraph& paragraph, BidiText::Analysis& analysis,
-                                 bool bidiReady, size_t firstLine, size_t lastLine,
-                                 BidiText::Line& bidiLine, std::vector<BidiText::Codepoint>& visual) {
+                                 bool bidiReady, size_t firstLine, size_t lastLine, BidiText::Line& bidiLine,
+                                 std::vector<BidiText::Codepoint>& visual) {
             if (firstLine == lastLine)
                 return;
             state.bidi = true;
@@ -159,8 +154,8 @@ namespace screens::PageReader {
                 const size_t localStart = line.start - paragraph.firstWord;
                 const size_t localEnd = line.end - paragraph.firstWord;
                 const size_t offset = paragraph.wordOffsets[localStart];
-                const size_t end = paragraph.wordOffsets[localEnd - 1]
-                                 + ReadingLoop::wordAt(session, line.end - 1).size();
+                const size_t end =
+                    paragraph.wordOffsets[localEnd - 1] + ReadingLoop::wordAt(session, line.end - 1).size();
                 const BidiText::LineRange range{offset, end - offset};
                 line.characterStart = state.characters.size();
                 line.bidi = true;
@@ -178,9 +173,9 @@ namespace screens::PageReader {
                     state.characters.push_back({
                         .codepoint = codepoint.value,
                         .wordOffset = static_cast<uint16_t>((!belongsToWord && logicalWord + 1 < paragraph.lastWord
-                                                              ? logicalWord + 1
-                                                              : logicalWord)
-                                                           - state.pageStart),
+                                                                 ? logicalWord + 1
+                                                                 : logicalWord)
+                                                            - state.pageStart),
                         .belongsToWord = belongsToWord,
                         .rightToLeft = codepoint.rightToLeft,
                     });
@@ -189,8 +184,7 @@ namespace screens::PageReader {
             }
         }
 
-        void layout(State& state, ui::fonts::AlphaTextRenderer<640>& text,
-                    const Typeface& typeface,
+        void layout(State& state, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
                     const settings::TypographySettings& typography, const ReadingSession& session, ui::Rect area,
                     size_t start) {
             const size_t wordCount = ReadingLoop::wordCount(session);
@@ -217,13 +211,13 @@ namespace screens::PageReader {
                                             bidiFirstLine, state.lineCount, shapingBidiLine, visual);
                     shapingParagraph = ReadingLoop::paragraphAt(session, index);
                     bidiFirstLine = state.lineCount;
-                    paragraphBidi = session.metadata.requiresBidi(shapingParagraph.firstWord,
-                                                                  shapingParagraph.lastWord);
+                    paragraphBidi =
+                        session.metadata.requiresBidi(shapingParagraph.firstWord, shapingParagraph.lastWord);
                     if (paragraphBidi)
-                        shapingBidiReady = shapingBidi
-                                               .reset(shapingParagraph.text,
-                                                      session.metadata.directionAt(shapingParagraph.firstWord))
-                                               .has_value();
+                        shapingBidiReady =
+                            shapingBidi
+                                .reset(shapingParagraph.text, session.metadata.directionAt(shapingParagraph.firstWord))
+                                .has_value();
                 }
                 const bool startsParagraph = paragraphStart(session, index);
                 if (state.lineCount > 0 && startsParagraph)
@@ -243,14 +237,14 @@ namespace screens::PageReader {
                     const uint8_t faceIndex = rememberFace(state, face);
                     const ui::fonts::AlphaFont& font = face.raster.get();
                     activateFace(text, face);
-                    State::Word& prepared = prepareWord(state, index, faceIndex, text, face, typography, session,
-                                                        shapingParagraph, shapingBidi, paragraphBidi,
-                                                        shapingBidiReady,
-                                                        shapingBidiLine);
+                    State::Word& prepared =
+                        prepareWord(state, index, faceIndex, text, face, typography, session, shapingParagraph,
+                                    shapingBidi, paragraphBidi, shapingBidiReady, shapingBidiLine);
                     const int16_t spaceWidth = std::max<int16_t>(1, text.glyphAdvance(' '));
                     const bool joinsCjk = index > line.start && prepared.cjk && wordAt(state, index - 1).cjk;
                     const int16_t gap = index == line.start ? startsParagraph ? spaceWidth * 2 : 0
-                                                           : joinsCjk ? 0 : spaceWidth;
+                                      : joinsCjk            ? 0
+                                                            : spaceWidth;
                     prepared.x = static_cast<int16_t>(area.x + kMarginX + width + gap);
                     const int16_t widthWithWord = static_cast<int16_t>(width + gap + prepared.width);
                     if (index > line.start && widthWithWord > maximumWidth)
@@ -290,8 +284,7 @@ namespace screens::PageReader {
                 for (size_t lineIndex = 0; lineIndex < state.lineCount; ++lineIndex) {
                     if (!state.lines[lineIndex].bidi)
                         continue;
-                    state.lines[lineIndex].width =
-                        lineAdvance(state, state.lines[lineIndex], text, typography);
+                    state.lines[lineIndex].width = lineAdvance(state, state.lines[lineIndex], text, typography);
                 }
             }
         }
@@ -305,8 +298,8 @@ namespace screens::PageReader {
             return true;
         }
 
-        void drawShapedWord(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
-                            size_t index, int16_t x, int16_t baseline, ui::themes::ColorRole role) {
+        void drawShapedWord(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, size_t index,
+                            int16_t x, int16_t baseline, ui::themes::ColorRole role) {
             text.setTextColor(ui.color(role), ui.color(ui::themes::ColorRole::Background));
             const State::Word& word = wordAt(state, index);
             const auto glyphs = std::span{state.glyphs}.subspan(word.glyphStart, word.glyphCount);
@@ -314,8 +307,8 @@ namespace screens::PageReader {
         }
 
         void drawWord(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
-                      const settings::TypographySettings& typography, const ReadingSession& session,
-                      size_t index, int16_t x, int16_t baseline, ui::themes::ColorRole role) {
+                      const settings::TypographySettings& typography, const ReadingSession& session, size_t index,
+                      int16_t x, int16_t baseline, ui::themes::ColorRole role) {
             if (wordAt(state, index).shaped) {
                 drawShapedWord(state, ui, text, index, x, baseline, role);
                 return;
@@ -324,8 +317,7 @@ namespace screens::PageReader {
             text.drawString(ReadingLoop::wordAt(session, index), x, baseline, typography.tracking);
         }
 
-        int16_t lineAdvance(const State& state, const State::Line& line,
-                            ui::fonts::AlphaTextRenderer<640>& text,
+        int16_t lineAdvance(const State& state, const State::Line& line, ui::fonts::AlphaTextRenderer<640>& text,
                             const settings::TypographySettings& typography) {
             int16_t advance = 0;
             size_t activeWord = kInvalidIndex;
@@ -344,10 +336,10 @@ namespace screens::PageReader {
                     continue;
                 if (index > line.characterStart) {
                     const State::Character& previous = state.characters[index - 1];
-                    if (character.belongsToWord && previous.belongsToWord
-                        && character.wordOffset == previous.wordOffset && !character.rightToLeft)
-                        advance = static_cast<int16_t>(advance
-                                                       + text.kerningAdjust(previous.codepoint, character.codepoint));
+                    if (character.belongsToWord && previous.belongsToWord && character.wordOffset == previous.wordOffset
+                        && !character.rightToLeft)
+                        advance =
+                            static_cast<int16_t>(advance + text.kerningAdjust(previous.codepoint, character.codepoint));
                 }
                 advance = static_cast<int16_t>(advance + text.glyphAdvance(character.codepoint));
                 if (index + 1 < line.characterEnd && character.belongsToWord
@@ -359,15 +351,14 @@ namespace screens::PageReader {
         }
 
         void drawLine(const State& state, const State::Line& line, ui::Context& ui,
-                      ui::fonts::AlphaTextRenderer<640>& text,
-                      const settings::TypographySettings& typography, ui::Rect area, size_t highlighted) {
+                      ui::fonts::AlphaTextRenderer<640>& text, const settings::TypographySettings& typography,
+                      ui::Rect area, size_t highlighted) {
             int16_t indent = 0;
             activateFace(text, faceAt(state, line.start));
             if (line.paragraphStart)
                 indent = std::max<int16_t>(1, text.glyphAdvance(' ')) * 2;
-            int16_t x = line.rightToLeft
-                          ? static_cast<int16_t>(area.x + area.w - kMarginX - indent - line.width)
-                          : static_cast<int16_t>(area.x + kMarginX + indent);
+            int16_t x = line.rightToLeft ? static_cast<int16_t>(area.x + area.w - kMarginX - indent - line.width)
+                                         : static_cast<int16_t>(area.x + kMarginX + indent);
             size_t activeWord = kInvalidIndex;
             for (size_t index = line.characterStart; index < line.characterEnd; ++index) {
                 const State::Character& character = state.characters[index];
@@ -387,8 +378,8 @@ namespace screens::PageReader {
                     continue;
                 if (index > line.characterStart) {
                     const State::Character& previous = state.characters[index - 1];
-                    if (character.belongsToWord && previous.belongsToWord
-                        && character.wordOffset == previous.wordOffset && !character.rightToLeft)
+                    if (character.belongsToWord && previous.belongsToWord && character.wordOffset == previous.wordOffset
+                        && !character.rightToLeft)
                         x = static_cast<int16_t>(x + text.kerningAdjust(previous.codepoint, character.codepoint));
                 }
                 text.setTextColor(ui.color(character.belongsToWord && wordIndex == highlighted
@@ -405,8 +396,7 @@ namespace screens::PageReader {
 
     } // namespace
 
-    void draw(State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
-              const Typeface& typeface,
+    void draw(State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
               const settings::TypographySettings& typography, uint32_t typographyRevision,
               const ReadingSession& session, ui::Rect area, std::string_view overlay) {
         const size_t wordCount = ReadingLoop::wordCount(session);
@@ -420,7 +410,7 @@ namespace screens::PageReader {
             state.layoutRevision = typographyRevision;
             invalidate(state);
         }
-        const size_t current = std::min(session.currentIndex, wordCount - 1);
+        const size_t current = std::min<size_t>(session.state.wordIndex, wordCount - 1);
         if (state.pageStart == kInvalidIndex)
             layout(state, text, typeface, typography, session, area, anchorIndex(session, current));
         if (current < state.pageStart)
@@ -441,15 +431,12 @@ namespace screens::PageReader {
             if (state.highlighted == current)
                 return;
             const auto end = state.lines.begin() + state.lineCount;
-            const auto previousLine = std::ranges::find_if(state.lines.begin(), end,
-                                                           [&](const State::Line& line) {
-                                                               return state.highlighted >= line.start
-                                                                   && state.highlighted < line.end;
-                                                           });
-            const auto currentLine = std::ranges::find_if(state.lines.begin(), end,
-                                                          [&](const State::Line& line) {
-                                                              return current >= line.start && current < line.end;
-                                                          });
+            const auto previousLine = std::ranges::find_if(state.lines.begin(), end, [&](const State::Line& line) {
+                return state.highlighted >= line.start && state.highlighted < line.end;
+            });
+            const auto currentLine = std::ranges::find_if(state.lines.begin(), end, [&](const State::Line& line) {
+                return current >= line.start && current < line.end;
+            });
             if (previousLine != end) {
                 if (previousLine->bidi) {
                     drawLine(state, *previousLine, ui, text, typography, area, current);
@@ -471,8 +458,7 @@ namespace screens::PageReader {
                     int16_t y = 0;
                     if (logicalWordPosition(state, current, x, y)) {
                         activateFace(text, faceAt(state, current));
-                        drawWord(state, ui, text, typography, session, current, x, y,
-                                 ui::themes::ColorRole::Accent);
+                        drawWord(state, ui, text, typography, session, current, x, y, ui::themes::ColorRole::Accent);
                     }
                 }
             } else if (currentLine != end && !currentLine->bidi) {
@@ -480,8 +466,7 @@ namespace screens::PageReader {
                 int16_t y = 0;
                 if (logicalWordPosition(state, current, x, y)) {
                     activateFace(text, faceAt(state, current));
-                    drawWord(state, ui, text, typography, session, current, x, y,
-                             ui::themes::ColorRole::Accent);
+                    drawWord(state, ui, text, typography, session, current, x, y, ui::themes::ColorRole::Accent);
                 }
             }
             state.highlighted = current;
@@ -498,8 +483,7 @@ namespace screens::PageReader {
                     activateFace(text, faceAt(state, index));
                     const State::Word& word = wordAt(state, index);
                     drawWord(state, ui, text, typography, session, index, word.x, word.y,
-                             index == current ? ui::themes::ColorRole::Accent
-                                              : ui::themes::ColorRole::Foreground);
+                             index == current ? ui::themes::ColorRole::Accent : ui::themes::ColorRole::Foreground);
                 }
             }
         }
@@ -508,7 +492,8 @@ namespace screens::PageReader {
             const int16_t x = static_cast<int16_t>(area.x + (area.w - width) / 2);
             const int16_t y = static_cast<int16_t>(area.y + area.h - kMarginY - kOverlayTextHeight);
             ui.gfx().fillRect(static_cast<int16_t>(x - 4), static_cast<int16_t>(y - 2), static_cast<int16_t>(width + 8),
-                              static_cast<int16_t>(kOverlayTextHeight + 4), ui.color(ui::themes::ColorRole::Background));
+                              static_cast<int16_t>(kOverlayTextHeight + 4),
+                              ui.color(ui::themes::ColorRole::Background));
             ui.drawText({x, y, width, kOverlayTextHeight}, overlay, kOverlayTextSize,
                         ui.color(ui::themes::ColorRole::Accent));
         }

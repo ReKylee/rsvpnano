@@ -12,11 +12,11 @@
 #include "board/BoardStorage.h"
 
 #include "hash/Fnv1a.h"
-#include "text/LocaleTag.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 #include "storage/index/BufferedWriter.h"
 #include "storage/library/EpubCache.h"
+#include "text/LocaleTag.h"
 #include "text/RsvpDirectives.h"
 #include "text/RsvpTokenizer.h"
 #include "text/UnicodeText.h"
@@ -75,14 +75,14 @@ namespace IndexedBook {
             uint32_t paragraphsEnd = 0;
             uint32_t chaptersEnd = 0;
             uint32_t textRunsEnd = 0;
-            if (header.wordCount > std::numeric_limits<uint32_t>::max() / sizeof(WordRecord)
+            if (header.identity.wordCount > std::numeric_limits<uint32_t>::max() / sizeof(WordRecord)
                 || header.paragraphCount > std::numeric_limits<uint32_t>::max() / sizeof(uint32_t)
                 || header.chapterCount > std::numeric_limits<uint32_t>::max() / sizeof(ChapterRecord)
                 || header.textRunCount > std::numeric_limits<uint32_t>::max() / sizeof(TextRunRecord)) {
                 return false;
             }
 
-            recordsBytes = header.wordCount * sizeof(WordRecord);
+            recordsBytes = header.identity.wordCount * sizeof(WordRecord);
             return checkedAdd(header.recordsOffset, recordsBytes, recordsEnd)
                 && checkedAdd(header.paragraphsOffset, header.paragraphCount * sizeof(uint32_t), paragraphsEnd)
                 && checkedAdd(header.chaptersOffset, header.chapterCount * sizeof(ChapterRecord), chaptersEnd)
@@ -274,7 +274,6 @@ namespace IndexedBook {
                 const uint32_t scripts = detectTokenRequirements(token, *buildContext.metadata);
                 if (!buildContext.metadata->textRuns.empty())
                     buildContext.metadata->textRuns.back().scriptMask |= scripts;
-                buildContext.metadata->wordCount = buildContext.wordCount;
             }
             return true;
         }
@@ -340,12 +339,7 @@ namespace IndexedBook {
                     paragraphPending = true;
                     return true;
                 }
-                if (buildContext.metadata != nullptr && RsvpText::prefixHasBoundary(trimmed, "@title")) {
-                    buildContext.metadata->title = RsvpText::directiveValue(trimmed, "@title");
-                    return true;
-                }
-                if (buildContext.metadata != nullptr && RsvpText::prefixHasBoundary(trimmed, "@author")) {
-                    buildContext.metadata->author = RsvpText::directiveValue(trimmed, "@author");
+                if (RsvpText::prefixHasBoundary(trimmed, "@title") || RsvpText::prefixHasBoundary(trimmed, "@author")) {
                     return true;
                 }
                 if (buildContext.metadata != nullptr && RsvpText::prefixHasBoundary(trimmed, "@language")) {
@@ -415,12 +409,12 @@ namespace IndexedBook {
                 const uint32_t actualFingerprint =
                     sourceBytes <= UINT32_MAX ? sourceFingerprint(source, static_cast<uint32_t>(sourceBytes)) : 0;
                 source.close();
-                if (sourceBytes > UINT32_MAX || header.sourceSize != static_cast<uint32_t>(sourceBytes)
-                    || header.sourceFingerprint != actualFingerprint) {
+                if (sourceBytes > UINT32_MAX || header.identity.sourceSize != static_cast<uint32_t>(sourceBytes)
+                    || header.identity.sourceFingerprint != actualFingerprint) {
                     ESP_LOGW("storage-index", "stale index: %s size=%lu/%lu fingerprint=%08lx/%08lx",
-                             sourcePath.c_str(), static_cast<unsigned long>(header.sourceSize),
+                             sourcePath.c_str(), static_cast<unsigned long>(header.identity.sourceSize),
                              static_cast<unsigned long>(sourceBytes),
-                             static_cast<unsigned long>(header.sourceFingerprint),
+                             static_cast<unsigned long>(header.identity.sourceFingerprint),
                              static_cast<unsigned long>(actualFingerprint));
                     return false;
                 }
@@ -463,7 +457,6 @@ namespace IndexedBook {
                 return false;
             }
 
-            metadata.wordCount = header.wordCount;
             metadata.locale = loadFixedString(header.locale);
             if (!metadata.locale.empty()) {
                 const auto normalized = LocaleTag::normalize(metadata.locale);
@@ -477,13 +470,6 @@ namespace IndexedBook {
             metadata.baseDirection = static_cast<TextDirection>(header.baseDirection);
             metadata.scriptMask = header.scriptMask;
             metadata.requiredCapabilities = header.requiredCapabilities;
-            const RsvpText::RsvpDirectiveValues directives = RsvpText::readRsvpDirectiveValues(sourcePath);
-            metadata.title = directives.title;
-            metadata.author = directives.author;
-            if (metadata.title.empty()) {
-                metadata.title = RsvpText::normalizeDisplayText(displayNameWithoutExtension(path));
-            }
-
             if (header.paragraphCount > 0) {
                 metadata.paragraphStarts.reserve(header.paragraphCount);
                 if (!indexFile.seek(header.paragraphsOffset)) {
@@ -555,7 +541,8 @@ namespace IndexedBook {
                                     .direction = static_cast<TextDirection>(record.direction),
                                     .scriptMask = record.scriptMask};
                     const auto normalized = LocaleTag::normalize(run.locale);
-                    if (run.wordIndex > header.wordCount || record.direction > static_cast<uint8_t>(TextDirection::rtl)
+                    if (run.wordIndex > header.identity.wordCount
+                        || record.direction > static_cast<uint8_t>(TextDirection::rtl)
                         || (!run.locale.empty() && (!normalized || *normalized != run.locale))) {
                         indexFile.close();
                         metadata.clear();
@@ -568,13 +555,13 @@ namespace IndexedBook {
             }
 
             indexFile.close();
-            if (metadata.wordCount > 0 && metadata.paragraphStarts.empty()) {
+            if (header.identity.wordCount > 0 && metadata.paragraphStarts.empty()) {
                 metadata.paragraphStarts.push_back(0);
             }
             if (headerOut != nullptr) {
                 *headerOut = header;
             }
-            if (metadata.wordCount == 0) {
+            if (header.identity.wordCount == 0) {
                 ESP_LOGW("storage-index", "index has no words: %s", indexPath.c_str());
                 return false;
             }
@@ -765,22 +752,18 @@ namespace IndexedBook {
                 if (metadata.paragraphStarts.empty()) {
                     metadata.paragraphStarts.push_back(0);
                 }
-                if (metadata.title.empty()) {
-                    metadata.title = RsvpText::normalizeDisplayText(displayNameWithoutExtension(path));
-                }
-
                 header.magic = IndexedBookStore::kMagic;
                 header.version = IndexedBookStore::kVersion;
                 header.headerSize = sizeof(IndexHeader);
                 header.recordSize = sizeof(WordRecord);
-                header.sourceSize = static_cast<uint32_t>(sourceBytes);
-                header.sourceFingerprint = fingerprint;
-                header.wordCount = dataContext.wordCount;
+                header.identity.sourceSize = static_cast<uint32_t>(sourceBytes);
+                header.identity.sourceFingerprint = fingerprint;
+                header.identity.wordCount = dataContext.wordCount;
                 header.paragraphCount = static_cast<uint32_t>(metadata.paragraphStarts.size());
                 header.chapterCount = static_cast<uint32_t>(metadata.chapters.size());
                 header.textRunCount = static_cast<uint32_t>(metadata.textRuns.size());
                 header.recordsOffset = sizeof(IndexHeader);
-                header.paragraphsOffset = header.recordsOffset + header.wordCount * sizeof(WordRecord);
+                header.paragraphsOffset = header.recordsOffset + header.identity.wordCount * sizeof(WordRecord);
                 header.chaptersOffset = header.paragraphsOffset + header.paragraphCount * sizeof(uint32_t);
                 header.textRunsOffset = header.chaptersOffset + header.chapterCount * sizeof(ChapterRecord);
                 header.dataSize = dataContext.dataSize;
@@ -851,10 +834,11 @@ namespace IndexedBook {
                 }
 
                 if (!parseFailed
-                    && (indexContext.wordCount != header.wordCount || indexContext.dataSize != header.dataSize)) {
+                    && (indexContext.wordCount != header.identity.wordCount
+                        || indexContext.dataSize != header.dataSize)) {
                     ESP_LOGE("storage-index", "second pass mismatch words=%u/%u data=%u/%u",
                              static_cast<unsigned int>(indexContext.wordCount),
-                             static_cast<unsigned int>(header.wordCount),
+                             static_cast<unsigned int>(header.identity.wordCount),
                              static_cast<unsigned int>(indexContext.dataSize),
                              static_cast<unsigned int>(header.dataSize));
                     parseFailed = true;
@@ -959,8 +943,9 @@ namespace IndexedBook {
             }
 
             ESP_LOGI("storage-index", "Built %u words, %u chapters from %s in %lu ms",
-                     static_cast<unsigned int>(metadata.wordCount), static_cast<unsigned int>(metadata.chapters.size()),
-                     sourcePath.c_str(), static_cast<unsigned long>(millis() - startedMs));
+                     static_cast<unsigned int>(dataContext.wordCount),
+                     static_cast<unsigned int>(metadata.chapters.size()), sourcePath.c_str(),
+                     static_cast<unsigned long>(millis() - startedMs));
             report("Index ready", label.c_str(), "Book ready", 100);
             return true;
         }
@@ -987,22 +972,22 @@ namespace IndexedBook {
                 return false;
             }
 
-            if (library.paths.empty()) {
+            if (library.empty()) {
                 BookLibrary::refresh(library, false, RSVP_ON_DEVICE_EPUB_CONVERSION);
             }
-            if (library.paths.empty()) {
+            if (library.empty()) {
                 ESP_LOGD("storage", "No readable .rsvp, .txt, or .epub books found under /books");
                 report("Book open failed", "No books found", "Add books to SD", 100);
                 return false;
             }
 
-            if (index >= library.paths.size()) {
+            if (index >= library.size()) {
                 ESP_LOGW("storage", "Book index %u out of range", static_cast<unsigned int>(index));
                 report("Book open failed", "Library changed", "Open list again", 100);
                 return false;
             }
 
-            path = BookLibrary::pathAt(library, index);
+            path = library[index].path;
             if (hasEpubExtension(path)) {
                 if (!request.allowEpubConversion) {
                     report("Index needed", displayNameForPath(path).c_str(), "Open from library", 100);
@@ -1075,24 +1060,16 @@ namespace IndexedBook {
             }
 
             report("Opening book", displayNameForPath(path).c_str(), "Opening word cache", 80);
-            const std::string indexPath = indexedIndexPathFor(path);
-            const std::string dataPath = indexedDataPathFor(path);
-            if (!store.open(indexPath.c_str(), dataPath.c_str(), header)) {
+            if (!store.open(path, header)) {
                 metadata.clear();
                 report("Book open failed", displayNameForPath(path).c_str(), "Index unreadable", 100);
                 return false;
             }
         }
 
-        if (request.loadedPath != nullptr) {
-            *request.loadedPath = path;
-        }
-        if (request.loadedIndex != nullptr) {
-            *request.loadedIndex = parsedIndex;
-        }
-
+        BookLibrary::refreshMetadata(library[parsedIndex]);
         ESP_LOGI("storage", "Opened indexed book %s: %u words, %u chapters", path.c_str(),
-                 static_cast<unsigned int>(metadata.wordCount), static_cast<unsigned int>(metadata.chapters.size()));
+                 static_cast<unsigned int>(store.wordCount()), static_cast<unsigned int>(metadata.chapters.size()));
         return true;
     }
 

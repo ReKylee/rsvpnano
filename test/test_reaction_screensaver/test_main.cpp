@@ -4,16 +4,16 @@
 
 namespace {
 
-void assertSameFrame(const standby::Frame& left, const standby::Frame& right) {
-    TEST_ASSERT_EQUAL_UINT32(left.generation, right.generation);
-    TEST_ASSERT_EQUAL(left.cells.wordCount, right.cells.wordCount);
-    for (size_t i = 0; i < left.cells.wordCount; ++i) {
-        TEST_ASSERT_EQUAL_HEX32(left.cells.words[i], right.cells.words[i]);
-        TEST_ASSERT_EQUAL_HEX32(left.dimCells.words[i], right.dimCells.words[i]);
-        TEST_ASSERT_EQUAL_HEX32(left.dirtyCells.words[i], right.dirtyCells.words[i]);
-        TEST_ASSERT_EQUAL_HEX32(0, left.cells.words[i] & left.dimCells.words[i]);
+    void assertSameFrame(const standby::Frame& left, const standby::Frame& right) {
+        TEST_ASSERT_EQUAL_UINT32(left.generation, right.generation);
+        TEST_ASSERT_EQUAL(left.cells.size(), right.cells.size());
+        for (size_t i = 0; i < left.cells.size(); ++i) {
+            TEST_ASSERT_EQUAL_HEX32(left.cells[i], right.cells[i]);
+            TEST_ASSERT_EQUAL_HEX32(left.dimCells[i], right.dimCells[i]);
+            TEST_ASSERT_EQUAL_HEX32(left.dirtyCells[i], right.dirtyCells[i]);
+            TEST_ASSERT_EQUAL_HEX32(0, left.cells[i] & left.dimCells[i]);
+        }
     }
-}
 
 } // namespace
 

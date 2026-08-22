@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 
 namespace standby {
 
@@ -12,16 +13,8 @@ namespace standby {
     constexpr size_t kPackedBitsPerWord = 32;
     constexpr size_t kMaxStandbyWords = (kMaxStandbyCells + kPackedBitsPerWord - 1U) / kPackedBitsPerWord;
 
-    struct PackedGridView {
-        const uint32_t* words = nullptr;
-        size_t wordCount = 0;
-
-        constexpr bool valid() const {
-            return words != nullptr && wordCount > 0;
-        }
-    };
-
     using PackedGridStorage = std::array<uint32_t, kMaxStandbyWords>;
+    using PackedGridView = std::span<const uint32_t>;
 
     uint32_t advanceRng(uint32_t& rng);
     size_t packedWordCount(size_t cellCount);

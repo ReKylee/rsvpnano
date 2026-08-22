@@ -8,6 +8,8 @@
 #include <string_view>
 #include <vector>
 
+#include "reader/ReadingState.h"
+
 class IndexedBookStore {
 public:
     struct Header {
@@ -15,9 +17,7 @@ public:
         uint32_t version = 0;
         uint32_t headerSize = 0;
         uint32_t recordSize = 0;
-        uint32_t sourceSize = 0;
-        uint32_t sourceFingerprint = 0;
-        uint32_t wordCount = 0;
+        reading::BookIdentity identity;
         uint32_t paragraphCount = 0;
         uint32_t chapterCount = 0;
         uint32_t recordsOffset = 0;
@@ -51,14 +51,14 @@ public:
     };
 
     static constexpr uint32_t kMagic = 0x58444952UL; // RIDX
-    static constexpr uint32_t kVersion = 9;
+    static constexpr uint32_t kVersion = 10;
     static constexpr size_t kWordCacheSize = 256;
 
     IndexedBookStore() = default;
     IndexedBookStore(const IndexedBookStore&) = delete;
     IndexedBookStore& operator=(const IndexedBookStore&) = delete;
 
-    bool open(const char* indexPath, const char* dataPath, const Header& header);
+    bool open(std::string_view sourcePath, const Header& header);
     void close();
     bool isOpen() const;
 
@@ -67,10 +67,16 @@ public:
     void prefetchAround(size_t index) const;
 
     uint32_t sourceSize() const {
-        return isOpen() ? header_.sourceSize : 0;
+        return isOpen() ? identity_.sourceSize : 0;
     }
     uint32_t sourceFingerprint() const {
-        return isOpen() ? header_.sourceFingerprint : 0;
+        return isOpen() ? identity_.sourceFingerprint : 0;
+    }
+    const reading::BookIdentity& identity() const {
+        return identity_;
+    }
+    std::string_view sourcePath() const {
+        return sourcePath_;
     }
 
 private:
@@ -78,9 +84,10 @@ private:
     bool hasCachedWord(size_t index) const;
     bool readRecords(size_t startIndex, size_t count, std::vector<WordRecord>& records) const;
 
-    std::string indexPath_;
-    std::string dataPath_;
-    Header header_;
+    std::string sourcePath_;
+    reading::BookIdentity identity_;
+    uint32_t recordsOffset_ = 0;
+    uint32_t dataSize_ = 0;
     mutable File indexFile_;
     mutable File dataFile_;
     mutable std::vector<WordRecord> cachedRecords_;

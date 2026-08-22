@@ -7,9 +7,9 @@
 
 #include "converter/EpubPackage.h"
 #include "converter/EpubZip.h"
-#include "text/LocaleTag.h"
 #include "storage/fs/StoragePaths.h"
 #include "text/AsciiText.h"
+#include "text/LocaleTag.h"
 #include "text/TextNormalizer.h"
 
 namespace {
@@ -252,8 +252,8 @@ namespace {
 
     void streamReadingOrder(EpubZip::Archive& zip, File& output, const std::vector<std::string>& readingOrder,
                             const std::vector<TocEntry>& tocEntries, std::string_view bookTitle,
-                            std::string_view bookLocale,
-                            const EpubConverter::Options& options, size_t& wordCount, size_t& chapterCount) {
+                            std::string_view bookLocale, const EpubConverter::Options& options, size_t& wordCount,
+                            size_t& chapterCount) {
         std::string lastChapterTitle;
         const bool hasToc = !tocEntries.empty();
 
@@ -272,10 +272,10 @@ namespace {
             reportItemProgress("Extracting content", i);
 
             std::vector<TocEntry> documentTocEntries;
-            const std::string loweredPath = toLowerCopy(readingOrder[i]);
             std::copy_if(tocEntries.begin(), tocEntries.end(), std::back_inserter(documentTocEntries),
                          [&](const TocEntry& entry) {
-                             return toLowerCopy(entry.path) == loweredPath;
+                             return std::ranges::equal(entry.path, readingOrder[i], {}, AsciiText::toLower,
+                                                       AsciiText::toLower);
                          });
 
             const EpubZip::ContentExtractStatus extractStatus =

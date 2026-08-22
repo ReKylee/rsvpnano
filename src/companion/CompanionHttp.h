@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <expected>
+#include <functional>
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -30,7 +31,7 @@ namespace companion::api {
     template<typename T>
     struct Located {
         std::string location;
-        T value;
+        std::reference_wrapper<const T> value;
     };
 
     template<typename T>

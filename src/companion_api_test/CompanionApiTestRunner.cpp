@@ -31,6 +31,22 @@ namespace {
     uint32_t gLastReadyLogMs = 0;
     uint32_t gFallbackReadyMs = 0;
 
+    void validateInstalledFonts() {
+        const auto families = gReader.fonts.families();
+        for (size_t index = 1; index < families.size(); ++index) {
+            const auto face = gReader.fonts.loadFace(index, 0);
+            const bool rasterLoaded = face.raster.get().name == families[index].label;
+            const bool shapingLoaded = !families[index].shaping || face.shaper != nullptr;
+            if (!rasterLoaded || !shapingLoaded) {
+                ESP_LOGE("api-test", "font unusable id=%s raster=%d shaping=%d", families[index].id.c_str(),
+                         rasterLoaded, shapingLoaded);
+            } else {
+                ESP_LOGI("api-test", "font usable id=%s", families[index].id.c_str());
+            }
+        }
+        gReader.fonts.clearLoaded();
+    }
+
     void beginApiTest() {
         if (!Board::Display::begin())
             ESP_LOGE("api-test", "display init failed");
@@ -42,8 +58,10 @@ namespace {
             ESP_LOGW("api-test", "settings warning: %s", result.error().message.c_str());
 
         if (filesystem != nullptr)
-            gLocales = locales::scanInstalled(*filesystem);
+            gLocales = locales::scanInstalled(*filesystem, static_cast<size_t>(UiText::Count));
+        gUi.setLanguageCatalog(filesystem, &gLocales, &locales::loadUiFont);
         gReader.fonts.loadFromSd();
+        validateInstalledFonts();
         auto& settings = gSettings.settings();
         if (!gReader.fonts.find(settings.reading.typography.fontId))
             settings.reading.typography.fontId = settings::TypographySettings{}.fontId;
@@ -52,7 +70,7 @@ namespace {
             settings.interface.locale = Localization::kDefaultLocale;
 
         gInterface.begin(gUi, settings.interface, gLocales, &Board::Display::setBrightness);
-        gReader.begin(gInterface.themes.selected());
+        gReader.begin(gInterface.themes.resolve(settings.interface.selectedThemeId));
         gNetwork.begin(gSettings);
         gNetwork.startupCheckPending = false;
         if (filesystem != nullptr)
@@ -80,10 +98,7 @@ namespace {
             delay(100);
             return;
         }
-        if (gApi.update())
-            screens::status(gUi, "Companion API test", gApi.statusLine1(), gApi.statusLine2());
-
-        const std::string& stationSsid = gSettings.settings().network.wifiSsid;
+        const std::string& stationSsid = gSettings.settings().network.ssid;
         const bool stationReady = !stationSsid.empty() && gApi.statusLine1() == stationSsid;
         const bool accessPointReady = stationSsid.empty() || static_cast<int32_t>(nowMs - gFallbackReadyMs) >= 0;
         if ((stationReady || accessPointReady) && nowMs - gLastReadyLogMs >= 2000) {

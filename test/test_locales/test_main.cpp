@@ -168,6 +168,21 @@ void test_reader_font_selection_uses_requested_then_font_affinity_then_terminal_
     TEST_ASSERT_EQUAL_UINT32(6, FontCatalog::selectFamily(families, "missing", "ar", UnicodeText::ScriptArabic));
 }
 
+void test_ui_font_selection_uses_declared_pack_scripts() {
+    const locales::Catalog catalog{
+        {.manifest = {.id = "ja", .locale = "ja"},
+         .scriptMask = UnicodeText::ScriptHan | UnicodeText::ScriptHiragana | UnicodeText::ScriptKatakana},
+        {.manifest = {.id = "he", .locale = "he"}, .scriptMask = UnicodeText::ScriptHebrew},
+        {.manifest = {.id = "ar", .locale = "ar"}, .scriptMask = UnicodeText::ScriptArabic},
+    };
+    TEST_ASSERT_EQUAL_STRING("he", locales::findPackForScripts(catalog, "he-IL", UnicodeText::ScriptHebrew)
+                                       ->manifest.id.c_str());
+    TEST_ASSERT_EQUAL_STRING("ja", locales::findPackForScripts(catalog, "en", UnicodeText::ScriptHan)
+                                       ->manifest.id.c_str());
+    TEST_ASSERT_NULL(locales::findPackForScripts(catalog, "en",
+                                                 UnicodeText::ScriptHebrew | UnicodeText::ScriptArabic));
+}
+
 void test_bidi_resolves_metadata_direction_visual_runs_and_mirroring() {
     BookMetadata metadata;
     metadata.baseDirection = TextDirection::ltr;
@@ -218,6 +233,7 @@ int main() {
     RUN_TEST(test_locale_normalization_is_stable);
     RUN_TEST(test_binary_ui_assets_are_bounded_before_runtime_use);
     RUN_TEST(test_reader_font_selection_uses_requested_then_font_affinity_then_terminal_fallback);
+    RUN_TEST(test_ui_font_selection_uses_declared_pack_scripts);
     RUN_TEST(test_bidi_resolves_metadata_direction_visual_runs_and_mirroring);
     return UNITY_END();
 }

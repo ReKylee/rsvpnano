@@ -7,19 +7,24 @@
 
 namespace BookLibrary {
 
-    struct Listing {
-        std::vector<std::string> paths;
-        std::vector<std::string> titles;
-        std::vector<std::string> authors;
+    struct Entry {
+        std::string path;
+        size_t bytes = 0;
+        std::string title;
+        std::string author;
+        bool metadataLoaded = false;
     };
 
-    void clear(Listing& listing);
-    void refresh(Listing& listing, bool includeMetadata, bool onDeviceEpubConversionEnabled);
+    using Listing = std::vector<Entry>;
 
-    std::string pathAt(const Listing& listing, size_t index);
-    bool isArticle(const Listing& listing, size_t index);
-    std::string displayName(const Listing& listing, size_t index);
-    std::string authorName(const Listing& listing, size_t index);
+    void refresh(Listing& listing, bool includeMetadata, bool onDeviceEpubConversionEnabled);
+    void refreshMetadata(Entry& book);
+
+    const Entry* at(const Listing& listing, size_t index);
+    bool isArticle(const Entry& book);
+    std::string_view displayName(const Entry& book);
+    std::string_view relativeName(const Entry& book);
+    std::string id(const Entry& book);
     int indexOfPath(const Listing& listing, std::string_view target);
 
 } // namespace BookLibrary

@@ -53,13 +53,13 @@ namespace Board {
         void logStartupDiagnostics() {
             Logger::logResetReason();
 
-            const Board::Power::DiagnosticSnapshot power = Board::Power::diagnosticSnapshot();
+            const Board::Power::Diagnostics power = Board::Power::readDiagnostics();
             if (!power.available) {
-                ESP_LOGW("diag", "power_snapshot=unavailable");
+                ESP_LOGW("diag", "power_diagnostics=unavailable");
                 return;
             }
 
-            ESP_LOGD("diag", "power_snapshot=vbus:%u", power.externalPowerPresent ? 1 : 0);
+            ESP_LOGD("diag", "power_diagnostics=vbus:%u", power.externalPowerPresent ? 1 : 0);
         }
 
     } // namespace System

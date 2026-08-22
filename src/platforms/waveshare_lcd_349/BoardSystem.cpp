@@ -51,10 +51,9 @@ namespace Board {
 
         EspLightSleep::WakeReason lightSleep(uint32_t timeoutMs) {
             bool ignored = true;
-            if (!BoardDrivers::Tca9554::readInputPin(
-                    Wire1, WaveshareLcd349::Tca9554Wiring::kAddress,
-                    WaveshareLcd349::Tca9554Wiring::kTouchInterruptPin, ignored,
-                    WaveshareLcd349::Tca9554Wiring::kReleaseBusBeforeRead))
+            if (!BoardDrivers::Tca9554::readInputPin(Wire1, WaveshareLcd349::Tca9554Wiring::kAddress,
+                                                     WaveshareLcd349::Tca9554Wiring::kTouchInterruptPin, ignored,
+                                                     WaveshareLcd349::Tca9554Wiring::kReleaseBusBeforeRead))
                 ESP_LOGW("sleep", "failed to clear touch expander interrupt");
 
             constexpr gpio_num_t wakePins[] = {
@@ -71,13 +70,13 @@ namespace Board {
         void logStartupDiagnostics() {
             Logger::logResetReason();
 
-            const Board::Power::DiagnosticSnapshot power = Board::Power::diagnosticSnapshot();
+            const Board::Power::Diagnostics power = Board::Power::readDiagnostics();
             if (!power.available) {
-                ESP_LOGI("diag", "power_snapshot=vbus_sense:unavailable charge_status:unavailable");
+                ESP_LOGI("diag", "power_diagnostics=vbus_sense:unavailable charge_status:unavailable");
                 return;
             }
 
-            ESP_LOGD("diag", "power_snapshot=vbus:%u axp_status1:0x%02X axp_status2:0x%02X axp_pwr_irq:0x%02X",
+            ESP_LOGD("diag", "power_diagnostics=vbus:%u axp_status1:0x%02X axp_status2:0x%02X axp_pwr_irq:0x%02X",
                      power.externalPowerPresent ? 1 : 0, power.status1, power.status2, power.powerKeyIrqStatus);
         }
 

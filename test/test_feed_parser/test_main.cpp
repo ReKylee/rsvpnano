@@ -230,9 +230,9 @@ void test_text_normalizer_preserves_utf8_and_rejects_malformed_bytes() {
     TEST_ASSERT_EQUAL(1, stats.malformedUtf8);
 }
 
-void test_ui_metadata_replaces_scripts_the_builtin_font_cannot_show() {
-    TEST_ASSERT_EQUAL_STRING("Alice ??? - Алиса",
-                             RsvpText::uiSafeMetadata("Alice 愛麗絲 - Алиса").c_str());
+void test_metadata_preserves_scripts_for_locale_pack_fonts() {
+    TEST_ASSERT_EQUAL_STRING("Alice 愛麗絲 - Алиса",
+                             RsvpText::normalizeDisplayText("Alice 愛麗絲 - Алиса").c_str());
 }
 
 void test_fnv1a_supports_whole_and_incremental_hashing() {
@@ -260,7 +260,7 @@ int main(void) {
     RUN_TEST(test_rss_config_round_trip_and_normalization);
     RUN_TEST(test_standard_error_codes_are_preserved);
     RUN_TEST(test_text_normalizer_preserves_utf8_and_rejects_malformed_bytes);
-    RUN_TEST(test_ui_metadata_replaces_scripts_the_builtin_font_cannot_show);
+    RUN_TEST(test_metadata_preserves_scripts_for_locale_pack_fonts);
     RUN_TEST(test_fnv1a_supports_whole_and_incremental_hashing);
     return UNITY_END();
 }

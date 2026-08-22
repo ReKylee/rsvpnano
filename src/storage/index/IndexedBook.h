@@ -12,8 +12,6 @@ namespace IndexedBook {
                                     int progressPercent);
 
     struct OpenRequest {
-        std::string* loadedPath = nullptr;
-        size_t* loadedIndex = nullptr;
         bool allowIndexBuild = true;
         bool allowEpubConversion = true;
         StatusCallback statusCallback = nullptr;

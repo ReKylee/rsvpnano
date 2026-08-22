@@ -33,13 +33,12 @@ namespace screens {
         }
 
         size_t readingIndex = 0;
-        while (readingIndex + 1 < chapters.size() && chapters[readingIndex + 1].wordIndex <= reader.currentIndex) {
+        while (readingIndex + 1 < chapters.size() && chapters[readingIndex + 1].wordIndex <= reader.state.wordIndex) {
             ++readingIndex;
         }
 
-        if (source_ != chapters.data() || sourceCount_ != chapters.size()) {
-            source_ = chapters.data();
-            sourceCount_ = chapters.size();
+        if (source_.data() != chapters.data() || source_.size() != chapters.size()) {
+            source_ = chapters;
             centeredIndex_ = readingIndex;
             offset_ = 0;
             dragging_ = false;
@@ -223,7 +222,7 @@ namespace screens {
                                                                              : std::string_view{chapters[index].title};
                 ui.drawText({static_cast<int16_t>(x + 10), top, static_cast<int16_t>(width - notch - 24), height},
                             title, centered ? 2 : 1, ui.blend(ui::themes::ColorRole::Foreground, alpha),
-                            ui::TextAlign::Center);
+                            ui::TextAlign::Center, 1, reader.metadata.localeAt(chapters[index].wordIndex));
             }
         }
         return Action::None;

@@ -11,7 +11,7 @@ was lost.
 
 | Method | Path | Success response |
 | --- | --- | --- |
-| `GET` | `/api/v2/device` | `{ "firmwareVersion": "…", "otaAsset": "…" }` |
+| `GET` | `/api/v2/device` | `{ "ssid": "RSVP-Nano-XXXXXX", "firmwareVersion": "…", "otaAsset": "…" }` |
 | `GET` | `/api/v2/library` | Bare array of library entries |
 | `POST` | `/api/v2/library?category=…` | Created entry (`201` and `Location`) |
 | `DELETE` | `/api/v2/library/{id}` | `204` |

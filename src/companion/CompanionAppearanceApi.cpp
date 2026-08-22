@@ -13,23 +13,19 @@ namespace api = companion::api;
 api::Result<> CompanionApi::putThemeSelection(httpd_req_t& request) {
     return readSelectionId(request).and_then([this](std::string id) -> api::Result<> {
         auto& themes = interfaceScreen_.themes;
-        themes.loadFromSd();
-
-        if (!themes.selectById(id)) {
-            return std::unexpected(api::httpError(HTTP_CODE_NOT_FOUND, "theme_not_found",
-                                                  "Theme is not installed", "id"));
+        const ui::themes::Theme* theme = themes.find(id);
+        if (theme == nullptr) {
+            return std::unexpected(api::httpError(HTTP_CODE_NOT_FOUND, "theme_not_found", "Theme is not installed",
+                                                  "id"));
         }
 
-        const std::string selectedId = themes.selected().id;
-        if (settingsStore_.settings().interface.selectedThemeId != selectedId) {
-            settings::DeviceSettings next = settingsStore_.settings();
-            next.interface.selectedThemeId = selectedId;
-            settingsStore_.replace(std::move(next), settings::SettingsSource::Companion);
+        if (settingsStore_.settings().interface.selectedThemeId != theme->id) {
+            settingsStore_.settings().interface.selectedThemeId = theme->id;
+            settingsStore_.acceptChanges();
         }
 
-        const auto& theme = themes.selected();
-        ui_.setTheme(theme);
-        readerScreen_.applyTheme(theme);
+        ui_.setTheme(*theme);
+        readerScreen_.applyTheme(*theme);
         return {};
     });
 }
@@ -42,11 +38,10 @@ api::Result<> CompanionApi::putFontSelection(httpd_req_t& request) {
                                                   "id"));
         }
 
-        const std::string selectedId = family->get().id;
+        const std::string selectedId = family->id;
         if (settingsStore_.settings().reading.typography.fontId != selectedId) {
-            settings::DeviceSettings next = settingsStore_.settings();
-            next.reading.typography.fontId = selectedId;
-            settingsStore_.replace(std::move(next), settings::SettingsSource::Companion);
+            settingsStore_.settings().reading.typography.fontId = selectedId;
+            settingsStore_.acceptChanges();
         }
 
         readerScreen_.refreshTypography(settingsStore_.settings().reading, readerScreen_.session.state.overrides);
@@ -71,9 +66,8 @@ api::Result<> CompanionApi::putLocaleSelection(httpd_req_t& request) {
         }
 
         if (settingsStore_.settings().interface.locale != *locale) {
-            settings::DeviceSettings next = settingsStore_.settings();
-            next.interface.locale = *locale;
-            settingsStore_.replace(std::move(next), settings::SettingsSource::Companion);
+            settingsStore_.settings().interface.locale = *locale;
+            settingsStore_.acceptChanges();
         }
 
         ui_.setLanguageAssets(std::move(*assets));

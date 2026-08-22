@@ -3,8 +3,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#if __has_include(<esp_log.h>)
+#include <esp_log.h>
+#endif
 
 #include "fonts/UiFont6x9.h"
+#include "text/UnicodeText.h"
 #include "text/Utf8Text.h"
 
 namespace ui {
@@ -15,15 +19,8 @@ namespace ui {
 
         constexpr uint8_t kUiFontCellWidth = 6;
         constexpr uint8_t kUiFontHeight = 9;
+        constexpr uint32_t kBuiltInUiScripts = UnicodeText::ScriptLatin | UnicodeText::ScriptCyrillic;
         constexpr uint8_t kTapCancelOutsideSamples = 2;
-
-        size_t fittedLength(std::string_view text, size_t capacity) {
-            if (Utf8Text::count(text) <= capacity)
-                return text.size();
-            if (capacity <= 3)
-                return 0;
-            return Utf8Text::prefixBytes(text, capacity - 3);
-        }
 
     } // namespace
 
@@ -39,19 +36,49 @@ namespace ui {
         return static_cast<int16_t>(kUiFontHeight * std::max<uint8_t>(1, size));
     }
 
-    int16_t Context::textWidthFor(std::string_view text, uint8_t size) const {
-        const uint8_t cellWidth = languageAssets_.owns(text) && !languageAssets_.font.empty()
-                                    ? locales::uiFontCellWidth(languageAssets_.font)
-                                    : kUiFontCellWidth;
-        const int32_t width =
-            static_cast<int32_t>(Utf8Text::count(text)) * cellWidth * std::max<uint8_t>(1, size);
+    const locales::UiAssets* Context::fontAssetsFor(std::string_view text, std::string_view textLocale) const {
+        if (languageAssets_.owns(text) && !languageAssets_.font.empty())
+            return &languageAssets_;
+        const uint32_t requiredScripts = UnicodeText::scriptsIn(text) & ~kBuiltInUiScripts;
+        if (requiredScripts == 0 || languageFilesystem_ == nullptr || languageCatalog_ == nullptr
+            || languageFontLoader_ == nullptr)
+            return nullptr;
+        const std::string_view preferredLocale = textLocale.empty() ? std::string_view{locale_} : textLocale;
+        const locales::InstalledPack* pack =
+            locales::findPackForScripts(*languageCatalog_, preferredLocale, requiredScripts);
+        if (pack == nullptr)
+            return nullptr;
+        if (pack->manifest.locale == locale_ && !languageAssets_.font.empty())
+            return &languageAssets_;
+        const auto cached =
+            std::ranges::find(contentFonts_, pack->manifest.id, [](const auto& entry) -> const std::string& {
+                return entry.first;
+            });
+        if (cached != contentFonts_.end())
+            return cached->second.font.empty() ? nullptr : &cached->second;
+
+        auto& [id, assets] =
+            contentFonts_.emplace_back(pack->manifest.id, locales::UiAssets{.direction = pack->manifest.direction});
+        auto loaded = languageFontLoader_(*languageFilesystem_, *pack);
+        if (loaded)
+            assets.font = std::move(*loaded);
+#if __has_include(<esp_log.h>)
+        else
+            ESP_LOGW("ui", "content font unavailable pack=%s: %s", id.c_str(), loaded.error().c_str());
+#endif
+        return assets.font.empty() ? nullptr : &assets;
+    }
+
+    int16_t Context::textWidthFor(std::string_view text, uint8_t size, std::string_view textLocale) const {
+        const locales::UiAssets* assets = fontAssetsFor(text, textLocale);
+        const uint8_t cellWidth = assets == nullptr ? kUiFontCellWidth : locales::uiFontCellWidth(assets->font);
+        const int32_t width = static_cast<int32_t>(Utf8Text::count(text)) * cellWidth * std::max<uint8_t>(1, size);
         return static_cast<int16_t>(std::min<int32_t>(width, INT16_MAX));
     }
 
-    int16_t Context::textHeightFor(std::string_view text, uint8_t size) const {
-        const uint8_t height = languageAssets_.owns(text) && !languageAssets_.font.empty()
-                                 ? locales::uiFontHeight(languageAssets_.font)
-                                 : kUiFontHeight;
+    int16_t Context::textHeightFor(std::string_view text, uint8_t size, std::string_view textLocale) const {
+        const locales::UiAssets* assets = fontAssetsFor(text, textLocale);
+        const uint8_t height = assets == nullptr ? kUiFontHeight : locales::uiFontHeight(assets->font);
         return static_cast<int16_t>(height * std::max<uint8_t>(1, size));
     }
 
@@ -62,8 +89,18 @@ namespace ui {
         }
     }
 
+    void Context::setLanguageCatalog(fs::FS* filesystem, const locales::Catalog* catalog,
+                                     LanguageFontLoader fontLoader) {
+        languageFilesystem_ = filesystem;
+        languageCatalog_ = catalog;
+        languageFontLoader_ = fontLoader;
+        contentFonts_.clear();
+        invalidate();
+    }
+
     void Context::setLanguageAssets(locales::UiAssets assets) {
         languageAssets_ = std::move(assets);
+        contentFonts_.clear();
         invalidate();
     }
 
@@ -123,6 +160,7 @@ namespace ui {
         drew_ = false;
         if (screen_ != screen) {
             screen_ = screen;
+            contentFonts_.clear();
             invalid_ = true;
             capturedSlot_ = kSlotCapacity;
         }
@@ -159,16 +197,21 @@ namespace ui {
         invalid_ = true;
     }
 
+    void Context::prepareTextFont(std::string_view text, std::string_view textLocale) const {
+        (void)fontAssetsFor(text, textLocale);
+    }
+
     void Context::label(Rect rect, std::string_view text, uint8_t textSize, ui::themes::ColorRole role, TextAlign align,
-                        uint8_t textLines) {
+                        uint8_t textLines, std::string_view textLocale) {
         uint32_t state = combine(signature(text), textSize);
         state = combine(state, role);
         state = combine(state, static_cast<uint8_t>(align));
         state = combine(state, textLines);
+        state = signature(textLocale, state);
         if (!claim(Kind::Label, rect, state).changed) {
             return;
         }
-        drawText(rect, text, textSize, color(role), align, textLines);
+        drawText(rect, text, textSize, color(role), align, textLines, textLocale);
     }
 
     void Context::separator(Rect rect, std::string_view text) {
@@ -467,8 +510,7 @@ namespace ui {
                               suffix.data());
                 const std::string_view valueView{valueText};
                 const int16_t headerWidth = static_cast<int16_t>(visual.w - 14);
-                const bool largeInline = visual.h >= 40
-                                      && textHeightFor(label, 3) <= visual.h - 10
+                const bool largeInline = visual.h >= 40 && textHeightFor(label, 3) <= visual.h - 10
                                       && textHeightFor(valueView, 3) <= visual.h - 10
                                       && textWidthFor(label, 3) + textWidthFor(valueView, 3) + 8 <= headerWidth;
                 if (largeInline) {
@@ -909,12 +951,13 @@ namespace ui {
     }
 
     void Context::drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t textColor, TextAlign align,
-                           uint8_t maxLines) {
+                           uint8_t maxLines, std::string_view textLocale) {
         if (rect.w <= 0 || rect.h <= 0)
             return;
-        const bool externalFont = languageAssets_.owns(text) && !languageAssets_.font.empty();
-        const uint8_t cellWidth = externalFont ? locales::uiFontCellWidth(languageAssets_.font) : kUiFontCellWidth;
-        const uint8_t fontHeight = externalFont ? locales::uiFontHeight(languageAssets_.font) : kUiFontHeight;
+        const locales::UiAssets* assets = fontAssetsFor(text, textLocale);
+        const bool externalFont = assets != nullptr;
+        const uint8_t cellWidth = externalFont ? locales::uiFontCellWidth(assets->font) : kUiFontCellWidth;
+        const uint8_t fontHeight = externalFont ? locales::uiFontHeight(assets->font) : kUiFontHeight;
         const size_t codepoints = Utf8Text::count(text);
         uint8_t size = std::max<uint8_t>(1, textSize);
         while (size > 1) {
@@ -927,12 +970,12 @@ namespace ui {
         const size_t capacity = static_cast<size_t>(std::max<int16_t>(0, rect.w) / (cellWidth * size));
         if (capacity == 0)
             return;
-        gfx_.setFont(externalFont ? languageAssets_.font.data() : u8g2_font_rsvpnano_ui_6x9_tf);
+        gfx_.setFont(externalFont ? assets->font.data() : u8g2_font_rsvpnano_ui_6x9_tf);
         gfx_.setUTF8Print(true);
         gfx_.setTextSize(size);
         gfx_.setTextWrap(false);
         gfx_.setTextColor(textColor);
-        const bool rightToLeft = languageAssets_.direction == TextDirection::rtl;
+        const bool rightToLeft = (externalFont ? assets->direction : languageAssets_.direction) == TextDirection::rtl;
         if (rightToLeft) {
             if (align == TextAlign::Left)
                 align = TextAlign::Right;
@@ -954,45 +997,78 @@ namespace ui {
         }
 
         const uint8_t lineCount = second.empty() ? 1 : 2;
-        const int16_t lineHeight = textHeightFor(text, size);
+        const int16_t lineHeight = static_cast<int16_t>(fontHeight * size);
         const int16_t firstY =
             static_cast<int16_t>(rect.y + std::max<int16_t>(0, (rect.h - lineHeight * lineCount) / 2));
-        const auto drawLine = [&](std::string_view line, int16_t y) {
-            const bool truncated = Utf8Text::count(line) > capacity;
-            const size_t length = fittedLength(line, capacity);
+        const auto drawLine = [&](std::string_view line, size_t lineCodepoints, int16_t y) {
+            const bool truncated = lineCodepoints > capacity;
+            const size_t length = truncated && capacity > 3 ? Utf8Text::prefixBytes(line, capacity - 3)
+                                                            : truncated ? 0 : line.size();
             const size_t dots = truncated ? std::min<size_t>(3, capacity) : 0;
-            const int16_t renderedWidth = static_cast<int16_t>(textWidthFor(line.substr(0, length), size)
-                                                               + dots * cellWidth * size);
-            const int16_t x = align == TextAlign::Center
-                                ? std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + (rect.w - renderedWidth) / 2))
-                            : align == TextAlign::Right
-                                ? std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + rect.w - renderedWidth))
-                                : rect.x;
-            gfx_.setCursor(x, static_cast<int16_t>(y + lineHeight - size));
+            const std::string_view visible = line.substr(0, length);
+            const bool bidiReady = rightToLeft && bidiAnalysis_.reset(visible, TextDirection::rtl)
+                                && bidiAnalysis_.resolve({0, visible.size()}, bidiLine_);
+            if (bidiReady)
+                BidiText::visualCodepoints(visible, bidiLine_, bidiCodepoints_);
+
             const auto drawBytes = [&](std::string_view value) {
                 for (const char byte: value)
                     gfx_.write(static_cast<uint8_t>(byte));
             };
-            const auto drawVisual = [&](std::string_view value) {
-                if (!rightToLeft || !bidiAnalysis_.reset(value, TextDirection::rtl)
-                    || !bidiAnalysis_.resolve({0, value.size()}, bidiLine_)) {
-                    drawBytes(value);
+            const auto appendVisual = [&](std::string& output) {
+                if (!bidiReady) {
+                    output.append(visible);
                     return;
                 }
-                BidiText::visualCodepoints(value, bidiLine_, bidiCodepoints_);
                 std::array<char, 4> encoded{};
                 for (const BidiText::Codepoint& codepoint: bidiCodepoints_)
-                    drawBytes(std::string_view{encoded.data(), Utf8Text::encode(codepoint.value, encoded)});
+                    output.append(encoded.data(), Utf8Text::encode(codepoint.value, encoded));
             };
-            if (rightToLeft)
-                drawBytes(std::string_view{"...", dots});
-            drawVisual(line.substr(0, length));
-            if (!rightToLeft)
-                drawBytes(std::string_view{"...", dots});
+
+            int16_t inkX = 0;
+            const size_t renderedCodepoints = truncated ? capacity : lineCodepoints;
+            int16_t renderedWidth = static_cast<int16_t>(std::min<size_t>(
+                renderedCodepoints * static_cast<size_t>(cellWidth) * size, INT16_MAX));
+            std::string centered;
+            if (align == TextAlign::Center) {
+                centered.reserve(visible.size() + dots);
+                if (rightToLeft)
+                    centered.append(dots, '.');
+                appendVisual(centered);
+                if (!rightToLeft)
+                    centered.append(dots, '.');
+                int16_t inkY = 0;
+                uint16_t inkWidth = 0;
+                uint16_t inkHeight = 0;
+                gfx_.getTextBounds(centered.c_str(), 0, 0, &inkX, &inkY, &inkWidth, &inkHeight);
+                renderedWidth = static_cast<int16_t>(inkWidth);
+            }
+            const int16_t x =
+                align == TextAlign::Center
+                    ? std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + (rect.w - renderedWidth) / 2 - inkX))
+                : align == TextAlign::Right
+                    ? std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + rect.w - renderedWidth))
+                    : rect.x;
+            gfx_.setCursor(x, static_cast<int16_t>(y + lineHeight - size));
+            if (!centered.empty()) {
+                drawBytes(centered);
+            } else {
+                if (rightToLeft)
+                    drawBytes(std::string_view{"...", dots});
+                if (!bidiReady) {
+                    drawBytes(visible);
+                } else {
+                    std::array<char, 4> encoded{};
+                    for (const BidiText::Codepoint& codepoint: bidiCodepoints_)
+                        drawBytes(std::string_view{encoded.data(), Utf8Text::encode(codepoint.value, encoded)});
+                }
+                if (!rightToLeft)
+                    drawBytes(std::string_view{"...", dots});
+            }
         };
-        drawLine(first, firstY);
+        drawLine(first, second.empty() ? codepoints : Utf8Text::count(first), firstY);
         if (!second.empty())
-            drawLine(second, static_cast<int16_t>(firstY + lineHeight));
+            drawLine(second, Utf8Text::count(second), static_cast<int16_t>(firstY + lineHeight));
         drew_ = true;
     }
 

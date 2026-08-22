@@ -73,8 +73,8 @@ namespace settings {
         bool operator==(const ReadingOverrides&) const = default;
     };
 
-    inline std::string_view fontForText(const ReadingOverrides& overrides, std::string_view locale,
-                                        uint32_t scripts, std::string_view fallback) {
+    inline std::string_view fontForText(const ReadingOverrides& overrides, std::string_view locale, uint32_t scripts,
+                                        std::string_view fallback) {
         const std::string_view target = (scripts & UnicodeText::ScriptMath) != 0 ? kMathFontTarget : locale;
         const auto selected = std::ranges::find(overrides.languageFonts, target, &LanguageFont::locale);
         return selected == overrides.languageFonts.end() ? fallback : std::string_view{selected->fontId};
@@ -118,7 +118,7 @@ namespace settings {
     };
 
     struct NetworkSettings {
-        std::string wifiSsid;
+        std::string ssid;
 
         bool operator==(const NetworkSettings&) const = default;
     };

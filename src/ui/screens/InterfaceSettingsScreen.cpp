@@ -7,7 +7,7 @@ namespace screens {
 
         std::string_view nextLocale(const locales::Catalog& catalog, std::string_view current) {
             bool returnNext = current == Localization::kDefaultLocale;
-            for (const auto& pack: catalog.packs) {
+            for (const auto& pack: catalog) {
                 if (returnNext)
                     return pack.manifest.locale;
                 returnNext = pack.manifest.locale == current;
@@ -17,18 +17,19 @@ namespace screens {
 
     } // namespace
 
-    void InterfaceScreen::begin(ui::Context& ui, settings::InterfaceSettings& config,
-                                const locales::Catalog& languages, void (*setBrightness)(uint8_t)) {
-        languages_ = std::cref(languages);
+    bool InterfaceScreen::begin(ui::Context& ui, settings::InterfaceSettings& config, const locales::Catalog& languages,
+                                void (*setBrightness)(uint8_t)) {
+        languages_ = &languages;
         if (setBrightness != nullptr)
             setBrightness(config.brightnessPercent);
 
         themes.loadFromSd();
-        if (!themes.selectById(config.selectedThemeId)) {
-            config.selectedThemeId = themes.selected().id;
-        }
-        ui.setTheme(themes.selected());
+        const ui::themes::Theme& selected = themes.resolve(config.selectedThemeId);
+        const bool corrected = config.selectedThemeId != selected.id;
+        config.selectedThemeId = selected.id;
+        ui.setTheme(selected);
         ui.setLocale(config.locale);
+        return corrected;
     }
 
     bool InterfaceScreen::draw(ui::Context& ui, settings::InterfaceSettings& config,
@@ -58,20 +59,20 @@ namespace screens {
         const int16_t firstRowY = static_cast<int16_t>(sectionsY + 14);
         constexpr int16_t rowHeight = 40;
         const int16_t secondRowY = static_cast<int16_t>(firstRowY + rowHeight + 4);
+        const ui::themes::Theme& selectedTheme = themes.resolve(config.selectedThemeId);
         if (ui.setting({content.x, firstRowY, halfWidth, rowHeight}, ui.text(UiText::Theme),
-                       themes.selected().definition.name, ui::SettingLayout::Inline)) {
-            themes.selectNext();
-            config.selectedThemeId = themes.selected().id;
-            ui.setTheme(themes.selected());
+                       selectedTheme.definition.name, ui::SettingLayout::Inline)) {
+            const ui::themes::Theme& nextTheme = themes.next(config.selectedThemeId);
+            config.selectedThemeId = nextTheme.id;
+            ui.setTheme(nextTheme);
             changed = true;
         }
 
         if (ui.setting({content.x, secondRowY, halfWidth, rowHeight}, ui.text(UiText::Language),
-                       languages_ ? locales::localeName(languages_->get(), config.locale)
-                                  : std::string_view{config.locale},
+                       languages_ ? locales::localeName(*languages_, config.locale) : std::string_view{config.locale},
                        ui::SettingLayout::Inline)) {
             config.locale = !languages_ ? std::string{Localization::kDefaultLocale}
-                                        : std::string{nextLocale(languages_->get(), config.locale)};
+                                        : std::string{nextLocale(*languages_, config.locale)};
             ui.setLocale(config.locale);
             changed = true;
         }

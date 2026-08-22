@@ -27,15 +27,16 @@ namespace {
         return record;
     }
 
-    std::array<RFont4::StrikeRecord, RFont4::kSizeCount>
-    readStrikes(const std::vector<uint8_t>& bytes, const RFont4::Header& header) {
+    std::array<RFont4::StrikeRecord, RFont4::kSizeCount> readStrikes(const std::vector<uint8_t>& bytes,
+                                                                     const RFont4::Header& header) {
         std::array<RFont4::StrikeRecord, RFont4::kSizeCount> strikes;
         std::memcpy(strikes.data(), bytes.data() + header.strikesOffset, sizeof(strikes));
         return strikes;
     }
 
-    std::array<RFont4::LayoutTableRecord, RFont4::kMaximumLayoutTableCount>
-    readTables(const std::vector<uint8_t>& bytes, const RFont4::Header& header) {
+    std::array<RFont4::LayoutTableRecord, RFont4::kMaximumLayoutTableCount> readTables(const std::vector<uint8_t>&
+                                                                                           bytes,
+                                                                                       const RFont4::Header& header) {
         std::array<RFont4::LayoutTableRecord, RFont4::kMaximumLayoutTableCount> tables{};
         std::memcpy(tables.data(), bytes.data() + header.layoutTablesOffset,
                     static_cast<size_t>(header.layoutTableCount) * sizeof(tables.front()));
@@ -46,18 +47,15 @@ namespace {
         uint32_t scriptMask = 0;
         uint32_t previousCodepoint = 0;
         for (uint32_t glyphIndex = 0; glyphIndex < header.glyphCount; ++glyphIndex) {
-            const auto identity = recordAt<RFont4::GlyphIdentityRecord>(bytes, header.identitiesOffset,
-                                                                        glyphIndex);
+            const auto identity = recordAt<RFont4::GlyphIdentityRecord>(bytes, header.identitiesOffset, glyphIndex);
             TEST_ASSERT_TRUE(glyphIndex == 0 || identity.codepoint > previousCodepoint
                              || (identity.codepoint == RFont4::kShapedGlyphCodepoint
                                  && previousCodepoint == RFont4::kShapedGlyphCodepoint));
             if (identity.codepoint <= UINT16_MAX) {
                 const uint8_t page = bytes[header.pageMapOffset + (identity.codepoint >> 8U)];
                 TEST_ASSERT_TRUE(page < header.pageTableCount);
-                const uint32_t entry = page * RFont4::kPageTableEntries
-                                     + (identity.codepoint & 0xFFU);
-                TEST_ASSERT_EQUAL_UINT16(glyphIndex,
-                                         recordAt<uint16_t>(bytes, header.pageTablesOffset, entry));
+                const uint32_t entry = page * RFont4::kPageTableEntries + (identity.codepoint & 0xFFU);
+                TEST_ASSERT_EQUAL_UINT16(glyphIndex, recordAt<uint16_t>(bytes, header.pageTablesOffset, entry));
             }
             scriptMask |= UnicodeText::scriptMask(identity.codepoint);
             previousCodepoint = identity.codepoint;
@@ -68,15 +66,13 @@ namespace {
             if (glyphIndex == UINT16_MAX)
                 continue;
             TEST_ASSERT_TRUE(glyphIndex < header.glyphCount);
-            const auto identity = recordAt<RFont4::GlyphIdentityRecord>(bytes, header.identitiesOffset,
-                                                                        glyphIndex);
+            const auto identity = recordAt<RFont4::GlyphIdentityRecord>(bytes, header.identitiesOffset, glyphIndex);
             TEST_ASSERT_EQUAL_UINT16(glyphId, identity.glyphId);
         }
         return scriptMask;
     }
 
-    void validateStrike(const std::vector<uint8_t>& bytes, const RFont4::StrikeRecord& strike,
-                        uint32_t glyphCount) {
+    void validateStrike(const std::vector<uint8_t>& bytes, const RFont4::StrikeRecord& strike, uint32_t glyphCount) {
         TEST_ASSERT_TRUE(strike.bitsPerPixel == 1 || strike.bitsPerPixel == 4);
         TEST_ASSERT_TRUE(strike.bitmapEncoding == RFont4::BitmapEncoding::raw
                          || strike.bitmapEncoding == RFont4::BitmapEncoding::lz4);
@@ -84,25 +80,22 @@ namespace {
             const auto glyph = recordAt<RFont4::GlyphRecord>(bytes, strike.glyphsOffset, glyphIndex);
             const size_t decodedBytes = static_cast<size_t>(glyph.rowStride) * glyph.height;
             const size_t storedBytes = RFont4::bitmapBytes(glyph);
-            TEST_ASSERT_TRUE(static_cast<uint64_t>(glyph.bitmapOffset)
-                                 + storedBytes
-                             <= strike.bitmapSize);
+            TEST_ASSERT_TRUE(static_cast<uint64_t>(glyph.bitmapOffset) + storedBytes <= strike.bitmapSize);
             TEST_ASSERT_EQUAL_UINT8((glyph.width * strike.bitsPerPixel + 7U) / 8U, glyph.rowStride);
             if (RFont4::bitmapStoredRaw(strike, glyph)) {
                 TEST_ASSERT_EQUAL_UINT32(decodedBytes, storedBytes);
             } else {
                 std::vector<uint8_t> decoded(decodedBytes);
-                const auto encoded = std::span<const uint8_t>{bytes}.subspan(
-                    strike.bitmapOffset + glyph.bitmapOffset, storedBytes);
+                const auto encoded =
+                    std::span<const uint8_t>{bytes}.subspan(strike.bitmapOffset + glyph.bitmapOffset, storedBytes);
                 TEST_ASSERT_TRUE(RFont4::decompressLz4Block(encoded, decoded));
             }
-            TEST_ASSERT_TRUE(static_cast<uint64_t>(glyph.kernOffset) + glyph.kernCount
-                             <= strike.kerningPairCount);
+            TEST_ASSERT_TRUE(static_cast<uint64_t>(glyph.kernOffset) + glyph.kernCount <= strike.kerningPairCount);
 
             uint32_t previousRight = 0;
             for (uint32_t index = 0; index < glyph.kernCount; ++index) {
-                const auto pair = recordAt<RFont4::KerningRecord>(bytes, strike.kerningOffset,
-                                                                  glyph.kernOffset + index);
+                const auto pair =
+                    recordAt<RFont4::KerningRecord>(bytes, strike.kerningOffset, glyph.kernOffset + index);
                 TEST_ASSERT_TRUE(index == 0 || pair.rightCodepoint > previousRight);
                 previousRight = pair.rightCodepoint;
             }
@@ -115,21 +108,19 @@ namespace {
         const auto header = recordAt<RFont4::Header>(bytes, 0);
         const auto strikes = readStrikes(bytes, header);
         const auto tables = readTables(bytes, header);
-        TEST_ASSERT_TRUE(RFont4::layoutValid(header, strikes,
-                                             std::span{tables}.first(header.layoutTableCount), bytes.size()));
+        TEST_ASSERT_TRUE(RFont4::layoutValid(header, strikes, std::span{tables}.first(header.layoutTableCount),
+                                             bytes.size()));
         TEST_ASSERT_EQUAL_UINT8('\0', bytes[header.nameOffset + header.nameSize - 1]);
         const uint32_t scriptMask = validateFamilyLookup(bytes, header);
         TEST_ASSERT_BITS_HIGH(header.scriptMask & ~UnicodeText::ScriptMath, scriptMask);
         if ((header.scriptMask & UnicodeText::ScriptMath) != 0)
             TEST_ASSERT_BITS_HIGH(UnicodeText::ScriptMath, scriptMask);
         for (size_t index = 0; index < strikes.size(); ++index) {
-            TEST_ASSERT_EQUAL_UINT8(index == RFont4::kCompactStrikeIndex ? 1 : 4,
-                                    strikes[index].bitsPerPixel);
-            TEST_ASSERT_EQUAL_UINT8(
-                static_cast<uint8_t>(index == RFont4::kCompactStrikeIndex
-                                       ? RFont4::BitmapEncoding::raw
-                                       : RFont4::BitmapEncoding::lz4),
-                static_cast<uint8_t>(strikes[index].bitmapEncoding));
+            TEST_ASSERT_EQUAL_UINT8(index == RFont4::kCompactStrikeIndex ? 1 : 4, strikes[index].bitsPerPixel);
+            TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(index == RFont4::kCompactStrikeIndex
+                                                             ? RFont4::BitmapEncoding::raw
+                                                             : RFont4::BitmapEncoding::lz4),
+                                    static_cast<uint8_t>(strikes[index].bitmapEncoding));
             validateStrike(bytes, strikes[index], header.glyphCount);
         }
     }
@@ -176,11 +167,7 @@ namespace {
 
     void test_resident_metrics_avoid_file_reads_until_bitmap_rendering() {
         const std::array glyphs{
-            ui::fonts::AlphaGlyph{.width = 3,
-                                  .height = 1,
-                                  .rowStride = 1,
-                                  .xAdvance = 4,
-                                  .bitmapBytes = 1},
+            ui::fonts::AlphaGlyph{.width = 3, .height = 1, .rowStride = 1, .xAdvance = 4, .bitmapBytes = 1},
         };
         const std::array identities{ui::fonts::AlphaGlyphIdentity{'x', 7}};
         std::array<uint16_t, 8> glyphMap;
@@ -192,8 +179,7 @@ namespace {
         std::array<uint8_t, RFont4::kPageTableEntries * sizeof(uint16_t)> pageTable;
         pageTable.fill(UINT8_MAX);
         const uint16_t glyphIndex = 0;
-        std::memcpy(pageTable.data() + static_cast<size_t>('x') * sizeof(glyphIndex), &glyphIndex,
-                    sizeof(glyphIndex));
+        std::memcpy(pageTable.data() + static_cast<size_t>('x') * sizeof(glyphIndex), &glyphIndex, sizeof(glyphIndex));
         File file{std::string(1, static_cast<char>(0xA0))};
         const ui::fonts::AlphaFont font{
             .glyphs = glyphs.data(),
@@ -206,7 +192,7 @@ namespace {
             .glyphMap = reinterpret_cast<const uint8_t*>(glyphMap.data()),
             .glyphMapCount = glyphMap.size(),
             .pixelsPerEm = 2,
-            .file = std::ref(file),
+            .file = &file,
             .fileSize = 1,
             .fileStrike = {.bitmapSize = 1},
             .bitsPerPixel = 1,
@@ -281,7 +267,7 @@ namespace {
             .pageMap = pageMap.data(),
             .pageTableCount = 1,
             .pixelsPerEm = 64,
-            .file = std::ref(file),
+            .file = &file,
             .fileSize = static_cast<uint32_t>(file.size()),
             .fileStrike = {.bitmapEncoding = RFont4::BitmapEncoding::lz4,
                            .bitmapSize = static_cast<uint32_t>(file.size())},

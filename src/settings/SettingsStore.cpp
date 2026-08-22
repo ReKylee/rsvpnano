@@ -92,7 +92,7 @@ namespace settings {
                 value.interface.locale = std::move(*locale);
             else
                 value.interface.locale = "en";
-            truncate(value.network.wifiSsid, rules::kWifiSsidMaxLength);
+            truncate(value.network.ssid, rules::kWifiSsidMaxLength);
             truncate(value.updates.repositoryOwner, rules::kRepositoryOwnerMaxLength);
             truncate(value.updates.releaseTag, rules::kReleaseTagMaxLength);
         }
@@ -173,12 +173,10 @@ namespace settings {
         }
 
         sanitize(settings_);
-        lastAccepted_ = settings_;
 
         if (nvsSecrets)
             secrets_ = std::move(*nvsSecrets);
         sanitize(secrets_);
-        lastAcceptedSecrets_ = secrets_;
 
         mirrorEnabled_ = filesystem && !invalidFile;
         auto canonical = codec::encodeToml(settings_, SettingsSource::Nvs);
@@ -202,27 +200,13 @@ namespace settings {
 
     void SettingsStore::acceptChanges() {
         sanitize(settings_);
-        if (settings_ == lastAccepted_)
-            return;
-        lastAccepted_ = settings_;
         dirty_ = true;
         dirtyAtMs_ = millis();
     }
 
     void SettingsStore::acceptSecretChanges() {
         sanitize(secrets_);
-        if (secrets_ == lastAcceptedSecrets_)
-            return;
-        lastAcceptedSecrets_ = secrets_;
         secretsDirty_ = true;
-        dirtyAtMs_ = millis();
-    }
-
-    void SettingsStore::replace(DeviceSettings candidate, SettingsSource /*source*/) {
-        sanitize(candidate);
-        settings_ = std::move(candidate);
-        lastAccepted_ = settings_;
-        dirty_ = true;
         dirtyAtMs_ = millis();
     }
 

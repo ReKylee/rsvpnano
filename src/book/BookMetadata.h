@@ -24,13 +24,10 @@ struct BookTextRun {
 };
 
 struct BookMetadata {
-    std::string title;
-    std::string author;
     std::string locale;
     TextDirection baseDirection = TextDirection::automatic;
     uint32_t scriptMask = 0;
     uint32_t requiredCapabilities = 0;
-    size_t wordCount = 0;
     std::vector<ChapterMarker> chapters;
     std::vector<size_t> paragraphStarts;
     std::vector<BookTextRun> textRuns;
@@ -41,13 +38,10 @@ struct BookMetadata {
     }
 
     void clear() {
-        title.clear();
-        author.clear();
         locale.clear();
         baseDirection = TextDirection::automatic;
         scriptMask = 0;
         requiredCapabilities = 0;
-        wordCount = 0;
         chapters.clear();
         paragraphStarts.clear();
         textRuns.clear();
@@ -83,17 +77,39 @@ struct BookMetadata {
         return result != 0 || (!textRuns.empty() && value != locale) ? result : scriptMask;
     }
 
+    bool hasLocale(std::string_view value) const {
+        return !value.empty()
+            && (value == locale || std::ranges::contains(textRuns, value, &BookTextRun::locale));
+    }
+
+    template<typename Visitor>
+    void forEachLanguage(Visitor&& visitor) const {
+        if (!locale.empty())
+            visitor(std::string_view{locale}, scriptsForLocale(locale));
+        for (size_t index = 0; index < textRuns.size(); ++index) {
+            const std::string& value = textRuns[index].locale;
+            if (value.empty() || value == locale)
+                continue;
+            bool seen = false;
+            for (size_t previous = 0; previous < index; ++previous)
+                if (textRuns[previous].locale == value) {
+                    seen = true;
+                    break;
+                }
+            if (!seen)
+                visitor(std::string_view{value}, scriptsForLocale(value));
+        }
+    }
+
     bool requiresBidi(size_t firstWord, size_t lastWord) const {
         if (firstWord >= lastWord)
             return false;
         if (textRuns.empty())
-            return (requiredCapabilities & UnicodeText::CapabilityBidi) != 0
-                || baseDirection == TextDirection::rtl;
+            return (requiredCapabilities & UnicodeText::CapabilityBidi) != 0 || baseDirection == TextDirection::rtl;
 
         const auto needsBidi = [this](const BookTextRun* run) {
-            const TextDirection direction = run != nullptr && run->direction != TextDirection::automatic
-                                              ? run->direction
-                                              : baseDirection;
+            const TextDirection direction =
+                run != nullptr && run->direction != TextDirection::automatic ? run->direction : baseDirection;
             const uint32_t scripts = run != nullptr ? run->scriptMask : scriptMask;
             return direction == TextDirection::rtl
                 || (scripts & (UnicodeText::ScriptHebrew | UnicodeText::ScriptArabic)) != 0;

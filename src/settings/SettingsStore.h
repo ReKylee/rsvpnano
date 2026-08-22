@@ -36,7 +36,6 @@ namespace settings {
 
         void acceptChanges();
         void acceptSecretChanges();
-        void replace(DeviceSettings candidate, SettingsSource source);
         void update(uint32_t nowMs);
         SettingsResult<> flush();
         void closeNvs();
@@ -54,9 +53,7 @@ namespace settings {
         Preferences preferences_;
         fs::FS* filesystem_ = nullptr;
         DeviceSettings settings_;
-        DeviceSettings lastAccepted_;
         DeviceSecrets secrets_;
-        DeviceSecrets lastAcceptedSecrets_;
         bool nvsOpen_ = false;
         bool mirrorEnabled_ = false;
         bool dirty_ = false;

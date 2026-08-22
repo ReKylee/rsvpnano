@@ -34,18 +34,17 @@ namespace {
 } // namespace
 
 void CompanionApi::storeNetwork(std::string ssid, std::string password) {
-    settings::DeviceSettings next = settingsStore_.settings();
-    next.network.wifiSsid = std::move(ssid);
-    settingsStore_.replace(std::move(next), settings::SettingsSource::Companion);
+    settingsStore_.settings().network.ssid = std::move(ssid);
+    settingsStore_.acceptChanges();
     settingsStore_.secrets().wifiPassword = std::move(password);
     settingsStore_.acceptSecretChanges();
     networkScreen_.begin(settingsStore_);
     networkScreen_.startupCheckPending = false;
 }
 
-companion::api::Result<companion::api::NetworkResponse> CompanionApi::getNetwork(httpd_req_t& request) {
+companion::api::Result<const settings::NetworkSettings*> CompanionApi::getNetwork(httpd_req_t& request) {
     (void) request;
-    return companion::api::NetworkResponse{settingsStore_.settings().network.wifiSsid};
+    return &settingsStore_.settings().network;
 }
 
 companion::api::Result<> CompanionApi::putNetwork(httpd_req_t& request) {

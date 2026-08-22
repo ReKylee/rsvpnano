@@ -26,14 +26,13 @@ class FontCatalog {
 public:
     struct Face {
         std::reference_wrapper<const ui::fonts::AlphaFont> raster;
-        std::optional<std::reference_wrapper<TextShaping::Shaper>> shaper;
+        TextShaping::Shaper* shaper = nullptr;
     };
 
     struct Family {
         std::string id;
         std::string label;
         std::string locales;
-        std::string path;
         bool builtIn = false;
         bool shaping = false;
         uint32_t scriptMask = 0;
@@ -71,12 +70,12 @@ public:
     FontCatalog();
 
     void loadFromSd();
-    std::expected<Family, std::string> install(std::string_view stagedPath);
+    std::expected<std::reference_wrapper<const Family>, std::string> install(std::string_view stagedPath);
     std::expected<void, std::string> remove(std::string_view id);
     std::span<const Family> families() const {
         return families_;
     }
-    std::optional<std::reference_wrapper<const Family>> find(std::string_view id) const;
+    const Family* find(std::string_view id) const;
     Face loadFace(size_t familyIndex, size_t sizeIndex);
     void clearLoaded();
 #if defined(RSVP_BENCHMARK_MODE)
@@ -88,8 +87,8 @@ public:
         return fileCache_ ? fileCache_->stats() : ui::fonts::RFontFileCache::Stats{};
     }
 #endif
-    static size_t selectFamily(std::span<const Family> families, std::string_view requested,
-                               std::string_view locale, uint32_t requiredScripts) {
+    static size_t selectFamily(std::span<const Family> families, std::string_view requested, std::string_view locale,
+                               uint32_t requiredScripts) {
         if (families.empty())
             return 0;
         auto selected = std::ranges::find_if(families, [&](const Family& family) {
@@ -107,8 +106,8 @@ public:
         }
         if (selected == families.end()) {
             const auto requestedFamily = std::ranges::find(families, requested, &Family::id);
-            const uint32_t missing = requiredScripts
-                                   & ~(requestedFamily == families.end() ? 0U : requestedFamily->scriptMask);
+            const uint32_t missing =
+                requiredScripts & ~(requestedFamily == families.end() ? 0U : requestedFamily->scriptMask);
             selected = std::ranges::find_if(families, [&](const Family& family) {
                 return family.supportsAny(missing);
             });
@@ -144,8 +143,9 @@ private:
 
     void reset();
     std::expected<std::reference_wrapper<LoadedFamily>, std::string> loadRuntimeFamily(size_t familyIndex);
-    std::expected<std::reference_wrapper<const ui::fonts::AlphaFont>, std::string>
-    loadRuntimeStrike(LoadedFamily& family, size_t sizeIndex);
+    std::expected<std::reference_wrapper<const ui::fonts::AlphaFont>, std::string> loadRuntimeStrike(LoadedFamily&
+                                                                                                         family,
+                                                                                                     size_t sizeIndex);
     static std::string normalizeId(std::string_view value);
 
     std::vector<Family> families_;

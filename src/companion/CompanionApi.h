@@ -4,9 +4,11 @@
 #include <esp_http_server.h>
 #include <esp_log.h>
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -42,7 +44,6 @@ public:
             focusScreen_(focusScreen) {}
 
     bool begin();
-    bool update();
     void end();
     [[nodiscard]] bool active() const;
     [[nodiscard]] std::string_view statusLine1() const;
@@ -50,36 +51,40 @@ public:
 
 private:
     using FeedList = std::vector<std::string>;
-    using FocusTimerList = std::vector<focus::Timer>;
     using OperationResult = std::expected<void, std::string>;
 
     // Network and server lifecycle
     OperationResult startStation();
     OperationResult startAccessPoint();
+    OperationResult startNetworkEvents();
+    void stopNetworkEvents();
+    void queueNetworkState();
+    static void applyNetworkState(void* context);
     OperationResult startMdns();
     void stopMdns();
     OperationResult startServer();
     void stopServer();
+    void drainServer();
+    static void notifyServerDrained(void* context);
 
     // Device
     companion::api::Result<companion::api::DeviceInfo> getDevice(httpd_req_t& request);
 
     // Library
-    companion::api::Result<std::vector<companion::api::LibraryItem>> getLibrary(httpd_req_t& request);
-    companion::api::Result<companion::api::Located<companion::api::LibraryItem>> postLibraryItem(httpd_req_t& request);
+    companion::api::Result<size_t> installLibraryItem(httpd_req_t& request);
     companion::api::Result<> deleteLibraryItem(httpd_req_t& request);
     companion::api::Result<> putBookPosition(httpd_req_t& request);
     companion::api::Result<> putBookLanguageFonts(httpd_req_t& request);
 
     // Themes, fonts, and locales
-    companion::api::Result<std::vector<companion::api::ThemeSummary>> getThemes(httpd_req_t& request);
-    companion::api::Result<companion::api::Located<companion::api::ThemeSummary>> postTheme(httpd_req_t& request);
+    companion::api::Result<std::span<const ui::themes::Theme>> getThemes(httpd_req_t& request);
+    companion::api::Result<companion::api::Located<ui::themes::Theme>> postTheme(httpd_req_t& request);
     companion::api::Result<> deleteTheme(httpd_req_t& request);
-    companion::api::Result<std::vector<companion::api::FontSummary>> getFonts(httpd_req_t& request);
-    companion::api::Result<companion::api::Located<companion::api::FontSummary>> postFont(httpd_req_t& request);
+    companion::api::Result<std::span<const FontCatalog::Family>> getFonts(httpd_req_t& request);
+    companion::api::Result<companion::api::Located<FontCatalog::Family>> postFont(httpd_req_t& request);
     companion::api::Result<> deleteFont(httpd_req_t& request);
-    companion::api::Result<std::vector<companion::api::LocaleSummary>> getLocales(httpd_req_t& request);
-    companion::api::Result<companion::api::Located<companion::api::LocaleSummary>> postLocale(httpd_req_t& request);
+    companion::api::Result<std::span<const locales::InstalledPack>> getLocales(httpd_req_t& request);
+    companion::api::Result<companion::api::Located<locales::InstalledPack>> postLocale(httpd_req_t& request);
     companion::api::Result<> deleteLocale(httpd_req_t& request);
 
     // Active appearance selections
@@ -88,21 +93,23 @@ private:
     companion::api::Result<> putLocaleSelection(httpd_req_t& request);
 
     // Reader settings
-    companion::api::Result<companion::api::SettingsResponse> getSettings(httpd_req_t& request);
     companion::api::Result<> patchReadingSettings(httpd_req_t& request);
     companion::api::Result<> patchDisplaySettings(httpd_req_t& request);
     companion::api::Result<> patchUpdateSettings(httpd_req_t& request);
 
     // Network configuration and reader content
-    companion::api::Result<companion::api::NetworkResponse> getNetwork(httpd_req_t& request);
+    companion::api::Result<const settings::NetworkSettings*> getNetwork(httpd_req_t& request);
     companion::api::Result<> putNetwork(httpd_req_t& request);
     companion::api::Result<> deleteNetwork(httpd_req_t& request);
     companion::api::Result<FeedList> getFeeds(httpd_req_t& request);
     companion::api::Result<> putFeeds(httpd_req_t& request);
-    companion::api::Result<FocusTimerList> getFocusTimers(httpd_req_t& request);
+    companion::api::Result<std::span<const focus::Timer>> getFocusTimers(httpd_req_t& request);
     companion::api::Result<> putFocusTimers(httpd_req_t& request);
 
     // HTTP transport
+    static esp_err_t handleLibrary(httpd_req_t* request);
+    static esp_err_t handleLibraryInstall(httpd_req_t* request);
+    static esp_err_t handleSettings(httpd_req_t* request);
     static esp_err_t handleNotFound(httpd_req_t* request, httpd_err_code_t error);
 
     template<auto endpoint>
@@ -113,13 +120,14 @@ private:
         auto* self = static_cast<CompanionApi*>(httpd_get_global_user_ctx(request->handle));
         if (self == nullptr)
             return ESP_ERR_INVALID_STATE;
+        if (!self->active())
+            return ESP_ERR_INVALID_STATE;
 
         if (request->content_len != 0 && (request->method == HTTP_GET || request->method == HTTP_DELETE)) {
             return self->sendError(*request,
                                    companion::api::httpError(HTTP_CODE_BAD_REQUEST, "unexpected_body",
                                                              "This endpoint does not accept a request body",
-                                                             std::nullopt,
-                                                             companion::api::ConnectionPolicy::Close));
+                                                             std::nullopt, companion::api::ConnectionPolicy::Close));
         }
 
         auto result = (self->*endpoint)(*request);
@@ -138,6 +146,8 @@ private:
 
     esp_err_t sendJson(httpd_req_t& request, t_http_codes status, std::string_view json,
                        companion::api::ConnectionPolicy connection = companion::api::ConnectionPolicy::KeepAlive);
+    esp_err_t sendLibrary(httpd_req_t& request);
+    esp_err_t sendSettings(httpd_req_t& request);
     esp_err_t sendError(httpd_req_t& request, companion::api::HttpError error);
     esp_err_t sendNoContent(httpd_req_t& request);
 
@@ -145,11 +155,13 @@ private:
     companion::api::Result<std::string> encodeResponse(const T& data) {
         std::string json;
         return companion::api::encode(data, json)
-            .transform([&json] { return std::move(json); })
+            .transform([&json] {
+                return std::move(json);
+            })
             .transform_error([](std::string message) {
                 ESP_LOGE("companion", "response encode failed: %s", message.c_str());
-                return companion::api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR,
-                                                 "encode_failed", "Response could not be encoded");
+                return companion::api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR, "encode_failed",
+                                                 "Response could not be encoded");
             });
     }
 
@@ -163,7 +175,7 @@ private:
 
     template<typename T>
     esp_err_t sendLocated(httpd_req_t& request, companion::api::Located<T> response) {
-        auto json = encodeResponse(response.value);
+        auto json = encodeResponse(response.value.get());
         if (!json)
             return sendError(request, std::move(json.error()));
         if (const esp_err_t error = httpd_resp_set_hdr(&request, "Location", response.location.c_str());
@@ -193,15 +205,16 @@ private:
                                                 std::string_view suffix = {}) const;
 
     // Shared domain helpers
-    companion::api::Result<companion::api::LibraryItem> bookResponse(std::string_view path);
-    [[nodiscard]] std::optional<companion::api::LibraryItem> readBook(size_t index, uint32_t bytes);
+    companion::api::Result<std::string> encodeBook(size_t index);
     companion::api::Result<std::string> readSelectionId(httpd_req_t& request);
     void storeNetwork(std::string ssid, std::string password);
     [[nodiscard]] std::string deviceSuffix() const;
-    [[nodiscard]] std::string bookIdForPath(std::string_view path) const;
-    [[nodiscard]] std::optional<std::string> findBookPath(std::string_view id) const;
+    [[nodiscard]] std::optional<size_t> findBookIndex(std::string_view id) const;
 
     httpd_handle_t server_ = nullptr;
+    std::atomic_bool active_ = false;
+    std::atomic_bool stationConnected_ = false;
+    std::mutex networkStateMutex_;
     std::string accessPointSsid_;
     settings::SettingsStore& settingsStore_;
     StorageManager& storage_;
@@ -214,6 +227,8 @@ private:
     screens::FocusScreen& focusScreen_;
     std::string statusLine1_ = "Idle";
     std::string statusLine2_;
-    bool stationConnected_ = false;
+    std::string stationUrl_;
+    size_t wifiEventId_ = 0;
+    bool stationPausedForAccessPoint_ = false;
     bool mdnsStarted_ = false;
 };

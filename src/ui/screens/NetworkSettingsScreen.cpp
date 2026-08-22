@@ -12,16 +12,15 @@ namespace screens {
 
     void NetworkScreen::begin(settings::SettingsStore& store) {
         const auto& persisted = store.settings();
-        ssid = persisted.network.wifiSsid;
-        password_ = store.secrets().wifiPassword;
-        owner = persisted.updates.repositoryOwner;
-        tag = persisted.updates.releaseTag;
-        ssidStored = !ssid.empty();
-        startupCheckPending = persisted.updates.checkOnStartup && !ssid.empty();
+        password_.clear();
+        selectedNetworkIndex_ = networks_.size();
+        startupCheckPending = persisted.updates.checkOnStartup && !persisted.network.ssid.empty();
     }
 
     Action NetworkScreen::draw(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
         const ui::Rect content = detail::content(ui);
+        const auto& settings = store.settings();
+        const bool ssidStored = !settings.network.ssid.empty();
         constexpr int16_t gap = 4;
         constexpr int16_t backWidth = 56;
         const int16_t rowHeight = static_cast<int16_t>((content.h - gap * 3) / 4);
@@ -30,7 +29,8 @@ namespace screens {
         if (ui.setting({static_cast<int16_t>(content.x + backWidth + gap), content.y,
                         static_cast<int16_t>(content.w - backWidth - gap), rowHeight},
                        ui.text(UiText::Network),
-                       ssid.empty() ? ui.text(UiText::NotSet) : std::string_view{ssid}, ui::SettingLayout::Inline)) {
+                       ssidStored ? std::string_view{settings.network.ssid} : ui.text(UiText::NotSet),
+                       ui::SettingLayout::Inline)) {
             openWifiScan();
             screen = Screen::WifiScan;
         }
@@ -43,23 +43,25 @@ namespace screens {
         const int16_t thirdRowY = static_cast<int16_t>(secondRowY + rowHeight + gap);
         const int16_t halfWidth = static_cast<int16_t>((content.w - gap) / 2);
         if (ui.setting({content.x, thirdRowY, halfWidth, rowHeight}, ui.text(UiText::OtaOwner),
-                       owner.empty() ? ui.text(UiText::Default) : std::string_view{owner})) {
+                       settings.updates.repositoryOwner.empty() ? ui.text(UiText::Default)
+                                                                : std::string_view{settings.updates.repositoryOwner})) {
             editField_ = EditField::Owner;
-            editValue_ = owner;
+            editValue_ = settings.updates.repositoryOwner;
             keyboard_ = {};
             screen = Screen::NetworkEdit;
         }
         if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), thirdRowY, halfWidth, rowHeight},
-                       ui.text(UiText::ReleaseTag), tag.empty() ? ui.text(UiText::Latest) : std::string_view{tag})) {
+                       ui.text(UiText::ReleaseTag),
+                       settings.updates.releaseTag.empty() ? ui.text(UiText::Latest)
+                                                           : std::string_view{settings.updates.releaseTag})) {
             editField_ = EditField::Tag;
-            editValue_ = tag;
+            editValue_ = settings.updates.releaseTag;
             keyboard_ = {};
             screen = Screen::NetworkEdit;
         }
 
         const int16_t actionsY = static_cast<int16_t>(thirdRowY + rowHeight + gap);
-        ui::Grid actions{{content.x, actionsY, content.w,
-                          static_cast<int16_t>(content.y + content.h - actionsY)},
+        ui::Grid actions{{content.x, actionsY, content.w, static_cast<int16_t>(content.y + content.h - actionsY)},
                          static_cast<uint8_t>(ssidStored ? 3 : 2),
                          static_cast<int16_t>(content.y + content.h - actionsY),
                          gap};
@@ -68,10 +70,8 @@ namespace screens {
         if (ui.button(actions.next(), ui.text(UiText::FirmwareUpdates)))
             screen = Screen::Ota;
         if (ssidStored && ui.button(actions.next(), ui.text(UiText::ForgetNetwork))) {
-            ssid.clear();
             password_.clear();
-            saveNetwork(store);
-            ssidStored = false;
+            saveNetwork(store, {});
             startupCheckPending = false;
         }
         return Action::None;
@@ -80,6 +80,7 @@ namespace screens {
     void NetworkScreen::openWifiScan() {
         closeWifi();
         networkCount_ = 0;
+        selectedNetworkIndex_ = networks_.size();
         scanState_ = WifiScanState::Idle;
     }
 
@@ -150,7 +151,8 @@ namespace screens {
                 return;
             }
             ui::Column column{{static_cast<int16_t>(content.x + backWidth + gap), content.y,
-                               static_cast<int16_t>(content.w - backWidth - gap), content.h}, 8};
+                               static_cast<int16_t>(content.w - backWidth - gap), content.h},
+                              8};
             ui.label(column.next(56),
                      ui.text(scanState_ == WifiScanState::Failed ? UiText::ScanFailed : UiText::NoNetworksFound), 2,
                      ui::themes::ColorRole::Muted, ui::TextAlign::Center);
@@ -174,18 +176,16 @@ namespace screens {
             const WifiNetwork& network = networks_[index];
             const std::string signal = std::to_string(network.rssi) + " dBm";
             if (ui.setting(grid.next(), network.ssid, signal, ui::SettingLayout::Inline)) {
-                const bool savedNetwork = network.ssid == ssid;
-                ssid = network.ssid;
+                const bool savedNetwork = network.ssid == store.settings().network.ssid;
                 if (!network.secured) {
                     password_.clear();
-                    saveNetwork(store);
-                    ssidStored = true;
+                    saveNetwork(store, network.ssid);
                     closeWifi();
                     screen = Screen::NetworkSettings;
                     return;
                 }
-                if (!savedNetwork)
-                    password_.clear();
+                password_ = savedNetwork ? store.secrets().wifiPassword : std::string{};
+                selectedNetworkIndex_ = index;
                 keyboard_ = {};
                 connectionFailed_ = false;
                 screen = Screen::WifiConnect;
@@ -196,6 +196,11 @@ namespace screens {
 
     bool NetworkScreen::drawWifiConnect(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
         const ui::Rect content = detail::content(ui);
+        if (selectedNetworkIndex_ >= networkCount_) {
+            screen = Screen::WifiScan;
+            return false;
+        }
+        const std::string& ssid = networks_[selectedNetworkIndex_].ssid;
         const std::string_view label = connectionFailed_ ? ui.text(UiText::ConnectionFailed) : std::string_view{ssid};
         const ui::KeyboardAction action = ui.keyboard(content, password_, 63, keyboard_, label, true);
         if (action == ui::KeyboardAction::Cancel) {
@@ -215,8 +220,7 @@ namespace screens {
             connectionFailed_ = true;
             return true;
         }
-        saveNetwork(store);
-        ssidStored = true;
+        saveNetwork(store, ssid);
         screen = Screen::NetworkSettings;
         return true;
     }
@@ -230,19 +234,17 @@ namespace screens {
             screen = Screen::NetworkSettings;
         } else if (action == ui::KeyboardAction::Submit) {
             if (editField_ == EditField::Owner) {
-                owner = editValue_;
-                store.settings().updates.repositoryOwner = owner;
+                store.settings().updates.repositoryOwner = editValue_;
             } else {
-                tag = editValue_;
-                store.settings().updates.releaseTag = tag;
+                store.settings().updates.releaseTag = editValue_;
             }
             store.acceptChanges();
             screen = Screen::NetworkSettings;
         }
     }
 
-    void NetworkScreen::saveNetwork(settings::SettingsStore& store) {
-        store.settings().network.wifiSsid = ssid;
+    void NetworkScreen::saveNetwork(settings::SettingsStore& store, std::string_view ssid) {
+        store.settings().network.ssid = ssid;
         store.secrets().wifiPassword = password_;
         store.acceptChanges();
         store.acceptSecretChanges();

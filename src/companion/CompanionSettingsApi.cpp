@@ -1,25 +1,45 @@
 #include "companion/CompanionApi.h"
 
+#include <glaze/json.hpp>
+
 #include <utility>
 
 #include "board/BoardDisplay.h"
 
 namespace api = companion::api;
 
-api::Result<api::SettingsResponse> CompanionApi::getSettings(httpd_req_t& request) {
-    (void) request;
+esp_err_t CompanionApi::handleSettings(httpd_req_t* request) {
+    if (request == nullptr || request->handle == nullptr)
+        return ESP_ERR_INVALID_ARG;
+
+    auto* self = static_cast<CompanionApi*>(httpd_get_global_user_ctx(request->handle));
+    if (self == nullptr || !self->active())
+        return ESP_ERR_INVALID_STATE;
+    if (request->content_len != 0) {
+        return self->sendError(*request, api::httpError(HTTP_CODE_BAD_REQUEST, "unexpected_body",
+                                                        "This endpoint does not accept a request body", std::nullopt,
+                                                        api::ConnectionPolicy::Close));
+    }
+    return self->sendSettings(*request);
+}
+
+esp_err_t CompanionApi::sendSettings(httpd_req_t& request) {
     const auto& settings = settingsStore_.settings();
-    return api::SettingsResponse{settings.reading, settings.interface, settings.updates};
+    const auto response =
+        glz::obj{"reading", settings.reading, "interface", settings.interface, "updates", settings.updates};
+    auto json = encodeResponse(response);
+    if (!json)
+        return sendError(request, std::move(json.error()));
+    return sendJson(request, HTTP_CODE_OK, *json);
 }
 
 api::Result<> CompanionApi::patchReadingSettings(httpd_req_t& request) {
     return readJson(request, settings::kMaxSettingsBytes, "Settings payload exceeds 8 KB",
                     settingsStore_.settings().reading)
         .transform([this](settings::ReadingSettings reading) {
-            settings::DeviceSettings next = settingsStore_.settings();
-            reading.typography.fontId = next.reading.typography.fontId;
-            next.reading = std::move(reading);
-            settingsStore_.replace(std::move(next), settings::SettingsSource::Companion);
+            reading.typography.fontId = settingsStore_.settings().reading.typography.fontId;
+            settingsStore_.settings().reading = std::move(reading);
+            settingsStore_.acceptChanges();
             readerScreen_.refreshTypography(settingsStore_.settings().reading, readerScreen_.session.state.overrides);
         });
 }
@@ -28,11 +48,10 @@ api::Result<> CompanionApi::patchDisplaySettings(httpd_req_t& request) {
     return readJson(request, settings::kMaxSettingsBytes, "Display settings payload exceeds 8 KB",
                     settingsStore_.settings().interface)
         .transform([this](settings::InterfaceSettings interface) {
-            settings::DeviceSettings next = settingsStore_.settings();
-            interface.locale = next.interface.locale;
-            interface.selectedThemeId = next.interface.selectedThemeId;
-            next.interface = std::move(interface);
-            settingsStore_.replace(std::move(next), settings::SettingsSource::Companion);
+            interface.locale = settingsStore_.settings().interface.locale;
+            interface.selectedThemeId = settingsStore_.settings().interface.selectedThemeId;
+            settingsStore_.settings().interface = std::move(interface);
+            settingsStore_.acceptChanges();
             Board::Display::setBrightness(settingsStore_.settings().interface.brightnessPercent);
         });
 }
@@ -41,9 +60,8 @@ api::Result<> CompanionApi::patchUpdateSettings(httpd_req_t& request) {
     return readJson(request, settings::kMaxSettingsBytes, "Update settings payload exceeds 8 KB",
                     settingsStore_.settings().updates)
         .transform([this](settings::UpdateSettings updates) {
-            settings::DeviceSettings next = settingsStore_.settings();
-            next.updates = std::move(updates);
-            settingsStore_.replace(std::move(next), settings::SettingsSource::Companion);
+            settingsStore_.settings().updates = std::move(updates);
+            settingsStore_.acceptChanges();
             networkScreen_.begin(settingsStore_);
             networkScreen_.startupCheckPending = false;
         });

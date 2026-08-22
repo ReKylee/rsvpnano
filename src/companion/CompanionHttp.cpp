@@ -4,6 +4,8 @@
 #include <glaze/net/url.hpp>
 
 #include <array>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -19,8 +21,7 @@ namespace {
         return uri.substr(0, uri.find('?'));
     }
 
-    [[nodiscard]] httpd_uri_t makeRoute(const char* uri, httpd_method_t method,
-                                        esp_err_t (*handler)(httpd_req_t*)) {
+    [[nodiscard]] httpd_uri_t makeRoute(const char* uri, httpd_method_t method, esp_err_t (*handler)(httpd_req_t*)) {
         httpd_uri_t route{};
         route.uri = uri;
         route.method = method;
@@ -54,50 +55,42 @@ namespace {
 } // namespace
 
 CompanionApi::OperationResult CompanionApi::startServer() {
+    // Keep the HTTP owner task for the firmware lifetime. Stopping it while an already-dispatched
+    // Wi-Fi event is queueing work can invalidate the server handle during sync shutdown.
+    if (server_ != nullptr)
+        return {};
+
     const std::array routes{
         makeRoute("/api/v2/device", HTTP_GET, &CompanionApi::handle<&CompanionApi::getDevice>),
-        makeRoute("/api/v2/library", HTTP_GET, &CompanionApi::handle<&CompanionApi::getLibrary>),
-        makeRoute("/api/v2/library", HTTP_POST, &CompanionApi::handle<&CompanionApi::postLibraryItem>),
-        makeRoute("/api/v2/library/{id}", HTTP_DELETE,
-                  &CompanionApi::handle<&CompanionApi::deleteLibraryItem>),
-        makeRoute("/api/v2/library/{id}/position", HTTP_PUT,
-                  &CompanionApi::handle<&CompanionApi::putBookPosition>),
+        makeRoute("/api/v2/library", HTTP_GET, &CompanionApi::handleLibrary),
+        makeRoute("/api/v2/library", HTTP_POST, &CompanionApi::handleLibraryInstall),
+        makeRoute("/api/v2/library/{id}", HTTP_DELETE, &CompanionApi::handle<&CompanionApi::deleteLibraryItem>),
+        makeRoute("/api/v2/library/{id}/position", HTTP_PUT, &CompanionApi::handle<&CompanionApi::putBookPosition>),
         makeRoute("/api/v2/library/{id}/language-fonts", HTTP_PUT,
                   &CompanionApi::handle<&CompanionApi::putBookLanguageFonts>),
         makeRoute("/api/v2/themes", HTTP_GET, &CompanionApi::handle<&CompanionApi::getThemes>),
         makeRoute("/api/v2/themes", HTTP_POST, &CompanionApi::handle<&CompanionApi::postTheme>),
-        makeRoute("/api/v2/themes/{id}", HTTP_DELETE,
-                  &CompanionApi::handle<&CompanionApi::deleteTheme>),
+        makeRoute("/api/v2/themes/{id}", HTTP_DELETE, &CompanionApi::handle<&CompanionApi::deleteTheme>),
         makeRoute("/api/v2/fonts", HTTP_GET, &CompanionApi::handle<&CompanionApi::getFonts>),
         makeRoute("/api/v2/fonts", HTTP_POST, &CompanionApi::handle<&CompanionApi::postFont>),
-        makeRoute("/api/v2/fonts/{id}", HTTP_DELETE,
-                  &CompanionApi::handle<&CompanionApi::deleteFont>),
+        makeRoute("/api/v2/fonts/{id}", HTTP_DELETE, &CompanionApi::handle<&CompanionApi::deleteFont>),
         makeRoute("/api/v2/locales", HTTP_GET, &CompanionApi::handle<&CompanionApi::getLocales>),
         makeRoute("/api/v2/locales", HTTP_POST, &CompanionApi::handle<&CompanionApi::postLocale>),
-        makeRoute("/api/v2/locales/{id}", HTTP_DELETE,
-                  &CompanionApi::handle<&CompanionApi::deleteLocale>),
-        makeRoute("/api/v2/appearance/theme", HTTP_PUT,
-                  &CompanionApi::handle<&CompanionApi::putThemeSelection>),
-        makeRoute("/api/v2/appearance/font", HTTP_PUT,
-                  &CompanionApi::handle<&CompanionApi::putFontSelection>),
-        makeRoute("/api/v2/appearance/locale", HTTP_PUT,
-                  &CompanionApi::handle<&CompanionApi::putLocaleSelection>),
-        makeRoute("/api/v2/settings", HTTP_GET, &CompanionApi::handle<&CompanionApi::getSettings>),
-        makeRoute("/api/v2/settings/reading", HTTP_PATCH,
-                  &CompanionApi::handle<&CompanionApi::patchReadingSettings>),
-        makeRoute("/api/v2/settings/display", HTTP_PATCH,
-                  &CompanionApi::handle<&CompanionApi::patchDisplaySettings>),
-        makeRoute("/api/v2/settings/updates", HTTP_PATCH,
-                  &CompanionApi::handle<&CompanionApi::patchUpdateSettings>),
+        makeRoute("/api/v2/locales/{id}", HTTP_DELETE, &CompanionApi::handle<&CompanionApi::deleteLocale>),
+        makeRoute("/api/v2/appearance/theme", HTTP_PUT, &CompanionApi::handle<&CompanionApi::putThemeSelection>),
+        makeRoute("/api/v2/appearance/font", HTTP_PUT, &CompanionApi::handle<&CompanionApi::putFontSelection>),
+        makeRoute("/api/v2/appearance/locale", HTTP_PUT, &CompanionApi::handle<&CompanionApi::putLocaleSelection>),
+        makeRoute("/api/v2/settings", HTTP_GET, &CompanionApi::handleSettings),
+        makeRoute("/api/v2/settings/reading", HTTP_PATCH, &CompanionApi::handle<&CompanionApi::patchReadingSettings>),
+        makeRoute("/api/v2/settings/display", HTTP_PATCH, &CompanionApi::handle<&CompanionApi::patchDisplaySettings>),
+        makeRoute("/api/v2/settings/updates", HTTP_PATCH, &CompanionApi::handle<&CompanionApi::patchUpdateSettings>),
         makeRoute("/api/v2/network", HTTP_GET, &CompanionApi::handle<&CompanionApi::getNetwork>),
         makeRoute("/api/v2/network", HTTP_PUT, &CompanionApi::handle<&CompanionApi::putNetwork>),
-        makeRoute("/api/v2/network", HTTP_DELETE,
-                  &CompanionApi::handle<&CompanionApi::deleteNetwork>),
+        makeRoute("/api/v2/network", HTTP_DELETE, &CompanionApi::handle<&CompanionApi::deleteNetwork>),
         makeRoute("/api/v2/feeds", HTTP_GET, &CompanionApi::handle<&CompanionApi::getFeeds>),
         makeRoute("/api/v2/feeds", HTTP_PUT, &CompanionApi::handle<&CompanionApi::putFeeds>),
         makeRoute("/api/v2/focus-timers", HTTP_GET, &CompanionApi::handle<&CompanionApi::getFocusTimers>),
-        makeRoute("/api/v2/focus-timers", HTTP_PUT,
-                  &CompanionApi::handle<&CompanionApi::putFocusTimers>),
+        makeRoute("/api/v2/focus-timers", HTTP_PUT, &CompanionApi::handle<&CompanionApi::putFocusTimers>),
     };
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -147,6 +140,8 @@ esp_err_t CompanionApi::handleNotFound(httpd_req_t* request, httpd_err_code_t er
     auto* self = static_cast<CompanionApi*>(httpd_get_global_user_ctx(request->handle));
     if (self == nullptr)
         return ESP_ERR_INVALID_STATE;
+    if (!self->active())
+        return ESP_ERR_INVALID_STATE;
 
     const api::ConnectionPolicy connection =
         request->content_len == 0 ? api::ConnectionPolicy::KeepAlive : api::ConnectionPolicy::Close;
@@ -159,6 +154,25 @@ void CompanionApi::stopServer() {
         httpd_stop(server_);
         server_ = nullptr;
     }
+}
+
+void CompanionApi::notifyServerDrained(void* context) {
+    xTaskNotifyGive(static_cast<TaskHandle_t>(context));
+}
+
+void CompanionApi::drainServer() {
+    if (server_ == nullptr)
+        return;
+
+    const TaskHandle_t waitingTask = xTaskGetCurrentTaskHandle();
+    ulTaskNotifyTake(pdTRUE, 0);
+    if (const esp_err_t error = httpd_queue_work(server_, &CompanionApi::notifyServerDrained, waitingTask);
+        error != ESP_OK) {
+        ESP_LOGW("companion", "could not drain HTTP task: %s", esp_err_to_name(error));
+        return;
+    }
+    if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(5000)) == 0)
+        ESP_LOGW("companion", "HTTP task drain timed out");
 }
 
 esp_err_t CompanionApi::sendJson(httpd_req_t& request, t_http_codes status, std::string_view json,
@@ -266,15 +280,13 @@ api::Result<std::string> CompanionApi::routeId(const httpd_req_t& request, std::
                                                std::string_view suffix) const {
     const std::string_view path = requestPath(request);
     if (!path.starts_with(prefix) || !path.ends_with(suffix) || path.size() <= prefix.size() + suffix.size()) {
-        return std::unexpected(api::httpError(HTTP_CODE_BAD_REQUEST, "missing_field", "Resource id is required",
-                                              "id"));
+        return std::unexpected(api::httpError(HTTP_CODE_BAD_REQUEST, "missing_field", "Resource id is required", "id"));
     }
 
     const std::string_view encoded = path.substr(prefix.size(), path.size() - prefix.size() - suffix.size());
     std::string id = glz::url_decode(encoded);
     if (id.empty() || id.contains('/')) {
-        return std::unexpected(api::httpError(HTTP_CODE_BAD_REQUEST, "invalid_field", "Resource id is invalid",
-                                              "id"));
+        return std::unexpected(api::httpError(HTTP_CODE_BAD_REQUEST, "invalid_field", "Resource id is invalid", "id"));
     }
     return id;
 }

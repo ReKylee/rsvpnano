@@ -2,38 +2,23 @@
 
 #include <algorithm>
 #include <ranges>
-#include <vector>
 
 namespace screens {
     bool bookFonts(ui::Context& ui, const BookMetadata& metadata, settings::ReadingOverrides& overrides,
                    const locales::Catalog& localeCatalog, FontCatalog& fonts, Screen& screen) {
-        std::vector<std::string_view> locales;
-        locales.reserve(metadata.textRuns.size() + 1);
-        const auto addLocale = [&](std::string_view locale) {
-            if (locale.empty() || std::ranges::find(locales, locale) != locales.end())
-                return;
-            locales.push_back(locale);
-        };
-        addLocale(metadata.locale);
-        for (const BookTextRun& run: metadata.textRuns)
-            addLocale(run.locale);
-        if (locales.empty())
-            addLocale("und");
-
         const ui::Rect content = detail::content(ui);
-        std::vector<std::pair<std::string_view, uint32_t>> targets;
-        targets.reserve(locales.size() + 1);
-        for (const std::string_view locale: locales) {
-            const uint32_t scripts = metadata.scriptsForLocale(locale) & ~UnicodeText::ScriptMath;
-            if (scripts != 0)
-                targets.emplace_back(locale, scripts);
-        }
+        size_t languageCount = 0;
+        metadata.forEachLanguage([&languageCount](std::string_view, uint32_t scripts) {
+            languageCount += (scripts & ~UnicodeText::ScriptMath) != 0;
+        });
+        const bool useUndetermined = languageCount == 0 && (metadata.scriptMask & ~UnicodeText::ScriptMath) != 0;
+        languageCount += useUndetermined;
         if ((metadata.scriptMask & UnicodeText::ScriptMath) != 0)
-            targets.emplace_back(settings::kMathFontTarget, UnicodeText::ScriptMath);
+            ++languageCount;
 
         constexpr int16_t gap = 4;
         const uint8_t columns = content.w >= 600 ? 4 : 3;
-        const size_t itemCount = targets.size() + 2;
+        const size_t itemCount = languageCount + 2;
         const size_t rows = (itemCount + columns - 1) / columns;
         const int16_t rowHeight = std::min<int16_t>(34, static_cast<int16_t>(
             (content.h - gap * static_cast<int16_t>(rows - 1)) / static_cast<int16_t>(rows)));
@@ -50,27 +35,27 @@ namespace screens {
         bool changed = false;
         const auto chooseFont = [&](std::string_view label, std::string_view locale, uint32_t requiredScripts,
                                     std::string_view selectedId) -> std::optional<std::string> {
-            std::vector<size_t> compatible;
-            compatible.reserve(families.size());
+            size_t active = families.size();
             for (size_t familyIndex = 0; familyIndex < families.size(); ++familyIndex) {
-                if (families[familyIndex].usableFor(locale, requiredScripts))
-                    compatible.push_back(familyIndex);
+                if (families[familyIndex].usableFor(locale, requiredScripts)
+                    && families[familyIndex].id == selectedId) {
+                    active = familyIndex;
+                    break;
+                }
             }
 
-            auto active = std::ranges::find_if(compatible,
-                                               [&](size_t index) { return families[index].id == selectedId; });
-            const std::string_view value = selectedId.empty() || active == compatible.end()
+            const std::string_view value = selectedId.empty() || active == families.size()
                                              ? ui.text(UiText::Default)
-                                             : std::string_view{families[*active].label};
-            if (!ui.setting(grid.next(), label, value, ui::SettingLayout::Inline) || compatible.empty())
+                                             : std::string_view{families[active].label};
+            if (!ui.setting(grid.next(), label, value, ui::SettingLayout::Inline))
                 return std::nullopt;
-            if (selectedId.empty() || active == compatible.end())
-                return families[compatible.front()].id;
-            ++active;
-            return active == compatible.end() ? std::string{} : families[*active].id;
+            for (size_t next = active == families.size() ? 0 : active + 1; next < families.size(); ++next)
+                if (families[next].usableFor(locale, requiredScripts))
+                    return families[next].id;
+            return active == families.size() ? std::nullopt : std::optional<std::string>{std::string{}};
         };
 
-        for (const auto& [locale, requiredScripts]: targets) {
+        const auto drawTarget = [&](std::string_view locale, uint32_t requiredScripts) {
             const auto selected = std::ranges::find(overrides.languageFonts, locale,
                                                     &settings::LanguageFont::locale);
             const std::string_view selectedId = selected == overrides.languageFonts.end()
@@ -80,7 +65,7 @@ namespace screens {
             const auto nextId = chooseFont(math ? std::string_view{"Math"} : locales::localeName(localeCatalog, locale),
                                            math ? std::string_view{} : locale, requiredScripts, selectedId);
             if (!nextId)
-                continue;
+                return;
             if (nextId->empty()) {
                 if (selected != overrides.languageFonts.end())
                     overrides.languageFonts.erase(selected);
@@ -91,7 +76,16 @@ namespace screens {
                 selected->fontId = std::move(*nextId);
             }
             changed = true;
-        }
+        };
+        metadata.forEachLanguage([&drawTarget](std::string_view locale, uint32_t scripts) {
+            scripts &= ~UnicodeText::ScriptMath;
+            if (scripts != 0)
+                drawTarget(locale, scripts);
+        });
+        if (useUndetermined)
+            drawTarget("und", metadata.scriptMask & ~UnicodeText::ScriptMath);
+        if ((metadata.scriptMask & UnicodeText::ScriptMath) != 0)
+            drawTarget(settings::kMathFontTarget, UnicodeText::ScriptMath);
         return changed;
     }
 

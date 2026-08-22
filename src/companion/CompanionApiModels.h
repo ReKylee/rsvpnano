@@ -2,15 +2,22 @@
 
 #include <glaze/json.hpp>
 
+#include <algorithm>
 #include <cstdint>
 #include <expected>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "book/BookMetadata.h"
+#include "fonts/FontCatalog.h"
+#include "locales/LocaleCatalog.h"
+#include "reader/ReadingState.h"
 #include "settings/SettingsModel.h"
+#include "ui/Theme.h"
 
 namespace companion::api {
 
@@ -21,13 +28,9 @@ namespace companion::api {
     };
 
     struct DeviceInfo {
+        std::string ssid;
         std::string firmwareVersion;
         std::string otaAsset;
-    };
-
-    struct Chapter {
-        std::string title;
-        uint32_t wordIndex = 0;
     };
 
     struct BookLanguage {
@@ -35,32 +38,14 @@ namespace companion::api {
         std::vector<std::string> scripts;
     };
 
-    struct BookMetadata {
-        std::string title;
-        std::string author;
-        uint32_t wordCount = 0;
-        std::string locale;
-        std::vector<std::string> scripts;
+    inline std::vector<BookLanguage> bookLanguages(const BookMetadata& metadata) {
         std::vector<BookLanguage> languages;
-        std::vector<Chapter> chapters;
-    };
-
-    struct BookReading {
-        uint32_t wordIndex = 0;
-        std::vector<settings::LanguageFont> languageFonts;
-    };
-
-    struct LibraryItem {
-        std::string id;
-        std::string name;
-        uint32_t bytes = 0;
-        BookMetadata metadata;
-        std::optional<BookReading> reading;
-    };
-
-    struct NetworkResponse {
-        std::string ssid;
-    };
+        languages.reserve(metadata.textRuns.size() + 1);
+        metadata.forEachLanguage([&languages](std::string_view locale, uint32_t scriptMask) {
+            languages.push_back({std::string{locale}, UnicodeText::scriptTags(scriptMask)});
+        });
+        return languages;
+    }
 
     struct NetworkUpdate {
         std::optional<std::string> ssid;
@@ -75,33 +60,8 @@ namespace companion::api {
         std::optional<uint32_t> wordIndex;
     };
 
-    struct ThemeSummary {
-        std::string id;
-        std::string name;
-    };
-
-    struct FontSummary {
-        std::string id;
-        std::string name;
-        std::vector<std::string> locales;
-        std::vector<std::string> scripts;
-        bool builtIn = false;
-    };
-
     struct BookLanguageFontsUpdate {
         std::vector<settings::LanguageFont> languageFonts;
-    };
-
-    struct LocaleSummary {
-        std::string id;
-        std::string name;
-        std::string locale;
-    };
-
-    struct SettingsResponse {
-        settings::ReadingSettings reading;
-        settings::InterfaceSettings interface;
-        settings::UpdateSettings updates;
     };
 
     template<typename T>
@@ -121,3 +81,75 @@ namespace companion::api {
     }
 
 } // namespace companion::api
+
+template<>
+struct glz::meta<ChapterMarker> {
+    using T = ChapterMarker;
+    static constexpr auto value = glz::object("title", &T::title, "wordIndex", &T::wordIndex);
+};
+
+template<>
+struct glz::meta<ui::themes::ThemeEntry> {
+    using T = ui::themes::ThemeEntry;
+    static constexpr auto readName = [](T& theme, std::string name) {
+        theme.definition.name = std::move(name);
+    };
+    static constexpr auto writeName = [](const T& theme) -> const std::string& {
+        return theme.definition.name;
+    };
+    static constexpr auto value = glz::object("id", &T::id, "name", glz::custom<readName, writeName>);
+};
+
+template<>
+struct glz::meta<FontCatalog::Family> {
+    using T = FontCatalog::Family;
+    static constexpr auto readName = [](T& family, std::string name) {
+        family.label = std::move(name);
+    };
+    static constexpr auto writeName = [](const T& family) -> const std::string& {
+        return family.label;
+    };
+    static constexpr auto readLocales = [](T&, const std::vector<std::string>&) {};
+    static constexpr auto writeLocales = [](const T& family) {
+        std::vector<std::string> locales;
+        for (size_t offset = 0; offset < family.locales.size();) {
+            const std::string_view locale{family.locales.data() + offset};
+            locales.emplace_back(locale);
+            offset += locale.size() + 1;
+        }
+        return locales;
+    };
+    static constexpr auto readScripts = [](T&, const std::vector<std::string>&) {};
+    static constexpr auto writeScripts = [](const T& family) {
+        return UnicodeText::scriptTags(family.scriptMask);
+    };
+    static constexpr auto value = glz::object("id", &T::id, "name", glz::custom<readName, writeName>, "locales",
+                                              glz::custom<readLocales, writeLocales>, "scripts",
+                                              glz::custom<readScripts, writeScripts>, "builtIn", &T::builtIn);
+};
+
+template<>
+struct glz::meta<locales::InstalledPack> {
+    using T = locales::InstalledPack;
+    static constexpr auto readId = [](T& pack, std::string id) {
+        pack.manifest.id = std::move(id);
+    };
+    static constexpr auto writeId = [](const T& pack) -> const std::string& {
+        return pack.manifest.id;
+    };
+    static constexpr auto readName = [](T& pack, std::string name) {
+        pack.manifest.nativeName = std::move(name);
+    };
+    static constexpr auto writeName = [](const T& pack) -> const std::string& {
+        return pack.manifest.nativeName;
+    };
+    static constexpr auto readLocale = [](T& pack, std::string locale) {
+        pack.manifest.locale = std::move(locale);
+    };
+    static constexpr auto writeLocale = [](const T& pack) -> const std::string& {
+        return pack.manifest.locale;
+    };
+    static constexpr auto value =
+        glz::object("id", glz::custom<readId, writeId>, "name", glz::custom<readName, writeName>, "locale",
+                    glz::custom<readLocale, writeLocale>);
+};

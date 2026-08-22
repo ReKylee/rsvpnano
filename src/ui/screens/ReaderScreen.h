@@ -29,11 +29,10 @@ namespace screens {
         void begin(const ui::themes::Theme& theme);
         void applyTheme(const ui::themes::Theme& theme);
         void refreshTypography();
-        void refreshTypography(const settings::ReadingSettings& settings,
-                               const settings::ReadingOverrides& overrides);
+        void refreshTypography(const settings::ReadingSettings& settings, const settings::ReadingOverrides& overrides);
         bool openBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, size_t index, uint32_t nowMs);
         void prepareBookOpen(Preferences& preferences, uint32_t nowMs);
-        void finishBookOpen(Preferences& preferences, size_t loadedIndex, std::string_view loadedPath, uint32_t nowMs);
+        void finishBookOpen(Preferences& preferences, uint32_t nowMs);
         void loadInitialBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, uint32_t nowMs);
         void draw(ui::Context& ui, const StorageManager& storage, const Board::Power::BatteryState& battery,
                   uint32_t nowMs);
@@ -49,15 +48,15 @@ namespace screens {
     private:
         int focusOffset(std::string_view word) const;
         int16_t wordAdvance(std::span<const BidiText::Codepoint> word) const;
-        void drawPhantom(std::string_view value, bool rightToLeft, int16_t edge, bool extendsLeft,
-                         int16_t baseline, ui::Context& ui);
+        void drawPhantom(std::string_view value, bool rightToLeft, int16_t edge, bool extendsLeft, int16_t baseline,
+                         ui::Context& ui);
         void drawWord(std::string_view word, int16_t x, int16_t baseline, int focus, ui::Context& ui);
-        void drawWord(std::span<const BidiText::Codepoint> word, int16_t x, int16_t baseline,
-                      size_t wordOffset, int focus, ui::Context& ui);
+        void drawWord(std::span<const BidiText::Codepoint> word, int16_t x, int16_t baseline, size_t wordOffset,
+                      int focus, ui::Context& ui);
         std::string phantomBefore(const ReadingSession& reader, uint8_t sizeIndex) const;
         std::string phantomAfter(const ReadingSession& reader, uint8_t sizeIndex) const;
-        uint32_t frameSignature(std::string_view before, std::string_view word, std::string_view after,
-                                std::string_view overlay, const settings::ReadingSettings& settings) const;
+        uint32_t frameSignature(std::string_view word, bool overlayVisible, bool cjkPacing,
+                                const settings::ReadingSettings& settings) const;
 
         enum class TouchIntent : uint8_t {
             None,

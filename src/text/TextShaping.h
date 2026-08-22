@@ -6,8 +6,6 @@
 #include <array>
 #include <cstdint>
 #include <expected>
-#include <functional>
-#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -41,16 +39,16 @@ namespace TextShaping {
 
     private:
         static hb_blob_t* referenceTable(hb_face_t*, hb_tag_t tag, void* userData);
-        static hb_bool_t nominalGlyph(hb_font_t*, void* fontData, hb_codepoint_t codepoint,
-                                      hb_codepoint_t* glyph, void*);
+        static hb_bool_t nominalGlyph(hb_font_t*, void* fontData, hb_codepoint_t codepoint, hb_codepoint_t* glyph,
+                                      void*);
         static hb_position_t glyphAdvance(hb_font_t*, void* fontData, hb_codepoint_t glyph, void*);
         static hb_font_funcs_t* fontFunctions();
         hb_blob_t* loadTable(hb_tag_t tag);
 
-        std::optional<std::reference_wrapper<File>> file_;
+        File* file_ = nullptr;
         std::span<const RFont4::LayoutTableRecord> tables_;
         std::array<hb_blob_t*, RFont4::kMaximumLayoutTableCount> tableBlobs_{};
-        std::optional<std::reference_wrapper<ui::fonts::AlphaTextRenderer<640>>> renderer_;
+        ui::fonts::AlphaTextRenderer<640>* renderer_ = nullptr;
         hb_face_t* face_ = nullptr;
         hb_font_t* font_ = nullptr;
         hb_buffer_t* buffer_ = nullptr;

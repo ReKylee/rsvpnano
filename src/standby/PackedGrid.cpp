@@ -1,8 +1,6 @@
 #include "standby/PackedGrid.h"
 
 #include <algorithm>
-#include <span>
-
 namespace standby {
 
     uint32_t advanceRng(uint32_t& rng) {
@@ -25,17 +23,14 @@ namespace standby {
 
     bool cellAlive(PackedGridView cells, size_t index) {
         const size_t word = index / kPackedBitsPerWord;
-        if (cells.words == nullptr || word >= cells.wordCount) {
+        if (word >= cells.size()) {
             return false;
         }
-        return (cells.words[word] & (1UL << (index % kPackedBitsPerWord))) != 0;
+        return (cells[word] & (1UL << (index % kPackedBitsPerWord))) != 0;
     }
 
     bool anyCellAlive(PackedGridView cells) {
-        if (cells.words == nullptr) {
-            return false;
-        }
-        return std::ranges::any_of(std::span{cells.words, cells.wordCount}, [](uint32_t word) {
+        return std::ranges::any_of(cells, [](uint32_t word) {
             return word != 0;
         });
     }
@@ -61,7 +56,7 @@ namespace standby {
     }
 
     PackedGridView viewOf(const PackedGridStorage& cells, size_t wordCount) {
-        return PackedGridView{cells.data(), std::min(wordCount, cells.size())};
+        return std::span{cells}.first(std::min(wordCount, cells.size()));
     }
 
 } // namespace standby

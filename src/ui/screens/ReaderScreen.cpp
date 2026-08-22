@@ -104,8 +104,8 @@ namespace screens {
             for (const UnicodeText::ScriptTag& script: UnicodeText::SupportedScripts) {
                 if ((scripts & script.mask) == 0)
                     continue;
-                const std::string_view requested = settings::fontForText(
-                    overrides, locale, script.mask, typography_.fontId);
+                const std::string_view requested =
+                    settings::fontForText(overrides, locale, script.mask, typography_.fontId);
                 const size_t family = FontCatalog::selectFamily(families, requested, locale, script.mask);
                 if (family != 0 && !prepared[family]) {
                     fonts.loadFace(family, sizeIndex);
@@ -116,8 +116,8 @@ namespace screens {
         };
         prepare(0, session.metadata.localeAt(0), session.metadata.scriptMaskAt(0));
         for (const BookTextRun& run: session.metadata.textRuns) {
-            const std::string_view locale = run.locale.empty() ? std::string_view{session.metadata.locale}
-                                                               : std::string_view{run.locale};
+            const std::string_view locale =
+                run.locale.empty() ? std::string_view{session.metadata.locale} : std::string_view{run.locale};
             prepare(run.wordIndex, locale, run.scriptMask);
         }
 
@@ -142,8 +142,8 @@ namespace screens {
             rsvpGlyphs_.clear();
             const size_t offset = paragraph.wordOffsets[localWord];
             const bool rightToLeft = session.metadata.directionAt(wordIndex) == TextDirection::rtl;
-            if (face.shaper->get().shape(paragraph.text, offset, word.size(), rightToLeft,
-                                         session.metadata.localeAt(wordIndex), text_, rsvpGlyphs_))
+            if (face.shaper->shape(paragraph.text, offset, word.size(), rightToLeft,
+                                   session.metadata.localeAt(wordIndex), text_, rsvpGlyphs_))
                 text_.prepare(std::span<const ui::fonts::PositionedGlyph>{rsvpGlyphs_});
         }
         rsvpGlyphs_.clear();
@@ -158,8 +158,8 @@ namespace screens {
         const std::string_view word = ReadingLoop::wordAt(session, wordIndex);
         const std::string_view locale = session.metadata.localeAt(wordIndex);
         const uint32_t requiredScripts = UnicodeText::scriptsIn(word);
-        const std::string_view requested = settings::fontForText(
-            overrides, locale, requiredScripts, settings.typography.fontId);
+        const std::string_view requested =
+            settings::fontForText(overrides, locale, requiredScripts, settings.typography.fontId);
         const auto families = fonts.families();
         if (families.empty())
             return 0;
@@ -171,12 +171,12 @@ namespace screens {
     }
 
     void ReaderScreen::refreshTypeface() {
-        if (loadedWordIndex_ == session.currentIndex && loadedFontSizeIndex_ == typography_.fontSizeIndex) {
+        if (loadedWordIndex_ == session.state.wordIndex && loadedFontSizeIndex_ == typography_.fontSizeIndex) {
             activateFace(face_);
             return;
         }
-        loadedWordIndex_ = session.currentIndex;
-        const size_t family = fontChoice(session.currentIndex);
+        loadedWordIndex_ = session.state.wordIndex;
+        const size_t family = fontChoice(session.state.wordIndex);
         if (loadedFamilyIndex_ != family || loadedFontSizeIndex_ != typography_.fontSizeIndex) {
             loadedFamilyIndex_ = family;
             loadedFontSizeIndex_ = typography_.fontSizeIndex;
@@ -188,11 +188,11 @@ namespace screens {
 
     void ReaderScreen::prefetchUpcomingFont(uint32_t nowMs) {
 #if defined(BOARD_HAS_PSRAM)
-        if (!session.playing || readAheadWordIndex_ == session.currentIndex)
+        if (!session.playing || readAheadWordIndex_ == session.state.wordIndex)
             return;
-        readAheadWordIndex_ = session.currentIndex;
+        readAheadWordIndex_ = session.state.wordIndex;
 
-        const size_t currentFamily = fontChoice(session.currentIndex);
+        const size_t currentFamily = fontChoice(session.state.wordIndex);
         if (readAheadFamilyIndex_ == currentFamily) {
             readAheadFamilyIndex_ = SIZE_MAX;
             readAheadBlockCount_ = 0;
@@ -206,8 +206,8 @@ namespace screens {
             return;
 
         const size_t wordCount = ReadingLoop::wordCount(session);
-        const size_t end = std::min(wordCount, session.currentIndex + 1 + kFontReadAheadWords);
-        for (size_t first = session.currentIndex + 1; first < end; ++first) {
+        const size_t end = std::min<size_t>(wordCount, session.state.wordIndex + 1 + kFontReadAheadWords);
+        for (size_t first = session.state.wordIndex + 1; first < end; ++first) {
             const size_t family = fontChoice(first);
             if (family == currentFamily)
                 continue;
@@ -225,8 +225,8 @@ namespace screens {
                  index < end && readAheadBlockCount_ < kFontReadAheadTargetBlocks && hasSlack(millis()); ++index) {
                 if (fontChoice(index) != family)
                     break;
-                readAheadBlockCount_ += ui::fonts::prefetchGlyphBitmaps(
-                    upcoming.raster.get(), ReadingLoop::wordAt(session, index), 1);
+                readAheadBlockCount_ +=
+                    ui::fonts::prefetchGlyphBitmaps(upcoming.raster.get(), ReadingLoop::wordAt(session, index), 1);
             }
             return;
         }
@@ -235,14 +235,67 @@ namespace screens {
 
     void ReaderScreen::prefetchNextWord(uint32_t nowMs) {
         if (settings_.mode == settings::ReadingMode::page || pagePreview_
-            || renderedWordIndex_ != session.currentIndex)
+            || renderedWordIndex_ != session.state.wordIndex)
             return;
         prefetchUpcomingFont(nowMs);
-        const size_t next = session.currentIndex + 1;
+        const size_t next = session.state.wordIndex + 1;
         if (next == prefetchedWordIndex_ || next >= ReadingLoop::wordCount(session))
             return;
         prefetchedWordIndex_ = next;
-        if (face_.shaper || face_.raster.get().bitmap != nullptr || fontChoice(next) != loadedFamilyIndex_)
+        const size_t nextFamily = fontChoice(next);
+        const bool changingFamily = nextFamily != loadedFamilyIndex_;
+#if defined(BOARD_HAS_PSRAM)
+        const std::string_view nextWord = ReadingLoop::wordAt(session, next);
+        if (changingFamily && UnicodeText::isCjkText(nextWord)) {
+            const FontCatalog::Face nextFace = fonts.loadFace(nextFamily, typography_.fontSizeIndex);
+            constexpr size_t blockBudget = kFontReadAheadTargetBlocks / 8;
+            size_t loadedBlocks = 0;
+            const auto bounds = ReadingLoop::paragraphBoundsAt(session, next);
+            for (size_t index = next; index < bounds.second && loadedBlocks < blockBudget; ++index) {
+                if (fontChoice(index) != nextFamily)
+                    break;
+                loadedBlocks += ui::fonts::prefetchGlyphBitmaps(
+                    nextFace.raster.get(), ReadingLoop::wordAt(session, index), blockBudget - loadedBlocks);
+            }
+            return;
+        }
+
+        TextShaping::Shaper* nextShaper = nullptr;
+        if (changingFamily) {
+            const FontCatalog::Face nextFace = fonts.loadFace(nextFamily, typography_.fontSizeIndex);
+            nextShaper = nextFace.shaper;
+            if (nextShaper)
+                activateFace(nextFace);
+        }
+        if (nextShaper) {
+            const ReadingLoop::TextParagraph paragraph = ReadingLoop::paragraphAt(session, next);
+            const size_t localWord = next - paragraph.firstWord;
+            if (localWord < paragraph.wordOffsets.size()) {
+                rsvpGlyphs_.clear();
+                const size_t offset = paragraph.wordOffsets[localWord];
+                const bool rightToLeft = session.metadata.directionAt(next) == TextDirection::rtl;
+                if (nextShaper->shape(paragraph.text, offset, nextWord.size(), rightToLeft,
+                                      session.metadata.localeAt(next), text_, rsvpGlyphs_))
+                    text_.prepare(std::span<const ui::fonts::PositionedGlyph>{rsvpGlyphs_});
+                rsvpGlyphs_.clear();
+
+                const size_t after = next + 1;
+                const size_t localAfter = localWord + 1;
+                if (settings_.phantomWords && after < paragraph.lastWord
+                    && localAfter < paragraph.wordOffsets.size() && fontChoice(after) == nextFamily
+                    && session.metadata.directionAt(after) == session.metadata.directionAt(next)) {
+                    const std::string_view afterWord = ReadingLoop::wordAt(session, after);
+                    const size_t afterOffset = paragraph.wordOffsets[localAfter];
+                    if (nextShaper->shape(paragraph.text, afterOffset, afterWord.size(), rightToLeft,
+                                          session.metadata.localeAt(after), text_, rsvpGlyphs_))
+                        text_.prepare(std::span<const ui::fonts::PositionedGlyph>{rsvpGlyphs_});
+                    rsvpGlyphs_.clear();
+                }
+            }
+            return;
+        }
+#endif
+        if (changingFamily || face_.shaper || face_.raster.get().bitmap != nullptr)
             return;
         activateFace(face_);
         text_.prepare(ReadingLoop::wordAt(session, next));
@@ -254,20 +307,16 @@ namespace screens {
 
     bool ReaderScreen::openBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, size_t index,
                                 uint32_t nowMs) {
-        if (!storage.mounted() || index >= storage.bookCount())
+        if (!storage.mounted() || index >= storage.books().size())
             return false;
-        status(ui, ui.text(UiText::OpeningBook), storage.bookDisplayName(index), {}, 5);
+        const BookLibrary::Entry& book = storage.books()[index];
+        status(ui, ui.text(UiText::OpeningBook), BookLibrary::displayName(book), {}, 5);
         prepareBookOpen(preferences, nowMs);
-        StorageManager::IndexedBookLoadOptions options;
-        std::string loadedPath;
-        size_t loadedIndex = index;
-        options.loadedPath = &loadedPath;
-        options.loadedIndex = &loadedIndex;
-        if (!storage.loadIndexedBook(index, store, session.metadata, options)) {
-            status(ui, ui.text(UiText::BookFailed), storage.bookDisplayName(index), ui.text(UiText::CheckSdCard));
+        if (!storage.loadIndexedBook(index, store, session.metadata)) {
+            status(ui, ui.text(UiText::BookFailed), BookLibrary::displayName(book), ui.text(UiText::CheckSdCard));
             return false;
         }
-        finishBookOpen(preferences, loadedIndex, loadedPath, nowMs);
+        finishBookOpen(preferences, nowMs);
         refreshTypography();
         return true;
     }
@@ -279,11 +328,7 @@ namespace screens {
         session.metadata.clear();
     }
 
-    void ReaderScreen::finishBookOpen(Preferences& preferences, size_t loadedIndex, std::string_view loadedPath,
-                                      uint32_t nowMs) {
-        session.bookIndex = loadedIndex;
-        session.path = loadedPath;
-        session.fromStorage = true;
+    void ReaderScreen::finishBookOpen(Preferences& preferences, uint32_t nowMs) {
         session.state = {};
         pagePreview_ = false;
         session.lastSavedWordIndex = static_cast<size_t>(-1);
@@ -292,9 +337,9 @@ namespace screens {
         const uint32_t savedWord = ReadingProgress::restore(session, store);
         if (savedWord != ReadingProgress::kNoSavedWordIndex) {
             ReadingLoop::seekTo(session, savedWord);
-            ReadingProgress::cache(session, preferences, static_cast<uint32_t>(session.currentIndex));
+            ReadingProgress::cache(session, preferences, static_cast<uint32_t>(session.state.wordIndex));
         } else {
-            preferences.putString("book", session.path.c_str());
+            preferences.putString("book", session.sourcePath().data());
         }
     }
 
@@ -303,16 +348,14 @@ namespace screens {
         storage.refreshBooks();
         const std::string savedPath = preferences.getString("book").c_str();
         if (!savedPath.empty()) {
-            const int savedBook = storage.bookIndex(savedPath);
+            const int savedBook = storage.findBook(savedPath);
             if (savedBook >= 0 && openBook(ui, storage, preferences, static_cast<size_t>(savedBook), nowMs))
                 return;
             ESP_LOGE("reader", "saved book not found: %s", savedPath.c_str());
         }
-        if (storage.bookCount() > 0 && openBook(ui, storage, preferences, 0, nowMs))
+        if (!storage.books().empty() && openBook(ui, storage, preferences, 0, nowMs))
             return;
         session.metadata.clear();
-        session.path = "";
-        session.fromStorage = false;
         session.state = {};
         pagePreview_ = false;
         refreshTypography();
@@ -321,33 +364,35 @@ namespace screens {
 
     void ReaderScreen::draw(ui::Context& ui, const StorageManager& storage, const Board::Power::BatteryState& battery,
                             uint32_t nowMs) {
-        const std::string bookTitle = ReadingProgress::title(session, storage);
+        const std::string_view bookTitle = ReadingProgress::title(session, storage);
         const bool reading = session.playing;
         const settings::ReadingSettings& settings = settings_;
         const bool pageView = settings.mode == settings::ReadingMode::page || pagePreview_;
         if (!pageView)
             refreshTypeface();
-        const std::string before =
-            !pageView && settings.phantomWords ? phantomBefore(session, typography_.fontSizeIndex) : "";
-        const std::string after =
-            !pageView && settings.phantomWords ? phantomAfter(session, typography_.fontSizeIndex) : "";
-        const ChapterMarker* chapter = session.metadata.chapterAt(session.currentIndex);
+        const auto nextChapter = std::ranges::upper_bound(session.metadata.chapters, session.state.wordIndex, {},
+                                                          &ChapterMarker::wordIndex);
+        const ChapterMarker* chapter =
+            nextChapter == session.metadata.chapters.begin() ? nullptr : &*std::prev(nextChapter);
+        if (chapter != nullptr && session.state.wordIndex == chapter->wordIndex + 1
+            && nextChapter != session.metadata.chapters.end())
+            ui.prepareTextFont(nextChapter->title, session.metadata.localeAt(nextChapter->wordIndex));
         const std::string_view chapterLabel = chapter != nullptr && !chapter->title.empty()
                                                 ? std::string_view{chapter->title}
                                                 : std::string_view{bookTitle};
-        const uint8_t progress = ReadingProgress::percent(session.currentIndex, ReadingLoop::wordCount(session));
+        const uint8_t progress = ReadingProgress::percent(session.state.wordIndex, ReadingLoop::wordCount(session));
         std::string footer;
         if (reading || settings.footerMetric == settings::FooterMetric::percentage) {
             footer = std::to_string(progress) + "%";
         } else {
-            size_t remainingWords = ReadingLoop::wordCount(session) > session.currentIndex
-                                      ? ReadingLoop::wordCount(session) - session.currentIndex
+            size_t remainingWords = ReadingLoop::wordCount(session) > session.state.wordIndex
+                                      ? ReadingLoop::wordCount(session) - session.state.wordIndex
                                       : 0;
             if (settings.footerMetric == settings::FooterMetric::chapterTime) {
-                const auto next = std::ranges::upper_bound(session.metadata.chapters, session.currentIndex, {},
+                const auto next = std::ranges::upper_bound(session.metadata.chapters, session.state.wordIndex, {},
                                                            &ChapterMarker::wordIndex);
                 if (next != session.metadata.chapters.end())
-                    remainingWords = next->wordIndex - session.currentIndex;
+                    remainingWords = next->wordIndex - session.state.wordIndex;
             }
             const uint32_t minutes = static_cast<uint32_t>((remainingWords + settings.wpm - 1) / settings.wpm);
             footer = ui.text(settings.footerMetric == settings::FooterMetric::chapterTime ? UiText::ChapterShort
@@ -356,18 +401,22 @@ namespace screens {
             footer += minutes >= 60 ? std::to_string(minutes / 60) + "h" : std::to_string(minutes) + "m";
         }
         const bool cjkPacing = ReadingLoop::pacingMode(session) == settings::ReadingPacing::cjkPhrase;
-        const std::string overlay = wpmFeedbackUntilMs_ > nowMs
-                                      ? std::to_string(settings.wpm) + (cjkPacing ? " CPM" : " WPM")
-                                      : "";
+        const bool overlayVisible = wpmFeedbackUntilMs_ > nowMs;
 
         const ui::Rect readingArea{0, 36, ui.width(), static_cast<int16_t>(std::max<int16_t>(0, ui.height() - 72))};
         if (pageView) {
+            const std::string overlay =
+                overlayVisible ? std::to_string(settings.wpm) + (cjkPacing ? " CPM" : " WPM") : "";
             const auto typeface = [this](size_t wordIndex) -> FontCatalog::Face {
                 return pageTypeface(wordIndex);
             };
             PageReader::draw(pageState_, ui, text_, typeface, typography_, typographyRevision_, session, readingArea,
                              overlay);
-        } else if (ui.redraw(readingArea, frameSignature(before, session.currentWord, after, overlay, settings))) {
+        } else if (ui.redraw(readingArea, frameSignature(session.currentWord, overlayVisible, cjkPacing, settings))) {
+            const std::string before = settings.phantomWords ? phantomBefore(session, typography_.fontSizeIndex) : "";
+            const std::string after = settings.phantomWords ? phantomAfter(session, typography_.fontSizeIndex) : "";
+            const std::string overlay =
+                overlayVisible ? std::to_string(settings.wpm) + (cjkPacing ? " CPM" : " WPM") : "";
             Arduino_GFX& gfx = ui.gfx();
             background_ = ui.color(ui::themes::ColorRole::Background);
             activateFace(face_);
@@ -375,24 +424,24 @@ namespace screens {
                                ui.color(ui::themes::ColorRole::Background));
 
             const std::string& word = session.currentWord;
-            const bool bidi = session.metadata.requiresBidi(session.currentIndex, session.currentIndex + 1);
-            const bool shaping = face_.shaper.has_value();
+            const bool bidi = session.metadata.requiresBidi(session.state.wordIndex, session.state.wordIndex + 1);
+            const bool shaping = face_.shaper != nullptr;
             size_t wordOffset = 0;
             bool shaped = false;
             int32_t shapedWidth = 0;
             if (bidi || shaping) {
-                if (session.currentIndex < rsvpParagraph_.firstWord
-                    || session.currentIndex >= rsvpParagraph_.lastWord) {
-                    rsvpParagraph_ = ReadingLoop::paragraphAt(session, session.currentIndex);
+                if (session.state.wordIndex < rsvpParagraph_.firstWord
+                    || session.state.wordIndex >= rsvpParagraph_.lastWord) {
+                    rsvpParagraph_ = ReadingLoop::paragraphAt(session, session.state.wordIndex);
                     rsvpBidi_.clear();
                     if (bidi) {
-                        const auto analyzed = rsvpBidi_.reset(
-                            rsvpParagraph_.text, session.metadata.directionAt(rsvpParagraph_.firstWord));
+                        const auto analyzed = rsvpBidi_.reset(rsvpParagraph_.text,
+                                                              session.metadata.directionAt(rsvpParagraph_.firstWord));
                         if (!analyzed)
                             ESP_LOGW("reader", "bidi analysis failed: %s", analyzed.error().c_str());
                     }
                 }
-                const size_t localWord = session.currentIndex - rsvpParagraph_.firstWord;
+                const size_t localWord = session.state.wordIndex - rsvpParagraph_.firstWord;
                 wordOffset = rsvpParagraph_.wordOffsets[localWord];
 
                 rsvpLine_.clear();
@@ -411,10 +460,10 @@ namespace screens {
 
                 rsvpGlyphs_.clear();
                 if (shaping) {
-                    const std::string_view locale = session.metadata.localeAt(session.currentIndex);
+                    const std::string_view locale = session.metadata.localeAt(session.state.wordIndex);
                     if (!bidi) {
-                        const auto result = face_.shaper->get().shape(rsvpParagraph_.text, wordOffset, word.size(),
-                                                                    false, locale, text_, rsvpGlyphs_);
+                        const auto result = face_.shaper->shape(rsvpParagraph_.text, wordOffset, word.size(), false,
+                                                                locale, text_, rsvpGlyphs_);
                         shaped = result.has_value();
                         if (result)
                             shapedWidth = *result;
@@ -423,8 +472,8 @@ namespace screens {
                     } else {
                         shaped = true;
                         for (const BidiText::Run& run: rsvpLine_) {
-                            const auto result = face_.shaper->get().shape(rsvpParagraph_.text, run.offset, run.length,
-                                                                        run.rightToLeft, locale, text_, rsvpGlyphs_);
+                            const auto result = face_.shaper->shape(rsvpParagraph_.text, run.offset, run.length,
+                                                                    run.rightToLeft, locale, text_, rsvpGlyphs_);
                             if (!result) {
                                 ESP_LOGW("reader", "shaping failed: %s", result.error().c_str());
                                 shaped = false;
@@ -441,10 +490,9 @@ namespace screens {
             }
             const int focus = focusOffset(word);
             uint32_t shapedFocusCluster = UINT32_MAX;
-            const int16_t wordWidth = shaped
-                                        ? static_cast<int16_t>(std::clamp<int32_t>(shapedWidth, 0, INT16_MAX))
-                                        : bidi ? wordAdvance(rsvpVisual_)
-                                               : text_.textAdvance(word, typography_.tracking);
+            const int16_t wordWidth = shaped ? static_cast<int16_t>(std::clamp<int32_t>(shapedWidth, 0, INT16_MAX))
+                                    : bidi   ? wordAdvance(rsvpVisual_)
+                                             : text_.textAdvance(word, typography_.tracking);
             int16_t focusCenter = wordWidth / 2;
             if (focus >= 0) {
                 int16_t cursor = 0;
@@ -520,18 +568,20 @@ namespace screens {
                 int16_t cursor = x;
                 size_t first = 0;
                 while (first < rsvpGlyphs_.size()) {
-                    const bool highlighted = typography_.focusHighlight
-                                          && rsvpGlyphs_[first].cluster == shapedFocusCluster;
+                    const bool highlighted =
+                        typography_.focusHighlight && rsvpGlyphs_[first].cluster == shapedFocusCluster;
                     size_t last = first + 1;
                     while (last < rsvpGlyphs_.size()
-                           && (typography_.focusHighlight
-                               && rsvpGlyphs_[last].cluster == shapedFocusCluster) == highlighted)
+                           && (typography_.focusHighlight && rsvpGlyphs_[last].cluster == shapedFocusCluster)
+                                  == highlighted)
                         ++last;
                     text_.setTextColor(ui.color(highlighted ? ui::themes::ColorRole::Accent
                                                             : ui::themes::ColorRole::Foreground),
                                        background_);
-                    cursor = static_cast<int16_t>(cursor + text_.drawGlyphs(
-                        std::span{rsvpGlyphs_}.subspan(first, last - first), cursor, baseline));
+                    cursor =
+                        static_cast<int16_t>(cursor
+                                             + text_.drawGlyphs(std::span{rsvpGlyphs_}.subspan(first, last - first),
+                                                                cursor, baseline));
                     first = last;
                 }
             } else if (bidi)
@@ -541,13 +591,11 @@ namespace screens {
             const bool rightToLeft = bidi && rsvpBidi_.rightToLeft();
             if (!before.empty())
                 drawPhantom(before, rightToLeft,
-                            rightToLeft ? static_cast<int16_t>(x + wordWidth + 24)
-                                        : static_cast<int16_t>(x - 24),
+                            rightToLeft ? static_cast<int16_t>(x + wordWidth + 24) : static_cast<int16_t>(x - 24),
                             !rightToLeft, baseline, ui);
             if (!after.empty())
                 drawPhantom(after, rightToLeft,
-                            rightToLeft ? static_cast<int16_t>(x - 24)
-                                        : static_cast<int16_t>(x + wordWidth + 24),
+                            rightToLeft ? static_cast<int16_t>(x - 24) : static_cast<int16_t>(x + wordWidth + 24),
                             rightToLeft, baseline, ui);
 
             gfx.setFont(static_cast<const GFXfont*>(nullptr));
@@ -565,7 +613,7 @@ namespace screens {
             }
         }
 
-        renderedWordIndex_ = pageView ? SIZE_MAX : session.currentIndex;
+        renderedWordIndex_ = pageView ? SIZE_MAX : session.state.wordIndex;
         const bool showChapter = !reading || settings.chapterVisibleWhileReading;
         const bool showProgress = !reading || settings.progressVisibleWhileReading;
         const bool showBattery = !reading || settings.batteryVisibleWhileReading;
@@ -576,10 +624,11 @@ namespace screens {
             settings.leftHanded && showProgress ? static_cast<int16_t>(footerX + footerWidth + 24) : 18;
         const int16_t chapterWidth =
             showProgress ? static_cast<int16_t>(ui.width() - 60 - footerWidth) : static_cast<int16_t>(ui.width() - 36);
-        ui.label({chapterX, static_cast<int16_t>(ui.height() - 26), chapterWidth, 16},
+        ui.label({chapterX, static_cast<int16_t>(ui.height() - 26), chapterWidth, 26},
                  showChapter ? chapterLabel.empty() ? ui.text(UiText::Start) : chapterLabel : std::string_view{}, 2,
-                 ui::themes::ColorRole::Muted, settings.leftHanded ? ui::TextAlign::Right : ui::TextAlign::Left);
-        ui.label({footerX, static_cast<int16_t>(ui.height() - 26), footerWidth, 16}, footer, 2,
+                 ui::themes::ColorRole::Muted, settings.leftHanded ? ui::TextAlign::Right : ui::TextAlign::Left, 1,
+                 chapter == nullptr ? session.metadata.locale : session.metadata.localeAt(chapter->wordIndex));
+        ui.label({footerX, static_cast<int16_t>(ui.height() - 26), footerWidth, 26}, footer, 2,
                  ui::themes::ColorRole::Muted, settings.leftHanded ? ui::TextAlign::Left : ui::TextAlign::Right);
 
         char batteryText[12];
@@ -639,7 +688,7 @@ namespace screens {
             touching_ = true;
             touchStartX_ = touch.x;
             touchStartY_ = touch.y;
-            touchStartWord_ = session.currentIndex;
+            touchStartWord_ = session.state.wordIndex;
             scrubSteps_ = 0;
             touchIntent_ = TouchIntent::None;
             return;
@@ -803,11 +852,16 @@ namespace screens {
         nowMs = millis();
         if (!session.playing)
             return;
-        const size_t previousIndex = session.currentIndex;
+#if defined(RSVP_BENCHMARK_MODE)
+        // Reading benchmarks load indexed fixtures but intentionally exclude persistence I/O.
+        ReadingLoop::update(session, settings_, nowMs);
+#else
+        const size_t previousIndex = session.state.wordIndex;
         if (ReadingLoop::update(session, settings_, nowMs)) {
-            ReadingProgress::saveChapterTransition(session, preferences, store, previousIndex, session.currentIndex,
+            ReadingProgress::saveChapterTransition(session, preferences, store, previousIndex, session.state.wordIndex,
                                                    nowMs);
         }
+#endif
     }
 
     void ReaderScreen::start(uint32_t nowMs, bool locked) {
@@ -896,21 +950,20 @@ namespace screens {
     std::string ReaderScreen::phantomBefore(const ReadingSession& reader, uint8_t sizeIndex) const {
         if (ReadingLoop::wordCount(reader) == 0)
             return "";
-        const ReadingLoop::TextParagraph paragraph = ReadingLoop::paragraphAt(reader, reader.currentIndex);
-        const TextDirection direction = reader.metadata.directionAt(reader.currentIndex);
+        const auto bounds = ReadingLoop::paragraphBoundsAt(reader, reader.state.wordIndex);
+        const TextDirection direction = reader.metadata.directionAt(reader.state.wordIndex);
         const size_t target = kPhantomBeforeTargets[std::min<size_t>(sizeIndex, 2)];
-        size_t start = reader.currentIndex;
+        size_t start = reader.state.wordIndex;
         size_t characters = 0;
-        while (start > paragraph.firstWord && characters < target) {
-            if (reader.metadata.directionAt(start - 1) != direction
-                || fontChoice(start - 1) != loadedFamilyIndex_)
+        while (start > bounds.first && characters < target) {
+            if (reader.metadata.directionAt(start - 1) != direction || fontChoice(start - 1) != loadedFamilyIndex_)
                 break;
             --start;
-            characters += ReadingLoop::wordAt(reader, start).length() + (start + 1 < reader.currentIndex);
+            characters += ReadingLoop::wordAt(reader, start).length() + (start + 1 < reader.state.wordIndex);
         }
         std::string result;
         result.reserve(characters);
-        for (size_t index = start; index < reader.currentIndex; ++index) {
+        for (size_t index = start; index < reader.state.wordIndex; ++index) {
             if (!result.empty())
                 result += ' ';
             result += ReadingLoop::wordAt(reader, index);
@@ -919,22 +972,22 @@ namespace screens {
     }
 
     std::string ReaderScreen::phantomAfter(const ReadingSession& reader, uint8_t sizeIndex) const {
-        if (reader.currentIndex + 1 >= ReadingLoop::wordCount(reader))
+        if (reader.state.wordIndex + 1 >= ReadingLoop::wordCount(reader))
             return "";
-        const ReadingLoop::TextParagraph paragraph = ReadingLoop::paragraphAt(reader, reader.currentIndex);
-        const TextDirection direction = reader.metadata.directionAt(reader.currentIndex);
+        const auto bounds = ReadingLoop::paragraphBoundsAt(reader, reader.state.wordIndex);
+        const TextDirection direction = reader.metadata.directionAt(reader.state.wordIndex);
         const size_t target = kPhantomAfterTargets[std::min<size_t>(sizeIndex, 2)];
-        size_t end = reader.currentIndex + 1;
+        size_t end = reader.state.wordIndex + 1;
         size_t characters = 0;
-        while (end < paragraph.lastWord && characters < target) {
+        while (end < bounds.second && characters < target) {
             if (reader.metadata.directionAt(end) != direction || fontChoice(end) != loadedFamilyIndex_)
                 break;
-            characters += ReadingLoop::wordAt(reader, end).length() + (end > reader.currentIndex + 1);
+            characters += ReadingLoop::wordAt(reader, end).length() + (end > reader.state.wordIndex + 1);
             ++end;
         }
         std::string result;
         result.reserve(characters);
-        for (size_t index = reader.currentIndex + 1; index < end; ++index) {
+        for (size_t index = reader.state.wordIndex + 1; index < end; ++index) {
             if (!result.empty())
                 result += ' ';
             result += ReadingLoop::wordAt(reader, index);
@@ -988,25 +1041,24 @@ namespace screens {
         phantomLine_.clear();
         phantomVisual_.clear();
         phantomGlyphs_.clear();
-        const bool bidi = rightToLeft
-                       || (UnicodeText::scriptsIn(value)
-                           & (UnicodeText::ScriptHebrew | UnicodeText::ScriptArabic)) != 0;
+        const bool bidi =
+            rightToLeft
+            || (UnicodeText::scriptsIn(value) & (UnicodeText::ScriptHebrew | UnicodeText::ScriptArabic)) != 0;
         if (bidi) {
             const TextDirection direction = rightToLeft ? TextDirection::rtl : TextDirection::ltr;
-            if (!phantomBidi_.reset(value, direction)
-                || !phantomBidi_.resolve({0, value.size()}, phantomLine_))
+            if (!phantomBidi_.reset(value, direction) || !phantomBidi_.resolve({0, value.size()}, phantomLine_))
                 phantomLine_.assign(1, {0, value.size(), rightToLeft});
         } else {
             phantomLine_.assign(1, {0, value.size(), false});
         }
 
-        bool shaped = face_.shaper.has_value();
+        bool shaped = face_.shaper != nullptr;
         int32_t width = 0;
         if (shaped) {
-            const std::string_view locale = session.metadata.localeAt(session.currentIndex);
+            const std::string_view locale = session.metadata.localeAt(session.state.wordIndex);
             for (const BidiText::Run& run: phantomLine_) {
-                const auto result = face_.shaper->get().shape(
-                    value, run.offset, run.length, run.rightToLeft, locale, text_, phantomGlyphs_);
+                const auto result =
+                    face_.shaper->shape(value, run.offset, run.length, run.rightToLeft, locale, text_, phantomGlyphs_);
                 if (!result) {
                     shaped = false;
                     phantomGlyphs_.clear();
@@ -1036,8 +1088,7 @@ namespace screens {
             for (const BidiText::Codepoint& codepoint: phantomVisual_) {
                 if (previousValid && !codepoint.rightToLeft)
                     x = static_cast<int16_t>(x + text_.kerningAdjust(previous, codepoint.value));
-                x = static_cast<int16_t>(x + text_.drawCodepoint(codepoint.value, x, baseline)
-                                         + typography_.tracking);
+                x = static_cast<int16_t>(x + text_.drawCodepoint(codepoint.value, x, baseline) + typography_.tracking);
                 previous = codepoint.value;
                 previousValid = true;
             }
@@ -1081,12 +1132,14 @@ namespace screens {
         }
     }
 
-    uint32_t ReaderScreen::frameSignature(std::string_view before, std::string_view word, std::string_view after,
-                                          std::string_view overlay, const settings::ReadingSettings& settings) const {
-        uint32_t value = ui::Context::signature(before);
-        value = ui::Context::signature(word, value);
-        value = ui::Context::signature(after, value);
-        value = ui::Context::signature(overlay, value);
+    uint32_t ReaderScreen::frameSignature(std::string_view word, bool overlayVisible, bool cjkPacing,
+                                          const settings::ReadingSettings& settings) const {
+        uint32_t value = ui::Context::signature(word);
+        value = ui::Context::combine(value, static_cast<uint32_t>(session.state.wordIndex));
+        value = ui::Context::combine(value, overlayVisible);
+        value = ui::Context::combine(value, cjkPacing);
+        value = ui::Context::combine(value, settings.wpm);
+        value = ui::Context::combine(value, settings.phantomWords);
         value = ui::Context::combine(value, static_cast<uint8_t>(typography_.tracking));
         value = ui::Context::combine(value, typography_.anchor);
         value = ui::Context::combine(value, typography_.guideWidth);

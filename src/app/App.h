@@ -48,14 +48,12 @@ private:
         char line1[96] = {};
         char line2[96] = {};
         int progressPercent = -1;
+        bool rebootRequired = false;
     };
 
-    void migrateSettingsLocale();
-    void migrateSettingsLocale(fs::FS& filesystem);
-    void migrateLegacyStorage();
     void renderScreen(uint32_t nowMs);
     void handleScreenAction(screens::Action action, uint32_t nowMs);
-    void handleInput(const Input::Event& event, uint32_t nowMs);
+    void handleInput(Input::ActionMask actions, uint32_t nowMs);
     void handleTouch(uint32_t nowMs);
     void runRss();
     void runBookOpen(size_t index, uint32_t nowMs);
@@ -104,18 +102,7 @@ private:
     screens::StandbyScreen standbyScreen_;
     QueueHandle_t jobQueue_ = nullptr;
     JobKind jobKind_ = JobKind::None;
-    settings::DeviceSettings jobSettings_;
-    settings::ReadingOverrides jobReadingOverrides_;
-    settings::DeviceSecrets jobSecrets_;
-    OtaUpdater::Config jobOtaConfig_;
-    RssFeeds::Result jobRssResult_;
-    SdDiagnostics::Inventory jobStorageInventory_;
-    SdDiagnostics::Result jobStorageResult_;
-    OtaUpdater::Result jobOtaResult_;
     size_t jobBookIndex_ = 0;
-    size_t jobLoadedBookIndex_ = 0;
-    std::string jobBookPath_;
-    std::string jobBookName_;
     bool jobBookLoaded_ = false;
     size_t pendingBookIndex_ = 0;
     bool bookOpenPending_ = false;

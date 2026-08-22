@@ -1,8 +1,8 @@
 #include <esp_log.h>
 
 #include <Arduino.h>
-#include <esp_heap_caps.h>
 #include <algorithm>
+#include <esp_heap_caps.h>
 #include <memory>
 #include <numeric>
 #include <span>
@@ -71,18 +71,19 @@ namespace {
         bool rightToLeft = false;
     };
 
-    constexpr TextSample kLatinSample{
-        "latin", "en", "Comfortable reading should remain quick on every page.", "Comfortable", "reading", false};
-    constexpr TextSample kHebrewSample{
-        "hebrew", "he", "קריאה עברית נוחה וברורה עם נִקּוּד מלא.", "נִקּוּד", "עברית", true};
-    constexpr TextSample kArabicSample{
-        "arabic", "ar", "القراءة العربية واضحة ومريحة مع التَّشْكِيلِ.", "التَّشْكِيلِ", "العربية", true};
-    constexpr TextSample kCjkSample{
-        "cjk", "ja", "日本語と中文の文章を快適に読みます。", "日本語と中文", "文章", false};
-    constexpr TextSample kChineseSample{
-        "han", "zh-Hans", "中文文章应当快速清晰地显示。", "中文阅读", "文章显示", false};
-    constexpr TextSample kMathSample{
-        "math", "en", "∀x∈ℝ, x²≥0 and ∫₀¹x²dx=⅓.", "∀x∈ℝ", "x²≥0", false};
+    constexpr TextSample kLatinSample{"latin",
+                                      "en",
+                                      "Comfortable reading should remain quick on every page.",
+                                      "Comfortable",
+                                      "reading",
+                                      false};
+    constexpr TextSample kHebrewSample{"hebrew", "he", "קריאה עברית נוחה וברורה עם נִקּוּד מלא.", "נִקּוּד", "עברית", true};
+    constexpr TextSample kArabicSample{"arabic",  "ar",      "القراءة العربية واضحة ومريحة مع التَّشْكِيلِ.",
+                                       "التَّشْكِيلِ", "العربية", true};
+    constexpr TextSample kCjkSample{"cjk", "ja", "日本語と中文の文章を快適に読みます。", "日本語と中文", "文章", false};
+    constexpr TextSample kChineseSample{"han",      "zh-Hans",  "中文文章应当快速清晰地显示。",
+                                        "中文阅读", "文章显示", false};
+    constexpr TextSample kMathSample{"math", "en", "∀x∈ℝ, x²≥0 and ∫₀¹x²dx=⅓.", "∀x∈ℝ", "x²≥0", false};
     constexpr std::string_view kMixedParagraph =
         "English 123 — עברית עם נִקּוּד — العربية مع التَّشْكِيلِ — 日本語と中文 — ∀x∈ℝ.";
 
@@ -140,9 +141,9 @@ namespace {
         while (!gBenchmarkStorage.ejected() && matchedCommandBytes < kRunCommand.size()) {
             while (Serial.available() > 0 && matchedCommandBytes < kRunCommand.size()) {
                 const char received = static_cast<char>(Serial.read());
-                matchedCommandBytes = received == kRunCommand[matchedCommandBytes]
-                                        ? matchedCommandBytes + 1
-                                        : received == kRunCommand.front() ? 1 : 0;
+                matchedCommandBytes = received == kRunCommand[matchedCommandBytes] ? matchedCommandBytes + 1
+                                    : received == kRunCommand.front()              ? 1
+                                                                                   : 0;
             }
             delay(20);
         }
@@ -205,9 +206,9 @@ namespace {
                  static_cast<int>(name.size()), name.data(), ok ? 1 : 0, static_cast<unsigned long>(elapsedMs),
                  static_cast<unsigned long>(elapsedUs), static_cast<unsigned long>(iterations),
                  static_cast<unsigned long>(averageUs), static_cast<unsigned long>(bytes),
-                  static_cast<unsigned long>(rateKiBPerSecond), static_cast<unsigned long>(heapBefore),
-                  static_cast<unsigned long>(heapAfter), static_cast<unsigned long>(minimumHeap),
-                  static_cast<unsigned long>(deadlineMisses));
+                 static_cast<unsigned long>(rateKiBPerSecond), static_cast<unsigned long>(heapBefore),
+                 static_cast<unsigned long>(heapAfter), static_cast<unsigned long>(minimumHeap),
+                 static_cast<unsigned long>(deadlineMisses));
     }
 
     void fillBytes(uint8_t* buffer, size_t bytes, uint32_t offset) {
@@ -234,8 +235,7 @@ namespace {
             return false;
         }
 
-        uint8_t* buffer = static_cast<uint8_t*>(
-            heap_caps_malloc(kSdChunkBytes, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
+        uint8_t* buffer = static_cast<uint8_t*>(heap_caps_malloc(kSdChunkBytes, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
         if (buffer == nullptr) {
             return false;
         }
@@ -365,10 +365,8 @@ namespace {
                 continue;
             previousMisses = misses;
             ++transitionCount;
-            ESP_LOGI("bench",
-                     "wpm_transition phase=%.*s wpm=%u deadline_misses=%u",
-                     static_cast<int>(phase.size()), phase.data(), static_cast<unsigned>(wpm),
-                     static_cast<unsigned>(misses));
+            ESP_LOGI("bench", "wpm_transition phase=%.*s wpm=%u deadline_misses=%u", static_cast<int>(phase.size()),
+                     phase.data(), static_cast<unsigned>(wpm), static_cast<unsigned>(misses));
         }
         ESP_LOGI("bench",
                  "wpm_sweep phase=%.*s min_wpm=%u max_wpm=%u step_wpm=%u transitions=%u samples=%u "
@@ -381,27 +379,26 @@ namespace {
                  static_cast<unsigned long>(sortedSamples.back()));
     }
 
-    void logLatencyDistribution(std::string_view name, bool ok, std::vector<uint32_t> samples,
-                                uint32_t deadlineUs = 0, uint32_t heapBefore = 0, uint32_t heapAfter = 0,
-                                uint32_t minimumHeap = 0, bool sweepWpm = false) {
+    void logLatencyDistribution(std::string_view name, bool ok, std::vector<uint32_t> samples, uint32_t deadlineUs = 0,
+                                uint32_t heapBefore = 0, uint32_t heapAfter = 0, uint32_t minimumHeap = 0,
+                                bool sweepWpm = false) {
         if (samples.empty()) {
             logMetric(name, false, 0, 0, 0, heapBefore, heapAfter, minimumHeap);
             return;
         }
 
-        const size_t deadlineMisses = deadlineUs == 0
-                                        ? 0
-                                        : static_cast<size_t>(std::ranges::count_if(samples, [deadlineUs](uint32_t us) {
-                                              return us > deadlineUs;
-                                          }));
+        const size_t deadlineMisses =
+            deadlineUs == 0 ? 0 : static_cast<size_t>(std::ranges::count_if(samples, [deadlineUs](uint32_t us) {
+                return us > deadlineUs;
+            }));
         const uint64_t total = std::accumulate(samples.begin(), samples.end(), uint64_t{0});
         std::ranges::sort(samples);
         const auto percentile = [&](size_t percent) {
             return samples[(samples.size() - 1) * percent / 100];
         };
         const std::string prefix{name};
-        logMetric(name, ok, static_cast<uint32_t>(std::min<uint64_t>(total, UINT32_MAX)), samples.size(), 0,
-                  heapBefore, heapAfter, minimumHeap, deadlineMisses);
+        logMetric(name, ok, static_cast<uint32_t>(std::min<uint64_t>(total, UINT32_MAX)), samples.size(), 0, heapBefore,
+                  heapAfter, minimumHeap, deadlineMisses);
         logMetric(prefix + "_p50", ok, percentile(50));
         logMetric(prefix + "_p95", ok, percentile(95));
         logMetric(prefix + "_p99", ok, percentile(99));
@@ -414,7 +411,7 @@ namespace {
         reader.store.close();
         reader.session.metadata.clear();
         BookLibrary::Listing listing;
-        listing.paths.emplace_back(path);
+        listing.push_back({.path = std::string{path}});
         const bool opened = runTimed(metric, [&] {
             return IndexedBook::load(0, listing, reader.store, reader.session.metadata,
                                      {.allowIndexBuild = true, .allowEpubConversion = false});
@@ -422,9 +419,6 @@ namespace {
         if (!opened)
             return false;
 
-        reader.session.path = path;
-        reader.session.bookIndex = 0;
-        reader.session.fromStorage = false;
         reader.session.state = {};
         ReadingLoop::setBookStore(reader.session, reader.store, millis());
         return true;
@@ -449,7 +443,7 @@ namespace {
         frameLatency.reserve(frameCount);
         updateLatency.reserve(frameCount - 1);
         cycleLatency.reserve(frameCount - 1);
-        size_t slowestIndex = reader.session.currentIndex;
+        size_t slowestIndex = reader.session.state.wordIndex;
         uint32_t slowestUs = 0;
         uint32_t slowestDrawUs = 0;
         uint32_t slowestFlushUs = 0;
@@ -465,7 +459,7 @@ namespace {
         const uint32_t heapBefore = ESP.getFreeHeap();
         const bool monitorHeap = heap_caps_monitor_local_minimum_free_size_start() == ESP_OK;
         for (size_t frame = 0; frame < frameCount; ++frame) {
-            const size_t wordIndex = reader.session.currentIndex;
+            const size_t wordIndex = reader.session.state.wordIndex;
             if (sweepWpm)
                 reader.fonts.resetFileCacheStats();
             const uint32_t startedUs = micros();
@@ -490,8 +484,9 @@ namespace {
                 const std::string_view word = ReadingLoop::wordAt(reader.session, wordIndex);
                 const std::string_view locale = reader.session.metadata.localeAt(wordIndex);
                 const auto io = reader.fonts.fileCacheStats();
-                ESP_LOGI("bench", "reading_miss phase=%.*s index=%u us=%lu draw=%lu flush=%lu locale=%.*s "
-                           "scripts=%lu bytes=%u font_reads=%lu blocks=%lu seeks=%lu loaded=%lu",
+                ESP_LOGI("bench",
+                         "reading_miss phase=%.*s index=%u us=%lu draw=%lu flush=%lu locale=%.*s "
+                         "scripts=%lu bytes=%u font_reads=%lu blocks=%lu seeks=%lu loaded=%lu",
                          static_cast<int>(name.size()), name.data(), static_cast<unsigned>(wordIndex),
                          static_cast<unsigned long>(elapsedUs), static_cast<unsigned long>(drawUs),
                          static_cast<unsigned long>(flushUs), static_cast<int>(locale.size()), locale.data(),
@@ -503,12 +498,12 @@ namespace {
             if (frame + 1 == frameCount)
                 break;
             const uint32_t duration = ReadingLoop::currentWordDurationMs(reader.session, settings);
-            const size_t previousIndex = reader.session.currentIndex;
+            const size_t previousIndex = reader.session.state.wordIndex;
             if (sweepWpm)
                 reader.fonts.resetFileCacheStats();
             const uint32_t updateStartedUs = micros();
             reader.update(preferences, millis());
-            if (reader.session.currentIndex == previousIndex) {
+            if (reader.session.state.wordIndex == previousIndex) {
                 reader.session.lastAdvanceMs = millis() - duration;
                 reader.update(preferences, millis());
             }
@@ -519,15 +514,16 @@ namespace {
             if (cycleUs > acceptanceDeadlineUs) {
                 cycleDeadlineMet = false;
                 const auto io = reader.fonts.fileCacheStats();
-                ESP_LOGI("bench", "reading_cycle_miss phase=%.*s index=%u us=%lu frame=%lu update=%lu "
-                           "font_reads=%lu blocks=%lu seeks=%lu loaded=%lu",
+                ESP_LOGI("bench",
+                         "reading_cycle_miss phase=%.*s index=%u us=%lu frame=%lu update=%lu "
+                         "font_reads=%lu blocks=%lu seeks=%lu loaded=%lu",
                          static_cast<int>(name.size()), name.data(), static_cast<unsigned>(wordIndex),
                          static_cast<unsigned long>(cycleUs), static_cast<unsigned long>(elapsedUs),
                          static_cast<unsigned long>(updateUs), static_cast<unsigned long>(io.logicalReads),
                          static_cast<unsigned long>(io.blockReads), static_cast<unsigned long>(io.seeks),
                          static_cast<unsigned long>(io.loadedBytes));
             }
-            if (reader.session.currentIndex != previousIndex + 1) {
+            if (reader.session.state.wordIndex != previousIndex + 1) {
                 ok = false;
                 break;
             }
@@ -539,16 +535,16 @@ namespace {
             heap_caps_monitor_local_minimum_free_size_stop();
 
         const std::string prefix{name};
-        logLatencyDistribution(prefix + "_frame", ok && frameDeadlineMet, std::move(frameLatency),
-                               acceptanceDeadlineUs,
+        logLatencyDistribution(prefix + "_frame", ok && frameDeadlineMet, std::move(frameLatency), acceptanceDeadlineUs,
                                heapBefore, heapAfter, minimumHeap, sweepWpm);
         logLatencyDistribution(prefix + "_update", ok, std::move(updateLatency));
-        logLatencyDistribution(prefix + "_cycle", ok && cycleDeadlineMet, std::move(cycleLatency),
-                               acceptanceDeadlineUs, 0, 0, 0, sweepWpm);
+        logLatencyDistribution(prefix + "_cycle", ok && cycleDeadlineMet, std::move(cycleLatency), acceptanceDeadlineUs,
+                               0, 0, 0, sweepWpm);
         const std::string_view word = ReadingLoop::wordAt(reader.session, slowestIndex);
         const std::string_view locale = reader.session.metadata.localeAt(slowestIndex);
-        ESP_LOGI("bench", "reading_peak phase=%s index=%u us=%lu draw=%lu flush=%lu locale=%.*s scripts=%lu "
-                           "bytes=%u font_reads=%lu blocks=%lu seeks=%lu loaded=%lu word=%.*s",
+        ESP_LOGI("bench",
+                 "reading_peak phase=%s index=%u us=%lu draw=%lu flush=%lu locale=%.*s scripts=%lu "
+                 "bytes=%u font_reads=%lu blocks=%lu seeks=%lu loaded=%lu word=%.*s",
                  prefix.c_str(), static_cast<unsigned>(slowestIndex), static_cast<unsigned long>(slowestUs),
                  static_cast<unsigned long>(slowestDrawUs), static_cast<unsigned long>(slowestFlushUs),
                  static_cast<int>(locale.size()), locale.data(),
@@ -596,8 +592,8 @@ namespace {
 
         const std::string prefix{name};
         logLatencyDistribution(prefix + "_frame", true, std::move(latency), 0, heapBefore, heapAfter, minimumHeap);
-        ESP_LOGI("bench", "reading_peak phase=%s index=%u us=%lu locale=%.*s scripts=%lu",
-                 prefix.c_str(), static_cast<unsigned>(slowestIndex), static_cast<unsigned long>(slowestUs),
+        ESP_LOGI("bench", "reading_peak phase=%s index=%u us=%lu locale=%.*s scripts=%lu", prefix.c_str(),
+                 static_cast<unsigned>(slowestIndex), static_cast<unsigned long>(slowestUs),
                  static_cast<int>(reader.session.metadata.localeAt(slowestIndex).size()),
                  reader.session.metadata.localeAt(slowestIndex).data(),
                  static_cast<unsigned long>(UnicodeText::scriptsIn(ReadingLoop::wordAt(reader.session, slowestIndex))));
@@ -611,8 +607,7 @@ namespace {
                 file.close();
             return false;
         }
-        uint8_t* buffer = static_cast<uint8_t*>(
-            heap_caps_malloc(kSdChunkBytes, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
+        uint8_t* buffer = static_cast<uint8_t*>(heap_caps_malloc(kSdChunkBytes, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
         if (buffer == nullptr) {
             file.close();
             return false;
@@ -621,21 +616,24 @@ namespace {
         uint32_t state = 0x9E3779B9U ^ static_cast<uint32_t>(bytesPerRead);
         const uint32_t maximumOffset = static_cast<uint32_t>(file.size() - bytesPerRead);
         const std::string metric = "sd_random_read_" + std::to_string(bytesPerRead);
-        const bool ok = runTimed(metric, kSdRandomIterations, [&] {
-            state = state * 1664525U + 1013904223U;
-            uint32_t offset = state % (maximumOffset + 1U);
-            if (bytesPerRead >= 512)
-                offset &= ~511U;
-            if (!file.seek(offset) || file.read(buffer, bytesPerRead) != bytesPerRead)
-                return false;
-            for (size_t index = 0; index < bytesPerRead; ++index) {
-                const uint32_t value = offset + static_cast<uint32_t>(index);
-                const uint8_t expected = static_cast<uint8_t>((value * 33U) ^ (value >> 3) ^ 0xA5U);
-                if (buffer[index] != expected)
+        const bool ok = runTimed(
+            metric, kSdRandomIterations,
+            [&] {
+                state = state * 1664525U + 1013904223U;
+                uint32_t offset = state % (maximumOffset + 1U);
+                if (bytesPerRead >= 512)
+                    offset &= ~511U;
+                if (!file.seek(offset) || file.read(buffer, bytesPerRead) != bytesPerRead)
                     return false;
-            }
-            return true;
-        }, bytesPerRead * kSdRandomIterations, false);
+                for (size_t index = 0; index < bytesPerRead; ++index) {
+                    const uint32_t value = offset + static_cast<uint32_t>(index);
+                    const uint8_t expected = static_cast<uint8_t>((value * 33U) ^ (value >> 3) ^ 0xA5U);
+                    if (buffer[index] != expected)
+                        return false;
+                }
+                return true;
+            },
+            bytesPerRead * kSdRandomIterations, false);
         file.close();
         heap_caps_free(buffer);
         return ok;
@@ -643,7 +641,7 @@ namespace {
 
     void resetFontIo(const FontCatalog::Face& face) {
         if (face.raster.get().fileCache)
-            face.raster.get().fileCache->get().resetStats();
+            face.raster.get().fileCache->resetStats();
     }
 
     FontCatalog::Face loadFaceTimed(size_t familyIndex, size_t sizeIndex, std::string_view metric) {
@@ -668,13 +666,13 @@ namespace {
                      font.bitmap != nullptr ? 1U : 0U);
             return;
         }
-        const auto& stats = font.fileCache->get().stats();
+        const auto& stats = font.fileCache->stats();
         ESP_LOGI("bench",
-                  "font_io phase=%.*s resident_metrics=%u resident_bitmap=%u logical_reads=%lu "
-                  "block_reads=%lu seeks=%lu requested_bytes=%lu loaded_bytes=%lu",
+                 "font_io phase=%.*s resident_metrics=%u resident_bitmap=%u logical_reads=%lu "
+                 "block_reads=%lu seeks=%lu requested_bytes=%lu loaded_bytes=%lu",
                  static_cast<int>(phase.size()), phase.data(), font.glyphs != nullptr ? 1U : 0U,
                  font.bitmap != nullptr ? 1U : 0U, static_cast<unsigned long>(stats.logicalReads),
-                  static_cast<unsigned long>(stats.blockReads), static_cast<unsigned long>(stats.seeks),
+                 static_cast<unsigned long>(stats.blockReads), static_cast<unsigned long>(stats.seeks),
                  static_cast<unsigned long>(stats.requestedBytes), static_cast<unsigned long>(stats.loadedBytes));
     }
 
@@ -700,8 +698,8 @@ namespace {
         if (offset == std::string_view::npos)
             return false;
         glyphs.clear();
-        return face.shaper->get()
-            .shape(sample.paragraph, offset, sample.word.size(), sample.rightToLeft, sample.locale, gText, glyphs)
+        return face.shaper
+            ->shape(sample.paragraph, offset, sample.word.size(), sample.rightToLeft, sample.locale, gText, glyphs)
             .has_value();
     }
 
@@ -732,8 +730,8 @@ namespace {
             bool shaped = false;
             if (face.shaper) {
                 glyphs.clear();
-                const auto result = face.shaper->get().shape(sample.paragraph, offset, word.size(),
-                                                             sample.rightToLeft, sample.locale, gText, glyphs);
+                const auto result = face.shaper->shape(sample.paragraph, offset, word.size(), sample.rightToLeft,
+                                                       sample.locale, gText, glyphs);
                 if (!result)
                     return false;
                 advance = *result;
@@ -750,12 +748,10 @@ namespace {
             if (baseline >= area.y + area.h - 4)
                 return true;
             const int16_t x = sample.rightToLeft ? static_cast<int16_t>(cursor - advance) : cursor;
-            const int16_t drawn = shaped ? gText.drawGlyphs(glyphs, x, baseline)
-                                         : gText.drawString(word, x, baseline);
+            const int16_t drawn = shaped ? gText.drawGlyphs(glyphs, x, baseline) : gText.drawString(word, x, baseline);
             if (drawn < 0)
                 return false;
-            cursor = sample.rightToLeft ? static_cast<int16_t>(x - space)
-                                        : static_cast<int16_t>(x + drawn + space);
+            cursor = sample.rightToLeft ? static_cast<int16_t>(x - space) : static_cast<int16_t>(x + drawn + space);
             offset = end;
         }
         baseline = static_cast<int16_t>(baseline + 16);
@@ -766,11 +762,14 @@ namespace {
         BidiText::Analysis analysis;
         BidiText::Line line;
         const std::string metric = "bidi_" + std::string{id} + "_paragraph";
-        return runTimed(metric, kCpuIterations, [&] {
-            if (!analysis.reset(sample.paragraph, sample.rightToLeft ? TextDirection::rtl : TextDirection::ltr))
-                return false;
-            return analysis.resolve({0, sample.paragraph.size()}, line).has_value() && !line.empty();
-        }, 0, false);
+        return runTimed(
+            metric, kCpuIterations,
+            [&] {
+                if (!analysis.reset(sample.paragraph, sample.rightToLeft ? TextDirection::rtl : TextDirection::ltr))
+                    return false;
+                return analysis.resolve({0, sample.paragraph.size()}, line).has_value() && !line.empty();
+            },
+            0, false);
     }
 
     bool benchmarkFamily(size_t familyIndex) {
@@ -789,26 +788,43 @@ namespace {
             std::vector<ui::fonts::PositionedGlyph> glyphs;
             glyphs.reserve(sample.word.size());
             resetFontIo(face);
-            ok &= runTimed(prefix + "_shape_cold", 1, [&] { return shape(face, sample, glyphs); }, 0, false);
+            ok &= runTimed(
+                prefix + "_shape_cold", 1,
+                [&] {
+                    return shape(face, sample, glyphs);
+                },
+                0, false);
             logFontIo(prefix + "_shape_cold", face);
             resetFontIo(face);
-            ok &= runTimed(prefix + "_shape_warm", kCpuIterations,
-                           [&] { return shape(face, sample, glyphs); }, 0, false);
+            ok &= runTimed(
+                prefix + "_shape_warm", kCpuIterations,
+                [&] {
+                    return shape(face, sample, glyphs);
+                },
+                0, false);
             logFontIo(prefix + "_shape_warm", face);
             if (!glyphs.empty()) {
                 clearRenderArea();
                 gText.clearBitmapCache();
                 resetFontIo(face);
-                ok &= runTimed(prefix + "_render_rsvp_cold", 1, [&] {
-                    return gText.drawGlyphs(glyphs, static_cast<int16_t>(area.x + 12),
-                                            static_cast<int16_t>(area.y + area.h / 2)) >= 0;
-                }, 0, false);
+                ok &= runTimed(
+                    prefix + "_render_rsvp_cold", 1,
+                    [&] {
+                        return gText.drawGlyphs(glyphs, static_cast<int16_t>(area.x + 12),
+                                                static_cast<int16_t>(area.y + area.h / 2))
+                            >= 0;
+                    },
+                    0, false);
                 logFontIo(prefix + "_render_rsvp_cold", face);
                 resetFontIo(face);
-                ok &= runTimed(prefix + "_render_rsvp", kRenderIterations, [&] {
-                    return gText.drawGlyphs(glyphs, static_cast<int16_t>(area.x + 12),
-                                            static_cast<int16_t>(area.y + area.h / 2)) >= 0;
-                }, 0, false);
+                ok &= runTimed(
+                    prefix + "_render_rsvp", kRenderIterations,
+                    [&] {
+                        return gText.drawGlyphs(glyphs, static_cast<int16_t>(area.x + 12),
+                                                static_cast<int16_t>(area.y + area.h / 2))
+                            >= 0;
+                    },
+                    0, false);
                 logFontIo(prefix + "_render_rsvp", face);
                 Board::Display::gfx().flush();
             }
@@ -816,30 +832,45 @@ namespace {
             clearRenderArea();
             gText.clearBitmapCache();
             resetFontIo(face);
-            ok &= runTimed(prefix + "_render_rsvp_cold", 1, [&] {
-                return gText.drawString(sample.word, static_cast<int16_t>(area.x + 12),
-                                        static_cast<int16_t>(area.y + area.h / 2)) >= 0;
-            }, 0, false);
+            ok &= runTimed(
+                prefix + "_render_rsvp_cold", 1,
+                [&] {
+                    return gText.drawString(sample.word, static_cast<int16_t>(area.x + 12),
+                                            static_cast<int16_t>(area.y + area.h / 2))
+                        >= 0;
+                },
+                0, false);
             logFontIo(prefix + "_render_rsvp_cold", face);
             resetFontIo(face);
-            ok &= runTimed(prefix + "_render_rsvp", kRenderIterations, [&] {
-                return gText.drawString(sample.word, static_cast<int16_t>(area.x + 12),
-                                        static_cast<int16_t>(area.y + area.h / 2)) >= 0;
-            }, 0, false);
+            ok &= runTimed(
+                prefix + "_render_rsvp", kRenderIterations,
+                [&] {
+                    return gText.drawString(sample.word, static_cast<int16_t>(area.x + 12),
+                                            static_cast<int16_t>(area.y + area.h / 2))
+                        >= 0;
+                },
+                0, false);
             logFontIo(prefix + "_render_rsvp", face);
             if (!sample.nextWord.empty()) {
                 resetFontIo(face);
-                ok &= runTimed(prefix + "_prefetch_next", 1, [&] {
-                    gText.prepare(sample.nextWord);
-                    return true;
-                }, 0, false);
+                ok &= runTimed(
+                    prefix + "_prefetch_next", 1,
+                    [&] {
+                        gText.prepare(sample.nextWord);
+                        return true;
+                    },
+                    0, false);
                 logFontIo(prefix + "_prefetch_next", face);
                 clearRenderArea();
                 resetFontIo(face);
-                ok &= runTimed(prefix + "_render_prefetched", kRenderIterations, [&] {
-                    return gText.drawString(sample.nextWord, static_cast<int16_t>(area.x + 12),
-                                            static_cast<int16_t>(area.y + area.h / 2)) >= 0;
-                }, 0, false);
+                ok &= runTimed(
+                    prefix + "_render_prefetched", kRenderIterations,
+                    [&] {
+                        return gText.drawString(sample.nextWord, static_cast<int16_t>(area.x + 12),
+                                                static_cast<int16_t>(area.y + area.h / 2))
+                            >= 0;
+                    },
+                    0, false);
                 logFontIo(prefix + "_render_prefetched", face);
             }
             Board::Display::gfx().flush();
@@ -849,10 +880,13 @@ namespace {
         gText.setFont(face.raster.get());
         clearRenderArea();
         resetFontIo(face);
-        ok &= runTimed(prefix + "_render_page", kRenderIterations, [&] {
-            int16_t baseline = static_cast<int16_t>(area.y + 14);
-            return renderParagraph(sample, area, RFont4::kCompactStrikeIndex, baseline, familyIndex);
-        }, 0, false);
+        ok &= runTimed(
+            prefix + "_render_page", kRenderIterations,
+            [&] {
+                int16_t baseline = static_cast<int16_t>(area.y + 14);
+                return renderParagraph(sample, area, RFont4::kCompactStrikeIndex, baseline, familyIndex);
+            },
+            0, false);
         logFontIo(prefix + "_render_page", face);
         Board::Display::gfx().flush();
         gFonts.clearLoaded();
@@ -865,14 +899,17 @@ namespace {
         showRenderScreen("Multilingual page", "Latin / Hebrew / Arabic / CJK / Math");
         clearRenderArea();
         gFonts.clearLoaded();
-        const bool ok = runTimed("multilingual_page_pipeline", kRenderIterations, [&] {
-            int16_t baseline = static_cast<int16_t>(area.y + 12);
-            return renderParagraph(kLatinSample, area, RFont4::kCompactStrikeIndex, baseline)
-                && renderParagraph(kHebrewSample, area, RFont4::kCompactStrikeIndex, baseline)
-                && renderParagraph(kArabicSample, area, RFont4::kCompactStrikeIndex, baseline)
-                && renderParagraph(kCjkSample, area, RFont4::kCompactStrikeIndex, baseline)
-                && renderParagraph(kMathSample, area, RFont4::kCompactStrikeIndex, baseline);
-        }, 0, false);
+        const bool ok = runTimed(
+            "multilingual_page_pipeline", kRenderIterations,
+            [&] {
+                int16_t baseline = static_cast<int16_t>(area.y + 12);
+                return renderParagraph(kLatinSample, area, RFont4::kCompactStrikeIndex, baseline)
+                    && renderParagraph(kHebrewSample, area, RFont4::kCompactStrikeIndex, baseline)
+                    && renderParagraph(kArabicSample, area, RFont4::kCompactStrikeIndex, baseline)
+                    && renderParagraph(kCjkSample, area, RFont4::kCompactStrikeIndex, baseline)
+                    && renderParagraph(kMathSample, area, RFont4::kCompactStrikeIndex, baseline);
+            },
+            0, false);
         Board::Display::gfx().flush();
         gFonts.clearLoaded();
         return ok;
@@ -927,8 +964,8 @@ namespace {
                 reader->refreshTypography();
                 return true;
             });
-            ok = benchmarkSequentialReading(*reader, settings, storage, battery, preferences,
-                                            "reading_latin_rsvp", kReadingSessionWords);
+            ok = benchmarkSequentialReading(*reader, settings, storage, battery, preferences, "reading_latin_rsvp",
+                                            kReadingSessionWords);
         }
 
         ok = openReadingFixture(*reader, kMultilingualRsvpPath, "reading_multilingual_open") && ok;
@@ -939,8 +976,8 @@ namespace {
                 return true;
             });
             ok = benchmarkSequentialReading(*reader, settings, storage, battery, preferences,
-                                            "reading_multilingual_rsvp",
-                                            ReadingLoop::wordCount(reader->session), true) && ok;
+                                            "reading_multilingual_rsvp", ReadingLoop::wordCount(reader->session), true)
+              && ok;
 
             ReadingLoop::seekTo(reader->session, 0);
             settings.mode = settings::ReadingMode::page;
@@ -949,8 +986,8 @@ namespace {
                 return true;
             });
             ok = benchmarkSequentialReading(*reader, settings, storage, battery, preferences,
-                                            "reading_multilingual_page",
-                                            ReadingLoop::wordCount(reader->session)) && ok;
+                                            "reading_multilingual_page", ReadingLoop::wordCount(reader->session))
+              && ok;
         }
 
         ok = openReadingFixture(*reader, kDraculaRsvpPath, "reading_dracula_reopen") && ok;
@@ -1004,7 +1041,7 @@ namespace {
         while (true) {
             if (millis() - waitStartedMs >= 10000)
                 break;
-            Input::Event event;
+            Input::ActionMask event;
             if (gDisplay.pollTouch(millis())) {
                 break;
             }

@@ -8,8 +8,8 @@ namespace TextShaping {
     namespace {
 
         constexpr int16_t fromFixed26_6(hb_position_t value) {
-            const int64_t rounded = value < 0 ? -(-static_cast<int64_t>(value) + 32) / 64
-                                              : (static_cast<int64_t>(value) + 32) / 64;
+            const int64_t rounded =
+                value < 0 ? -(-static_cast<int64_t>(value) + 32) / 64 : (static_cast<int64_t>(value) + 32) / 64;
             return static_cast<int16_t>(std::clamp<int64_t>(rounded, INT16_MIN, INT16_MAX));
         }
 
@@ -20,12 +20,12 @@ namespace TextShaping {
     }
 
     std::expected<void, std::string> Shaper::open(File& file, const RFont4::Header& header,
-                                                 std::span<const RFont4::LayoutTableRecord> tables) {
+                                                  std::span<const RFont4::LayoutTableRecord> tables) {
         close();
         if (!file || file.isDirectory() || tables.empty() || tables.size() > RFont4::kMaximumLayoutTableCount)
             return std::unexpected("Font shaping data unavailable");
 
-        file_ = std::ref(file);
+        file_ = &file;
         tables_ = tables;
         face_ = hb_face_create_for_tables(referenceTable, this, nullptr);
         if (face_ == hb_face_get_empty()) {
@@ -54,8 +54,8 @@ namespace TextShaping {
             if (blob != nullptr)
                 hb_blob_destroy(blob);
         }
-        file_.reset();
-        renderer_.reset();
+        file_ = nullptr;
+        renderer_ = nullptr;
         buffer_ = nullptr;
         font_ = nullptr;
         face_ = nullptr;
@@ -65,9 +65,9 @@ namespace TextShaping {
     }
 
     std::expected<int16_t, std::string> Shaper::shape(std::string_view paragraph, size_t offset, size_t length,
-                                                     bool rightToLeft, std::string_view language,
-                                                     ui::fonts::AlphaTextRenderer<640>& renderer,
-                                                     std::vector<ui::fonts::PositionedGlyph>& output) {
+                                                      bool rightToLeft, std::string_view language,
+                                                      ui::fonts::AlphaTextRenderer<640>& renderer,
+                                                      std::vector<ui::fonts::PositionedGlyph>& output) {
         const uint8_t pixelsPerEm = renderer.pixelsPerEm();
         if (!ready() || pixelsPerEm == 0)
             return std::unexpected("Font shaping is unavailable");
@@ -77,9 +77,9 @@ namespace TextShaping {
             || length > static_cast<size_t>(std::numeric_limits<int>::max()))
             return std::unexpected("Text run is too large to shape");
 
-        if (!renderer_ || &renderer_->get() != &renderer) {
+        if (renderer_ != &renderer) {
             hb_font_set_funcs(font_, fontFunctions(), &renderer, nullptr);
-            renderer_ = std::ref(renderer);
+            renderer_ = &renderer;
         }
         if (pixelsPerEm_ != pixelsPerEm) {
             hb_font_set_scale(font_, static_cast<int>(pixelsPerEm) * 64, static_cast<int>(pixelsPerEm) * 64);
@@ -88,9 +88,10 @@ namespace TextShaping {
         hb_buffer_clear_contents(buffer_);
         hb_buffer_set_direction(buffer_, rightToLeft ? HB_DIRECTION_RTL : HB_DIRECTION_LTR);
         if (!language.empty())
-            hb_buffer_set_language(buffer_, hb_language_from_string(language.data(), static_cast<int>(language.size())));
-        hb_buffer_add_utf8(buffer_, paragraph.data(), static_cast<int>(paragraph.size()),
-                           static_cast<unsigned>(offset), static_cast<int>(length));
+            hb_buffer_set_language(buffer_,
+                                   hb_language_from_string(language.data(), static_cast<int>(language.size())));
+        hb_buffer_add_utf8(buffer_, paragraph.data(), static_cast<int>(paragraph.size()), static_cast<unsigned>(offset),
+                           static_cast<int>(length));
         hb_buffer_guess_segment_properties(buffer_);
         if (!hb_buffer_allocation_successful(buffer_))
             return std::unexpected("Could not allocate shaping buffer");
@@ -135,7 +136,7 @@ namespace TextShaping {
         if (tableBlobs_[index] != nullptr)
             return hb_blob_reference(tableBlobs_[index]);
         auto* bytes = static_cast<char*>(std::malloc(table->size));
-        File& file = file_->get();
+        File& file = *file_;
         if (bytes == nullptr || !file.seek(table->offset)
             || file.read(reinterpret_cast<uint8_t*>(bytes), table->size) != table->size) {
             std::free(bytes);
@@ -145,8 +146,7 @@ namespace TextShaping {
         return tableBlobs_[index] == nullptr ? nullptr : hb_blob_reference(tableBlobs_[index]);
     }
 
-    hb_bool_t Shaper::nominalGlyph(hb_font_t*, void* fontData, hb_codepoint_t codepoint,
-                                 hb_codepoint_t* glyph, void*) {
+    hb_bool_t Shaper::nominalGlyph(hb_font_t*, void* fontData, hb_codepoint_t codepoint, hb_codepoint_t* glyph, void*) {
         return static_cast<ui::fonts::AlphaTextRenderer<640>*>(fontData)->nominalGlyph(codepoint, *glyph);
     }
 

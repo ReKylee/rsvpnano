@@ -6,10 +6,13 @@
 #endif
 
 #include <algorithm>
+#include <cerrno>
 #include <cstring>
 #include <iterator>
 #include <ranges>
 #include <span>
+#include <system_error>
+#include <utility>
 
 #include "board/BoardStorage.h"
 #include "fonts/LiterataFallbackAlpha4.h"
@@ -25,6 +28,10 @@ namespace {
     constexpr auto& kFallbackFonts = ui::fonts::LiterataFallbackAlpha4_Sizes;
     static_assert(std::size(kFallbackFonts) == RFont4::kSizeCount);
 
+    std::string fontPath(std::string_view id) {
+        return std::string{StoragePaths::kFontsPath} + "/" + std::string{id} + "/" + RFont4::kFilename;
+    }
+
     template<typename T, size_t Extent>
     std::expected<void, std::string> readSection(File& file, uint32_t offset, std::span<T, Extent> out) {
         if (out.empty())
@@ -39,8 +46,7 @@ namespace {
 #if defined(BOARD_HAS_PSRAM)
     std::expected<void, std::string> readPsramSection(File& file, uint32_t offset, std::span<uint8_t> out) {
         constexpr size_t kTransferBytes = 4096;
-        auto* transfer = static_cast<uint8_t*>(
-            heap_caps_malloc(kTransferBytes, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
+        auto* transfer = static_cast<uint8_t*>(heap_caps_malloc(kTransferBytes, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
         if (transfer == nullptr)
             return std::unexpected("Font transfer buffer unavailable");
         if (!file.seek(offset)) {
@@ -81,8 +87,7 @@ namespace {
                                        std::span{directory.layoutTables}.first(header.layoutTableCount));
                 })
                 .and_then([&]() -> std::expected<RFont4::Directory, std::string> {
-                    const auto tables =
-                        std::span{directory.layoutTables}.first(header.layoutTableCount);
+                    const auto tables = std::span{directory.layoutTables}.first(header.layoutTableCount);
                     if (!RFont4::layoutValid(header, directory.strikes, tables, file.size()))
                         return std::unexpected("Unsupported or corrupt font format");
                     return directory;
@@ -120,10 +125,8 @@ FontCatalog::FontCatalog() {
 
 void FontCatalog::reset() {
     clearLoaded();
-    families_ = {{.id = kFallbackId,
-                  .label = kFallbackLabel,
-                  .builtIn = true,
-                  .scriptMask = kFallbackFonts[0]->scriptMask}};
+    families_ = {
+        {.id = kFallbackId, .label = kFallbackLabel, .builtIn = true, .scriptMask = kFallbackFonts[0]->scriptMask}};
 }
 
 void FontCatalog::loadFromSd() {
@@ -141,87 +144,107 @@ void FontCatalog::loadFromSd() {
     }
 
     size_t rejected = 0;
+    std::vector<std::pair<Family, std::string>> candidates;
     while (File entry = root.openNextFile()) {
         if (!entry.isDirectory()) {
             entry.close();
             continue;
         }
 
-        const std::string path = std::string{entry.path()} + "/" + RFont4::kFilename;
+        std::string directory = entry.path();
+        const std::string path = directory + "/" + RFont4::kFilename;
         auto family = inspectFontFile(path);
-        if (family && family->id != kFallbackId && !find(family->id))
-            families_.push_back(std::move(*family));
-        else if (!family) {
+        entry.close();
+        if (family && family->id != kFallbackId) {
+            candidates.emplace_back(std::move(*family), std::move(directory));
+        } else if (!family) {
             ++rejected;
             ESP_LOGW("font", "rejected %s: %s", path.c_str(), family.error().c_str());
         }
-        entry.close();
     }
     root.close();
+
+    for (auto& [family, directory]: candidates) {
+        if (find(family.id))
+            continue;
+        const std::string canonicalDirectory = std::string{StoragePaths::kFontsPath} + "/" + family.id;
+        if (directory != canonicalDirectory) {
+            errno = 0;
+            if (!Board::Storage::filesystem().rename(directory.c_str(), canonicalDirectory.c_str())) {
+                const int error = errno == 0 ? EIO : errno;
+                Logger::failure("font", "canonicalize directory", directory.c_str(), canonicalDirectory.c_str(),
+                                std::error_code{error, std::generic_category()});
+                ++rejected;
+                continue;
+            }
+            ESP_LOGI("font", "canonicalized directory from=%s to=%s", directory.c_str(), canonicalDirectory.c_str());
+        }
+        families_.push_back(std::move(family));
+    }
 
     std::ranges::sort(families_.begin() + 1, families_.end(), {}, &Family::label);
     ESP_LOGI("font", "catalog ready installed=%u rejected=%u", static_cast<unsigned>(families_.size() - 1),
              static_cast<unsigned>(rejected));
 }
 
-std::expected<FontCatalog::Family, std::string> FontCatalog::install(std::string_view stagedPath) {
+std::expected<std::reference_wrapper<const FontCatalog::Family>, std::string> FontCatalog::install(std::string_view
+                                                                                                       stagedPath) {
     const std::string staged{stagedPath};
-    return inspectFontFile(stagedPath).and_then([this, &staged](const Family& inspected)
-                                                    -> std::expected<Family, std::string> {
-        if (inspected.id == kFallbackId || find(inspected.id))
-            return std::unexpected("Font family already exists");
+    return inspectFontFile(stagedPath)
+        .and_then([this,
+                   &staged](Family inspected) -> std::expected<std::reference_wrapper<const Family>, std::string> {
+            if (inspected.id == kFallbackId || find(inspected.id))
+                return std::unexpected("Font family already exists");
 
-        const std::string directory = std::string{StoragePaths::kFontsPath} + "/" + inspected.id;
-        const std::string finalPath = directory + "/" + RFont4::kFilename;
-        return StorageFiles::ensureDirectory(StoragePaths::kFontsPath)
-            .transform_error([](std::error_code) { return std::string{"Fonts folder could not be created"}; })
-            .and_then([&] {
-                return StorageFiles::ensureDirectory(directory.c_str()).transform_error(
-                    [](std::error_code) { return std::string{"Font folder could not be created"}; });
-            })
-            .and_then([&]() -> std::expected<void, std::string> {
-                if (StorageFiles::fileExists(finalPath.c_str()))
-                    return std::unexpected("Font family already exists");
-                return StorageFiles::replaceFileAtomic(Board::Storage::filesystem(), finalPath.c_str(),
-                                                       staged.c_str(), (finalPath + ".bak").c_str())
-                    .transform_error([&](std::error_code) {
-                        Board::Storage::filesystem().rmdir(directory.c_str());
-                        return std::string{"Font file could not be installed"};
+            const std::string directory = std::string{StoragePaths::kFontsPath} + "/" + inspected.id;
+            const std::string finalPath = directory + "/" + RFont4::kFilename;
+            return StorageFiles::ensureDirectory(StoragePaths::kFontsPath)
+                .transform_error([](std::error_code) {
+                    return std::string{"Fonts folder could not be created"};
+                })
+                .and_then([&] {
+                    return StorageFiles::ensureDirectory(directory.c_str()).transform_error([](std::error_code) {
+                        return std::string{"Font folder could not be created"};
                     });
-            })
-            .and_then([&]() -> std::expected<Family, std::string> {
-                const std::string id = inspected.id;
-                loadFromSd();
-                if (const auto family = find(id))
-                    return family->get();
-
-                Board::Storage::filesystem().remove(finalPath.c_str());
-                Board::Storage::filesystem().rmdir(directory.c_str());
-                loadFromSd();
-                return std::unexpected("Installed font could not be loaded");
-            });
-    });
+                })
+                .and_then([&]() -> std::expected<void, std::string> {
+                    if (StorageFiles::fileExists(finalPath.c_str()))
+                        return std::unexpected("Font family already exists");
+                    return StorageFiles::replaceFileAtomic(Board::Storage::filesystem(), finalPath.c_str(),
+                                                           staged.c_str(), (finalPath + ".bak").c_str())
+                        .transform_error([&](std::error_code) {
+                            Board::Storage::filesystem().rmdir(directory.c_str());
+                            return std::string{"Font file could not be installed"};
+                        });
+                })
+                .transform([&, id = inspected.id] {
+                    families_.push_back(std::move(inspected));
+                    std::ranges::sort(families_.begin() + 1, families_.end(), {}, &Family::label);
+                    return std::cref(*find(id));
+                });
+        });
 }
 
 std::expected<void, std::string> FontCatalog::remove(std::string_view id) {
     const auto family = find(id);
     if (!family)
         return std::unexpected("Font not found");
-    if (family->get().builtIn)
+    if (family->builtIn)
         return std::unexpected("Built-in font cannot be removed");
 
-    const std::string path = family->get().path;
+    const std::string familyId = family->id;
+    const std::string path = fontPath(familyId);
     clearLoaded();
-    if (!Board::Storage::filesystem().remove(path.c_str())) {
-        loadFromSd();
+    if (!Board::Storage::filesystem().remove(path.c_str()))
         return std::unexpected("Font file could not be removed");
-    }
     Board::Storage::filesystem().rmdir(StoragePaths::parentDirectoryForPath(path).c_str());
-    loadFromSd();
+    std::erase_if(families_, [&familyId](const Family& candidate) {
+        return candidate.id == familyId;
+    });
     return {};
 }
 
-std::optional<std::reference_wrapper<const FontCatalog::Family>> FontCatalog::find(std::string_view id) const {
+const FontCatalog::Family* FontCatalog::find(std::string_view id) const {
     const auto findId = [this](std::string_view value) {
         return std::ranges::find_if(families_, [value](const Family& family) {
             return family.id == value;
@@ -230,38 +253,37 @@ std::optional<std::reference_wrapper<const FontCatalog::Family>> FontCatalog::fi
     auto found = findId(id);
     if (found == families_.end())
         found = findId(normalizeId(id));
-    return found == families_.end() ? std::nullopt
-                                    : std::optional<std::reference_wrapper<const Family>>{std::cref(*found)};
+    return found == families_.end() ? nullptr : &*found;
 }
 
 FontCatalog::Face FontCatalog::loadFace(size_t familyIndex, size_t sizeIndex) {
     const size_t safeFamily = std::min(familyIndex, families_.size() - 1);
     const size_t safeSize = std::min(sizeIndex, RFont4::kSizeCount - 1);
     if (!families_[safeFamily].builtIn) {
+        const std::string path = fontPath(families_[safeFamily].id);
         auto family = loadRuntimeFamily(safeFamily);
         if (family) {
             LoadedFamily& loaded = family->get();
             auto strike = loadRuntimeStrike(loaded, safeSize);
             if (strike) {
-                std::optional<std::reference_wrapper<TextShaping::Shaper>> shaper;
+                TextShaping::Shaper* shaper = nullptr;
                 if (families_[safeFamily].shaping && !loaded.shapingFailed) {
                     if (!loaded.shaper.ready()) {
-                        const auto tables = std::span{loaded.directory.layoutTables}
-                                                .first(loaded.directory.header.layoutTableCount);
+                        const auto tables =
+                            std::span{loaded.directory.layoutTables}.first(loaded.directory.header.layoutTableCount);
                         if (auto opened = loaded.shaper.open(loaded.file, loaded.directory.header, tables); !opened) {
                             loaded.shapingFailed = true;
-                            ESP_LOGE("font", "shaping failed %s: %s", families_[safeFamily].path.c_str(),
-                                     opened.error().c_str());
+                            ESP_LOGE("font", "shaping failed %s: %s", path.c_str(), opened.error().c_str());
                         }
                     }
                     if (loaded.shaper.ready())
-                        shaper = std::ref(loaded.shaper);
+                        shaper = &loaded.shaper;
                 }
                 return {.raster = *strike, .shaper = shaper};
             }
-            ESP_LOGE("font", "load failed %s: %s", families_[safeFamily].path.c_str(), strike.error().c_str());
+            ESP_LOGE("font", "load failed %s: %s", path.c_str(), strike.error().c_str());
         } else {
-            ESP_LOGE("font", "load failed %s: %s", families_[safeFamily].path.c_str(), family.error().c_str());
+            ESP_LOGE("font", "load failed %s: %s", path.c_str(), family.error().c_str());
         }
     }
     return {.raster = std::cref(*kFallbackFonts[safeSize])};
@@ -272,8 +294,8 @@ void FontCatalog::clearLoaded() {
     fileCache_.reset();
 }
 
-std::expected<std::reference_wrapper<FontCatalog::LoadedFamily>, std::string>
-FontCatalog::loadRuntimeFamily(size_t familyIndex) {
+std::expected<std::reference_wrapper<FontCatalog::LoadedFamily>, std::string> FontCatalog::
+    loadRuntimeFamily(size_t familyIndex) {
     const auto existing = std::ranges::find_if(loadedFamilies_, [familyIndex](const LoadedFamily& loaded) {
         return loaded.familyIndex == familyIndex;
     });
@@ -285,9 +307,9 @@ FontCatalog::loadRuntimeFamily(size_t familyIndex) {
 
     LoadedFamily& loaded = loadedFamilies_.emplace_back();
     loaded.familyIndex = familyIndex;
-    loaded.file = Board::Storage::filesystem().open(families_[familyIndex].path.c_str(), FILE_READ);
-    const auto fail = [this](std::string error)
-        -> std::expected<std::reference_wrapper<LoadedFamily>, std::string> {
+    const std::string path = fontPath(families_[familyIndex].id);
+    loaded.file = Board::Storage::filesystem().open(path.c_str(), FILE_READ);
+    const auto fail = [this](std::string error) -> std::expected<std::reference_wrapper<LoadedFamily>, std::string> {
         loadedFamilies_.pop_back();
         return std::unexpected(std::move(error));
     };
@@ -302,33 +324,30 @@ FontCatalog::loadRuntimeFamily(size_t familyIndex) {
     {
         constexpr uint32_t kPsramCapabilities = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
         const RFont4::Header& header = loaded.directory.header;
-        const uint32_t metadataEnd = header.glyphMapOffset
-                                   + header.sourceGlyphCount * sizeof(uint16_t);
+        const uint32_t metadataEnd = header.glyphMapOffset + header.sourceGlyphCount * sizeof(uint16_t);
         const size_t metadataSize = metadataEnd - header.identitiesOffset;
         if (metadataSize <= heap_caps_get_largest_free_block(kPsramCapabilities))
-            loaded.residentMetadata.reset(
-                static_cast<uint8_t*>(heap_caps_malloc(metadataSize, kPsramCapabilities)));
+            loaded.residentMetadata.reset(static_cast<uint8_t*>(heap_caps_malloc(metadataSize, kPsramCapabilities)));
         if (loaded.residentMetadata) {
             if (auto read = readPsramSection(loaded.file, header.identitiesOffset,
                                              {loaded.residentMetadata.get(), metadataSize});
                 !read)
                 return fail(read.error());
-            ESP_LOGI("font", "resident family metadata family=%s bytes=%u",
-                     families_[familyIndex].id.c_str(), static_cast<unsigned>(metadataSize));
+            ESP_LOGI("font", "resident family metadata family=%s bytes=%u", families_[familyIndex].id.c_str(),
+                     static_cast<unsigned>(metadataSize));
         }
     }
 #endif
     if (!loaded.residentMetadata) {
-        if (auto read = readSection(loaded.file, loaded.directory.header.pageMapOffset,
-                                    std::span{loaded.pageMap});
+        if (auto read = readSection(loaded.file, loaded.directory.header.pageMapOffset, std::span{loaded.pageMap});
             !read)
             return fail(read.error());
     }
     return std::ref(loaded);
 }
 
-std::expected<std::reference_wrapper<const ui::fonts::AlphaFont>, std::string>
-FontCatalog::loadRuntimeStrike(LoadedFamily& family, size_t sizeIndex) {
+std::expected<std::reference_wrapper<const ui::fonts::AlphaFont>, std::string> FontCatalog::
+    loadRuntimeStrike(LoadedFamily& family, size_t sizeIndex) {
     if (family.loadedStrike && family.loadedStrike->sizeIndex == sizeIndex)
         return std::cref(family.loadedStrike->font);
 
@@ -349,8 +368,8 @@ FontCatalog::loadRuntimeStrike(LoadedFamily& family, size_t sizeIndex) {
         .glyphMapCount = header.sourceGlyphCount,
         .scriptMask = header.scriptMask,
         .pixelsPerEm = strike.pixelsPerEm,
-        .file = std::ref(family.file),
-        .fileCache = std::ref(*fileCache_),
+        .file = &family.file,
+        .fileCache = fileCache_.get(),
         .fileSize = header.totalSize,
         .generation = nextFontGeneration_++,
         .fileHeader = header,
@@ -363,8 +382,7 @@ FontCatalog::loadRuntimeStrike(LoadedFamily& family, size_t sizeIndex) {
         const auto section = [&](uint32_t offset) {
             return family.residentMetadata.get() + (offset - header.identitiesOffset);
         };
-        loaded.font.identities = reinterpret_cast<const RFont4::GlyphIdentityRecord*>(
-            section(header.identitiesOffset));
+        loaded.font.identities = reinterpret_cast<const RFont4::GlyphIdentityRecord*>(section(header.identitiesOffset));
         loaded.font.pageMap = section(header.pageMapOffset);
         loaded.font.pageTableData = section(header.pageTablesOffset);
         if (header.sourceGlyphCount != 0)
@@ -378,16 +396,14 @@ FontCatalog::loadRuntimeStrike(LoadedFamily& family, size_t sizeIndex) {
         constexpr uint32_t kPsramCapabilities = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
         const bool compact = sizeIndex == RFont4::kCompactStrikeIndex;
         const bool residentBitmap = compact;
-        const uint32_t residentEnd = residentBitmap
-                                       ? strike.bitmapOffset + strike.bitmapSize
-                                       : strike.bitmapOffset;
+        const uint32_t residentEnd = residentBitmap ? strike.bitmapOffset + strike.bitmapSize : strike.bitmapOffset;
         const size_t residentSize = residentEnd - strike.glyphsOffset;
         const size_t available = heap_caps_get_largest_free_block(kPsramCapabilities);
         if (residentSize <= available)
             loaded.residentData.reset(static_cast<uint8_t*>(heap_caps_malloc(residentSize, kPsramCapabilities)));
         if (loaded.residentData) {
-            if (auto read = readPsramSection(family.file, strike.glyphsOffset,
-                                             {loaded.residentData.get(), residentSize});
+            if (auto read =
+                    readPsramSection(family.file, strike.glyphsOffset, {loaded.residentData.get(), residentSize});
                 !read) {
                 family.loadedStrike.reset();
                 return std::unexpected(read.error());
@@ -397,17 +413,15 @@ FontCatalog::loadRuntimeStrike(LoadedFamily& family, size_t sizeIndex) {
                 return loaded.residentData.get() + (offset - strike.glyphsOffset);
             };
             loaded.font.glyphs = reinterpret_cast<const RFont4::GlyphRecord*>(section(strike.glyphsOffset));
-            loaded.font.kerningPairs =
-                reinterpret_cast<const RFont4::KerningRecord*>(section(strike.kerningOffset));
+            loaded.font.kerningPairs = reinterpret_cast<const RFont4::KerningRecord*>(section(strike.kerningOffset));
             if (residentBitmap)
                 loaded.font.bitmap = section(strike.bitmapOffset);
-            ESP_LOGI("font", "resident %s family=%s bytes=%u",
-                     compact ? "compact strike" : "metrics",
+            ESP_LOGI("font", "resident %s family=%s bytes=%u", compact ? "compact strike" : "metrics",
                      families_[family.familyIndex].id.c_str(), static_cast<unsigned>(residentSize));
             return std::cref(loaded.font);
         }
-        ESP_LOGW("font", "strike remains file-backed family=%s bytes=%u",
-                  families_[family.familyIndex].id.c_str(), static_cast<unsigned>(residentSize));
+        ESP_LOGW("font", "strike remains file-backed family=%s bytes=%u", families_[family.familyIndex].id.c_str(),
+                 static_cast<unsigned>(residentSize));
     }
 #endif
     return std::cref(loaded.font);
@@ -444,17 +458,15 @@ std::expected<FontCatalog::Family, std::string> FontCatalog::inspectFontFile(std
         return std::unexpected("Font file unavailable");
     }
     return readDirectory(file).and_then([&](const RFont4::Directory& directory) {
-        return readName(file, directory.header).and_then([&](std::string label)
-                                                              -> std::expected<Family, std::string> {
-            return readLocales(file, directory.header).and_then(
-                [&](std::string locales) -> std::expected<Family, std::string> {
+        return readName(file, directory.header).and_then([&](std::string label) -> std::expected<Family, std::string> {
+            return readLocales(file, directory.header)
+                .and_then([&](std::string locales) -> std::expected<Family, std::string> {
                     std::string id = normalizeId(label);
                     if (id.empty())
                         return std::unexpected("Font name is invalid");
                     return Family{.id = std::move(id),
                                   .label = std::move(label),
                                   .locales = std::move(locales),
-                                  .path = std::string{path},
                                   .shaping = directory.header.layoutTableCount != 0,
                                   .scriptMask = directory.header.scriptMask};
                 });

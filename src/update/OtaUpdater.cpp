@@ -10,6 +10,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include "FirmwareVersion.generated.h"
+#include "board/BoardConfig.h"
 #include "net/WifiConnection.h"
 #include "text/AsciiText.h"
 #include "update/ReleaseParser.h"
@@ -34,7 +35,6 @@ namespace {
     };
 
     struct Error {
-        OtaUpdater::ResultCode code;
         std::string summary;
         std::string detail;
     };
@@ -74,10 +74,10 @@ namespace {
         return !owner.empty() && !repo.empty();
     }
 
-    ReleaseSource releaseSourceForConfig(const OtaUpdater::Config& config) {
-        ReleaseSource source{std::string{AsciiText::trim(config.githubOwner)},
-                             std::string{AsciiText::trim(config.githubRepo)},
-                             std::string{AsciiText::trim(config.githubTag)}};
+    ReleaseSource releaseSourceForSettings(const settings::UpdateSettings& settings) {
+        ReleaseSource source{settings.repositoryOwner.empty() ? std::string{"ionutdecebal"}
+                                                              : std::string{AsciiText::trim(settings.repositoryOwner)},
+                             "rsvpnano", std::string{AsciiText::trim(settings.releaseTag)}};
 
         splitOwnerRepo(source.owner, source.owner, source.repo);
         splitOwnerRepo(source.repo, source.owner, source.repo);
@@ -172,20 +172,6 @@ namespace {
 
 } // namespace
 
-OtaUpdater::Config OtaUpdater::config(const settings::DeviceSettings& settings,
-                                      const settings::DeviceSecrets& secrets) {
-    Config result;
-    if (!settings.network.wifiSsid.empty()) {
-        result.wifiSsid = settings.network.wifiSsid;
-        result.wifiPassword = secrets.wifiPassword;
-    }
-
-    if (!settings.updates.repositoryOwner.empty())
-        result.githubOwner = settings.updates.repositoryOwner;
-    result.githubTag = settings.updates.releaseTag;
-    return result;
-}
-
 std::string_view OtaUpdater::currentVersion() {
     return kFirmwareVersion;
 }
@@ -193,10 +179,10 @@ std::string_view OtaUpdater::currentVersion() {
 static void reportStatus(OtaUpdater::StatusCallback callback, void* context, const char* title, const char* line1,
                          const char* line2, int progressPercent);
 
-static std::expected<LatestRelease, std::string> fetchRelease(const OtaUpdater::Config& config,
+static std::expected<LatestRelease, std::string> fetchRelease(const settings::UpdateSettings& settings,
                                                               OtaUpdater::StatusCallback callback, void* context) {
     const std::string installedVersion{OtaUpdater::currentVersion()};
-    const ReleaseSource source = releaseSourceForConfig(config);
+    const ReleaseSource source = releaseSourceForSettings(settings);
     if (source.owner.empty() || source.repo.empty())
         return std::unexpected(std::string{"GitHub source missing"});
 
@@ -234,7 +220,7 @@ static std::expected<LatestRelease, std::string> fetchRelease(const OtaUpdater::
     const std::string body = readBodyLimited(http, kMaxReleaseJsonBytes);
     http.end();
 
-    auto parsed = releaseparser::parse(body, config.assetName);
+    auto parsed = releaseparser::parse(body, Board::Config::OTA_ASSET_NAME);
     if (!parsed)
         return std::unexpected(std::string{"Release tag missing"});
     LatestRelease release;
@@ -260,7 +246,7 @@ static std::expected<LatestRelease, std::string> fetchRelease(const OtaUpdater::
     release.version = std::move(*releaseVersion);
 
     if (release.assetUrl.empty())
-        return std::unexpected(config.assetName + " missing");
+        return std::unexpected(std::string{Board::Config::OTA_ASSET_NAME} + " missing");
 
     return release;
 }
@@ -315,48 +301,43 @@ static void reportStatus(OtaUpdater::StatusCallback callback, void* context, con
 
 static OtaUpdater::Result resultForError(Error error) {
     return {
-        .code = error.code,
-        .currentVersion = std::string{OtaUpdater::currentVersion()},
         .summary = std::move(error.summary),
         .detail = std::move(error.detail),
     };
 }
 
-static std::expected<LatestRelease, Error> prepareRelease(const OtaUpdater::Config& config,
+static std::expected<LatestRelease, Error> prepareRelease(const settings::DeviceSettings& settings,
+                                                          const settings::DeviceSecrets& secrets,
                                                           OtaUpdater::StatusCallback callback, void* context) {
-    if (auto compatible = validateAssetName(config.assetName); !compatible) {
+    if (auto compatible = validateAssetName(Board::Config::OTA_ASSET_NAME); !compatible) {
         return std::unexpected(Error{
-            .code = OtaUpdater::ResultCode::AssetMismatch,
             .summary = "Wrong OTA asset",
             .detail = std::move(compatible.error()),
         });
     }
 
-    if (AsciiText::trim(config.wifiSsid).empty()) {
+    if (AsciiText::trim(settings.network.ssid).empty()) {
         return std::unexpected(Error{
-            .code = OtaUpdater::ResultCode::NotConfigured,
             .summary = "Wi-Fi not set",
             .detail = "Settings -> Wi-Fi",
         });
     }
 
-    auto connected = net::connectStation(config.wifiSsid.c_str(), config.wifiPassword.c_str(), [&](int percent) {
-        reportStatus(callback, context, kStatusTitle, "Connecting Wi-Fi", config.wifiSsid.c_str(), percent);
+    auto connected = net::connectStation(settings.network.ssid.c_str(), secrets.wifiPassword.c_str(), [&](int percent) {
+        reportStatus(callback, context, kStatusTitle, "Connecting Wi-Fi", settings.network.ssid.c_str(), percent);
     });
     if (!connected) {
         net::disconnect();
         return std::unexpected(Error{
-            .code = OtaUpdater::ResultCode::ConnectFailed,
             .summary = "Wi-Fi failed",
             .detail = connected.error().message(),
         });
     }
 
-    auto release = fetchRelease(config, callback, context);
+    auto release = fetchRelease(settings.updates, callback, context);
     if (!release) {
         net::disconnect();
         return std::unexpected(Error{
-            .code = OtaUpdater::ResultCode::MetadataFailed,
             .summary = "GitHub failed",
             .detail = std::move(release.error()),
         });
@@ -365,54 +346,53 @@ static std::expected<LatestRelease, Error> prepareRelease(const OtaUpdater::Conf
     return std::move(*release);
 }
 
-OtaUpdater::Result OtaUpdater::checkOnly(const Config& config, StatusCallback callback, void* context) {
-    auto release = prepareRelease(config, callback, context);
+OtaUpdater::Result OtaUpdater::checkOnly(const settings::DeviceSettings& settings,
+                                         const settings::DeviceSecrets& secrets, StatusCallback callback,
+                                         void* context) {
+    auto release = prepareRelease(settings, secrets, callback, context);
     if (!release)
         return resultForError(std::move(release.error()));
 
     net::disconnect();
-    Result result;
-    result.currentVersion = currentVersion();
-    result.latestVersion = release->version;
-    if (release->version == result.currentVersion) {
-        result.code = ResultCode::NoUpdate;
-        result.summary = "Already current";
-        result.detail = release->version;
-        return result;
+    if (release->version == currentVersion()) {
+        return {
+            .summary = "Already current",
+            .detail = std::move(release->version),
+        };
     }
 
-    result.code = ResultCode::UpdateAvailable;
-    result.summary = "Update available";
-    result.detail = release->version;
-    return result;
+    return {
+        .summary = "Update available",
+        .detail = std::move(release->version),
+    };
 }
 
-OtaUpdater::Result OtaUpdater::checkAndInstall(const Config& config, StatusCallback callback, void* context) {
-    auto release = prepareRelease(config, callback, context);
+OtaUpdater::Result OtaUpdater::checkAndInstall(const settings::DeviceSettings& settings,
+                                               const settings::DeviceSecrets& secrets, StatusCallback callback,
+                                               void* context) {
+    auto release = prepareRelease(settings, secrets, callback, context);
     if (!release)
         return resultForError(std::move(release.error()));
 
-    Result result;
-    result.currentVersion = currentVersion();
-    result.latestVersion = release->version;
-    if (release->version == result.currentVersion) {
+    const std::string_view installedVersion = currentVersion();
+    if (release->version == installedVersion) {
         net::disconnect();
-        result.code = ResultCode::NoUpdate;
-        result.summary = "Already current";
-        result.detail = release->version;
-        return result;
+        return {
+            .summary = "Already current",
+            .detail = std::move(release->version),
+        };
     }
 
-    const std::string detail = versionDetail(result.currentVersion, result.latestVersion);
+    const std::string detail = versionDetail(installedVersion, release->version);
     reportStatus(callback, context, kStatusTitle, "Preparing update", detail.c_str(), 28);
 
-    auto resolvedAssetUrl = resolveDownloadUrl(release->assetUrl, result.latestVersion, callback, context);
+    auto resolvedAssetUrl = resolveDownloadUrl(release->assetUrl, release->version, callback, context);
     if (!resolvedAssetUrl) {
         net::disconnect();
-        result.code = ResultCode::InstallFailed;
-        result.summary = "Asset failed";
-        result.detail = resolvedAssetUrl.error();
-        return result;
+        return {
+            .summary = "Asset failed",
+            .detail = std::move(resolvedAssetUrl.error()),
+        };
     }
 
     WiFiClientSecure client;
@@ -426,9 +406,9 @@ OtaUpdater::Result OtaUpdater::checkAndInstall(const Config& config, StatusCallb
     updater.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 
     int lastReportedProgress = -1;
-    updater.onProgress([callback, context, &result, &lastReportedProgress](int current, int total) {
+    updater.onProgress([callback, context, &release, &lastReportedProgress](int current, int total) {
         if (total <= 0) {
-            reportStatus(callback, context, kStatusTitle, "Downloading update", result.latestVersion.c_str(), -1);
+            reportStatus(callback, context, kStatusTitle, "Downloading update", release->version.c_str(), -1);
             return;
         }
 
@@ -438,10 +418,10 @@ OtaUpdater::Result OtaUpdater::checkAndInstall(const Config& config, StatusCallb
         }
 
         lastReportedProgress = progress;
-        reportStatus(callback, context, kStatusTitle, "Downloading update", result.latestVersion.c_str(), progress);
+        reportStatus(callback, context, kStatusTitle, "Downloading update", release->version.c_str(), progress);
     });
 
-    const String version = result.currentVersion.c_str();
+    const String version = installedVersion.data();
     const String resolvedUrl = resolvedAssetUrl->c_str();
     const t_httpUpdate_return updateResult = updater.update(client, resolvedUrl, version, [version](HTTPClient* http) {
         http->setUserAgent(userAgentForVersion({version.c_str(), version.length()}).c_str());
@@ -452,22 +432,22 @@ OtaUpdater::Result OtaUpdater::checkAndInstall(const Config& config, StatusCallb
 
     switch (updateResult) {
     case HTTP_UPDATE_OK:
-        result.code = ResultCode::Success;
-        result.summary = "Update ready";
-        result.detail = result.latestVersion;
-        result.rebootRequired = true;
-        return result;
+        return {
+            .summary = "Update ready",
+            .detail = std::move(release->version),
+            .rebootRequired = true,
+        };
     case HTTP_UPDATE_NO_UPDATES:
-        result.code = ResultCode::NoUpdate;
-        result.summary = "Already current";
-        result.detail = result.latestVersion;
-        return result;
+        return {
+            .summary = "Already current",
+            .detail = std::move(release->version),
+        };
     case HTTP_UPDATE_FAILED:
     default:
-        result.code = ResultCode::InstallFailed;
-        result.summary = "Update failed";
         const String error = updater.getLastErrorString();
-        result.detail.assign(error.c_str(), error.length());
-        return result;
+        return {
+            .summary = "Update failed",
+            .detail = std::string{error.c_str(), error.length()},
+        };
     }
 }

@@ -71,8 +71,6 @@ namespace locales {
     };
 
     struct UiAssets {
-        std::string packId;
-        std::string locale;
         TextDirection direction = TextDirection::ltr;
         StringTable strings;
         std::vector<uint8_t> font;

@@ -107,6 +107,7 @@ namespace ui {
     };
 
     enum class TextAlign : uint8_t {
+        Start,
         Left,
         Center,
         Right,
@@ -145,7 +146,7 @@ namespace ui {
         void prepareTextFont(std::string_view text, std::string_view textLocale = {}) const;
 
         void label(Rect rect, std::string_view text, uint8_t textSize = 2,
-                   ui::themes::ColorRole role = ui::themes::ColorRole::Foreground, TextAlign align = TextAlign::Left,
+                   ui::themes::ColorRole role = ui::themes::ColorRole::Foreground, TextAlign align = TextAlign::Start,
                    uint8_t textLines = 1, std::string_view textLocale = {});
         void separator(Rect rect, std::string_view text);
         bool setting(Rect rect, std::string_view label, std::string_view value,
@@ -210,7 +211,7 @@ namespace ui {
         bool redraw(Rect rect, uint32_t signature);
         void markDrawn();
         void drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
-                      TextAlign align = TextAlign::Left, uint8_t maxLines = 1, std::string_view textLocale = {});
+                      TextAlign align = TextAlign::Start, uint8_t maxLines = 1, std::string_view textLocale = {});
 
         uint16_t color(ui::themes::ColorRole role) const;
         uint16_t blend(ui::themes::ColorRole role, uint8_t alpha) const;

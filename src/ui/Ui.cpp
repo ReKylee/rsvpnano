@@ -259,7 +259,7 @@ namespace ui {
                          color(ui::themes::ColorRole::Muted));
                 drawText({static_cast<int16_t>(rect.x + 7), static_cast<int16_t>(rect.y + 11), textWidth,
                           static_cast<int16_t>(std::max<int16_t>(0, rect.h - 13))},
-                         value, largeValue ? 2 : 1, color(ui::themes::ColorRole::Accent), TextAlign::Left,
+                         value, largeValue ? 2 : 1, color(ui::themes::ColorRole::Accent), TextAlign::Start,
                          !largeValue && rect.h >= 32 ? 2 : 1);
             }
         }
@@ -976,12 +976,8 @@ namespace ui {
         gfx_.setTextWrap(false);
         gfx_.setTextColor(textColor);
         const bool rightToLeft = (externalFont ? assets->direction : languageAssets_.direction) == TextDirection::rtl;
-        if (rightToLeft) {
-            if (align == TextAlign::Left)
-                align = TextAlign::Right;
-            else if (align == TextAlign::Right)
-                align = TextAlign::Left;
-        }
+        if (align == TextAlign::Start)
+            align = rightToLeft ? TextAlign::Right : TextAlign::Left;
 
         std::string_view first = text;
         std::string_view second;

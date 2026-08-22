@@ -87,11 +87,11 @@ namespace screens {
             ui.label(notes.next(20), ui.text(UiText::StorageEncryption), 2, ui::themes::ColorRole::Foreground,
                      ui::TextAlign::Center);
             ui.label(notes.next(36), ui.text(UiText::StorageEncryptionExplanation), 2,
-                     ui::themes::ColorRole::Foreground, ui::TextAlign::Left, 3);
+                     ui::themes::ColorRole::Foreground, ui::TextAlign::Start, 3);
             ui.label(notes.next(36), ui.text(UiText::StorageEncryptionPermanent), 2, ui::themes::ColorRole::Accent,
-                     ui::TextAlign::Left, 3);
+                     ui::TextAlign::Start, 3);
             ui.label(notes.next(36), ui.text(UiText::StorageEncryptionReset), 2, ui::themes::ColorRole::Foreground,
-                     ui::TextAlign::Left, 3);
+                     ui::TextAlign::Start, 3);
             ui.label(notes.next(20), ui.text(UiText::TapToContinue), 2, ui::themes::ColorRole::Muted,
                      ui::TextAlign::Center);
             if (ui.tap(content)) {

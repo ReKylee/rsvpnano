@@ -230,6 +230,5 @@ private:
     std::string statusLine2_;
     std::string stationUrl_;
     size_t wifiEventId_ = 0;
-    bool stationPausedForAccessPoint_ = false;
     bool mdnsStarted_ = false;
 };

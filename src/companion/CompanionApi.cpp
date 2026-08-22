@@ -94,7 +94,6 @@ void CompanionApi::end() {
     Logger::checkpoint("companion_stop_http");
     drainServer();
 
-    stationPausedForAccessPoint_ = false;
     accessPointSsid_.clear();
     stationUrl_.clear();
     statusLine1_ = "Idle";
@@ -155,11 +154,9 @@ CompanionApi::OperationResult CompanionApi::startNetworkEvents() {
         switch (event) {
         case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
             ESP_LOGI("companion", "softAP client connected");
-            queueNetworkState();
             break;
         case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:
             ESP_LOGI("companion", "softAP client disconnected");
-            queueNetworkState();
             break;
         case ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED:
             ESP_LOGI("companion", "softAP assigned client ip=%s",
@@ -199,26 +196,8 @@ void CompanionApi::applyNetworkState(void* context) {
     const std::lock_guard lock{self.networkStateMutex_};
     if (!self.active())
         return;
-    const bool directClientConnected = WiFi.softAPgetStationNum() != 0;
     const bool stationConnected = WiFi.status() == WL_CONNECTED;
     self.stationConnected_.store(false);
-
-    if (directClientConnected && !stationConnected) {
-        if (!self.stationPausedForAccessPoint_) {
-            self.stationPausedForAccessPoint_ = true;
-            WiFi.disconnect(false, false);
-            ESP_LOGI("companion", "station attempt paused for direct client");
-        }
-        self.stopMdns();
-        return;
-    }
-
-    if (!directClientConnected && self.stationPausedForAccessPoint_) {
-        self.stationPausedForAccessPoint_ = false;
-        if (auto station = self.startStation(); !station)
-            ESP_LOGW("companion", "station resume failed: %s", station.error().c_str());
-        return;
-    }
 
     if (!stationConnected) {
         self.stopMdns();

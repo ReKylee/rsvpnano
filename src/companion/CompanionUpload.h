@@ -4,12 +4,18 @@
 #include <esp_http_server.h>
 
 #include <cstddef>
+#include <expected>
+#include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 #include "companion/CompanionHttp.h"
 
 namespace companion {
+
+    using UploadChunkConsumer = std::expected<void, std::error_code> (*)(void* context,
+                                                                         std::span<const uint8_t> bytes);
 
     class TemporaryUpload {
     public:
@@ -25,7 +31,9 @@ namespace companion {
         [[nodiscard]] static api::Result<TemporaryUpload> receive(httpd_req_t& request, fs::FS& filesystem,
                                                                   std::string temporaryPath,
                                                                   size_t maximumBytes,
-                                                                  std::string_view label);
+                                                                  std::string_view label,
+                                                                  UploadChunkConsumer consume = nullptr,
+                                                                  void* consumeContext = nullptr);
 
     private:
         TemporaryUpload(fs::FS& filesystem, std::string temporaryPath);

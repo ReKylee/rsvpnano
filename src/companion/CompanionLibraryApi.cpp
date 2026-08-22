@@ -12,6 +12,7 @@
 #include "reader/ReadingLoop.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
+#include "storage/index/IndexedBook.h"
 #include "storage/index/ReadingProgress.h"
 #include "text/AsciiText.h"
 
@@ -26,6 +27,10 @@ namespace {
                                   "name");
         }
         return api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR, "storage_error", "Book could not be installed");
+    }
+
+    std::expected<void, std::error_code> appendBookUpload(void* context, std::span<const uint8_t> bytes) {
+        return static_cast<IndexedBook::Builder*>(context)->append(bytes);
     }
 
 } // namespace
@@ -51,27 +56,10 @@ esp_err_t CompanionApi::handleLibraryInstall(httpd_req_t* request) {
     if (self == nullptr || !self->active())
         return ESP_ERR_INVALID_STATE;
 
-    auto installed = self->installLibraryItem(*request);
-    if (!installed)
-        return self->sendError(*request, std::move(installed.error()));
-
-    const BookLibrary::Entry* book = self->storage_.book(*installed);
-    if (book == nullptr)
-        return self->sendError(*request, api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR, "storage_error",
-                                                        "Book is missing from the library"));
-    const std::string path = book->path;
-    auto json = self->encodeBook(*installed);
-    if (!json) {
-        if (auto rollback = self->storage_.removeBook(path); !rollback)
-            Logger::failure("companion", "rollback book install", path.c_str(), rollback.error());
-        self->libraryScreen_.invalidate();
-        return self->sendError(*request, std::move(json.error()));
-    }
-
-    const std::string location = "/api/v2/library/" + BookLibrary::id(*book);
-    if (const esp_err_t error = httpd_resp_set_hdr(request, "Location", location.c_str()); error != ESP_OK)
-        return error;
-    return self->sendJson(*request, HTTP_CODE_CREATED, *json);
+    auto response = self->installLibraryItem(*request);
+    if (!response)
+        return self->sendError(*request, std::move(response.error()));
+    return self->sendJson(*request, HTTP_CODE_CREATED, *response);
 }
 
 esp_err_t CompanionApi::sendLibrary(httpd_req_t& request) {
@@ -108,7 +96,8 @@ esp_err_t CompanionApi::sendLibrary(httpd_req_t& request) {
     return httpd_resp_send_chunk(&request, nullptr, 0);
 }
 
-companion::api::Result<std::string> CompanionApi::encodeBook(size_t index) {
+companion::api::Result<std::string> CompanionApi::encodeBook(size_t index, const BookMetadata* availableMetadata,
+                                                             const reading::BookIdentity* availableIdentity) {
     const BookLibrary::Entry* entry = storage_.book(index);
     if (entry == nullptr || entry->bytes > std::numeric_limits<uint32_t>::max()) {
         return std::unexpected(api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR, "storage_error",
@@ -116,8 +105,8 @@ companion::api::Result<std::string> CompanionApi::encodeBook(size_t index) {
     }
 
     BookMetadata storedMetadata;
-    const BookMetadata* metadata = &storedMetadata;
-    const reading::BookIdentity* identity = nullptr;
+    const BookMetadata* metadata = availableMetadata == nullptr ? &storedMetadata : availableMetadata;
+    const reading::BookIdentity* identity = availableIdentity;
     std::optional<reading::BookIdentity> storedIdentity;
     std::optional<reading::State> storedReading;
     const reading::State* reading = nullptr;
@@ -126,14 +115,14 @@ companion::api::Result<std::string> CompanionApi::encodeBook(size_t index) {
         metadata = &session.metadata;
         reading = &session.state;
         identity = &readerScreen_.store.identity();
-    } else {
+    } else if (identity == nullptr) {
         storedIdentity = storage_.readBookMetadata(index, storedMetadata);
         identity = storedIdentity ? &*storedIdentity : nullptr;
-        if (identity != nullptr) {
-            if (auto state = ReadingProgress::readBookState(entry->path, *identity)) {
-                storedReading = std::move(*state);
-                reading = &*storedReading;
-            }
+    }
+    if (reading == nullptr && identity != nullptr) {
+        if (auto state = ReadingProgress::readBookState(entry->path, *identity)) {
+            storedReading = std::move(*state);
+            reading = &*storedReading;
         }
     }
 
@@ -165,7 +154,17 @@ companion::api::Result<std::string> CompanionApi::encodeBook(size_t index) {
     return encodeResponse(response);
 }
 
-companion::api::Result<size_t> CompanionApi::installLibraryItem(httpd_req_t& request) {
+companion::api::Result<std::string> CompanionApi::installLibraryItem(httpd_req_t& request) {
+    if (request.content_len == 0) {
+        return std::unexpected(companion::api::httpError(HTTP_CODE_BAD_REQUEST, "missing_upload",
+                                                         "Book file is required", "file"));
+    }
+    if (request.content_len > kMaxBookUploadBytes) {
+        return std::unexpected(companion::api::httpError(HTTP_CODE_PAYLOAD_TOO_LARGE, "payload_too_large",
+                                                         "Book is too large", "file",
+                                                         companion::api::ConnectionPolicy::Close));
+    }
+
     auto requestedName = requiredQueryParameter(request, "name", "Book filename is required");
     if (!requestedName)
         return std::unexpected(companion::api::closeConnection(std::move(requestedName.error())));
@@ -176,8 +175,12 @@ companion::api::Result<size_t> CompanionApi::installLibraryItem(httpd_req_t& req
                                                          "Book filename is invalid", "name",
                                                          companion::api::ConnectionPolicy::Close));
     }
-    if (!StoragePaths::hasRsvpExtension(filename) && !StoragePaths::hasTextExtension(filename)
-        && !StoragePaths::hasEpubExtension(filename)) {
+    if (StoragePaths::hasEpubExtension(filename)) {
+        return std::unexpected(companion::api::httpError(
+            HTTP_CODE_BAD_REQUEST, "invalid_field", "Convert EPUB books to RSVP before uploading", "name",
+            companion::api::ConnectionPolicy::Close));
+    }
+    if (!StoragePaths::hasRsvpExtension(filename) && !StoragePaths::hasTextExtension(filename)) {
         filename += ".rsvp";
     }
 
@@ -196,15 +199,36 @@ companion::api::Result<size_t> CompanionApi::installLibraryItem(httpd_req_t& req
     }
 
     const std::string finalPath = std::string{targetDirectory} + "/" + filename;
+    IndexedBook::Builder builder{Board::Storage::filesystem(), finalPath, static_cast<uint32_t>(request.content_len),
+                                 StoragePaths::hasRsvpExtension(filename)};
+    if (auto begun = builder.begin(); !begun) {
+        Logger::failure("companion", "begin book index", finalPath.c_str(), begun.error());
+        return std::unexpected(companion::api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR, "index_error",
+                                                         builder.failure(), "file",
+                                                         companion::api::ConnectionPolicy::Close));
+    }
     auto upload = companion::TemporaryUpload::receive(request, Board::Storage::filesystem(), finalPath + ".tmp",
-                                                      kMaxBookUploadBytes, "Book");
+                                                      kMaxBookUploadBytes, "Book", appendBookUpload, &builder);
     if (!upload)
         return std::unexpected(std::move(upload.error()));
+    if (auto finished = builder.finish(); !finished) {
+        Logger::failure("companion", "finish book index", finalPath.c_str(), finished.error());
+        return std::unexpected(companion::api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR, "index_error",
+                                                         builder.failure(), "file",
+                                                         companion::api::ConnectionPolicy::Close));
+    }
 
     auto installed = storage_.installBook(upload->path(), finalPath);
     if (!installed) {
         Logger::failure("companion", "install book", upload->path().c_str(), finalPath.c_str(), installed.error());
         return std::unexpected(bookInstallError(installed.error()));
+    }
+    if (auto committed = builder.commit(); !committed) {
+        Logger::failure("companion", "commit book index", finalPath.c_str(), committed.error());
+        if (auto rollback = storage_.removeBook(finalPath); !rollback)
+            Logger::failure("companion", "rollback book install", finalPath.c_str(), rollback.error());
+        return std::unexpected(companion::api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR, "index_error",
+                                                         builder.failure(), "file"));
     }
 
     libraryScreen_.invalidate();
@@ -217,7 +241,22 @@ companion::api::Result<size_t> CompanionApi::installLibraryItem(httpd_req_t& req
         return std::unexpected(companion::api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR, "storage_error",
                                                          "Book is missing from the library"));
     }
-    return static_cast<size_t>(index);
+    BookMetadata metadata = builder.takeMetadata();
+    auto response = encodeBook(static_cast<size_t>(index), &metadata, &builder.header().identity);
+    const BookLibrary::Entry* book = storage_.book(static_cast<size_t>(index));
+    if (response && book != nullptr) {
+        const std::string location = "/api/v2/library/" + BookLibrary::id(*book);
+        if (httpd_resp_set_hdr(&request, "Location", location.c_str()) == ESP_OK)
+            return response;
+    }
+
+    if (auto rollback = storage_.removeBook(finalPath); !rollback)
+        Logger::failure("companion", "rollback book response", finalPath.c_str(), rollback.error());
+    libraryScreen_.invalidate();
+    if (!response)
+        return response;
+    return std::unexpected(companion::api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR, "storage_error",
+                                                     "Book response could not be prepared"));
 }
 
 companion::api::Result<> CompanionApi::deleteLibraryItem(httpd_req_t& request) {

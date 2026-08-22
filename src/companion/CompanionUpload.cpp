@@ -7,6 +7,8 @@
 #include <cstddef>
 #include <utility>
 
+#include "logging/Logger.h"
+
 namespace {
 
     namespace api = companion::api;
@@ -51,7 +53,8 @@ namespace companion {
 
     api::Result<TemporaryUpload> TemporaryUpload::receive(httpd_req_t& request, fs::FS& filesystem,
                                                            std::string temporaryPath, size_t maximumBytes,
-                                                           std::string_view label) {
+                                                           std::string_view label, UploadChunkConsumer consume,
+                                                           void* consumeContext) {
         if (request.content_len == 0) {
             return std::unexpected(api::httpError(HTTP_CODE_BAD_REQUEST, "missing_upload",
                                                   std::string{label} + " file is required", "file"));
@@ -102,6 +105,16 @@ namespace companion {
                 return std::unexpected(api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR, "storage_error",
                                                       std::string{label} + " upload could not be written", "file",
                                                       api::ConnectionPolicy::Close));
+            }
+            if (consume != nullptr) {
+                auto consumed = consume(consumeContext,
+                                        std::span{reinterpret_cast<const uint8_t*>(buffer.data()), receivedBytes});
+                if (!consumed) {
+                    Logger::failure("companion", "process upload", upload.path().c_str(), consumed.error());
+                    return std::unexpected(api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR, "index_error",
+                                                          std::string{label} + " could not be indexed", "file",
+                                                          api::ConnectionPolicy::Close));
+                }
             }
             remaining -= receivedBytes;
         }

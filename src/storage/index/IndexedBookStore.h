@@ -51,7 +51,7 @@ public:
     };
 
     static constexpr uint32_t kMagic = 0x58444952UL; // RIDX
-    static constexpr uint32_t kVersion = 10;
+    static constexpr uint32_t kVersion = 11;
     static constexpr size_t kWordCacheSize = 256;
 
     IndexedBookStore() = default;

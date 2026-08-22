@@ -71,7 +71,7 @@ private:
     companion::api::Result<companion::api::DeviceInfo> getDevice(httpd_req_t& request);
 
     // Library
-    companion::api::Result<size_t> installLibraryItem(httpd_req_t& request);
+    companion::api::Result<std::string> installLibraryItem(httpd_req_t& request);
     companion::api::Result<> deleteLibraryItem(httpd_req_t& request);
     companion::api::Result<> putBookPosition(httpd_req_t& request);
     companion::api::Result<> putBookLanguageFonts(httpd_req_t& request);
@@ -205,7 +205,8 @@ private:
                                                 std::string_view suffix = {}) const;
 
     // Shared domain helpers
-    companion::api::Result<std::string> encodeBook(size_t index);
+    companion::api::Result<std::string> encodeBook(size_t index, const BookMetadata* availableMetadata = nullptr,
+                                                   const reading::BookIdentity* availableIdentity = nullptr);
     companion::api::Result<std::string> readSelectionId(httpd_req_t& request);
     void storeNetwork(std::string ssid, std::string password);
     [[nodiscard]] std::string deviceSuffix() const;

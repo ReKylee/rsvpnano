@@ -2,6 +2,7 @@ package com.rsvpnano
 
 import com.rsvpnano.api.NanoClientError
 import com.rsvpnano.api.NanoKtorClient
+import com.rsvpnano.models.NanoChapter
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
@@ -137,21 +138,27 @@ class NanoKtorClientDeviceTest {
                 var uploadedId: String? = null
                 try {
                     val filename = "api-contract-${System.currentTimeMillis()}.rsvp"
+                    val words = (0 until 900).joinToString(" ") { "word$it" }
                     val uploaded = measured("upload-book") {
                         client.uploadBook(
                             baseUrl = baseUrl,
                             name = filename,
-                            data = "@title API contract probe\n@author Device test\n\nThe real ESP32 handled this upload.\n".encodeToByteArray(),
+                            data = "@title API contract probe\n@author Device test\n@chapter Streamed upload\n\n$words\n"
+                                .encodeToByteArray(),
                             category = "book",
                         )
                     }
                     uploadedId = uploaded.id
                     assertEquals("API contract probe", uploaded.metadata.title)
                     assertEquals("Device test", uploaded.metadata.author)
+                    assertEquals(900, uploaded.metadata.wordCount)
+                    assertEquals(listOf(NanoChapter(title = "Streamed upload", wordIndex = 0)), uploaded.metadata.chapters)
                     val listed = measured("library-after-upload") { client.listLibrary(baseUrl) }
                         .single { it.id == uploaded.id }
                     assertEquals("API contract probe", listed.metadata.title)
                     assertEquals("Device test", listed.metadata.author)
+                    assertEquals(uploaded.metadata.wordCount, listed.metadata.wordCount)
+                    assertEquals(uploaded.metadata.chapters, listed.metadata.chapters)
                 } finally {
                     uploadedId?.let { id -> measured("delete-book") { client.deleteBook(baseUrl, id) } }
                 }

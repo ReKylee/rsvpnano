@@ -1,5 +1,6 @@
 package com.rsvpnano.android.ui
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -9,7 +10,7 @@ import java.io.File
 
 class CompanionViewModel(
     appFilesDir: File,
-    nanoNetworkController: AndroidNanoNetworkController,
+    val nanoNetworkController: AndroidNanoNetworkController,
 ) : ViewModel() {
     val presenter = createAndroidCompanionPresenter(
         appFilesDir = appFilesDir,
@@ -24,14 +25,15 @@ class CompanionViewModel(
     }
 
     class Factory(
-        private val appFilesDir: File,
-        private val nanoNetworkController: AndroidNanoNetworkController,
+        context: Context,
     ) : ViewModelProvider.Factory {
+        private val appContext = context.applicationContext
+
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             return CompanionViewModel(
-                appFilesDir = appFilesDir,
-                nanoNetworkController = nanoNetworkController,
+                appFilesDir = appContext.filesDir,
+                nanoNetworkController = AndroidNanoNetworkController(appContext),
             ) as T
         }
     }

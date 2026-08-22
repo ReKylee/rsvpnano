@@ -60,6 +60,7 @@ data class PendingUpload(
 
 @Serializable
 data class NanoInfo(
+    val ssid: String,
     val firmwareVersion: String,
     val otaAsset: String,
 )

@@ -22,9 +22,8 @@ import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoThemeCatalogItem
 import com.rsvpnano.models.NanoThemeSummary
 import com.rsvpnano.models.NanoWifiSettings
-import com.rsvpnano.models.PendingUpload
-import com.rsvpnano.persistence.PendingUploadRepository
-import com.rsvpnano.persistence.PendingUploadStore
+import com.rsvpnano.persistence.PendingUploadJsonStore
+import com.rsvpnano.persistence.TextStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,8 +34,9 @@ class NanoCompanionControllerTest {
     fun connectRequestsOnlyDeviceIdentity() = runBlocking {
         val client = RecordingNanoClient()
 
-        val device = controller(InMemoryPendingStore(), client).connect("http://device.local")
+        val device = controller(client).connect("http://device.local")
 
+        assertEquals("RSVP-Nano-123456", device.ssid)
         assertEquals("preview-v0.0.9+abc", device.firmwareVersion)
         assertEquals(1, client.fetchDeviceCalls)
         assertEquals(0, client.listLibraryCalls)
@@ -45,7 +45,7 @@ class NanoCompanionControllerTest {
     @Test
     fun unavailableLibraryDoesNotPreventConnecting() = runBlocking {
         val client = RecordingNanoClient(failLibrary = true)
-        val controller = controller(InMemoryPendingStore(), client)
+        val controller = controller(client)
 
         assertEquals("preview-v0.0.9+abc", controller.connect("http://device.local").firmwareVersion)
         assertFailsWith<NanoClientError> {
@@ -61,7 +61,7 @@ class NanoCompanionControllerTest {
         val client = RecordingNanoClient(deviceFailures = 1)
 
         assertFailsWith<NanoClientError> {
-            controller(InMemoryPendingStore(), client).connect("http://device.local")
+            controller(client).connect("http://device.local")
         }
 
         assertEquals(1, client.fetchDeviceCalls)
@@ -71,7 +71,7 @@ class NanoCompanionControllerTest {
     @Test
     fun uploadReturnsCreatedBookAndDeleteReturnsNoDuplicateLibrary() = runBlocking {
         val client = RecordingNanoClient()
-        val controller = controller(InMemoryPendingStore(), client)
+        val controller = controller(client)
 
         val uploaded = controller.uploadBook(
             "http://device.local",
@@ -94,7 +94,7 @@ class NanoCompanionControllerTest {
         )
         val client = RecordingNanoClient(initialBooks = listOf(book))
 
-        val updated = controller(InMemoryPendingStore(), client).setBookPosition(
+        val updated = controller(client).setBookPosition(
             "http://device.local",
             book,
             250,
@@ -109,7 +109,7 @@ class NanoCompanionControllerTest {
     fun themeUploadReturnsOnlyTheCreatedTheme() = runBlocking {
         val client = RecordingNanoClient()
 
-        val response = controller(InMemoryPendingStore(), client).uploadTheme(
+        val response = controller(client).uploadTheme(
             "http://device.local",
             "night.toml",
             "theme-data".encodeToByteArray(),
@@ -122,7 +122,7 @@ class NanoCompanionControllerTest {
     @Test
     fun settingsWifiAndFeedsReturnTheSavedResourcesWithoutRefreshes() = runBlocking {
         val client = RecordingNanoClient()
-        val controller = controller(InMemoryPendingStore(), client)
+        val controller = controller(client)
         val settings = sampleSettings().withWpm(320).withBrightnessPercent(20)
 
         assertEquals(
@@ -155,7 +155,7 @@ class NanoCompanionControllerTest {
     @Test
     fun appearanceSelectionsUpdateOnlyTheirRequestedResource() = runBlocking {
         val client = RecordingNanoClient()
-        val controller = controller(InMemoryPendingStore(), client)
+        val controller = controller(client)
 
         assertEquals("night", controller.selectTheme("http://device.local", "night"))
         assertEquals("andika", controller.selectFont("http://device.local", "andika"))
@@ -166,18 +166,10 @@ class NanoCompanionControllerTest {
         assertEquals(null, client.savedSettings)
     }
 
-    private fun controller(store: PendingUploadStore, client: RecordingNanoClient) = NanoCompanionController(
-        draftService = PendingDraftService(PendingUploadRepository(store)),
+    private fun controller(client: RecordingNanoClient) = NanoCompanionController(
+        draftService = PendingDraftService(PendingUploadJsonStore(InMemoryTextStorage())),
         nanoApi = client,
         repository = client,
-    )
-
-    private fun samplePendingUpload() = PendingUpload(
-        id = "1",
-        title = "Example",
-        sourceUrl = "https://example.com/story",
-        body = "Hello reader.",
-        createdAt = "2026-05-17T10:00:00Z",
     )
 
     private class RecordingNanoClient(
@@ -208,7 +200,7 @@ class NanoCompanionControllerTest {
         override suspend fun fetchDevice(baseUrl: String): NanoInfo {
             fetchDeviceCalls++
             if (deviceFailures-- > 0) throw NanoClientError("device not ready")
-            return NanoInfo("preview-v0.0.9+abc", "reader-ota.bin")
+            return NanoInfo("RSVP-Nano-123456", "preview-v0.0.9+abc", "reader-ota.bin")
         }
 
         override suspend fun listLibrary(baseUrl: String): List<NanoBook> {
@@ -308,9 +300,9 @@ class NanoCompanionControllerTest {
         override suspend fun downloadLocalePack(url: String, onProgress: ((Long, Long?) -> Unit)?) = byteArrayOf()
     }
 
-    private class InMemoryPendingStore(var items: List<PendingUpload> = emptyList()) : PendingUploadStore {
-        override suspend fun loadAll() = items
-        override suspend fun saveAll(items: List<PendingUpload>) { this.items = items }
-        override suspend fun remove(id: String) { items = items.filterNot { it.id == id } }
+    private class InMemoryTextStorage : TextStorage {
+        private var value: String? = null
+        override suspend fun readText(): String? = value
+        override suspend fun writeText(value: String) { this.value = value }
     }
 }

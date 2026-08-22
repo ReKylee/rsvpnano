@@ -66,7 +66,7 @@ class NanoKtorClientAndroidTest {
     @Test
     fun fetchesIndependentDeviceAndCollectionResources() = runBlocking {
         val seen = mutableListOf<String>()
-        val device = NanoInfo("preview-v0.0.9+abc", "reader-ota.bin")
+        val device = NanoInfo("RSVP-Nano-123456", "preview-v0.0.9+abc", "reader-ota.bin")
         val books = listOf(sampleBook("b12345678", "Book", 1000))
         val client = NanoKtorClient(mockHttpClient { request ->
             seen += "${request.method.value} ${request.url.encodedPath}"
@@ -82,6 +82,7 @@ class NanoKtorClientAndroidTest {
 
         val info = client.fetchDevice("http://device.local")
         val book = client.listLibrary("http://device.local").single()
+        assertEquals("RSVP-Nano-123456", info.ssid)
         assertEquals("preview-v0.0.9+abc", info.firmwareVersion)
         assertEquals("Default", client.listThemes("http://device.local").single().name)
         assertEquals(emptyList(), client.listFonts("http://device.local"))
@@ -352,19 +353,23 @@ class NanoKtorClientAndroidTest {
         val localeResource = NanoLocaleSummary("ja", "日本語", "ja")
         val client = NanoKtorClient(mockHttpClient(
             status = { request ->
-                if (request.method == HttpMethod.Delete) HttpStatusCode.NoContent else HttpStatusCode.OK
+                when (request.method) {
+                    HttpMethod.Post -> HttpStatusCode.Created
+                    HttpMethod.Delete -> HttpStatusCode.NoContent
+                    else -> HttpStatusCode.OK
+                }
             },
         ) { request ->
             seen += "${request.method.value} ${request.url.encodedPath}?${request.url.encodedQuery}"
             when (request.url.encodedPath) {
                 "/themes/catalog.json" ->
-                    """[{"id":"night","name":"Night","file":"night.toml"}]"""
+                    """[{"id":"night","name":"Night","file":"night.toml"},{"id":"broken"}]"""
                 "/themes/night.toml" -> "theme-data"
                 "/fonts/catalog.json" ->
-                    """[{"id":"atkinson","name":"Atkinson Hyperlegible","file":"atkinson/font.rfont4"}]"""
+                    """[{"id":"atkinson","name":"Atkinson Hyperlegible","file":"atkinson/font.rfont4"},{"name":"broken"}]"""
                 "/fonts/atkinson/font.rfont4" -> "font-data"
                 "/locale-packs/index.json" ->
-                    """[{"id":"ja","name":"日本語","englishName":"Japanese","version":"1.0.0","locale":"ja","direction":"ltr","scripts":["Hani","Hira","Kana"],"translationStatus":"preview","file":"ja.zip"}]"""
+                    """[{"id":"ja","name":"日本語","englishName":"Japanese","version":"1.0.0","locale":"ja","direction":"ltr","scripts":["Hani","Hira","Kana"],"translationStatus":"preview","file":"ja.zip"},{"id":"broken"}]"""
                 "/locale-packs/ja.zip" -> "locale-pack-data"
                 "/api/v2/themes" -> {
                     assertEquals(HttpMethod.Post, request.method)
@@ -374,12 +379,12 @@ class NanoKtorClientAndroidTest {
                 }
                 "/api/v2/themes/night", "/api/v2/fonts/atkinson", "/api/v2/locales/ja" -> ""
                 "/api/v2/fonts" -> {
-                    assertEquals("font.rfont4", request.url.parameters["name"])
+                    assertEquals(null, request.url.parameters["name"])
                     assertEquals(ContentType.Application.OctetStream, request.body.contentType)
                     testJson.encodeToString(NanoFontSummary.serializer(), fontResource)
                 }
                 "/api/v2/locales" -> {
-                    assertEquals("ja.zip", request.url.parameters["name"])
+                    assertEquals(null, request.url.parameters["name"])
                     assertEquals(ContentType.Application.OctetStream, request.body.contentType)
                     testJson.encodeToString(NanoLocaleSummary.serializer(), localeResource)
                 }
@@ -438,9 +443,9 @@ class NanoKtorClientAndroidTest {
                 "GET /locale-packs/ja.zip?",
                 "POST /api/v2/themes?name=night.toml",
                 "DELETE /api/v2/themes/night?",
-                "POST /api/v2/fonts?name=font.rfont4",
+                "POST /api/v2/fonts?",
                 "DELETE /api/v2/fonts/atkinson?",
-                "POST /api/v2/locales?name=ja.zip",
+                "POST /api/v2/locales?",
                 "DELETE /api/v2/locales/ja?",
             ),
             seen,
@@ -469,6 +474,22 @@ class NanoKtorClientAndroidTest {
 
         assertEquals("wpm is out of range", error.message)
         assertEquals(422, error.status)
+    }
+
+    @Test
+    fun exposesStructuredDeviceErrors() = runBlocking {
+        val client = NanoKtorClient(mockHttpClient(
+            status = { HttpStatusCode.NotFound },
+        ) { """{"code":"font_not_found","message":"Font not found","field":"id"}""" })
+
+        val error = assertFailsWith<NanoClientError> {
+            client.listFonts("http://device.local")
+        }
+
+        assertEquals("Font not found", error.message)
+        assertEquals(404, error.status)
+        assertEquals("font_not_found", error.code)
+        assertEquals("id", error.field)
     }
 
     private fun requestBodyText(request: HttpRequestData): String =

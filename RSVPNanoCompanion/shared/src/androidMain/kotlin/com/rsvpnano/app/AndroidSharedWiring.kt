@@ -5,7 +5,6 @@ import com.rsvpnano.api.ArticleFetchClient
 import com.rsvpnano.persistence.JsonAppSettingsStore
 import com.rsvpnano.persistence.OkioTextStorage
 import com.rsvpnano.persistence.PendingUploadJsonStore
-import com.rsvpnano.persistence.PendingUploadRepository
 import com.rsvpnano.ui.CompanionPresenter
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -33,9 +32,7 @@ fun createAndroidCompanionPresenter(
     val root = appFilesDir.absolutePath.toPath()
     val settingsStore = JsonAppSettingsStore(OkioTextStorage(root.resolve(SettingsRelativePath), FileSystem.SYSTEM))
     val draftService = PendingDraftService(
-        repository = PendingUploadRepository(
-            PendingUploadJsonStore(OkioTextStorage(root.resolve(PendingUploadRelativePath), FileSystem.SYSTEM)),
-        ),
+        store = PendingUploadJsonStore(OkioTextStorage(root.resolve(PendingUploadRelativePath), FileSystem.SYSTEM)),
         articleFetchClient = ArticleFetchClient(httpClient = internetClient),
     )
     return CompanionPresenter(

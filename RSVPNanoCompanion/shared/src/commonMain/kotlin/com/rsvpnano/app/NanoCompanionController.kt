@@ -151,11 +151,11 @@ class NanoCompanionController(
         catalogUrl: String,
         theme: NanoThemeCatalogItem,
         onProgress: ((received: Long, total: Long?) -> Unit)? = null,
-    ): CompanionThemeFile {
+    ): CompanionCatalogFile {
         require(theme.file.isNotBlank() && '/' !in theme.file && '\\' !in theme.file) {
             "Theme catalog file path is invalid."
         }
-        return CompanionThemeFile(
+        return CompanionCatalogFile(
             filename = theme.file,
             data = repository.downloadTheme(catalogFileUrl(catalogUrl, theme.file), onProgress),
         )
@@ -165,11 +165,11 @@ class NanoCompanionController(
         catalogUrl: String,
         font: NanoFontCatalogItem,
         onProgress: ((received: Long, total: Long?) -> Unit)? = null,
-    ): CompanionFontFile {
+    ): CompanionCatalogFile {
         require(isSafeFontCatalogPath(font.file)) {
             "Font catalog file path is invalid."
         }
-        return CompanionFontFile(
+        return CompanionCatalogFile(
             filename = font.file.substringAfterLast('/'),
             data = repository.downloadFont(catalogFileUrl(catalogUrl, font.file), onProgress),
         )
@@ -213,12 +213,12 @@ class NanoCompanionController(
         catalogUrl: String,
         pack: NanoLocaleCatalogItem,
         onProgress: ((received: Long, total: Long?) -> Unit)? = null,
-    ): CompanionLocalePackFile {
+    ): CompanionCatalogFile {
         require(pack.file.isNotBlank() && '/' !in pack.file && '\\' !in pack.file &&
             pack.file.endsWith(".zip", ignoreCase = true)) {
             "Locale-pack catalog file path is invalid."
         }
-        return CompanionLocalePackFile(
+        return CompanionCatalogFile(
             filename = pack.file,
             data = repository.downloadLocalePack(catalogFileUrl(catalogUrl, pack.file), onProgress),
         )
@@ -331,17 +331,7 @@ data class CompanionDraftSaveSnapshot(
     val fetchedArticle: Boolean,
 )
 
-data class CompanionThemeFile(
-    val filename: String,
-    val data: ByteArray,
-)
-
-data class CompanionFontFile(
-    val filename: String,
-    val data: ByteArray,
-)
-
-data class CompanionLocalePackFile(
+data class CompanionCatalogFile(
     val filename: String,
     val data: ByteArray,
 )

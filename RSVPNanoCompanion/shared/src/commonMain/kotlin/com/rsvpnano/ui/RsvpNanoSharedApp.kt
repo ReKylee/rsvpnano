@@ -23,8 +23,8 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.outlined.Wifi
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FabPosition
@@ -36,13 +36,15 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -103,8 +105,16 @@ fun RsvpNanoSharedApp(
         var showRssDialog by rememberSaveable { mutableStateOf(false) }
         var showConnectionDialog by rememberSaveable { mutableStateOf(false) }
         var showHelpDialog by rememberSaveable { mutableStateOf(false) }
-        LaunchedEffect(uiState.isConnected, uiState.canRememberCurrentNano) {
-            if (uiState.isConnected && uiState.canRememberCurrentNano) showConnectionDialog = true
+        LaunchedEffect(uiState.isConnected, uiState.canRememberCurrentNano, uiState.nanoSsid) {
+            if (uiState.isConnected && uiState.canRememberCurrentNano) {
+                val result = snackbarHostState.showSnackbar(
+                    message = "Remember ${uiState.nanoSsid ?: "this Nano"} for quicker reconnects?",
+                    actionLabel = "Remember",
+                    withDismissAction = true,
+                    duration = SnackbarDuration.Long,
+                )
+                if (result == SnackbarResult.ActionPerformed) presenter.rememberCurrentNano()
+            }
         }
         val filePicker = rememberFilePickerLauncher(
             type = FileKitType.File(extensions = listOf("epub", "txt", "html", "htm", "rsvp")),

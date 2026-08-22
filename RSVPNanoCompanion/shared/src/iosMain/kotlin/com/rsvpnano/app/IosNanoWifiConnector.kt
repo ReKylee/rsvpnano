@@ -13,7 +13,15 @@ import platform.Foundation.NSNetService
 import platform.Foundation.NSNetServiceBrowser
 import platform.Foundation.NSNetServiceBrowserDelegateProtocol
 import platform.Foundation.NSNetServiceDelegateProtocol
+import platform.Network.nw_path_monitor_cancel
+import platform.Network.nw_path_monitor_create
+import platform.Network.nw_path_monitor_set_queue
+import platform.Network.nw_path_monitor_set_update_handler
+import platform.Network.nw_path_monitor_start
+import platform.Network.nw_path_monitor_t
 import platform.darwin.NSObject
+import platform.darwin.dispatch_async
+import platform.darwin.dispatch_get_main_queue
 import platform.NetworkExtension.NEHotspotConfiguration
 import platform.NetworkExtension.NEHotspotConfigurationManager
 import platform.NetworkExtension.NEHotspotNetwork
@@ -23,6 +31,10 @@ class IosNanoWifiConnector : NanoWifiConnector {
     private val _snapshot = MutableStateFlow(NanoWifiSnapshot())
     private val _events = MutableSharedFlow<NanoWifiEvent>(extraBufferCapacity = 4)
     private var requestedSsid: String? = null
+    private var started = false
+    private var pathMonitor: nw_path_monitor_t = null
+    private var snapshotGeneration = 0
+    private var networkChangePending = false
     // NSNetServiceBrowser does not retain its delegate.
     private var serviceDelegate: NanoServiceDelegate? = null
 
@@ -30,25 +42,58 @@ class IosNanoWifiConnector : NanoWifiConnector {
     override val events: SharedFlow<NanoWifiEvent> = _events
 
     override fun start() {
-        refreshSnapshot()
+        if (started) return
+        started = true
+        val monitor = nw_path_monitor_create() ?: run {
+            refreshSnapshot()
+            return
+        }
+        pathMonitor = monitor
+        nw_path_monitor_set_update_handler(monitor) {
+            scheduleSnapshotRefresh(networkChanged = true)
+        }
+        nw_path_monitor_set_queue(monitor, dispatch_get_main_queue())
+        nw_path_monitor_start(monitor)
     }
 
     override fun stop() {
+        started = false
+        pathMonitor?.let(::nw_path_monitor_cancel)
+        pathMonitor = null
+        snapshotGeneration++
+        networkChangePending = false
         releaseRequestedNanoNetwork()
     }
 
     override fun refreshSnapshot() {
-        NEHotspotNetwork.fetchCurrentWithCompletionHandler { network ->
-            val ssid = network?.SSID
-            val nano = NanoWifiIdentity.rememberedNanoOrNull(ssid)
-            _snapshot.value = if (nano != null) {
-                NanoWifiSnapshot(
-                    currentNano = nano,
-                    isAttached = true,
-                    isRequesting = false,
-                )
-            } else {
-                NanoWifiSnapshot()
+        scheduleSnapshotRefresh(networkChanged = false)
+    }
+
+    private fun scheduleSnapshotRefresh(networkChanged: Boolean) {
+        dispatch_async(dispatch_get_main_queue()) {
+            if (started) {
+                networkChangePending = networkChangePending || networkChanged
+                val generation = ++snapshotGeneration
+                NEHotspotNetwork.fetchCurrentWithCompletionHandler { network ->
+                    dispatch_async(dispatch_get_main_queue()) {
+                        if (started && generation == snapshotGeneration) {
+                            val nano = NanoWifiIdentity.rememberedNanoOrNull(network?.SSID)
+                            _snapshot.value = if (nano != null) {
+                                NanoWifiSnapshot(
+                                    currentNano = nano,
+                                    isAttached = true,
+                                    isRequesting = false,
+                                )
+                            } else {
+                                NanoWifiSnapshot()
+                            }
+                            if (networkChangePending) {
+                                networkChangePending = false
+                                _events.tryEmit(NanoWifiEvent.NetworkChanged)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -81,7 +126,7 @@ class IosNanoWifiConnector : NanoWifiConnector {
                 browser.searchForServicesOfType(SERVICE_TYPE, inDomain = "local.")
             }
         }
-        return endpoints.values.toList()
+        return endpoints.values.sortedBy { it.nano.ssid }
     }
 
     override fun requestNanoNetwork(

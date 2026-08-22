@@ -87,10 +87,16 @@ data class SharedImport(
     val source: String,
 )
 
-enum class CatalogAsset {
-    Theme,
-    Font,
-    Locale,
+enum class CatalogAsset(
+    val label: String,
+    val selectionLabel: String,
+    val plural: String,
+    val extension: String,
+    val catalogPath: String,
+) {
+    Theme("theme", "theme", "themes", ".toml", "themes/index.json"),
+    Font("font", "font", "fonts", ".rfont4", "fonts/index.json"),
+    Locale("locale pack", "interface language", "locale packs", ".zip", "locale-packs/index.json"),
 }
 
 enum class CompanionResource {

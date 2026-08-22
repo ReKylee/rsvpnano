@@ -35,7 +35,10 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
 
@@ -100,7 +103,7 @@ class NanoKtorClient(
         if (!response.status.isSuccess()) {
             throw NanoClientError("Locale-pack catalog returned HTTP ${response.status}")
         }
-        return json.decodeFromString(ListSerializer(NanoLocaleCatalogItem.serializer()), response.body<String>())
+        return decodeCatalog(response.body(), NanoLocaleCatalogItem.serializer())
     }
 
     override suspend fun downloadLocalePack(
@@ -244,7 +247,7 @@ class NanoKtorClient(
         data: ByteArray,
         onProgress: ((sent: Long, total: Long) -> Unit)?,
     ): NanoFontSummary {
-        val response = httpClient.post(buildUrl(baseUrl, "api/v2/fonts", listOf("name" to name))) {
+        val response = httpClient.post(buildUrl(baseUrl, "api/v2/fonts")) {
             contentType(ContentType.Application.OctetStream)
             setBody(data)
             onProgress?.let { progress ->
@@ -263,7 +266,7 @@ class NanoKtorClient(
         if (!response.status.isSuccess()) {
             throw NanoClientError("Theme catalog returned HTTP ${response.status}")
         }
-        return json.decodeFromString(ListSerializer(NanoThemeCatalogItem.serializer()), response.body<String>())
+        return decodeCatalog(response.body(), NanoThemeCatalogItem.serializer())
     }
 
     override suspend fun downloadTheme(
@@ -284,7 +287,7 @@ class NanoKtorClient(
         if (!response.status.isSuccess()) {
             throw NanoClientError("Font catalog returned HTTP ${response.status}")
         }
-        return json.decodeFromString(ListSerializer(NanoFontCatalogItem.serializer()), response.body<String>())
+        return decodeCatalog(response.body(), NanoFontCatalogItem.serializer())
     }
 
     override suspend fun downloadFont(
@@ -306,7 +309,7 @@ class NanoKtorClient(
         data: ByteArray,
         onProgress: ((sent: Long, total: Long) -> Unit)?,
     ): NanoLocaleSummary {
-        val response = httpClient.post(buildUrl(baseUrl, "api/v2/locales", listOf("name" to name))) {
+        val response = httpClient.post(buildUrl(baseUrl, "api/v2/locales")) {
             contentType(ContentType.Application.OctetStream)
             setBody(data)
             onProgress?.let { progress ->
@@ -406,12 +409,29 @@ class NanoKtorClient(
             }
     }
 
+    private fun <T> decodeCatalog(body: String, serializer: KSerializer<T>): List<T> =
+        json.parseToJsonElement(body).jsonArray.mapNotNull { item ->
+            runCatching { json.decodeFromJsonElement(serializer, item) }.getOrNull()
+        }
+
     private fun throwDeviceError(status: HttpStatusCode, body: String): Nothing {
+        val error = runCatching { json.decodeFromString(DeviceError.serializer(), body) }.getOrNull()
         throw NanoClientError(
-            message = body.takeIf(String::isNotBlank) ?: "Device rejected request with HTTP $status",
+            message = error?.message?.takeIf(String::isNotBlank)
+                ?: body.takeIf(String::isNotBlank)
+                ?: "Device rejected request with HTTP $status",
             status = status.value,
+            code = error?.code,
+            field = error?.field,
         )
     }
+
+    @Serializable
+    private data class DeviceError(
+        val code: String,
+        val message: String,
+        val field: String? = null,
+    )
 
     @Serializable
     private data class AppearanceSelection(val id: String)

@@ -1,6 +1,7 @@
 package com.rsvpnano.ui
 
 import com.rsvpnano.app.CompanionNotice
+import com.rsvpnano.app.CompanionCatalogFile
 import com.rsvpnano.app.FirmwareUpdates
 import com.rsvpnano.app.NanoCompanionController
 import com.rsvpnano.app.NanoConnectionState
@@ -9,10 +10,12 @@ import com.rsvpnano.app.NanoEndpoint
 import com.rsvpnano.app.NanoSettingsResource
 import com.rsvpnano.app.NanoWifiConnector
 import com.rsvpnano.app.NanoWifiEvent
+import com.rsvpnano.app.NanoWifiIdentity
 import com.rsvpnano.app.NanoWifiRequestResult
 import com.rsvpnano.app.NanoWifiSnapshot
 import com.rsvpnano.app.SharedAppUtils
 import com.rsvpnano.app.catalogContentUrl
+import com.rsvpnano.app.firmwareRevision
 import com.rsvpnano.app.releaseSource
 import com.rsvpnano.converters.ImportPreparation
 import com.rsvpnano.converters.RsvpConverter
@@ -31,6 +34,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -77,7 +82,7 @@ class CompanionPresenter(
         loadDrafts()
     }
 
-    fun connectNanoScan() {
+    fun connectNanoScan(onWifiPermissionRequired: () -> Unit = {}) {
         if (connectionCheckJob?.isActive == true) return
         suppressedRememberPrompt = null
         connectionCheckJob = scope.launch {
@@ -92,11 +97,23 @@ class CompanionPresenter(
                     notice = CompanionNotice.Attention("Looking for your RSVP Nano..."),
                 )
             }
-            val endpoints = nanoNetworkController.discoverNanos()
+            val endpoints = try {
+                nanoNetworkController.discoverNanos()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                updateState {
+                    it.copy(
+                        connectionState = NanoConnectionState.Disconnected,
+                        notice = CompanionNotice.Error("Local discovery failed: ${failureDetail(error)}"),
+                    )
+                }
+                return@launch
+            }
             val endpoint = when {
                 endpoints.isEmpty() -> {
                     updateState { it.copy(connectionState = NanoConnectionState.Disconnected) }
-                    connectNano(rememberedNano)
+                    connectNano(rememberedNano, onWifiPermissionRequired)
                     return@launch
                 }
                 endpoints.size == 1 -> endpoints.first()
@@ -143,10 +160,13 @@ class CompanionPresenter(
                 notice = CompanionNotice.Attention("Connecting to ${endpoint.nano.ssid}..."),
             )
         }
-        runCatching { refreshConnection(endpoint.baseUrl) }
-            .onFailure { error ->
-                markDisconnected("Found ${endpoint.nano.ssid}, but connection failed: ${failureDetail(error)}")
-            }
+        try {
+            refreshConnection(endpoint.baseUrl)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            markDisconnected("Found ${endpoint.nano.ssid}, but connection failed: ${failureDetail(error)}")
+        }
     }
 
     fun scanPermissionDenied() {
@@ -197,8 +217,8 @@ class CompanionPresenter(
 
     fun refreshThemeCatalog() {
         scope.launch {
+            val catalogUrl = runCatching { catalogUrl("themes/index.json") }.getOrNull() ?: return@launch
             runCatching {
-                val catalogUrl = catalogUrl("themes/index.json")
                 catalogUrl to companionController.fetchThemeCatalog(catalogUrl)
             }
                 .onSuccess { (catalogUrl, themes) ->
@@ -209,16 +229,16 @@ class CompanionPresenter(
                         )
                     }
                 }
-                .onFailure { error ->
-                    setNotice(CompanionNotice.Error(error.message ?: "Online theme catalog could not be loaded."))
+                .onFailure {
+                    updateState { it.copy(themeCatalogUrl = catalogUrl) }
                 }
         }
     }
 
     fun refreshFontCatalog() {
         scope.launch {
+            val catalogUrl = runCatching { catalogUrl("fonts/index.json") }.getOrNull() ?: return@launch
             runCatching {
-                val catalogUrl = catalogUrl("fonts/index.json")
                 catalogUrl to companionController.fetchFontCatalog(catalogUrl)
             }
                 .onSuccess { (catalogUrl, fonts) ->
@@ -229,8 +249,8 @@ class CompanionPresenter(
                         )
                     }
                 }
-                .onFailure { error ->
-                    setNotice(CompanionNotice.Error(error.message ?: "Online font catalog could not be loaded."))
+                .onFailure {
+                    updateState { it.copy(fontCatalogUrl = catalogUrl) }
                 }
         }
     }
@@ -257,9 +277,12 @@ class CompanionPresenter(
     private suspend fun verifyCurrentConnection() {
         val state = current
         if (!state.isConnected) return
-        runCatching {
+        try {
             refreshConnection(state.baseUrl)
-        }.onFailure {
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            currentCoroutineContext().ensureActive()
             if (current.isNanoWifiAttached) {
                 setNotice(CompanionNotice.Attention("Nano Wi-Fi is connected, but the reader is not responding."))
             } else {
@@ -301,40 +324,74 @@ class CompanionPresenter(
         enqueueSettingsSave(nextSettings, resources)
     }
 
-    fun selectTheme(id: String) {
+    fun selectTheme(id: String) = selectCatalogAsset(CatalogAsset.Theme, id)
+
+    fun selectFont(id: String) = selectCatalogAsset(CatalogAsset.Font, id)
+
+    fun selectLocale(id: String) = selectCatalogAsset(CatalogAsset.Locale, id)
+
+    private fun selectCatalogAsset(asset: CatalogAsset, id: String) {
         val state = current
         val settings = state.settings
         if (!state.isConnected || settings == null) {
-            setNotice(CompanionNotice.Error("Connect to your Nano before selecting a theme."))
+            setNotice(CompanionNotice.Error("Connect to your Nano before changing the ${asset.selectionLabel}."))
             return
         }
-        if (settings.`interface`.selectedThemeId == id) return
+        val previousId = selectedCatalogAsset(asset, settings)
+        if (previousId == id) return
 
-        pendingSettingsSave = pendingSettingsSave?.let { it.copy(settings = it.settings.withThemeId(id)) }
-        updateState { it.copy(settings = settings.withThemeId(id), notice = CompanionNotice.Neutral("Applying theme...")) }
+        pendingSettingsSave = pendingSettingsSave?.let {
+            it.copy(settings = updateSelectedCatalogAsset(asset, it.settings, id))
+        }
+        updateState {
+            it.copy(
+                settings = updateSelectedCatalogAsset(asset, settings, id),
+                notice = CompanionNotice.Neutral("Applying ${asset.selectionLabel}..."),
+            )
+        }
         scope.launch {
-            runCatching { withNanoApi { companionController.selectTheme(state.baseUrl, id) } }
-                .onSuccess { selectedId ->
-                    updateState { currentState ->
+            try {
+                val selectedId = withNanoApi { selectCatalogAssetOnDevice(asset, state.baseUrl, id) }
+                updateState { currentState ->
+                    if (currentState.settings?.let { selectedCatalogAsset(asset, it) } != id) {
+                        currentState
+                    } else {
                         currentState.copy(
-                            settings = currentState.settings?.withThemeId(selectedId),
-                            notice = CompanionNotice.Success("Theme applied."),
+                            settings = currentState.settings.let {
+                                updateSelectedCatalogAsset(asset, it, selectedId)
+                            },
+                            notice = CompanionNotice.Success(
+                                "${asset.selectionLabel.replaceFirstChar(Char::uppercase)} applied.",
+                            ),
                         )
                     }
                 }
-                .onFailure { error ->
-                    updateState { currentState ->
-                        val currentSettings = currentState.settings
-                        if (currentSettings?.`interface`?.selectedThemeId != id) currentState
-                        else {
-                            pendingSettingsSave = pendingSettingsSave?.let {
-                                it.copy(settings = it.settings.withThemeId(settings.`interface`.selectedThemeId))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                var rolledBack = false
+                updateState { currentState ->
+                    val currentSettings = currentState.settings
+                    if (currentSettings?.let { selectedCatalogAsset(asset, it) } != id) {
+                        currentState
+                    } else {
+                        rolledBack = true
+                        pendingSettingsSave = pendingSettingsSave?.let { pending ->
+                            if (selectedCatalogAsset(asset, pending.settings) == id) {
+                                pending.copy(
+                                    settings = updateSelectedCatalogAsset(asset, pending.settings, previousId),
+                                )
+                            } else {
+                                pending
                             }
-                            currentState.copy(settings = currentSettings.withThemeId(settings.`interface`.selectedThemeId))
                         }
+                        currentState.copy(
+                            settings = updateSelectedCatalogAsset(asset, currentSettings, previousId),
+                        )
                     }
-                    handleDeviceFailure(error, "Selecting theme failed")
                 }
+                if (rolledBack) handleDeviceFailure(error, "Selecting ${asset.selectionLabel} failed")
+            }
         }
     }
 
@@ -406,80 +463,6 @@ class CompanionPresenter(
             "Loading focus timers failed",
             companionController::refreshFocusTimers,
         ) { state, timers -> state.copy(focusTimers = timers) }
-    }
-
-    fun selectFont(id: String) {
-        val state = current
-        val settings = state.settings
-        if (!state.isConnected || settings == null) {
-            setNotice(CompanionNotice.Error("Connect to your Nano before selecting a font."))
-            return
-        }
-        if (settings.reading.typography.fontId == id) return
-
-        pendingSettingsSave = pendingSettingsSave?.let { it.copy(settings = it.settings.withTypeface(id)) }
-        updateState { it.copy(settings = settings.withTypeface(id), notice = CompanionNotice.Neutral("Applying font...")) }
-        scope.launch {
-            runCatching { withNanoApi { companionController.selectFont(state.baseUrl, id) } }
-                .onSuccess { selectedId ->
-                    updateState { currentState ->
-                        currentState.copy(
-                            settings = currentState.settings?.withTypeface(selectedId),
-                            notice = CompanionNotice.Success("Font applied."),
-                        )
-                    }
-                }
-                .onFailure { error ->
-                    updateState { currentState ->
-                        val currentSettings = currentState.settings
-                        if (currentSettings?.reading?.typography?.fontId != id) currentState
-                        else {
-                            pendingSettingsSave = pendingSettingsSave?.let {
-                                it.copy(settings = it.settings.withTypeface(settings.reading.typography.fontId))
-                            }
-                            currentState.copy(settings = currentSettings.withTypeface(settings.reading.typography.fontId))
-                        }
-                    }
-                    handleDeviceFailure(error, "Selecting font failed")
-                }
-        }
-    }
-
-    fun selectLocale(id: String) {
-        val state = current
-        val settings = state.settings
-        if (!state.isConnected || settings == null) {
-            setNotice(CompanionNotice.Error("Connect to your Nano before selecting an interface language."))
-            return
-        }
-        if (settings.`interface`.locale == id) return
-
-        pendingSettingsSave = pendingSettingsSave?.let { it.copy(settings = it.settings.withLocale(id)) }
-        updateState { it.copy(settings = settings.withLocale(id), notice = CompanionNotice.Neutral("Applying language...")) }
-        scope.launch {
-            runCatching { withNanoApi { companionController.selectLocale(state.baseUrl, id) } }
-                .onSuccess { selectedId ->
-                    updateState { currentState ->
-                        currentState.copy(
-                            settings = currentState.settings?.withLocale(selectedId),
-                            notice = CompanionNotice.Success("Interface language applied."),
-                        )
-                    }
-                }
-                .onFailure { error ->
-                    updateState { currentState ->
-                        val currentSettings = currentState.settings
-                        if (currentSettings?.`interface`?.locale != id) currentState
-                        else {
-                            pendingSettingsSave = pendingSettingsSave?.let {
-                                it.copy(settings = it.settings.withLocale(settings.`interface`.locale))
-                            }
-                            currentState.copy(settings = currentSettings.withLocale(settings.`interface`.locale))
-                        }
-                    }
-                    handleDeviceFailure(error, "Selecting interface language failed")
-                }
-        }
     }
 
     fun setFirmwareNotificationsEnabled(enabled: Boolean) {
@@ -974,8 +957,8 @@ class CompanionPresenter(
 
     fun refreshLocaleCatalog() {
         scope.launch {
+            val catalogUrl = runCatching { catalogUrl("locale-packs/index.json") }.getOrNull() ?: return@launch
             runCatching {
-                val catalogUrl = catalogUrl("locale-packs/index.json")
                 catalogUrl to companionController.fetchLocaleCatalog(catalogUrl)
             }
                 .onSuccess { (catalogUrl, locales) ->
@@ -986,8 +969,8 @@ class CompanionPresenter(
                         )
                     }
                 }
-                .onFailure { error ->
-                    setNotice(CompanionNotice.Error(error.message ?: "Online locale catalog could not be loaded."))
+                .onFailure {
+                    updateState { it.copy(localeCatalogUrl = catalogUrl) }
                 }
         }
     }
@@ -1076,187 +1059,20 @@ class CompanionPresenter(
         }
     }
 
-    fun uploadThemeFile(displayName: String, data: ByteArray) {
-        scope.launch {
-            val state = current
-            if (!state.isConnected) {
-                setNotice(CompanionNotice.Error("Connect to your Nano before uploading themes."))
-                return@launch
-            }
-            if (!displayName.endsWith(".toml", ignoreCase = true)) {
-                setNotice(CompanionNotice.Error("Theme files must use the .toml extension."))
-                return@launch
-            }
-            setNotice(CompanionNotice.Attention("Uploading $displayName..."))
-            runCatching {
-                withNanoApi {
-                    companionController.uploadTheme(
-                        baseUrl = state.baseUrl,
-                        filename = displayName,
-                        data = data,
-                    )
-                }
-            }.onSuccess { uploaded ->
-                updateState {
-                    it.copy(
-                        availableThemes = it.availableThemes.upsert(uploaded) { theme -> theme.id },
-                        notice = CompanionNotice.Success("Uploaded $displayName."),
-                    )
-                }
-            }.onFailure { error ->
-                handleDeviceFailure(error, "Uploading theme failed")
-            }
-        }
-    }
+    fun uploadThemeFile(displayName: String, data: ByteArray) =
+        uploadCatalogFile(CatalogAsset.Theme, displayName, data)
 
-    fun installOnlineTheme(themeId: String) {
-        scope.launch {
-            val state = current
-            if (!state.isConnected) {
-                setNotice(CompanionNotice.Error("Connect to your Nano before installing themes."))
-                return@launch
-            }
-            val theme = state.themeCatalog.firstOrNull { it.id == themeId }
-            if (theme == null) {
-                setNotice(CompanionNotice.Error("Load the online theme list first."))
-                return@launch
-            }
-            if (!beginCatalogInstall(CatalogAsset.Theme, theme.id)) return@launch
+    fun uploadFontFile(displayName: String, data: ByteArray) =
+        uploadCatalogFile(CatalogAsset.Font, displayName, data)
 
-            try {
-                setNotice(CompanionNotice.Attention("Downloading ${theme.name}..."))
-                val catalogUrl = state.themeCatalogUrl.ifBlank { catalogUrl("themes/index.json") }
-                val themeFile = runCatching {
-                    companionController.downloadTheme(catalogUrl, theme) { received, total ->
-                        updateCatalogInstall(CatalogAsset.Theme, theme.id, CatalogInstallStage.Downloading, received, total)
-                    }
-                }.onFailure { error ->
-                    setNotice(CompanionNotice.Error(error.message ?: "Theme download failed."))
-                }.getOrNull() ?: return@launch
+    fun installLocalePackFile(displayName: String, data: ByteArray) =
+        uploadCatalogFile(CatalogAsset.Locale, displayName, data)
 
-                if (!ensureReaderConnected("installing themes")) return@launch
-                updateCatalogInstall(CatalogAsset.Theme, theme.id, CatalogInstallStage.Sending)
-                setNotice(CompanionNotice.Attention("Installing ${theme.name}..."))
-                runCatching {
-                    withNanoApi {
-                        companionController.uploadTheme(
-                            baseUrl = state.baseUrl,
-                            filename = themeFile.filename,
-                            data = themeFile.data,
-                            onProgress = { sent, total ->
-                                updateCatalogUpload(CatalogAsset.Theme, theme.id, sent, total)
-                            },
-                        )
-                    }
-                }.onSuccess { installed ->
-                    updateState {
-                        it.copy(
-                            availableThemes = it.availableThemes.upsert(installed) { theme -> theme.id },
-                            notice = CompanionNotice.Success("Installed ${theme.name}."),
-                        )
-                    }
-                }.onFailure { error ->
-                    handleDeviceFailure(error, "Installing theme failed")
-                }
-            } finally {
-                finishCatalogInstall(CatalogAsset.Theme, theme.id)
-            }
-        }
-    }
+    fun installOnlineTheme(id: String) = installOnlineCatalogAsset(CatalogAsset.Theme, id)
 
+    fun installOnlineFont(id: String) = installOnlineCatalogAsset(CatalogAsset.Font, id)
 
-    fun uploadFontFile(displayName: String, data: ByteArray) {
-        scope.launch {
-            val state = current
-            if (!state.isConnected) {
-                setNotice(CompanionNotice.Error("Connect to your Nano before uploading fonts."))
-                return@launch
-            }
-            if (!displayName.endsWith(".rfont4", ignoreCase = true)) {
-                setNotice(CompanionNotice.Error("Font files must use the .rfont4 extension."))
-                return@launch
-            }
-            setNotice(CompanionNotice.Attention("Uploading $displayName..."))
-            runCatching {
-                withNanoApi {
-                    companionController.uploadFont(
-                        baseUrl = state.baseUrl,
-                        filename = displayName,
-                        data = data,
-                    )
-                }
-            }.onSuccess { uploaded ->
-                updateState {
-                    it.copy(
-                        availableFonts = it.availableFonts.upsert(uploaded) { font -> font.id },
-                        notice = CompanionNotice.Success("Uploaded ${uploaded.name}."),
-                    )
-                }
-            }.onFailure { error ->
-                handleDeviceFailure(error, "Uploading font failed")
-            }
-        }
-    }
-
-    fun installOnlineFont(id: String) {
-        scope.launch {
-            val state = current
-            if (!state.isConnected) {
-                setNotice(CompanionNotice.Error("Connect to your Nano before installing fonts."))
-                return@launch
-            }
-            val font = state.fontCatalog.firstOrNull { it.id == id }
-            if (font == null) {
-                setNotice(CompanionNotice.Error("Load the online font list first."))
-                return@launch
-            }
-            if (!beginCatalogInstall(CatalogAsset.Font, font.id)) return@launch
-            try {
-                setNotice(CompanionNotice.Attention("Downloading ${font.name}..."))
-                val catalogUrl = state.fontCatalogUrl.ifBlank { catalogUrl("fonts/index.json") }
-                val fontFile = runCatching {
-                    companionController.downloadFont(catalogUrl, font) { received, total ->
-                        updateCatalogInstall(CatalogAsset.Font, font.id, CatalogInstallStage.Downloading, received, total)
-                    }
-                }.onFailure { error ->
-                    setNotice(CompanionNotice.Error(error.message ?: "Font download failed."))
-                }.getOrNull() ?: return@launch
-
-                if (!ensureReaderConnected("installing fonts")) return@launch
-                updateCatalogInstall(CatalogAsset.Font, font.id, CatalogInstallStage.Sending)
-                setNotice(CompanionNotice.Attention("Installing ${font.name}..."))
-                runCatching {
-                    withNanoApi {
-                        companionController.uploadFont(
-                            baseUrl = state.baseUrl,
-                            filename = fontFile.filename,
-                            data = fontFile.data,
-                            onProgress = { sent, total ->
-                                updateCatalogUpload(CatalogAsset.Font, font.id, sent, total)
-                            },
-                        )
-                    }
-                }.onSuccess { installed ->
-                    updateState {
-                        it.copy(
-                            availableFonts = it.availableFonts.upsert(installed) { font -> font.id },
-                            notice = CompanionNotice.Success("Installed ${font.name}."),
-                        )
-                    }
-                }.onFailure { error ->
-                    handleDeviceFailure(error, "Installing font failed")
-                }
-            } finally {
-                finishCatalogInstall(CatalogAsset.Font, font.id)
-            }
-        }
-    }
-
-    fun installLocalePackFile(displayName: String, data: ByteArray) {
-        scope.launch {
-            installLocalePack(displayName, data)
-        }
-    }
+    fun installOnlineLocalePack(id: String) = installOnlineCatalogAsset(CatalogAsset.Locale, id)
 
     fun removeTheme(id: String) {
         scope.launch {
@@ -1298,70 +1114,139 @@ class CompanionPresenter(
         }
     }
 
-    fun installOnlineLocalePack(id: String) {
+    private fun uploadCatalogFile(asset: CatalogAsset, displayName: String, data: ByteArray) {
+        scope.launch {
+            installCatalogFile(asset, displayName, data)
+        }
+    }
+
+    private fun installOnlineCatalogAsset(asset: CatalogAsset, id: String) {
         scope.launch {
             val state = current
             if (!state.isConnected) {
-                setNotice(CompanionNotice.Error("Connect to your Nano before installing locale packs."))
+                setNotice(CompanionNotice.Error("Connect to your Nano before installing ${asset.plural}."))
                 return@launch
             }
-            val pack = state.localeCatalog.firstOrNull { it.id == id }
-            if (pack == null) {
-                setNotice(CompanionNotice.Error("Load the online locale list first."))
+            val installedFont = state.availableFonts.firstOrNull { it.id == id }
+            if (asset == CatalogAsset.Font && installedFont != null) {
+                setNotice(CompanionNotice.Neutral("${installedFont.name} is already installed."))
                 return@launch
             }
-            if (!beginCatalogInstall(CatalogAsset.Locale, pack.id)) return@launch
+            val name = catalogAssetName(asset, state, id)
+            if (name == null) {
+                setNotice(CompanionNotice.Error("Load the online ${asset.plural} first."))
+                return@launch
+            }
+            if (!beginCatalogInstall(asset, id)) return@launch
+
             try {
-                setNotice(CompanionNotice.Attention("Downloading ${pack.name}..."))
-                val catalogUrl = state.localeCatalogUrl.ifBlank { catalogUrl("locale-packs/index.json") }
-                val file = runCatching {
-                    companionController.downloadLocalePack(catalogUrl, pack) { received, total ->
-                        updateCatalogInstall(CatalogAsset.Locale, pack.id, CatalogInstallStage.Downloading, received, total)
+                setNotice(CompanionNotice.Attention("Downloading $name..."))
+                val file = try {
+                    downloadCatalogAsset(asset, state, id) { received, total ->
+                        updateCatalogInstall(asset, id, CatalogInstallStage.Downloading, received, total)
                     }
-                }.onFailure { error ->
-                    setNotice(CompanionNotice.Error(error.message ?: "Locale-pack download failed."))
-                }.getOrNull() ?: return@launch
-                installLocalePack(file.filename, file.data, pack.id)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Throwable) {
+                    setNotice(
+                        CompanionNotice.Error(
+                            error.message ?: "${asset.label.replaceFirstChar(Char::uppercase)} download failed.",
+                        ),
+                    )
+                    return@launch
+                }
+                installCatalogFile(asset, file.filename, file.data, id, name)
             } finally {
-                finishCatalogInstall(CatalogAsset.Locale, pack.id)
+                finishCatalogInstall(asset, id)
             }
         }
     }
 
-    private suspend fun installLocalePack(displayName: String, data: ByteArray, catalogId: String? = null) {
+    private suspend fun downloadCatalogAsset(
+        asset: CatalogAsset,
+        state: CompanionUiState,
+        id: String,
+        onProgress: (received: Long, total: Long?) -> Unit,
+    ): CompanionCatalogFile {
+        val indexUrl = catalogIndexUrl(asset, state)
+        return when (asset) {
+            CatalogAsset.Theme -> companionController.downloadTheme(
+                indexUrl,
+                requireNotNull(state.themeCatalog.firstOrNull { it.id == id }),
+                onProgress,
+            )
+            CatalogAsset.Font -> companionController.downloadFont(
+                indexUrl,
+                requireNotNull(state.fontCatalog.firstOrNull { it.id == id }),
+                onProgress,
+            )
+            CatalogAsset.Locale -> companionController.downloadLocalePack(
+                indexUrl,
+                requireNotNull(state.localeCatalog.firstOrNull { it.id == id }),
+                onProgress,
+            )
+        }
+    }
+
+    private suspend fun installCatalogFile(
+        asset: CatalogAsset,
+        displayName: String,
+        data: ByteArray,
+        catalogId: String? = null,
+        noticeName: String = displayName,
+    ) {
         val state = current
         if (!state.isConnected) {
-            setNotice(CompanionNotice.Error("Connect to your Nano before installing locale packs."))
+            setNotice(CompanionNotice.Error("Connect to your Nano before installing ${asset.plural}."))
             return
         }
-        if (!displayName.endsWith(".zip", ignoreCase = true)) {
-            setNotice(CompanionNotice.Error("Locale packs must use the .zip extension."))
+        if (!displayName.endsWith(asset.extension, ignoreCase = true)) {
+            setNotice(
+                CompanionNotice.Error(
+                    "${asset.label.replaceFirstChar(Char::uppercase)} files must use the ${asset.extension} extension.",
+                ),
+            )
             return
         }
         if (catalogId != null) {
-            updateCatalogInstall(CatalogAsset.Locale, catalogId, CatalogInstallStage.Sending)
+            updateCatalogInstall(asset, catalogId, CatalogInstallStage.Sending)
         }
-        setNotice(CompanionNotice.Attention("Installing $displayName..."))
-        runCatching {
-            withNanoApi {
-                companionController.installLocalePack(
-                    state.baseUrl,
-                    displayName,
-                    data,
-                    onProgress = catalogId?.let { id ->
-                        { sent, total -> updateCatalogUpload(CatalogAsset.Locale, id, sent, total) }
-                    },
-                )
+        setNotice(CompanionNotice.Attention("Installing $noticeName..."))
+        val onProgress = catalogId?.let { id ->
+            { sent: Long, total: Long -> updateCatalogUpload(asset, id, sent, total) }
+        }
+        try {
+            when (asset) {
+                CatalogAsset.Theme -> {
+                    val installed = withNanoApi {
+                        companionController.uploadTheme(state.baseUrl, displayName, data, onProgress)
+                    }
+                    updateState {
+                        it.copy(availableThemes = it.availableThemes.upsert(installed) { theme -> theme.id })
+                    }
+                }
+                CatalogAsset.Font -> {
+                    val installed = withNanoApi {
+                        companionController.uploadFont(state.baseUrl, displayName, data, onProgress)
+                    }
+                    updateState {
+                        it.copy(availableFonts = it.availableFonts.upsert(installed) { font -> font.id })
+                    }
+                }
+                CatalogAsset.Locale -> {
+                    val installed = withNanoApi {
+                        companionController.installLocalePack(state.baseUrl, displayName, data, onProgress)
+                    }
+                    updateState {
+                        it.copy(availableLocales = it.availableLocales.upsert(installed) { locale -> locale.id })
+                    }
+                }
             }
-        }.onSuccess { installed ->
-            updateState {
-                it.copy(
-                    availableLocales = it.availableLocales.upsert(installed) { locale -> locale.id },
-                    notice = CompanionNotice.Success("Installed $displayName."),
-                )
-            }
-        }.onFailure { error ->
-            handleDeviceFailure(error, "Installing locale pack failed")
+            setNotice(CompanionNotice.Success("Installed $noticeName."))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            handleDeviceFailure(error, "Installing ${asset.label} failed")
         }
     }
 
@@ -1411,37 +1296,55 @@ class CompanionPresenter(
             return false
         }
 
-        val selection = runCatching {
-            withNanoApi {
-                when (asset) {
-                    CatalogAsset.Theme -> companionController.selectTheme(state.baseUrl, fallback)
-                    CatalogAsset.Font -> companionController.selectFont(state.baseUrl, fallback)
-                    CatalogAsset.Locale -> companionController.selectLocale(state.baseUrl, fallback)
-                }
-            }
-        }
-        if (selection.isFailure) {
-            handleDeviceFailure(selection.exceptionOrNull()!!, "Selecting a fallback failed")
+        val selected = try {
+            withNanoApi { selectCatalogAssetOnDevice(asset, state.baseUrl, fallback) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            handleDeviceFailure(error, "Selecting a fallback failed")
             return false
         }
-        val selected = selection.getOrThrow()
-        val updated = when (asset) {
-            CatalogAsset.Theme -> settings.withThemeId(selected)
-            CatalogAsset.Font -> settings.withTypeface(selected)
-            CatalogAsset.Locale -> settings.withLocale(selected)
-        }
         pendingSettingsSave = pendingSettingsSave?.let { pending ->
-            pending.copy(
-                settings = when (asset) {
-                    CatalogAsset.Theme -> pending.settings.withThemeId(selected)
-                    CatalogAsset.Font -> pending.settings.withTypeface(selected)
-                    CatalogAsset.Locale -> pending.settings.withLocale(selected)
-                },
-            )
+            pending.copy(settings = updateSelectedCatalogAsset(asset, pending.settings, selected))
         }
-        updateState { it.copy(settings = updated) }
+        updateState { it.copy(settings = updateSelectedCatalogAsset(asset, settings, selected)) }
         return true
     }
+
+    private fun selectedCatalogAsset(asset: CatalogAsset, settings: NanoSettings): String = when (asset) {
+        CatalogAsset.Theme -> settings.`interface`.selectedThemeId
+        CatalogAsset.Font -> settings.reading.typography.fontId
+        CatalogAsset.Locale -> settings.`interface`.locale
+    }
+
+    private fun updateSelectedCatalogAsset(
+        asset: CatalogAsset,
+        settings: NanoSettings,
+        id: String,
+    ): NanoSettings = when (asset) {
+        CatalogAsset.Theme -> settings.withThemeId(id)
+        CatalogAsset.Font -> settings.withTypeface(id)
+        CatalogAsset.Locale -> settings.withLocale(id)
+    }
+
+    private suspend fun selectCatalogAssetOnDevice(asset: CatalogAsset, baseUrl: String, id: String): String =
+        when (asset) {
+            CatalogAsset.Theme -> companionController.selectTheme(baseUrl, id)
+            CatalogAsset.Font -> companionController.selectFont(baseUrl, id)
+            CatalogAsset.Locale -> companionController.selectLocale(baseUrl, id)
+        }
+
+    private fun catalogAssetName(asset: CatalogAsset, state: CompanionUiState, id: String): String? = when (asset) {
+        CatalogAsset.Theme -> state.themeCatalog.firstOrNull { it.id == id }?.name
+        CatalogAsset.Font -> state.fontCatalog.firstOrNull { it.id == id }?.name
+        CatalogAsset.Locale -> state.localeCatalog.firstOrNull { it.id == id }?.name
+    }
+
+    private fun catalogIndexUrl(asset: CatalogAsset, state: CompanionUiState): String = when (asset) {
+        CatalogAsset.Theme -> state.themeCatalogUrl
+        CatalogAsset.Font -> state.fontCatalogUrl
+        CatalogAsset.Locale -> state.localeCatalogUrl
+    }.ifBlank { catalogUrl(asset.catalogPath) }
 
     private fun clearDraftEditor(
         drafts: List<PendingUpload> = current.drafts,
@@ -1476,8 +1379,9 @@ class CompanionPresenter(
             nanoNetworkController.events.collect { event ->
                 when (event) {
                     NanoWifiEvent.RequestUnavailable -> {
-                        setNotice(CompanionNotice.Error("Android did not find a matching RSVP-Nano Wi-Fi network."))
+                        setNotice(CompanionNotice.Error("No matching RSVP-Nano Wi-Fi network was found."))
                     }
+                    NanoWifiEvent.NetworkChanged -> recheckConnectionAfterNetworkChange()
                 }
             }
         }
@@ -1496,7 +1400,8 @@ class CompanionPresenter(
         }
         
         when {
-            snapshot.isAttached && !stateBefore.isConnected && !stateBefore.isCheckingReader -> {
+            snapshot.isAttached && !current.isConnected && !current.isCheckingReader -> {
+                connectionCheckJob?.cancel()
                 connectAccessPointApi()
             }
             !snapshot.isAttached && stateBefore.isNanoWifiAttached -> {
@@ -1519,9 +1424,11 @@ class CompanionPresenter(
         }
         connectionCheckJob = scope.launch {
             try {
-                runCatching {
+                try {
                     refreshConnection(SharedAppUtils.ACCESS_POINT_BASE_URL)
-                }.onFailure { error ->
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Throwable) {
                     markDisconnected("Connected to Nano Wi-Fi, but connection failed: ${failureDetail(error)}")
                 }
             } finally {
@@ -1536,7 +1443,10 @@ class CompanionPresenter(
         }
     }
 
-    private fun connectNano(rememberedNano: RememberedNano?) {
+    private fun connectNano(
+        rememberedNano: RememberedNano?,
+        onWifiPermissionRequired: () -> Unit,
+    ) {
         updateState {
             it.copy(
                 notice = CompanionNotice.Attention(
@@ -1552,7 +1462,7 @@ class CompanionPresenter(
             }
             NanoWifiRequestResult.AlreadyRequesting -> Unit
             NanoWifiRequestResult.MissingPermissions -> {
-                setNotice(CompanionNotice.Error("Wi-Fi permission is needed to find your Nano from the app."))
+                onWifiPermissionRequired()
             }
             is NanoWifiRequestResult.Failed -> {
                 setNotice(CompanionNotice.Error(result.reason))
@@ -1562,8 +1472,11 @@ class CompanionPresenter(
 
     private suspend fun refreshConnection(baseUrl: String) {
         val device = withNanoApi { companionController.connect(baseUrl) }
+        currentCoroutineContext().ensureActive()
         val deviceName = "RSVP Nano"
-        val currentIdentity = nanoNetworkController.snapshot.value.currentNano ?: current.currentNano
+        val currentIdentity = NanoWifiIdentity.rememberedNanoOrNull(device.ssid)
+            ?: nanoNetworkController.snapshot.value.currentNano
+            ?: current.currentNano
         val newConnection = !current.isConnected || current.baseUrl != baseUrl
         if (newConnection) connectionGeneration++
         updateState {
@@ -1746,7 +1659,7 @@ class CompanionPresenter(
         val settings = current.settings ?: error("Connect to your Nano before loading catalogs.")
         val source = releaseSource(settings.updates.repositoryOwner, settings.updates.releaseTag)
             ?: error("Configure a GitHub release owner on your Nano first.")
-        return source.catalogContentUrl(path)
+        return source.catalogContentUrl(path, firmwareRevision(current.firmwareVersion) ?: source.tag)
     }
 
     private fun currentRememberableNano(): RememberedNano? {

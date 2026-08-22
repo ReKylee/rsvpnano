@@ -22,9 +22,36 @@ class PendingUploadJsonStoreTest {
         )
 
         runBlocking {
-            store.saveAll(listOf(item))
+            store.save(item)
             assertEquals(listOf(item), store.loadAll())
         }
+    }
+
+    @Test
+    fun saveReplacesByIdAndKeepsNewestFirst() = runBlocking {
+        val store = PendingUploadJsonStore(InMemoryStorage())
+        val older = PendingUpload("1", "Old", null, "Old body", "2026-05-17T10:00:00Z")
+        val newer = PendingUpload("2", "New", null, "New body", "2026-05-17T11:00:00Z")
+
+        store.save(older)
+        store.save(newer)
+        store.save(older.copy(title = "Edited", body = "Edited body"))
+
+        assertEquals(listOf("2", "1"), store.loadAll().map(PendingUpload::id))
+        assertEquals("Edited", store.loadAll().last().title)
+    }
+
+    @Test
+    fun deleteRemovesOnlyTheRequestedDraft() = runBlocking {
+        val store = PendingUploadJsonStore(InMemoryStorage())
+        val first = PendingUpload("1", "First", null, "Body", "2026-05-17T10:00:00Z")
+        val second = PendingUpload("2", "Second", null, "Body", "2026-05-17T11:00:00Z")
+        store.save(first)
+        store.save(second)
+
+        store.delete(first)
+
+        assertEquals(listOf(second), store.loadAll())
     }
 
     private class InMemoryStorage : TextStorage {

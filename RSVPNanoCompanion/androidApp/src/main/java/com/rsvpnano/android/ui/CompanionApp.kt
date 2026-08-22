@@ -22,7 +22,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.rsvpnano.android.net.AndroidNanoNetworkController
 import com.rsvpnano.android.FirmwareUpdateJobService
 import com.rsvpnano.ui.RsvpNanoSharedApp
 import kotlinx.coroutines.Dispatchers
@@ -40,13 +39,10 @@ fun CompanionApp(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val nanoNetworkController = remember(context) { AndroidNanoNetworkController(context.applicationContext) }
     val viewModel: CompanionViewModel = viewModel(
-        factory = CompanionViewModel.Factory(
-            appFilesDir = context.filesDir,
-            nanoNetworkController = nanoNetworkController,
-        )
+        factory = CompanionViewModel.Factory(context),
     )
+    val nanoNetworkController = viewModel.nanoNetworkController
     val presenter = viewModel.presenter
     val uiState by presenter.uiState.collectAsStateWithLifecycle()
     var permissionRequestAttempted by remember { mutableStateOf(false) }
@@ -91,9 +87,7 @@ fun CompanionApp(
     }
 
     fun connectNanoFromApp(openWifiSettingsOnBlocked: Boolean) {
-        if (nanoNetworkController.hasRequiredPermissions()) {
-            presenter.connectNanoScan()
-        } else {
+        presenter.connectNanoScan {
             val permission = nanoWifiPermission()
             val canAskAgain = !permissionRequestAttempted ||
                 context.findActivity()?.shouldShowRequestPermissionRationale(permission) == true
@@ -119,7 +113,6 @@ fun CompanionApp(
     DisposableEffect(lifecycleOwner, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                nanoNetworkController.refreshSnapshot()
                 presenter.recheckConnectionAfterResume()
             }
         }
@@ -134,7 +127,12 @@ fun CompanionApp(
         } else {
             val callback = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
+                    presenter.recheckConnectionAfterNetworkChange()
                     presenter.fetchPendingArticlesWhenOnline()
+                }
+
+                override fun onLost(network: Network) {
+                    presenter.recheckConnectionAfterNetworkChange()
                 }
 
                 override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {

@@ -70,8 +70,10 @@ data class NanoWifiSnapshot(
         return when {
             isRequesting -> NanoConnectionState.Requesting(identity)
             isAttached -> when {
-                previous is NanoConnectionState.CheckingReader -> previous
-                previous is NanoConnectionState.ReaderConnected -> previous
+                previous is NanoConnectionState.CheckingReader &&
+                    previous.transport == NanoConnectionTransport.AccessPoint -> previous
+                previous is NanoConnectionState.ReaderConnected &&
+                    previous.transport == NanoConnectionTransport.AccessPoint -> previous
                 else -> NanoConnectionState.WifiAttached(identity)
             }
             previous.transport == NanoConnectionTransport.LocalNetwork -> previous
@@ -90,6 +92,7 @@ sealed interface NanoWifiRequestResult {
 
 sealed interface NanoWifiEvent {
     data object RequestUnavailable : NanoWifiEvent
+    data object NetworkChanged : NanoWifiEvent
 }
 
 val NanoConnectionState.isConnected: Boolean

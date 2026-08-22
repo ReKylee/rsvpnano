@@ -2,8 +2,8 @@ package com.rsvpnano
 
 import com.rsvpnano.app.PendingDraftService
 import com.rsvpnano.models.PendingUpload
-import com.rsvpnano.persistence.PendingUploadRepository
-import com.rsvpnano.persistence.PendingUploadStore
+import com.rsvpnano.persistence.PendingUploadJsonStore
+import com.rsvpnano.persistence.TextStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -11,8 +11,7 @@ import kotlin.test.assertEquals
 class PendingDraftServiceTest {
     @Test
     fun savesUpdatesAndDeletesDrafts() = runBlocking {
-        val store = InMemoryPendingStore(emptyList())
-        val service = PendingDraftService(PendingUploadRepository(store))
+        val service = PendingDraftService(PendingUploadJsonStore(InMemoryStorage()))
         val item = PendingUpload(
             id = "1",
             title = "Draft",
@@ -27,15 +26,9 @@ class PendingDraftServiceTest {
         assertEquals(emptyList(), service.loadDrafts())
     }
 
-    private class InMemoryPendingStore(var items: List<PendingUpload>) : PendingUploadStore {
-        override suspend fun loadAll(): List<PendingUpload> = items
-
-        override suspend fun saveAll(items: List<PendingUpload>) {
-            this.items = items
-        }
-
-        override suspend fun remove(id: String) {
-            items = items.filterNot { it.id == id }
-        }
+    private class InMemoryStorage : TextStorage {
+        private var value: String? = null
+        override suspend fun readText(): String? = value
+        override suspend fun writeText(value: String) { this.value = value }
     }
 }

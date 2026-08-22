@@ -76,10 +76,51 @@ class NanoKtorClientDeviceTest {
                 measured("structured-error") { client.deleteBook(baseUrl, "api-test-missing") }
             }
             assertEquals(404, missing.status)
-            assertTrue(missing.message.orEmpty().contains("\"code\":\"book_not_found\""))
-            assertTrue(missing.message.orEmpty().contains("\"message\":\"Book not found\""))
+            assertEquals("book_not_found", missing.code)
+            assertEquals("Book not found", missing.message)
 
             if (writeEnabled) {
+                val info = measured("catalog-device") { client.fetchDevice(baseUrl) }
+                val revision = info.firmwareVersion.substringAfter('+').substringBefore('.')
+                val catalogRoot = "https://raw.githubusercontent.com/rekylee/rsvpnano/$revision"
+                val installedFonts = measured("catalog-installed-fonts") { client.listFonts(baseUrl) }
+                val font = measured("catalog-fonts") { client.fetchFontCatalog("$catalogRoot/fonts/index.json") }.first()
+                val fontData = measured("catalog-font-download") {
+                    client.downloadFont("$catalogRoot/fonts/${font.file}")
+                }
+                assertTrue(fontData.isNotEmpty())
+                if (installedFonts.none { it.id == font.id }) {
+                    try {
+                        assertEquals(font.id, measured("catalog-font-install") {
+                            client.uploadFont(baseUrl, font.file.substringAfterLast('/'), fontData)
+                        }.id)
+                    } finally {
+                        measured("catalog-font-delete") { client.deleteFont(baseUrl, font.id) }
+                    }
+                }
+
+                val installedLocales = measured("catalog-installed-locales") { client.listLocales(baseUrl) }
+                val locale = measured("catalog-locales") {
+                    client.fetchLocaleCatalog("$catalogRoot/locale-packs/index.json")
+                }.first()
+                val localeData = measured("catalog-locale-download") {
+                    client.downloadLocalePack("$catalogRoot/locale-packs/${locale.file}")
+                }
+                assertTrue(localeData.isNotEmpty())
+                if (installedLocales.none { it.id == locale.id }) {
+                    try {
+                        val installed = measured("catalog-locale-install") {
+                            client.uploadLocalePack(baseUrl, locale.file, localeData)
+                        }
+                        assertEquals(locale.id, installed.id)
+                        assertTrue(measured("catalog-locales-after-install") {
+                            client.listLocales(baseUrl)
+                        }.any { it.id == locale.id })
+                    } finally {
+                        measured("catalog-locale-delete") { client.deleteLocalePack(baseUrl, locale.id) }
+                    }
+                }
+
                 val settings = measured("settings-before-write") { client.fetchSettings(baseUrl) }
                 measured("patch-reading") { client.updateReadingSettings(baseUrl, settings.reading) }
                 measured("patch-display") { client.updateDisplaySettings(baseUrl, settings.`interface`) }

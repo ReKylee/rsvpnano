@@ -19,10 +19,17 @@ class FirmwareUpdatesTest {
             releaseSource("reader-owner", ""),
         )
         assertEquals(
-            "https://raw.githubusercontent.com/reader-owner/reader-firmware/main/themes/index.json",
+            "https://raw.githubusercontent.com/reader-owner/reader-firmware/preview-v2/themes/index.json",
             requireNotNull(releaseSource("reader-owner/reader-firmware", "preview-v2"))
                 .catalogContentUrl("themes/index.json"),
         )
+        assertEquals(
+            "https://raw.githubusercontent.com/reader-owner/reader-firmware/0123456789ab/fonts/index.json",
+            requireNotNull(releaseSource("reader-owner/reader-firmware", "preview-v2"))
+                .catalogContentUrl("fonts/index.json", "0123456789ab"),
+        )
+        assertEquals("1f7f421d6ca6", firmwareRevision("preview-v0.0.9+1f7f421d6ca6.dirty"))
+        assertNull(firmwareRevision("preview-v0.0.9"))
     }
 
     @Test

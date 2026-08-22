@@ -5,7 +5,6 @@ import com.rsvpnano.api.ArticleFetchClient
 import com.rsvpnano.persistence.JsonAppSettingsStore
 import com.rsvpnano.persistence.OkioTextStorage
 import com.rsvpnano.persistence.PendingUploadJsonStore
-import com.rsvpnano.persistence.PendingUploadRepository
 import com.rsvpnano.ui.CompanionPresenter
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.darwin.Darwin
@@ -54,10 +53,8 @@ fun createIosCompanionController(
 
 private fun createIosDraftService(root: Path, httpClient: HttpClient): PendingDraftService =
     PendingDraftService(
-        repository = PendingUploadRepository(
-            PendingUploadJsonStore(
-                OkioTextStorage(root.resolve("PendingUploads/drafts.json"), FileSystem.SYSTEM),
-            ),
+        store = PendingUploadJsonStore(
+            OkioTextStorage(root.resolve("PendingUploads/drafts.json"), FileSystem.SYSTEM),
         ),
         articleFetchClient = ArticleFetchClient(httpClient),
     )

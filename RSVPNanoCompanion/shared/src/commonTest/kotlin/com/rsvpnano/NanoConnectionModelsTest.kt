@@ -21,12 +21,12 @@ class NanoConnectionModelsTest {
     }
 
     @Test
-    fun transportSnapshotCannotDisconnectLocalApiConnection() {
+    fun nanoAccessPointSnapshotSwitchesFromLocalTransport() {
         val connected = NanoConnectionState.ReaderConnected(nano, NanoConnectionTransport.LocalNetwork)
 
         assertEquals(connected, NanoWifiSnapshot().toConnectionState(connected))
         assertEquals(
-            connected,
+            NanoConnectionState.WifiAttached(nano),
             NanoWifiSnapshot(currentNano = nano, isAttached = true).toConnectionState(connected),
         )
     }

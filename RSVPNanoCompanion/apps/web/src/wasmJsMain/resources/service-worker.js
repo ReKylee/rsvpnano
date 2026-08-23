@@ -1,5 +1,5 @@
 const CACHE = "rsvpnano-web-v2";
-const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg"];
+const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./favicon.svg"];
 
 self.addEventListener("install", event => {
   event.waitUntil(

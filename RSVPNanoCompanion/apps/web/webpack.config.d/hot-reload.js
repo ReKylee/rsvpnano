@@ -1,9 +1,3 @@
-config.ignoreWarnings ??= [];
-config.ignoreWarnings.push(warning =>
-  warning.module?.resource?.endsWith("rsvpnano-web.import-object.mjs") &&
-  warning.message.includes("the request of a dependency is an expression")
-);
-
 if (config.devServer) {
   config.devServer.static ??= [{
     directory: require("path").resolve(__dirname, "kotlin"),
@@ -13,5 +7,10 @@ if (config.devServer) {
   config.devServer.liveReload = true;
   config.devServer.static?.forEach(entry => {
     entry.watch = true;
+  });
+  config.devServer.static.push({
+    directory: require("path").resolve(__dirname, "../../../../web/firmware"),
+    publicPath: "/firmware",
+    watch: true,
   });
 }

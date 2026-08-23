@@ -44,7 +44,7 @@ api::Result<> CompanionApi::putFontSelection(httpd_req_t& request) {
             settingsStore_.acceptChanges();
         }
 
-        readerScreen_.refreshTypography(settingsStore_.settings().reading, readerScreen_.session.state.overrides);
+        readerScreen_.releaseRuntimeCaches();
         return {};
     });
 }

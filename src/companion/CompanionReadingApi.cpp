@@ -150,8 +150,7 @@ api::Result<> CompanionApi::putBookLanguageFonts(httpd_req_t& request) {
                     if (readerScreen_.session.sourcePath() != bookPath)
                         return;
                     readerScreen_.session.state.overrides.languageFonts = std::move(languageFonts);
-                    readerScreen_.refreshTypography(settingsStore_.settings().reading,
-                                                    readerScreen_.session.state.overrides);
+                    readerScreen_.releaseRuntimeCaches();
                 });
         });
 }

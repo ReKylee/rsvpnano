@@ -36,10 +36,8 @@ bool CompanionApi::begin() {
     Logger::checkpoint("companion_start");
     stationConnected_.store(false);
     statusLine1_ = "Starting sync";
-    statusLine2_ = "Reading library";
-    storage_.refreshBooks();
-    libraryScreen_.invalidate();
     statusLine2_ = "Preparing Wi-Fi";
+    readerScreen_.releaseRuntimeCaches();
 
     auto startup = startAccessPoint()
                        .transform_error([](std::string detail) {
@@ -93,6 +91,8 @@ void CompanionApi::end() {
     }
     Logger::checkpoint("companion_stop_http");
     drainServer();
+
+    readerScreen_.refreshTypography();
 
     accessPointSsid_.clear();
     stationUrl_.clear();
@@ -203,6 +203,7 @@ void CompanionApi::applyNetworkState(void* context) {
         self.stopMdns();
         ESP_LOGW("companion", "station disconnected; direct connection remains available at %s",
                  self.statusLine2_.c_str());
+        screens::status(self.ui_, self.ui_.text(UiText::Sync), self.statusLine1_, self.statusLine2_);
         return;
     }
 
@@ -213,6 +214,7 @@ void CompanionApi::applyNetworkState(void* context) {
     const std::string& ssid = self.settingsStore_.settings().network.ssid;
     ESP_LOGI("companion", "station ready ssid=%s ip=%s fallback=%s", ssid.c_str(), WiFi.localIP().toString().c_str(),
              self.accessPointSsid_.c_str());
+    screens::status(self.ui_, self.ui_.text(UiText::Sync), ssid, self.stationUrl_);
 }
 
 CompanionApi::OperationResult CompanionApi::startMdns() {

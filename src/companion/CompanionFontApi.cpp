@@ -51,7 +51,7 @@ companion::api::Result<companion::api::Located<FontCatalog::Family>> CompanionAp
         return std::unexpected(fontInstallError(std::move(installed.error())));
 
     const FontCatalog::Family& family = installed->get();
-    readerScreen_.refreshTypography(settingsStore_.settings().reading, readerScreen_.session.state.overrides);
+    readerScreen_.releaseRuntimeCaches();
     return companion::api::Located<FontCatalog::Family>{
         .location = "/api/v2/fonts/" + family.id,
         .value = std::cref(family),
@@ -83,6 +83,6 @@ companion::api::Result<> CompanionApi::deleteFont(httpd_req_t& request) {
         return std::unexpected(companion::api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR, "storage_error",
                                                          std::move(removed.error())));
     }
-    readerScreen_.refreshTypography(settingsStore_.settings().reading, readerScreen_.session.state.overrides);
+    readerScreen_.releaseRuntimeCaches();
     return {};
 }

@@ -40,7 +40,7 @@ api::Result<> CompanionApi::patchReadingSettings(httpd_req_t& request) {
             reading.typography.fontId = settingsStore_.settings().reading.typography.fontId;
             settingsStore_.settings().reading = std::move(reading);
             settingsStore_.acceptChanges();
-            readerScreen_.refreshTypography(settingsStore_.settings().reading, readerScreen_.session.state.overrides);
+            readerScreen_.releaseRuntimeCaches();
         });
 }
 

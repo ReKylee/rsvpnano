@@ -96,10 +96,7 @@ bool IndexedBookStore::open(std::string_view sourcePath, const Header& header) {
     dataSize_ = header.dataSize;
     indexFile_ = nextIndexFile;
     dataFile_ = nextDataFile;
-    cachedStart_ = static_cast<size_t>(-1);
-    cachedDataStart_ = 0;
-    cachedRecords_.clear();
-    cachedData_.clear();
+    releaseCache();
     return true;
 }
 
@@ -114,8 +111,12 @@ void IndexedBookStore::close() {
     identity_ = {};
     recordsOffset_ = 0;
     dataSize_ = 0;
-    cachedRecords_.clear();
-    cachedData_.clear();
+    releaseCache();
+}
+
+void IndexedBookStore::releaseCache() {
+    std::vector<WordRecord>{}.swap(cachedRecords_);
+    std::vector<char>{}.swap(cachedData_);
     cachedStart_ = static_cast<size_t>(-1);
     cachedDataStart_ = 0;
 }

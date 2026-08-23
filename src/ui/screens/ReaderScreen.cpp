@@ -70,6 +70,32 @@ namespace screens {
         ++typographyRevision_;
     }
 
+    void ReaderScreen::releaseRuntimeCaches() {
+        fonts.clearLoaded();
+        store.releaseCache();
+        face_ = fonts.loadFace(0, typography_.fontSizeIndex);
+        activateFace(face_);
+
+        pageState_ = {};
+        rsvpParagraph_ = {};
+        rsvpBidi_.clear();
+        phantomBidi_.clear();
+        BidiText::Line{}.swap(rsvpLine_);
+        BidiText::Line{}.swap(phantomLine_);
+        std::vector<BidiText::Codepoint>{}.swap(rsvpVisual_);
+        std::vector<BidiText::Codepoint>{}.swap(phantomVisual_);
+        std::vector<ui::fonts::PositionedGlyph>{}.swap(rsvpGlyphs_);
+        std::vector<ui::fonts::PositionedGlyph>{}.swap(phantomGlyphs_);
+
+        loadedWordIndex_ = SIZE_MAX;
+        loadedFamilyIndex_ = SIZE_MAX;
+        renderedWordIndex_ = SIZE_MAX;
+        prefetchedWordIndex_ = SIZE_MAX;
+        readAheadWordIndex_ = SIZE_MAX;
+        readAheadFamilyIndex_ = SIZE_MAX;
+        readAheadBlockCount_ = 0;
+    }
+
     void ReaderScreen::refreshTypography() {
         refreshTypography(settings_, session.state.overrides);
     }
@@ -79,17 +105,7 @@ namespace screens {
         if (settings.mode == settings::ReadingMode::page)
             pagePreview_ = false;
         typography_ = settings.typography;
-        fonts.clearLoaded();
-        loadedWordIndex_ = SIZE_MAX;
-        loadedFamilyIndex_ = SIZE_MAX;
-        renderedWordIndex_ = SIZE_MAX;
-        prefetchedWordIndex_ = SIZE_MAX;
-        readAheadWordIndex_ = SIZE_MAX;
-        readAheadFamilyIndex_ = SIZE_MAX;
-        readAheadBlockCount_ = 0;
-        rsvpBidi_.clear();
-        rsvpLine_.clear();
-        rsvpParagraph_ = {};
+        releaseRuntimeCaches();
         ++typographyRevision_;
 
         const auto families = fonts.families();

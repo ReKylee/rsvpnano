@@ -60,6 +60,7 @@ public:
 
     bool open(std::string_view sourcePath, const Header& header);
     void close();
+    void releaseCache();
     bool isOpen() const;
 
     size_t wordCount() const;

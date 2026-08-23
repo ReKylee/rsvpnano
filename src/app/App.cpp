@@ -142,7 +142,6 @@ void App::update(uint32_t nowMs) {
     if (companionApi_.active()) {
         settingsStore_.update(nowMs);
         Board::Power::updateBattery(battery_, nowMs);
-        renderScreen(nowMs);
         return;
     }
 
@@ -529,6 +528,8 @@ void App::updateBackgroundJob() {
 
         const JobKind completed = jobKind_;
         jobKind_ = JobKind::None;
+        vQueueDelete(jobQueue_);
+        jobQueue_ = nullptr;
         Logger::checkpoint("running");
         if (completed == JobKind::Typography) {
             if (bookOpenPending_) {
@@ -605,6 +606,8 @@ bool App::startBackgroundJob(JobKind kind) {
     jobKind_ = kind;
     if (xTaskCreate(backgroundJobEntry, "background", kJobStackBytes, this, kJobPriority, nullptr) != pdPASS) {
         jobKind_ = JobKind::None;
+        vQueueDelete(jobQueue_);
+        jobQueue_ = nullptr;
         return false;
     }
     return true;

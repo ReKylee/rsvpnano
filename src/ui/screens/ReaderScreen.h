@@ -28,6 +28,7 @@ namespace screens {
         FontCatalog fonts;
         void begin(const ui::themes::Theme& theme);
         void applyTheme(const ui::themes::Theme& theme);
+        void releaseRuntimeCaches();
         void refreshTypography();
         void refreshTypography(const settings::ReadingSettings& settings, const settings::ReadingOverrides& overrides);
         bool openBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, size_t index, uint32_t nowMs);

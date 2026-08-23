@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include "standby/ReactionScreensaver.h"
+#include "standby/Screensaver.h"
 
 namespace {
 
@@ -40,8 +41,28 @@ void test_reaction_is_deterministic_and_keeps_visual_states_disjoint() {
     assertSameFrame(frame, right.frame());
 }
 
+void test_screensaver_slot_releases_each_selected_animation() {
+    standby::ScreensaverSlot slot;
+    TEST_ASSERT_FALSE(static_cast<bool>(slot));
+
+    for (const standby::Kind kind:
+         {standby::Kind::life, standby::Kind::maze, standby::Kind::reaction, standby::Kind::voronoi}) {
+        slot.select(kind, 32, 16);
+        TEST_ASSERT_TRUE(static_cast<bool>(slot));
+        slot.seed(12345);
+        slot.step();
+        TEST_ASSERT_FALSE(slot.frame().cells.empty());
+        slot.reset();
+        TEST_ASSERT_FALSE(static_cast<bool>(slot));
+    }
+
+    slot.select(standby::Kind::screenOff, 32, 16);
+    TEST_ASSERT_FALSE(static_cast<bool>(slot));
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_reaction_is_deterministic_and_keeps_visual_states_disjoint);
+    RUN_TEST(test_screensaver_slot_releases_each_selected_animation);
     return UNITY_END();
 }

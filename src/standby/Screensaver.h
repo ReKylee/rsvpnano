@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <variant>
 
 #include "standby/LifeScreensaver.h"
@@ -30,8 +31,9 @@ namespace standby {
         }
 
     private:
-        using Storage =
-            std::variant<std::monostate, LifeScreensaver, MazeScreensaver, ReactionScreensaver, VoronoiScreensaver>;
+        using Storage = std::variant<std::monostate, std::unique_ptr<LifeScreensaver>,
+                                     std::unique_ptr<MazeScreensaver>, std::unique_ptr<ReactionScreensaver>,
+                                     std::unique_ptr<VoronoiScreensaver>>;
 
         Storage storage_;
         Kind kind_ = Kind::life;

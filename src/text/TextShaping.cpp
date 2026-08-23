@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cstdlib>
+#if defined(ESP32) && defined(BOARD_HAS_PSRAM)
+#include <esp_heap_caps.h>
+#endif
 #include <limits>
 
 namespace TextShaping {
@@ -135,7 +138,12 @@ namespace TextShaping {
         const size_t index = static_cast<size_t>(table - tables_.begin());
         if (tableBlobs_[index] != nullptr)
             return hb_blob_reference(tableBlobs_[index]);
+#if defined(ESP32) && defined(BOARD_HAS_PSRAM)
+        auto* bytes = static_cast<char*>(
+            heap_caps_malloc(table->size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+#else
         auto* bytes = static_cast<char*>(std::malloc(table->size));
+#endif
         File& file = *file_;
         if (bytes == nullptr || !file.seek(table->offset)
             || file.read(reinterpret_cast<uint8_t*>(bytes), table->size) != table->size) {

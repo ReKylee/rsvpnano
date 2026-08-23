@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 
+#include <array>
 #include <esp_log.h>
 #include "board/BoardPower.h"
 #include "drivers/audio/es8311/Es8311.h"
@@ -20,9 +21,8 @@ namespace {
     constexpr size_t kBeepFrames = (static_cast<size_t>(kSampleRateHz) * kBeepDurationMs) / 1000U;
     constexpr size_t kBeepSamples = kBeepFrames * 2U;
 
-    int16_t gBeepBuffer[kBeepSamples] = {};
-
-    void fillBeepBuffer() {
+    constexpr std::array<int16_t, kBeepSamples> makeBeepBuffer() {
+        std::array<int16_t, kBeepSamples> buffer{};
         const size_t attackFrames = (static_cast<size_t>(kSampleRateHz) * kEnvelopeAttackMs) / 1000U;
         const size_t releaseFrames = (static_cast<size_t>(kSampleRateHz) * kEnvelopeReleaseMs) / 1000U;
         const uint32_t halfPeriodSamples = kSampleRateHz / (kBeepFrequencyHz * 2U);
@@ -38,17 +38,20 @@ namespace {
             }
 
             const size_t index = frame * 2U;
-            gBeepBuffer[index] = static_cast<int16_t>(sample);
-            gBeepBuffer[index + 1U] = static_cast<int16_t>(sample);
+            buffer[index] = static_cast<int16_t>(sample);
+            buffer[index + 1U] = static_cast<int16_t>(sample);
         }
+        return buffer;
     }
+
+    constexpr auto kBeepBuffer = makeBeepBuffer();
 
     bool enableAudioRail() {
         return Board::Power::enableAudioPowerIfAvailable();
     }
 
     bool writeBeepBuffer(BoardDrivers::Es8311::Context& context) {
-        return BoardDrivers::Es8311::writeSamples(context, gBeepBuffer, kBeepSamples, kWriteTimeoutMs);
+        return BoardDrivers::Es8311::writeSamples(context, kBeepBuffer.data(), kBeepBuffer.size(), kWriteTimeoutMs);
     }
 
 } // namespace
@@ -59,8 +62,6 @@ namespace BoardPlatform::Es8311BoardAudio {
         if (BoardDrivers::Es8311::available(context)) {
             return true;
         }
-
-        fillBeepBuffer();
 
         if (!enableAudioRail()) {
             ESP_LOGW(kAudioTag, "Audio rail unavailable");

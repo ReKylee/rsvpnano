@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <esp_heap_caps.h>
 
 RowPrefixCanvas::RowPrefixCanvas(int16_t w, int16_t h, Arduino_G& output, int16_t output_x, int16_t output_y,
                                  uint8_t r) :
@@ -31,7 +32,10 @@ bool RowPrefixCanvas::begin(int32_t speed) {
 
     if (!_framebuffer) {
         size_t s = _width * _height * 2;
-#if defined(ESP32)
+#if defined(BOARD_HAS_PSRAM)
+        _framebuffer = static_cast<uint16_t*>(
+            heap_caps_aligned_alloc(16, s, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+#elif defined(ESP32)
         _framebuffer = (uint16_t*) aligned_alloc(16, s);
 #else
         _framebuffer = (uint16_t*) malloc(s);

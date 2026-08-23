@@ -1053,25 +1053,23 @@ namespace ui::fonts {
         void drawCounterRotatedGlyph(const AlphaGlyph& glyph, int16_t x, int16_t y) {
             if (glyph.width == 0 || glyph.height == 0 || glyph.height > MaxRowWidth)
                 return;
-            for (uint8_t sourceX = 0; sourceX < glyph.width; ++sourceX) {
-                int16_t firstInk = glyph.height;
-                int16_t lastInk = 0;
+            auto* rotated = strip_[0];
+            for (uint8_t sourceStart = 0; sourceStart < glyph.width;) {
+                const uint8_t sourceEnd =
+                    static_cast<uint8_t>(std::min<int>(glyph.width, sourceStart + MaxStripRows));
+                const uint8_t rows = static_cast<uint8_t>(sourceEnd - sourceStart);
+                std::ranges::fill_n(rotated, static_cast<size_t>(glyph.height) * rows, bg_);
                 for (uint8_t sourceY = 0; sourceY < glyph.height; ++sourceY) {
                     const uint8_t* packedRow = nullptr;
                     if (!prepareRow(glyph, sourceY, packedRow))
                         return;
-                    const int16_t destinationX = sourceY;
-                    const uint8_t coverage = coverageAt(packedRow, sourceX);
-                    strip_[0][destinationX] = blend_[coverage];
-                    if (coverage != 0) {
-                        firstInk = std::min(firstInk, destinationX);
-                        lastInk = std::max<int16_t>(lastInk, destinationX + 1);
-                    }
+                    for (uint8_t sourceX = sourceStart; sourceX < sourceEnd; ++sourceX)
+                        rotated[static_cast<size_t>(sourceEnd - sourceX - 1) * glyph.height + sourceY] =
+                            blend_[coverageAt(packedRow, sourceX)];
                 }
-                if (firstInk < lastInk)
-                    output_.draw16bitRGBBitmap(static_cast<int16_t>(x + firstInk),
-                                               static_cast<int16_t>(y + glyph.width - sourceX - 1),
-                                               strip_[0] + firstInk, lastInk - firstInk, 1);
+                output_.draw16bitRGBBitmap(x, static_cast<int16_t>(y + glyph.width - sourceEnd), rotated,
+                                           glyph.height, rows);
+                sourceStart = sourceEnd;
             }
         }
 

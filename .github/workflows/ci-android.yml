@@ -9,21 +9,25 @@ on:
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
       - 'gradlew'
+      - 'gradle.properties'
+      - 'gradle/libs.versions.toml'
       - 'gradle/wrapper/**'
       - 'RSVPNanoCompanion/conversionCore/**'
       - 'RSVPNanoCompanion/shared/**'
       - 'RSVPNanoCompanion/apps/android/**'
-      - '.github/workflows/**'
+      - '.github/workflows/ci-android.yml'
   pull_request:
     paths:
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
       - 'gradlew'
+      - 'gradle.properties'
+      - 'gradle/libs.versions.toml'
       - 'gradle/wrapper/**'
       - 'RSVPNanoCompanion/conversionCore/**'
       - 'RSVPNanoCompanion/shared/**'
       - 'RSVPNanoCompanion/apps/android/**'
-      - '.github/workflows/**'
+      - '.github/workflows/ci-android.yml'
 
 jobs:
   build:
@@ -35,15 +39,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
       - name: Run Android checks
         run: bash ./gradlew checkAndroid --no-daemon
       - name: Upload test results

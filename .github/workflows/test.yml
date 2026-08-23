@@ -14,6 +14,21 @@ jobs:
         with:
           submodules: recursive
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: ${{ runner.os }}-pio-tests-${{ hashFiles('platformio.ini', 'boards/**', 'tools/pio_*.py') }}
+          restore-keys: ${{ runner.os }}-pio-
+
       - name: Install PlatformIO
         run: pip install platformio freetype-py fonttools uharfbuzz lz4
 

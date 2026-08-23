@@ -7,96 +7,76 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "New release tag, for example v0.0.5"
+        description: "Release tag, for example v0.0.9"
         required: true
 
 permissions:
   contents: write
 
 jobs:
-  firmware:
+  prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      commit_sha: ${{ steps.release.outputs.commit_sha }}
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          submodules: recursive
 
       - name: Set release metadata
         id: release
+        env:
+          DISPATCH_VERSION: ${{ inputs.version }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RELEASE_TAG="${{ inputs.version }}"
+            RELEASE_TAG="$DISPATCH_VERSION"
           else
-            RELEASE_TAG="${GITHUB_REF_NAME}"
+            RELEASE_TAG="$GITHUB_REF_NAME"
           fi
           if ! echo "$RELEASE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._-]+)?$'; then
             echo "::error::Invalid release version: ${RELEASE_TAG}"
-            echo "::error::Use something like v0.0.5 or v0.0.5-beta.1"
             exit 1
           fi
-
-          BUILD_SHA="$(git rev-parse HEAD)"
 
           echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "commit_sha=${BUILD_SHA}" >> "$GITHUB_OUTPUT"
-          echo "RSVP_FIRMWARE_TAG=${RELEASE_TAG}" >> "$GITHUB_ENV"
+          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Ensure GitHub release does not already exist
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        run: |
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "::error::Release ${RELEASE_TAG} already exists. Real releases are immutable."
-            echo "::error::Use a fresh version tag, or use the Preview firmware workflow for replaceable builds."
-            exit 1
-          fi
-
-      - name: Prepare immutable release tag
+      - name: Verify pushed release tag
+        if: github.event_name != 'workflow_dispatch'
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           BUILD_SHA: ${{ steps.release.outputs.commit_sha }}
         run: |
           git fetch --tags origin
-
-          if git rev-parse -q --verify "refs/tags/${RELEASE_TAG}" >/dev/null; then
-            TAG_SHA="$(git rev-list -n 1 "${RELEASE_TAG}")"
-
-            if [ "$TAG_SHA" != "$BUILD_SHA" ]; then
-              echo "::error::${RELEASE_TAG} already points at ${TAG_SHA}, but this workflow checked out ${BUILD_SHA}."
-              echo "::error::Real releases are immutable. Use a fresh version tag, or use Preview firmware for mutable builds."
-              exit 1
-            fi
-
-            echo "[release] Existing tag ${RELEASE_TAG} already points at this commit."
-            exit 0
-          fi
-
-          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
-            echo "::error::Tag ${RELEASE_TAG} does not exist during a tag-push release."
+          TAG_SHA="$(git rev-list -n 1 "${RELEASE_TAG}")"
+          if [ "$TAG_SHA" != "$BUILD_SHA" ]; then
+            echo "::error::${RELEASE_TAG} points at ${TAG_SHA}, not ${BUILD_SHA}."
             exit 1
           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+  build:
+    needs: prepare
+    uses: ./.github/workflows/firmware-build.yml
+    with:
+      firmware_tag: ${{ needs.prepare.outputs.tag }}
 
-          git tag "$RELEASE_TAG" "$BUILD_SHA"
-          git push origin "refs/tags/${RELEASE_TAG}"
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.commit_sha }}
 
-          echo "[release] Created immutable tag ${RELEASE_TAG} at ${BUILD_SHA}."
+      - uses: actions/download-artifact@v4
+        with:
+          name: firmware-assets
+          path: web/firmware
 
-      - name: Install PlatformIO
-        run: pip install platformio
-
-      - name: Export firmware assets
-        run: python3 tools/export_web_firmware.py
-
-      - name: Write release notes
+      - name: Load release notes
         env:
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           NOTES_PATH="docs/releases/${RELEASE_TAG}.md"
           if [ ! -f "$NOTES_PATH" ]; then
@@ -108,9 +88,19 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-          BUILD_SHA: ${{ steps.release.outputs.commit_sha }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          BUILD_SHA: ${{ needs.prepare.outputs.commit_sha }}
         run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            git fetch --tags origin
+            git tag -f "$RELEASE_TAG" "$BUILD_SHA"
+            git push origin "refs/tags/${RELEASE_TAG}" --force
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release delete "$RELEASE_TAG" --yes
+          fi
+
           gh release create "$RELEASE_TAG" web/firmware/*.bin \
             --title "$RELEASE_TAG" \
             --notes-file release-notes.md \

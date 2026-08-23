@@ -9,21 +9,25 @@ on:
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
       - 'gradlew'
+      - 'gradle.properties'
+      - 'gradle/libs.versions.toml'
       - 'gradle/wrapper/**'
       - 'RSVPNanoCompanion/conversionCore/**'
       - 'RSVPNanoCompanion/shared/**'
       - 'RSVPNanoCompanion/apps/ios/**'
-      - '.github/workflows/**'
+      - '.github/workflows/ci-ios.yml'
   pull_request:
     paths:
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
       - 'gradlew'
+      - 'gradle.properties'
+      - 'gradle/libs.versions.toml'
       - 'gradle/wrapper/**'
       - 'RSVPNanoCompanion/conversionCore/**'
       - 'RSVPNanoCompanion/shared/**'
       - 'RSVPNanoCompanion/apps/ios/**'
-      - '.github/workflows/**'
+      - '.github/workflows/ci-ios.yml'
 
 jobs:
   build-ios:
@@ -35,6 +39,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
       - name: Run iOS checks
         run: bash ./gradlew checkIos --no-daemon
       - name: Upload Gradle reports

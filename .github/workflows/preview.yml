@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       channel:
-        description: "Preview tag/release name, for example preview-sd-fix"
+        description: "Preview tag, for example preview-sd-fix"
         required: true
         default: "preview-manual"
       label:
@@ -19,16 +19,16 @@ permissions:
   contents: write
 
 jobs:
-  firmware:
+  prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
+    outputs:
+      channel: ${{ steps.preview.outputs.channel }}
+      commit_sha: ${{ steps.preview.outputs.commit_sha }}
+      title: ${{ steps.preview.outputs.title }}
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          submodules: recursive
 
       - name: Set preview metadata
         id: preview
@@ -41,23 +41,14 @@ jobs:
           else
             CHANNEL="$GITHUB_REF_NAME"
           fi
-
-          BUILD_SHA="$(git rev-parse HEAD)"
-
           if ! echo "$CHANNEL" | grep -Eq '^preview-[A-Za-z0-9._-]+$'; then
             echo "::error::Preview channel must look like preview-name, got: ${CHANNEL}"
             exit 1
           fi
 
           echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
-          echo "commit_sha=${BUILD_SHA}" >> "$GITHUB_OUTPUT"
-          echo "RSVP_FIRMWARE_TAG=${CHANNEL}" >> "$GITHUB_ENV"
-
-          if [ -n "$LABEL" ]; then
-            echo "title=${LABEL}" >> "$GITHUB_OUTPUT"
-          else
-            echo "title=Preview ${CHANNEL}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "title=${LABEL:-Preview ${CHANNEL}}" >> "$GITHUB_OUTPUT"
 
       - name: Move preview tag to this commit
         if: github.event_name == 'workflow_dispatch'
@@ -67,23 +58,31 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           git tag -f "$RELEASE_TAG" "$BUILD_SHA"
           git push origin "refs/tags/${RELEASE_TAG}" --force
 
-      - name: Install PlatformIO
-        run: pip install platformio
+  build:
+    needs: prepare
+    uses: ./.github/workflows/firmware-build.yml
+    with:
+      firmware_tag: ${{ needs.prepare.outputs.channel }}
 
-      - name: Export firmware assets
-        run: python3 tools/export_web_firmware.py
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: firmware-assets
+          path: web/firmware
 
-      - name: Write preview release notes
+      - name: Write preview notes
         run: |
           cat > release-notes.md <<'NOTES'
           Preview firmware build.
 
-          Tag/channel: `${{ steps.preview.outputs.channel }}`
-          Commit: `${{ steps.preview.outputs.commit_sha }}`
+          Tag/channel: `${{ needs.prepare.outputs.channel }}`
+          Commit: `${{ needs.prepare.outputs.commit_sha }}`
 
           Preview releases are replaceable. Use a versioned release for stable firmware.
           NOTES
@@ -91,19 +90,14 @@ jobs:
       - name: Publish or update preview release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.preview.outputs.channel }}
-          RELEASE_TITLE: ${{ steps.preview.outputs.title }}
-          BUILD_SHA: ${{ steps.preview.outputs.commit_sha }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.channel }}
+          RELEASE_TITLE: ${{ needs.prepare.outputs.title }}
+          BUILD_SHA: ${{ needs.prepare.outputs.commit_sha }}
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" \
-              --title "$RELEASE_TITLE" \
-              --notes-file release-notes.md \
-              --prerelease
+            gh release create "$RELEASE_TAG" --title "$RELEASE_TITLE" --notes-file release-notes.md --prerelease
           fi
-
           gh release upload "$RELEASE_TAG" web/firmware/*.bin --clobber
-
           gh release edit "$RELEASE_TAG" \
             --title "$RELEASE_TITLE" \
             --notes-file release-notes.md \

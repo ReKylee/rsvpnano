@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WEB_FIRMWARE_DIR = ROOT / "web" / "firmware"
 RELEASE_METADATA_PATH = WEB_FIRMWARE_DIR / "release.json"
+VERSION_DIR = WEB_FIRMWARE_DIR / "versions"
 BOOT_APP0_GLOB = "framework-arduinoespressif32*/tools/partitions/boot_app0.bin"
 VERSION_DECLARATION = "inline constexpr char kFirmwareVersion[] = "
 
@@ -96,6 +97,10 @@ OTA_EXPORTS = (
         "binary": "rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin",
         "label": "RSVP Nano Touch AMOLED 2.41 OTA firmware",
     },
+)
+
+REQUIRED_ENVS = tuple(
+    sorted({export["env"] for export in FLASH_EXPORTS} | {export["env"] for export in OTA_EXPORTS})
 )
 
 
@@ -209,6 +214,34 @@ def write_release_metadata(version: str, firmware: dict[str, str]) -> None:
     RELEASE_METADATA_PATH.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
 
+def write_version_marker(env: str, version: str) -> None:
+    VERSION_DIR.mkdir(parents=True, exist_ok=True)
+    (VERSION_DIR / f"{env}.txt").write_text(version + "\n", encoding="utf-8")
+
+
+def assemble_release() -> None:
+    missing_markers = [env for env in REQUIRED_ENVS if not (VERSION_DIR / f"{env}.txt").exists()]
+    if missing_markers:
+        raise SystemExit(f"Missing firmware version markers: {', '.join(missing_markers)}")
+
+    versions = {
+        (VERSION_DIR / f"{env}.txt").read_text(encoding="utf-8").strip()
+        for env in REQUIRED_ENVS
+    }
+    if len(versions) != 1 or not next(iter(versions)):
+        raise SystemExit(f"Firmware jobs produced different versions: {', '.join(sorted(versions))}")
+
+    for export in (*FLASH_EXPORTS, *OTA_EXPORTS):
+        path = WEB_FIRMWARE_DIR / export["binary"]
+        if not path.exists():
+            raise SystemExit(f"Missing exported firmware: {path}")
+
+    version = versions.pop()
+    write_release_metadata(version, {export["id"]: export["binary"] for export in FLASH_EXPORTS})
+    shutil.rmtree(VERSION_DIR)
+    print(f"Firmware release assembled in {WEB_FIRMWARE_DIR}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build merged binaries for the web flasher.")
     parser.add_argument(
@@ -216,12 +249,20 @@ def main() -> int:
         action="store_true",
         help="Use existing .pio build outputs instead of running PlatformIO first.",
     )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--env", choices=REQUIRED_ENVS, help="Build and export one PlatformIO environment.")
+    mode.add_argument("--list-envs", action="store_true", help="Print the build environment matrix as JSON.")
+    mode.add_argument("--assemble", action="store_true", help="Assemble artifacts exported by --env jobs.")
     args = parser.parse_args()
 
-    required_envs = sorted(
-        {export["env"] for export in FLASH_EXPORTS}
-        | {export["env"] for export in OTA_EXPORTS}
-    )
+    if args.list_envs:
+        print(json.dumps(REQUIRED_ENVS))
+        return 0
+    if args.assemble:
+        assemble_release()
+        return 0
+
+    required_envs = [args.env] if args.env else list(REQUIRED_ENVS)
 
     if not args.skip_build:
         pio = pio_command()
@@ -234,16 +275,24 @@ def main() -> int:
     WEB_FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
 
     for export in FLASH_EXPORTS:
+        if export["env"] not in required_envs:
+            continue
         output = WEB_FIRMWARE_DIR / export["binary"]
         print(f"Exporting {export['label']} -> {output}")
         merge_firmware(export["env"], output)
 
-    write_release_metadata(version, {export["id"]: export["binary"] for export in FLASH_EXPORTS})
-
     for export in OTA_EXPORTS:
+        if export["env"] not in required_envs:
+            continue
         ota_output = WEB_FIRMWARE_DIR / export["binary"]
         print(f"Exporting {export['label']} -> {ota_output}")
         export_ota_binary(export["env"], ota_output)
+
+    if args.env:
+        write_version_marker(args.env, version)
+    else:
+        write_release_metadata(version, {export["id"]: export["binary"] for export in FLASH_EXPORTS})
+        shutil.rmtree(VERSION_DIR, ignore_errors=True)
 
     print(f"Web firmware exported to {WEB_FIRMWARE_DIR}")
     return 0

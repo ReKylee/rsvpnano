@@ -1,9 +1,6 @@
 name: Pages
 
 on:
-  push:
-    branches:
-      - main
   workflow_run:
     workflows: [Release firmware]
     types: [completed]
@@ -23,6 +20,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -34,6 +33,9 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Download latest release firmware
         if: github.repository == 'ionutdecebal/rsvpnano'

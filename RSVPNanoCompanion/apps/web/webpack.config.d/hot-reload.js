@@ -1,5 +1,3 @@
-config.output ??= {};
-config.output.publicPath = "/";
 config.ignoreWarnings ??= [];
 config.ignoreWarnings.push(warning =>
   warning.module?.resource?.endsWith("rsvpnano-web.import-object.mjs") &&

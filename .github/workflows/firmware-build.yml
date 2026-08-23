@@ -1,0 +1,84 @@
+name: Build firmware assets
+
+on:
+  workflow_call:
+    inputs:
+      firmware_tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      environments: ${{ steps.environments.outputs.value }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: environments
+        run: echo "value=$(python3 tools/export_web_firmware.py --list-envs)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: matrix
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJSON(needs.matrix.outputs.environments) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: ${{ runner.os }}-pio-${{ hashFiles('platformio.ini', 'boards/**', 'tools/pio_*.py') }}
+          restore-keys: ${{ runner.os }}-pio-
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Export firmware environment
+        env:
+          RSVP_FIRMWARE_TAG: ${{ inputs.firmware_tag }}
+        run: python3 tools/export_web_firmware.py --env "${{ matrix.environment }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: firmware-${{ matrix.environment }}
+          path: web/firmware
+          if-no-files-found: error
+
+  assemble:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: firmware-*
+          path: web/firmware
+          merge-multiple: true
+
+      - name: Assemble firmware release
+        run: python3 tools/export_web_firmware.py --assemble
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: firmware-assets
+          path: web/firmware
+          if-no-files-found: error

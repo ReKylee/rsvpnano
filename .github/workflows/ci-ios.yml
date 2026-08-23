@@ -5,41 +5,52 @@ env:
 
 on:
   push:
+    branches: [main]
     paths:
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
       - 'gradlew'
+      - 'gradle.properties'
+      - 'gradle/libs.versions.toml'
       - 'gradle/wrapper/**'
       - 'RSVPNanoCompanion/conversionCore/**'
       - 'RSVPNanoCompanion/shared/**'
       - 'RSVPNanoCompanion/apps/ios/**'
-      - '.github/workflows/**'
+      - '.github/workflows/ci-ios.yml'
   pull_request:
     paths:
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
       - 'gradlew'
+      - 'gradle.properties'
+      - 'gradle/libs.versions.toml'
       - 'gradle/wrapper/**'
       - 'RSVPNanoCompanion/conversionCore/**'
       - 'RSVPNanoCompanion/shared/**'
       - 'RSVPNanoCompanion/apps/ios/**'
-      - '.github/workflows/**'
+      - '.github/workflows/ci-ios.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-ios:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
       - name: Run iOS checks
         run: bash ./gradlew checkIos --no-daemon
       - name: Upload Gradle reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ios-gradle-reports
           path: |
@@ -49,7 +60,7 @@ jobs:
         run: bash RSVPNanoCompanion/tools/build_shared_xcframework.sh
       - name: Upload shared artifacts
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: shared-xcframework
           path: RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/SharedFrameworks/shared.xcframework

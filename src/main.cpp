@@ -4,11 +4,13 @@
 #include "board/Board.h"
 #include "logging/Logger.h"
 #include "settings/NvsSecurity.h"
+#include "usb/WebFlasherReset.h"
 
 App app;
 
 void setup() {
     Serial.begin(115200);
+    usb::enableWebFlasherReset();
     Logger::begin();
     delay(50);
     Board::System::begin();

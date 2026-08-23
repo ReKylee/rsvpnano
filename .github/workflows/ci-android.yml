@@ -5,50 +5,52 @@ env:
 
 on:
   push:
+    branches: [main]
     paths:
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
       - 'gradlew'
+      - 'gradle.properties'
+      - 'gradle/libs.versions.toml'
       - 'gradle/wrapper/**'
       - 'RSVPNanoCompanion/conversionCore/**'
       - 'RSVPNanoCompanion/shared/**'
       - 'RSVPNanoCompanion/apps/android/**'
-      - '.github/workflows/**'
+      - '.github/workflows/ci-android.yml'
   pull_request:
     paths:
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
       - 'gradlew'
+      - 'gradle.properties'
+      - 'gradle/libs.versions.toml'
       - 'gradle/wrapper/**'
       - 'RSVPNanoCompanion/conversionCore/**'
       - 'RSVPNanoCompanion/shared/**'
       - 'RSVPNanoCompanion/apps/android/**'
-      - '.github/workflows/**'
+      - '.github/workflows/ci-android.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
       - name: Run Android checks
         run: bash ./gradlew checkAndroid --no-daemon
       - name: Upload test results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: |
@@ -56,7 +58,7 @@ jobs:
             **/build/test-results/
       - name: Upload shared artifacts
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-release-apk
           path: RSVPNanoCompanion/apps/android/build/outputs/apk/release/*.apk

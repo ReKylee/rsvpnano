@@ -12,8 +12,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write
-  pages: write
 
 jobs:
   firmware:
@@ -34,7 +32,6 @@ jobs:
           else
             RELEASE_TAG="${GITHUB_REF_NAME}"
           fi
-
           if ! echo "$RELEASE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._-]+)?$'; then
             echo "::error::Invalid release version: ${RELEASE_TAG}"
             echo "::error::Use something like v0.0.5 or v0.0.5-beta.1"
@@ -102,85 +99,19 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           NOTES_PATH="docs/releases/${RELEASE_TAG}.md"
-          if [ -f "$NOTES_PATH" ]; then
-            cp "$NOTES_PATH" release-notes.md
-          else
-            cat > release-notes.md <<'NOTES'
-          RSVP Nano firmware release.
-
-          Assets:
-          - `rsvp-nano-esp32-s3-touch-lcd-3.49.bin` is the full browser-flasher image for fresh installs on the Touch LCD 3.49.
-          - `rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin` is the Touch LCD 3.49 OTA binary.
-          - `rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin` is the full browser-flasher image for Touch LCD 3.49 rev2 boards.
-          - `rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin` is the Touch LCD 3.49 rev2 OTA binary.
-          - `rsvp-nano-esp32-s3-touch-amoled-1.8.bin` is the full browser-flasher image for Touch AMOLED 1.8 V1 boards.
-          - `rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin` is the Touch AMOLED 1.8 V1 OTA binary.
-          - `rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin` is the full browser-flasher image for Touch AMOLED 1.8 V2 test boards.
-          - `rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin` is the Touch AMOLED 1.8 V2 test OTA binary.
-          - `rsvp-nano-esp32-s3-touch-amoled-2.06.bin` is the full browser-flasher image for Touch AMOLED 2.06 boards.
-          - `rsvp-nano-esp32-s3-touch-amoled-2.06-ota.bin` is the Touch AMOLED 2.06 OTA binary.
-          - `rsvp-nano-esp32-s3-touch-amoled-2.16.bin` is the full browser-flasher image for Touch AMOLED 2.16 boards.
-          - `rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin` is the Touch AMOLED 2.16 OTA binary.
-          - `rsvp-nano-esp32-s3-touch-amoled-2.41.bin` is the full browser-flasher image for Touch AMOLED 2.41 boards.
-          - `rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin` is the Touch AMOLED 2.41 OTA binary.
-          NOTES
+          if [ ! -f "$NOTES_PATH" ]; then
+            echo "::error::Missing release notes: ${NOTES_PATH}"
+            exit 1
           fi
+          cp "$NOTES_PATH" release-notes.md
 
-      - name: Publish GitHub Release
+      - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           BUILD_SHA: ${{ steps.release.outputs.commit_sha }}
         run: |
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" \
-              web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.06.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.06-ota.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.16.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.41.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin \
-              --clobber
-          else
-            gh release create "$RELEASE_TAG" \
-              web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.06.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.06-ota.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.16.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.41.bin \
-              web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin \
-              --title "$RELEASE_TAG" \
-              --notes-file release-notes.md \
-              --target "$BUILD_SHA"
-          fi
-
-      - name: Configure GitHub Pages
-        if: github.repository == 'ionutdecebal/rsvpnano'
-        uses: actions/configure-pages@v5
-
-      - name: Upload GitHub Pages artifact
-        if: github.repository == 'ionutdecebal/rsvpnano'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: web
-
-      - name: Deploy GitHub Pages
-        if: github.repository == 'ionutdecebal/rsvpnano'
-        id: deployment
-        uses: actions/deploy-pages@v4
+          gh release create "$RELEASE_TAG" web/firmware/*.bin \
+            --title "$RELEASE_TAG" \
+            --notes-file release-notes.md \
+            --target "$BUILD_SHA"

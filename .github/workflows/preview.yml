@@ -74,92 +74,8 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
 
-      - name: Find firmware export tool
-        id: exporter
-        shell: bash
-        run: |
-          EXPORTER="$(find . -type f -name 'export_web_firmware.py' -not -path './.git/*' -print -quit)"
-
-          if [ -z "$EXPORTER" ]; then
-            echo "::error::Could not find export_web_firmware.py"
-            exit 1
-          fi
-
-          echo "path=$EXPORTER" >> "$GITHUB_OUTPUT"
-          echo "[preview] Using firmware export tool: $EXPORTER"
-
       - name: Export firmware assets
-        shell: bash
-        run: python3 "${{ steps.exporter.outputs.path }}"
-
-      - name: Find firmware assets
-        id: assets
-        shell: bash
-        run: |
-          FW_DIR="web/firmware"
-          LCD349_FULL_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-lcd-3.49.bin"
-          LCD349_OTA_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin"
-          LCD349_REV2_FULL_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin"
-          LCD349_REV2_OTA_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin"
-          AMOLED18_FULL_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-1.8.bin"
-          AMOLED18_OTA_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin"
-          AMOLED18_V2_FULL_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin"
-          AMOLED18_V2_OTA_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin"
-          AMOLED206_FULL_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-2.06.bin"
-          AMOLED206_OTA_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-2.06-ota.bin"
-          AMOLED216_FULL_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-2.16.bin"
-          AMOLED216_OTA_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin"
-          AMOLED241_FULL_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-2.41.bin"
-          AMOLED241_OTA_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin"
-
-          if [ ! -f "$LCD349_FULL_BIN" ] || [ ! -f "$LCD349_OTA_BIN" ] || [ ! -f "$LCD349_REV2_FULL_BIN" ] || [ ! -f "$LCD349_REV2_OTA_BIN" ] || [ ! -f "$AMOLED18_FULL_BIN" ] || [ ! -f "$AMOLED18_OTA_BIN" ] || [ ! -f "$AMOLED18_V2_FULL_BIN" ] || [ ! -f "$AMOLED18_V2_OTA_BIN" ] || [ ! -f "$AMOLED206_FULL_BIN" ] || [ ! -f "$AMOLED206_OTA_BIN" ] || [ ! -f "$AMOLED216_FULL_BIN" ] || [ ! -f "$AMOLED216_OTA_BIN" ] || [ ! -f "$AMOLED241_FULL_BIN" ] || [ ! -f "$AMOLED241_OTA_BIN" ]; then
-            echo "::error::Could not find firmware assets in $FW_DIR."
-            echo "LCD349_FULL_BIN=$LCD349_FULL_BIN"
-            echo "LCD349_OTA_BIN=$LCD349_OTA_BIN"
-            echo "LCD349_REV2_FULL_BIN=$LCD349_REV2_FULL_BIN"
-            echo "LCD349_REV2_OTA_BIN=$LCD349_REV2_OTA_BIN"
-            echo "AMOLED18_FULL_BIN=$AMOLED18_FULL_BIN"
-            echo "AMOLED18_OTA_BIN=$AMOLED18_OTA_BIN"
-            echo "AMOLED18_V2_FULL_BIN=$AMOLED18_V2_FULL_BIN"
-            echo "AMOLED18_V2_OTA_BIN=$AMOLED18_V2_OTA_BIN"
-            echo "AMOLED206_FULL_BIN=$AMOLED206_FULL_BIN"
-            echo "AMOLED206_OTA_BIN=$AMOLED206_OTA_BIN"
-            echo "AMOLED216_FULL_BIN=$AMOLED216_FULL_BIN"
-            echo "AMOLED216_OTA_BIN=$AMOLED216_OTA_BIN"
-            echo "AMOLED241_FULL_BIN=$AMOLED241_FULL_BIN"
-            echo "AMOLED241_OTA_BIN=$AMOLED241_OTA_BIN"
-            exit 1
-          fi
-
-          echo "lcd349_full=$LCD349_FULL_BIN" >> "$GITHUB_OUTPUT"
-          echo "lcd349_ota=$LCD349_OTA_BIN" >> "$GITHUB_OUTPUT"
-          echo "lcd349_rev2_full=$LCD349_REV2_FULL_BIN" >> "$GITHUB_OUTPUT"
-          echo "lcd349_rev2_ota=$LCD349_REV2_OTA_BIN" >> "$GITHUB_OUTPUT"
-          echo "amoled18_full=$AMOLED18_FULL_BIN" >> "$GITHUB_OUTPUT"
-          echo "amoled18_ota=$AMOLED18_OTA_BIN" >> "$GITHUB_OUTPUT"
-          echo "amoled18_v2_full=$AMOLED18_V2_FULL_BIN" >> "$GITHUB_OUTPUT"
-          echo "amoled18_v2_ota=$AMOLED18_V2_OTA_BIN" >> "$GITHUB_OUTPUT"
-          echo "amoled206_full=$AMOLED206_FULL_BIN" >> "$GITHUB_OUTPUT"
-          echo "amoled206_ota=$AMOLED206_OTA_BIN" >> "$GITHUB_OUTPUT"
-          echo "amoled216_full=$AMOLED216_FULL_BIN" >> "$GITHUB_OUTPUT"
-          echo "amoled216_ota=$AMOLED216_OTA_BIN" >> "$GITHUB_OUTPUT"
-          echo "amoled241_full=$AMOLED241_FULL_BIN" >> "$GITHUB_OUTPUT"
-          echo "amoled241_ota=$AMOLED241_OTA_BIN" >> "$GITHUB_OUTPUT"
-
-          echo "[preview] Touch LCD 3.49 full image: $LCD349_FULL_BIN"
-          echo "[preview] Touch LCD 3.49 OTA image: $LCD349_OTA_BIN"
-          echo "[preview] Touch LCD 3.49 rev2 full image: $LCD349_REV2_FULL_BIN"
-          echo "[preview] Touch LCD 3.49 rev2 OTA image: $LCD349_REV2_OTA_BIN"
-          echo "[preview] Touch AMOLED 1.8 V1 full image: $AMOLED18_FULL_BIN"
-          echo "[preview] Touch AMOLED 1.8 V1 OTA image: $AMOLED18_OTA_BIN"
-          echo "[preview] Touch AMOLED 1.8 V2 test full image: $AMOLED18_V2_FULL_BIN"
-          echo "[preview] Touch AMOLED 1.8 V2 test OTA image: $AMOLED18_V2_OTA_BIN"
-          echo "[preview] Touch AMOLED 2.06 full image: $AMOLED206_FULL_BIN"
-          echo "[preview] Touch AMOLED 2.06 OTA image: $AMOLED206_OTA_BIN"
-          echo "[preview] Touch AMOLED 2.16 full image: $AMOLED216_FULL_BIN"
-          echo "[preview] Touch AMOLED 2.16 OTA image: $AMOLED216_OTA_BIN"
-          echo "[preview] Touch AMOLED 2.41 full image: $AMOLED241_FULL_BIN"
-          echo "[preview] Touch AMOLED 2.41 OTA image: $AMOLED241_OTA_BIN"
+        run: python3 tools/export_web_firmware.py
 
       - name: Write preview release notes
         run: |
@@ -168,21 +84,8 @@ jobs:
 
           Tag/channel: `${{ steps.preview.outputs.channel }}`
           Commit: `${{ steps.preview.outputs.commit_sha }}`
-          Assets:
-          - `rsvp-nano-esp32-s3-touch-lcd-3.49.bin` is the full browser-flasher image for fresh installs on the Touch LCD 3.49.
-          - `rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin` is the Touch LCD 3.49 OTA binary.
-          - `rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin` is the full browser-flasher image for Touch LCD 3.49 rev2 boards.
-          - `rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin` is the Touch LCD 3.49 rev2 OTA binary.
-          - `rsvp-nano-esp32-s3-touch-amoled-1.8.bin` is the full browser-flasher image for Touch AMOLED 1.8 V1 boards.
-          - `rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin` is the Touch AMOLED 1.8 V1 OTA binary.
-          - `rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin` is the full browser-flasher image for Touch AMOLED 1.8 V2 test boards.
-          - `rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin` is the Touch AMOLED 1.8 V2 test OTA binary.
-          - `rsvp-nano-esp32-s3-touch-amoled-2.06.bin` is the full browser-flasher image for Touch AMOLED 2.06 boards.
-          - `rsvp-nano-esp32-s3-touch-amoled-2.06-ota.bin` is the Touch AMOLED 2.06 OTA binary.
-          - `rsvp-nano-esp32-s3-touch-amoled-2.16.bin` is the full browser-flasher image for Touch AMOLED 2.16 boards.
-          - `rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin` is the Touch AMOLED 2.16 OTA binary.
-          - `rsvp-nano-esp32-s3-touch-amoled-2.41.bin` is the full browser-flasher image for Touch AMOLED 2.41 boards.
-          - `rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin` is the Touch AMOLED 2.41 OTA binary.
+
+          Preview releases are replaceable. Use a versioned release for stable firmware.
           NOTES
 
       - name: Publish or update preview release
@@ -191,20 +94,6 @@ jobs:
           RELEASE_TAG: ${{ steps.preview.outputs.channel }}
           RELEASE_TITLE: ${{ steps.preview.outputs.title }}
           BUILD_SHA: ${{ steps.preview.outputs.commit_sha }}
-          LCD349_FULL_BIN: ${{ steps.assets.outputs.lcd349_full }}
-          LCD349_OTA_BIN: ${{ steps.assets.outputs.lcd349_ota }}
-          LCD349_REV2_FULL_BIN: ${{ steps.assets.outputs.lcd349_rev2_full }}
-          LCD349_REV2_OTA_BIN: ${{ steps.assets.outputs.lcd349_rev2_ota }}
-          AMOLED18_FULL_BIN: ${{ steps.assets.outputs.amoled18_full }}
-          AMOLED18_OTA_BIN: ${{ steps.assets.outputs.amoled18_ota }}
-          AMOLED18_V2_FULL_BIN: ${{ steps.assets.outputs.amoled18_v2_full }}
-          AMOLED18_V2_OTA_BIN: ${{ steps.assets.outputs.amoled18_v2_ota }}
-          AMOLED206_FULL_BIN: ${{ steps.assets.outputs.amoled206_full }}
-          AMOLED206_OTA_BIN: ${{ steps.assets.outputs.amoled206_ota }}
-          AMOLED216_FULL_BIN: ${{ steps.assets.outputs.amoled216_full }}
-          AMOLED216_OTA_BIN: ${{ steps.assets.outputs.amoled216_ota }}
-          AMOLED241_FULL_BIN: ${{ steps.assets.outputs.amoled241_full }}
-          AMOLED241_OTA_BIN: ${{ steps.assets.outputs.amoled241_ota }}
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" \
@@ -213,22 +102,7 @@ jobs:
               --prerelease
           fi
 
-          gh release upload "$RELEASE_TAG" \
-            "$LCD349_FULL_BIN" \
-            "$LCD349_OTA_BIN" \
-            "$LCD349_REV2_FULL_BIN" \
-            "$LCD349_REV2_OTA_BIN" \
-            "$AMOLED18_FULL_BIN" \
-            "$AMOLED18_OTA_BIN" \
-            "$AMOLED18_V2_FULL_BIN" \
-            "$AMOLED18_V2_OTA_BIN" \
-            "$AMOLED206_FULL_BIN" \
-            "$AMOLED206_OTA_BIN" \
-            "$AMOLED216_FULL_BIN" \
-            "$AMOLED216_OTA_BIN" \
-            "$AMOLED241_FULL_BIN" \
-            "$AMOLED241_OTA_BIN" \
-            --clobber
+          gh release upload "$RELEASE_TAG" web/firmware/*.bin --clobber
 
           gh release edit "$RELEASE_TAG" \
             --title "$RELEASE_TITLE" \

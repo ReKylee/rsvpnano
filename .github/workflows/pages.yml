@@ -1,11 +1,12 @@
-name: Build web flasher
+name: Pages
 
 on:
   push:
     branches:
       - main
-  release:
-    types: [published]
+  workflow_run:
+    workflows: [Release firmware]
+    types: [completed]
   workflow_dispatch:
 
 concurrency:
@@ -14,7 +15,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main' || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -54,7 +55,7 @@ jobs:
           path: build/webSite
 
   deploy:
-    if: github.repository == 'ionutdecebal/rsvpnano' && (github.ref == 'refs/heads/main' || github.event_name == 'release' || github.event_name == 'workflow_dispatch')
+    if: github.repository == 'ionutdecebal/rsvpnano' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     needs: build
     runs-on: ubuntu-latest
 

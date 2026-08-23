@@ -27,6 +27,8 @@
 #include "ui/screens/ReaderScreen.h"
 #include "ui/screens/Screens.h"
 
+class CompanionSerial;
+
 class CompanionApi {
 public:
     CompanionApi(settings::SettingsStore& settingsStore, StorageManager& storage, locales::Catalog& localeCatalog,
@@ -50,6 +52,10 @@ public:
     [[nodiscard]] std::string_view statusLine2() const;
 
 private:
+    friend class CompanionSerial;
+
+    // TODO(feat/lang): Move endpoint operations into one companion::operations namespace and call those typed
+    // operations from both CompanionApi and CompanionSerial after the in-flight HTTP API work is merged.
     using FeedList = std::vector<std::string>;
     using OperationResult = std::expected<void, std::string>;
 
@@ -69,6 +75,7 @@ private:
 
     // Device
     companion::api::Result<companion::api::DeviceInfo> getDevice(httpd_req_t& request);
+    [[nodiscard]] companion::api::DeviceInfo deviceInfo() const;
 
     // Library
     companion::api::Result<std::string> installLibraryItem(httpd_req_t& request);
@@ -100,6 +107,7 @@ private:
     // Network configuration and reader content
     companion::api::Result<const settings::NetworkSettings*> getNetwork(httpd_req_t& request);
     companion::api::Result<> putNetwork(httpd_req_t& request);
+    companion::api::Result<> updateNetwork(companion::api::NetworkUpdate update);
     companion::api::Result<> deleteNetwork(httpd_req_t& request);
     companion::api::Result<FeedList> getFeeds(httpd_req_t& request);
     companion::api::Result<> putFeeds(httpd_req_t& request);
@@ -110,6 +118,7 @@ private:
     static esp_err_t handleLibrary(httpd_req_t* request);
     static esp_err_t handleLibraryInstall(httpd_req_t* request);
     static esp_err_t handleSettings(httpd_req_t* request);
+    static esp_err_t handleOptions(httpd_req_t* request);
     static esp_err_t handleNotFound(httpd_req_t* request, httpd_err_code_t error);
 
     template<auto endpoint>
@@ -122,6 +131,11 @@ private:
             return ESP_ERR_INVALID_STATE;
         if (!self->active())
             return ESP_ERR_INVALID_STATE;
+        if (!self->browserOriginAllowed(*request)) {
+            return self->sendError(*request,
+                                   companion::api::httpError(HTTP_CODE_FORBIDDEN, "origin_forbidden",
+                                                             "This browser origin is not allowed"));
+        }
 
         if (request->content_len != 0 && (request->method == HTTP_GET || request->method == HTTP_DELETE)) {
             return self->sendError(*request,
@@ -130,6 +144,7 @@ private:
                                                              std::nullopt, companion::api::ConnectionPolicy::Close));
         }
 
+        const std::lock_guard operationLock{self->operationsMutex_};
         auto result = (self->*endpoint)(*request);
         if (!result)
             return self->sendError(*request, std::move(result.error()));
@@ -150,6 +165,8 @@ private:
     esp_err_t sendSettings(httpd_req_t& request);
     esp_err_t sendError(httpd_req_t& request, companion::api::HttpError error);
     esp_err_t sendNoContent(httpd_req_t& request);
+    esp_err_t setBrowserResponseHeaders(httpd_req_t& request);
+    [[nodiscard]] bool browserOriginAllowed(httpd_req_t& request) const;
 
     template<typename T>
     companion::api::Result<std::string> encodeResponse(const T& data) {
@@ -216,6 +233,7 @@ private:
     std::atomic_bool active_ = false;
     std::atomic_bool stationConnected_ = false;
     std::mutex networkStateMutex_;
+    std::mutex operationsMutex_;
     std::string accessPointSsid_;
     settings::SettingsStore& settingsStore_;
     StorageManager& storage_;

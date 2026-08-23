@@ -96,6 +96,7 @@ void App::begin() {
 }
 
 void App::update(uint32_t nowMs) {
+    serialCompanion_.update(nowMs);
     Input::ActionMask actions;
     while (Input::poll(actions)) {
         lastActivityMs_ = nowMs;
@@ -139,7 +140,7 @@ void App::update(uint32_t nowMs) {
         return;
     }
 
-    if (companionApi_.active()) {
+    if (companionApi_.active() || serialCompanion_.active()) {
         settingsStore_.update(nowMs);
         Board::Power::updateBattery(battery_, nowMs);
         return;
@@ -167,6 +168,10 @@ void App::update(uint32_t nowMs) {
 }
 
 void App::renderScreen(uint32_t nowMs) {
+    if (serialCompanion_.active()) {
+        screens::status(immediateUi_, "USB companion", "Connected", "Keep the browser open");
+        return;
+    }
     const screens::Screen renderedScreen = screen_;
     screens::Action action = screens::Action::None;
     switch (screen_) {
@@ -390,6 +395,13 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
 }
 
 void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
+    if (serialCompanion_.active()) {
+        if (Input::hasAction(actions, Input::ActionBack) || Input::hasAction(actions, Input::ActionOpenMenu)) {
+            serialCompanion_.close();
+            renderScreen(nowMs);
+        }
+        return;
+    }
     if (screen_ == screens::Screen::Standby) {
         exitStandby(nowMs);
         return;
@@ -493,6 +505,8 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
 }
 
 void App::handleTouch(uint32_t nowMs) {
+    if (serialCompanion_.active())
+        return;
     const ui::Touch* touch = immediateUi_.touch();
     if (touch == nullptr)
         return;
@@ -752,6 +766,8 @@ void App::runBookOpen(size_t index, uint32_t nowMs) {
 
 void App::enterUsbTransfer(uint32_t nowMs) {
 #if RSVP_USB_TRANSFER_ENABLED
+    if (serialCompanion_.active())
+        return;
     ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
     ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
     settingsStore_.flush();

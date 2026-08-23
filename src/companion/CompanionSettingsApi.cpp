@@ -15,11 +15,14 @@ esp_err_t CompanionApi::handleSettings(httpd_req_t* request) {
     auto* self = static_cast<CompanionApi*>(httpd_get_global_user_ctx(request->handle));
     if (self == nullptr || !self->active())
         return ESP_ERR_INVALID_STATE;
+    if (!self->browserOriginAllowed(*request))
+        return self->sendError(*request, api::httpError(HTTP_CODE_FORBIDDEN, "origin_forbidden", "This browser origin is not allowed"));
     if (request->content_len != 0) {
         return self->sendError(*request, api::httpError(HTTP_CODE_BAD_REQUEST, "unexpected_body",
                                                         "This endpoint does not accept a request body", std::nullopt,
                                                         api::ConnectionPolicy::Close));
     }
+    const std::lock_guard operationLock{self->operationsMutex_};
     return self->sendSettings(*request);
 }
 

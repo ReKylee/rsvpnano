@@ -250,8 +250,12 @@ void CompanionApi::stopMdns() {
 
 companion::api::Result<companion::api::DeviceInfo> CompanionApi::getDevice(httpd_req_t& request) {
     (void) request;
+    return deviceInfo();
+}
+
+companion::api::DeviceInfo CompanionApi::deviceInfo() const {
     return companion::api::DeviceInfo{
-        .ssid = accessPointSsid_,
+        .ssid = accessPointSsid_.empty() ? "RSVP-Nano-" + deviceSuffix() : accessPointSsid_,
         .firmwareVersion = std::string{OtaUpdater::currentVersion()},
         .otaAsset = Board::Config::OTA_ASSET_NAME,
     };

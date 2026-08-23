@@ -1,4 +1,5 @@
 #include "companion/CompanionUpload.h"
+#include "companion/serial/CompanionBufferedRequest.h"
 
 #include <esp_log.h>
 
@@ -86,7 +87,11 @@ namespace companion {
         size_t remaining = request.content_len;
         while (remaining > 0) {
             const size_t requested = std::min(remaining, buffer.size());
-            const int received = httpd_req_recv(&request, reinterpret_cast<char*>(buffer.data()), requested);
+            const int received = companion::bufferedRequest(request) != nullptr
+                                   ? companion::bufferedRequest(request)->read(
+                                         companion::bufferedRequest(request)->readContext,
+                                         std::span{reinterpret_cast<uint8_t*>(buffer.data()), requested})
+                                   : httpd_req_recv(&request, reinterpret_cast<char*>(buffer.data()), requested);
             if (received == HTTPD_SOCK_ERR_TIMEOUT) {
                 return std::unexpected(interruptedUpload(
                     HTTP_CODE_REQUEST_TIMEOUT, "request_timeout",

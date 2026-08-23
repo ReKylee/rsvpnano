@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "board/BoardStorage.h"
+#include "companion/serial/CompanionBufferedRequest.h"
 #include "companion/CompanionUpload.h"
 #include "logging/Logger.h"
 #include "reader/ReadingLoop.h"
@@ -41,11 +42,14 @@ esp_err_t CompanionApi::handleLibrary(httpd_req_t* request) {
     auto* self = static_cast<CompanionApi*>(httpd_get_global_user_ctx(request->handle));
     if (self == nullptr || !self->active())
         return ESP_ERR_INVALID_STATE;
+    if (!self->browserOriginAllowed(*request))
+        return self->sendError(*request, api::httpError(HTTP_CODE_FORBIDDEN, "origin_forbidden", "This browser origin is not allowed"));
     if (request->content_len != 0) {
         return self->sendError(*request, api::httpError(HTTP_CODE_BAD_REQUEST, "unexpected_body",
                                                         "This endpoint does not accept a request body", std::nullopt,
                                                         api::ConnectionPolicy::Close));
     }
+    const std::lock_guard operationLock{self->operationsMutex_};
     return self->sendLibrary(*request);
 }
 
@@ -55,7 +59,10 @@ esp_err_t CompanionApi::handleLibraryInstall(httpd_req_t* request) {
     auto* self = static_cast<CompanionApi*>(httpd_get_global_user_ctx(request->handle));
     if (self == nullptr || !self->active())
         return ESP_ERR_INVALID_STATE;
+    if (!self->browserOriginAllowed(*request))
+        return self->sendError(*request, api::httpError(HTTP_CODE_FORBIDDEN, "origin_forbidden", "This browser origin is not allowed"));
 
+    const std::lock_guard operationLock{self->operationsMutex_};
     auto response = self->installLibraryItem(*request);
     if (!response)
         return self->sendError(*request, std::move(response.error()));
@@ -63,6 +70,8 @@ esp_err_t CompanionApi::handleLibraryInstall(httpd_req_t* request) {
 }
 
 esp_err_t CompanionApi::sendLibrary(httpd_req_t& request) {
+    if (const esp_err_t error = setBrowserResponseHeaders(request); error != ESP_OK)
+        return error;
     if (const esp_err_t error = httpd_resp_set_hdr(&request, "Cache-Control", "no-store"); error != ESP_OK)
         return error;
     const std::string status = api::httpStatusLine(HTTP_CODE_OK);
@@ -246,6 +255,10 @@ companion::api::Result<std::string> CompanionApi::installLibraryItem(httpd_req_t
     const BookLibrary::Entry* book = storage_.book(static_cast<size_t>(index));
     if (response && book != nullptr) {
         const std::string location = "/api/v2/library/" + BookLibrary::id(*book);
+        if (auto* buffered = companion::bufferedRequest(request)) {
+            buffered->location = location;
+            return response;
+        }
         if (httpd_resp_set_hdr(&request, "Location", location.c_str()) == ESP_OK)
             return response;
     }

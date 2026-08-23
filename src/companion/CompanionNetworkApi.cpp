@@ -49,10 +49,13 @@ companion::api::Result<const settings::NetworkSettings*> CompanionApi::getNetwor
 
 companion::api::Result<> CompanionApi::putNetwork(httpd_req_t& request) {
     return readJson<companion::api::NetworkUpdate>(request, 512, "Wi-Fi payload exceeds 512 bytes")
-        .and_then(validateNetworkUpdate)
-        .transform([this](companion::api::NetworkUpdate update) {
-            storeNetwork(std::move(*update.ssid), update.password.value_or(""));
-        });
+        .and_then([this](companion::api::NetworkUpdate update) { return updateNetwork(std::move(update)); });
+}
+
+companion::api::Result<> CompanionApi::updateNetwork(companion::api::NetworkUpdate update) {
+    return validateNetworkUpdate(std::move(update)).transform([this](companion::api::NetworkUpdate validated) {
+        storeNetwork(std::move(*validated.ssid), validated.password.value_or(""));
+    });
 }
 
 companion::api::Result<> CompanionApi::deleteNetwork(httpd_req_t& request) {

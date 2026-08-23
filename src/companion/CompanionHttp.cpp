@@ -1,9 +1,10 @@
 #include "companion/CompanionApi.h"
-
+#include "companion/serial/CompanionBufferedRequest.h"
 #include <esp_log.h>
 #include <glaze/net/url.hpp>
 
 #include <array>
+#include <algorithm>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <string>
@@ -38,6 +39,9 @@ namespace {
         std::string_view path{uri, length};
         path = path.substr(0, path.find('?'));
 
+        if (pattern.ends_with('*'))
+            return path.starts_with(pattern.substr(0, pattern.size() - 1));
+
         const size_t parameterOffset = pattern.find(parameter);
         if (parameterOffset == std::string_view::npos)
             return path == pattern;
@@ -50,6 +54,37 @@ namespace {
 
         const std::string_view value = path.substr(prefix.size(), path.size() - prefix.size() - suffix.size());
         return !value.contains('/');
+    }
+
+    [[nodiscard]] std::optional<std::string> requestHeader(httpd_req_t& request, const char* name) {
+        const size_t length = httpd_req_get_hdr_value_len(&request, name);
+        if (length == 0)
+            return std::nullopt;
+
+        std::string value(length + 1, '\0');
+        if (httpd_req_get_hdr_value_str(&request, name, value.data(), value.size()) != ESP_OK)
+            return std::nullopt;
+        value.resize(length);
+        return value;
+    }
+
+    [[nodiscard]] bool isLocalDevelopmentOrigin(std::string_view origin, std::string_view host) {
+        for (const std::string_view scheme: {std::string_view{"http://"}, std::string_view{"https://"}}) {
+            const std::string prefix = std::string{scheme} + std::string{host};
+            if (origin == prefix)
+                return true;
+            if (!origin.starts_with(prefix) || origin.size() <= prefix.size() + 1 || origin[prefix.size()] != ':')
+                continue;
+            const std::string_view port = origin.substr(prefix.size() + 1);
+            if (std::all_of(port.begin(), port.end(), [](char value) { return value >= '0' && value <= '9'; }))
+                return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] bool isAllowedOrigin(std::string_view origin) {
+        return origin == "https://ionutdecebal.github.io" || isLocalDevelopmentOrigin(origin, "localhost") ||
+               isLocalDevelopmentOrigin(origin, "127.0.0.1") || isLocalDevelopmentOrigin(origin, "[::1]");
     }
 
 } // namespace
@@ -91,6 +126,7 @@ CompanionApi::OperationResult CompanionApi::startServer() {
         makeRoute("/api/v2/feeds", HTTP_PUT, &CompanionApi::handle<&CompanionApi::putFeeds>),
         makeRoute("/api/v2/focus-timers", HTTP_GET, &CompanionApi::handle<&CompanionApi::getFocusTimers>),
         makeRoute("/api/v2/focus-timers", HTTP_PUT, &CompanionApi::handle<&CompanionApi::putFocusTimers>),
+        makeRoute("/api/v2/*", HTTP_OPTIONS, &CompanionApi::handleOptions),
     };
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -142,11 +178,48 @@ esp_err_t CompanionApi::handleNotFound(httpd_req_t* request, httpd_err_code_t er
         return ESP_ERR_INVALID_STATE;
     if (!self->active())
         return ESP_ERR_INVALID_STATE;
+    if (!self->browserOriginAllowed(*request)) {
+        return self->sendError(*request,
+                               api::httpError(HTTP_CODE_FORBIDDEN, "origin_forbidden",
+                                              "This browser origin is not allowed"));
+    }
 
     const api::ConnectionPolicy connection =
         request->content_len == 0 ? api::ConnectionPolicy::KeepAlive : api::ConnectionPolicy::Close;
     return self->sendError(*request, api::httpError(HTTP_CODE_NOT_FOUND, "not_found", "Endpoint not found",
                                                     std::nullopt, connection));
+}
+
+esp_err_t CompanionApi::handleOptions(httpd_req_t* request) {
+    if (request == nullptr || request->handle == nullptr)
+        return ESP_ERR_INVALID_ARG;
+    auto* self = static_cast<CompanionApi*>(httpd_get_global_user_ctx(request->handle));
+    if (self == nullptr || !self->active())
+        return ESP_ERR_INVALID_STATE;
+    if (!self->browserOriginAllowed(*request)) {
+        return self->sendError(*request,
+                               api::httpError(HTTP_CODE_FORBIDDEN, "origin_forbidden",
+                                              "This browser origin is not allowed"));
+    }
+
+    if (const esp_err_t error = self->setBrowserResponseHeaders(*request); error != ESP_OK)
+        return error;
+    if (const esp_err_t error = httpd_resp_set_hdr(request, "Access-Control-Allow-Methods",
+                                                   "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+        error != ESP_OK) {
+        return error;
+    }
+    if (const esp_err_t error = httpd_resp_set_hdr(request, "Access-Control-Allow-Headers", "Content-Type");
+        error != ESP_OK) {
+        return error;
+    }
+    if (requestHeader(*request, "Access-Control-Request-Private-Network") == "true") {
+        if (const esp_err_t error = httpd_resp_set_hdr(request, "Access-Control-Allow-Private-Network", "true");
+            error != ESP_OK) {
+            return error;
+        }
+    }
+    return self->sendNoContent(*request);
 }
 
 void CompanionApi::stopServer() {
@@ -177,6 +250,8 @@ void CompanionApi::drainServer() {
 
 esp_err_t CompanionApi::sendJson(httpd_req_t& request, t_http_codes status, std::string_view json,
                                  api::ConnectionPolicy connection) {
+    if (const esp_err_t error = setBrowserResponseHeaders(request); error != ESP_OK)
+        return error;
     if (const esp_err_t error = httpd_resp_set_hdr(&request, "Cache-Control", "no-store"); error != ESP_OK)
         return error;
     if (connection == api::ConnectionPolicy::Close) {
@@ -209,6 +284,8 @@ esp_err_t CompanionApi::sendError(httpd_req_t& request, api::HttpError error) {
 }
 
 esp_err_t CompanionApi::sendNoContent(httpd_req_t& request) {
+    if (const esp_err_t error = setBrowserResponseHeaders(request); error != ESP_OK)
+        return error;
     if (const esp_err_t error = httpd_resp_set_hdr(&request, "Cache-Control", "no-store"); error != ESP_OK)
         return error;
 
@@ -217,6 +294,22 @@ esp_err_t CompanionApi::sendNoContent(httpd_req_t& request) {
         return error;
 
     return httpd_resp_send(&request, nullptr, 0);
+}
+
+esp_err_t CompanionApi::setBrowserResponseHeaders(httpd_req_t& request) {
+    const auto origin = requestHeader(request, "Origin");
+    if (!origin || !isAllowedOrigin(*origin))
+        return ESP_OK;
+    if (const esp_err_t error = httpd_resp_set_hdr(&request, "Access-Control-Allow-Origin", origin->c_str());
+        error != ESP_OK) {
+        return error;
+    }
+    return httpd_resp_set_hdr(&request, "Vary", "Origin");
+}
+
+bool CompanionApi::browserOriginAllowed(httpd_req_t& request) const {
+    const auto origin = requestHeader(request, "Origin");
+    return !origin || isAllowedOrigin(*origin);
 }
 
 api::Result<std::string> CompanionApi::readBody(httpd_req_t& request, size_t maximum,
@@ -230,7 +323,11 @@ api::Result<std::string> CompanionApi::readBody(httpd_req_t& request, size_t max
     std::string body(request.content_len, '\0');
     size_t offset = 0;
     while (offset < body.size()) {
-        const int received = httpd_req_recv(&request, body.data() + offset, body.size() - offset);
+        const int received = companion::bufferedRequest(request) != nullptr
+                               ? companion::bufferedRequest(request)->read(
+                                     companion::bufferedRequest(request)->readContext,
+                                     std::span{reinterpret_cast<uint8_t*>(body.data() + offset), body.size() - offset})
+                               : httpd_req_recv(&request, body.data() + offset, body.size() - offset);
         if (received == HTTPD_SOCK_ERR_TIMEOUT) {
             return std::unexpected(api::httpError(HTTP_CODE_REQUEST_TIMEOUT, "request_timeout",
                                                   "Timed out while receiving the request body", std::nullopt,
@@ -247,6 +344,10 @@ api::Result<std::string> CompanionApi::readBody(httpd_req_t& request, size_t max
 }
 
 std::optional<std::string> CompanionApi::queryParameter(httpd_req_t& request, std::string_view name) const {
+    if (const auto* buffered = companion::bufferedRequest(request)) {
+        const auto value = buffered->query.find(name);
+        return value == buffered->query.end() ? std::nullopt : std::optional{value->second};
+    }
     const size_t length = httpd_req_get_url_query_len(&request);
     if (length == 0)
         return std::nullopt;
@@ -278,7 +379,8 @@ api::Result<std::string> CompanionApi::requiredQueryParameter(httpd_req_t& reque
 
 api::Result<std::string> CompanionApi::routeId(const httpd_req_t& request, std::string_view prefix,
                                                std::string_view suffix) const {
-    const std::string_view path = requestPath(request);
+    const auto* buffered = companion::bufferedRequest(request);
+    const std::string_view path = buffered == nullptr ? requestPath(request) : std::string_view{buffered->path};
     if (!path.starts_with(prefix) || !path.ends_with(suffix) || path.size() <= prefix.size() + suffix.size()) {
         return std::unexpected(api::httpError(HTTP_CODE_BAD_REQUEST, "missing_field", "Resource id is required", "id"));
     }

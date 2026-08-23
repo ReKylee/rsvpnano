@@ -1,609 +1,231 @@
-# RSVP Nano
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="RSVPNanoCompanion/apps/web/src/wasmJsMain/composeResources/drawable/rsvp_nano_horizontal.svg">
+    <img src="RSVPNanoCompanion/apps/web/src/wasmJsMain/composeResources/drawable/rsvp_nano_horizontal_light.svg" alt="RSVP Nano" width="520">
+  </picture>
+</p>
 
-RSVP Nano is an open-source ESP32-S3 reading device that shows text one word at a time using RSVP, Rapid Serial Visual Presentation. It is designed for small screens, SD card libraries, fast reading, and a simple browser-first workflow for converting and uploading books.
+<p align="center">
+  An open-source, pocket-sized speed reader built on ESP32.
+</p>
 
-This README tracks the current main branch and the `preview-v0.0.9` preview.
+<p align="center">
+  <a href="https://github.com/ionutdecebal/rsvpnano/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/ionutdecebal/rsvpnano?sort=semver"></a>
+  <a href="https://github.com/ionutdecebal/rsvpnano/actions/workflows/test.yml"><img alt="Tests" src="https://github.com/ionutdecebal/rsvpnano/actions/workflows/test.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/ionutdecebal/rsvpnano"></a>
+  <a href="https://discord.gg/mB5xv2PG53"><img alt="Discord" src="https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white"></a>
+</p>
 
-## What You Need
+<p align="center">
+  <a href="https://ionutdecebal.github.io/rsvpnano/"><strong>Open the web companion</strong></a>
+  &nbsp;|&nbsp;
+  <a href="https://github.com/ionutdecebal/rsvpnano/releases">Releases</a>
+  &nbsp;|&nbsp;
+  <a href="docs/releases/v0.0.9.md">v0.0.9 notes</a>
+  &nbsp;|&nbsp;
+  <a href="https://discord.gg/mB5xv2PG53">Discord</a>
+</p>
 
-- An RSVP Nano device.
-- A USB-C data cable.
-- A microSD card.
-- Chrome or Edge on a desktop computer for browser flashing and the web converter.
-- Optional: native iOS or Android companion apps built locally while public distribution is pending.
+## What is RSVP Nano?
 
-## Supported Hardware
+RSVP Nano is a small standalone reader that presents text one word at a time using Rapid Serial
+Visual Presentation. It also supports page reading when you want surrounding context. Books,
+articles, settings, fonts, themes, languages, and reading progress live on a microSD card.
 
-The browser flasher supports these device targets:
+The project includes:
 
-- Waveshare ESP32-S3 Touch LCD 3.49 rev1.
-- Waveshare ESP32-S3 Touch LCD 3.49 rev2.
-- Waveshare ESP32-S3 Touch AMOLED 1.8 V1.
-- Waveshare ESP32-S3 Touch AMOLED 1.8 V2 Test.
-- Waveshare ESP32-S3 Touch AMOLED 2.06.
-- Waveshare ESP32-S3 Touch AMOLED 2.16.
-- Waveshare ESP32-S3 Touch AMOLED 2.41.
+- Multi-board ESP32 firmware with RSVP and page reading.
+- A responsive Compose Multiplatform web companion for setup, flashing, conversion, and management.
+- Android and iOS companions built on shared Kotlin Multiplatform logic.
+- A shared Kotlin conversion engine for EPUB, text, Markdown, HTML, XHTML, and RSVP files.
+- Installable reader fonts, interface language packs, and color themes.
 
-Some hardware links below are affiliate links. Buying through them may support RSVP Nano at no
-extra cost to you:
+RSVP Nano is under active development. The current release line is `0.x`, so back up important SD
+card content before testing new firmware.
 
-- [ESP32-S3 Touch LCD 3.49](https://www.waveshare.com/esp32-s3-touch-lcd-3.49.htm?&aff_id=ionutdecebal)
-- [ESP32-S3 Touch AMOLED 1.8](https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal)
-- [ESP32-S3 Touch AMOLED 2.06](https://www.waveshare.com/esp32-s3-touch-amoled-2.06.htm?&aff_id=ionutdecebal)
-- [ESP32-S3 Touch AMOLED 2.16](https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=ionutdecebal)
-- [ESP32-S3 Touch AMOLED 2.41](https://www.waveshare.com/esp32-s3-touch-amoled-2.41.htm?&aff_id=ionutdecebal)
+## Highlights
 
-## Quick Start
+- **Two reading modes:** focused RSVP playback and paragraph-aware page reading.
+- **Multilingual text:** bidirectional text, Arabic and Hebrew shaping, CJK fonts, and vertical CJK
+  books.
+- **Personal appearance:** installable RFont4 reader fonts, locale packs, downloadable themes,
+  focus highlighting, tracking, guide geometry, and handed layouts.
+- **Companion management:** library uploads, progress editing, settings, Wi-Fi, RSS feeds, focus
+  timers, fonts, themes, locales, and firmware updates.
+- **Flexible connections:** local-network sync, the Nano's direct Wi-Fi network, USB companion
+  control, and USB mass-storage transfer on supported boards.
+- **Offline-friendly setup:** an installable PWA shell, browser firmware installation, Improv Wi-Fi
+  provisioning, and local file conversion without a server-side converter.
+- **Device utilities:** OTA updates, SD diagnostics, configurable focus routines, and Life, Maze,
+  Voronoi, and Reaction screensavers.
 
-1. Flash the firmware from the browser.
-2. Format the SD card and create the library folders.
-3. Convert books or articles to `.rsvp`.
-4. Copy or upload files to the device.
-5. Pick a book or article from the device menu and start reading.
+## Get started
 
-## Flash The Firmware
+You need a supported RSVP Nano board, a USB-C data cable, and a FAT32 microSD card. An 8 GB to
+32 GB card is the safest choice.
 
-Use the hosted flasher:
+1. Open the [web companion](https://ionutdecebal.github.io/rsvpnano/) in a desktop browser.
+2. Choose your board and install the latest firmware.
+3. Follow setup to provision Wi-Fi and verify the reader.
+4. Add an EPUB, RSVP, text, Markdown, HTML, or XHTML file from the Library screen.
+5. Open the book on the Nano and start reading.
 
-<https://ionutdecebal.github.io/rsvpnano/>
+Chrome or Edge is required for browser flashing and USB companion access because those features use
+Web Serial. The site still supports local-network management in browsers that can reach the reader.
 
-Open it in Chrome or Edge on desktop, connect the device over USB, and follow the installer prompts. The flasher uses ESP Web Tools and Web Serial, so it must run from HTTPS or localhost.
+The web installer uses the firmware bundled with the latest published release. You can also choose a
+compatible full-image `.bin` file manually. Firmware already installed on a Nano can update through
+the device's OTA flow.
 
-Choose the correct device from the flasher dropdown before installing.
+## Supported hardware
 
-Most ESP32-S3 Touch LCD 3.49 devices should use the default rev1 firmware option. If a newer
-Waveshare batch boots but brightness or backlight control does not respond, try the rev2 firmware
-option instead; it uses the alternate GPIO42 backlight profile.
+| Board | PlatformIO environment | Distribution |
+| --- | --- | --- |
+| Waveshare ESP32-S3 Touch LCD 3.49 rev1 | `waveshare_esp32s3_touch_lcd_349_rev1` | Web installer, OTA, source |
+| Waveshare ESP32-S3 Touch LCD 3.49 rev2 | `waveshare_esp32s3_touch_lcd_349_rev2` | Web installer, OTA, source |
+| Waveshare ESP32-S3 Touch AMOLED 1.8 V1 | `waveshare_esp32s3_touch_amoled_18_v1` | Web installer, OTA, source |
+| Waveshare ESP32-S3 Touch AMOLED 1.8 V2 | `waveshare_esp32s3_touch_amoled_18_v2` | Web installer, OTA, source; still experimental |
+| Waveshare ESP32-S3 Touch AMOLED 2.06 | `waveshare_esp32s3_touch_amoled_206` | Web installer, OTA, source |
+| Waveshare ESP32-S3 Touch AMOLED 2.16 | `waveshare_esp32s3_touch_amoled_216` | Web installer, OTA, source |
+| Waveshare ESP32-S3 Touch AMOLED 2.41 | `waveshare_esp32s3_touch_amoled_241` | Web installer, OTA, source |
+| Waveshare ESP32-C6 Touch LCD 1.47 | `waveshare_esp32c6_touch_lcd_147` | Source build |
 
-For Waveshare Touch AMOLED 1.8 boards, choose the V1 option for SH8601 display / FT3168 touch
-hardware. Choose the V2 Test option only for newer CO5300 display / CST816 touch hardware.
+Most LCD 3.49 readers use rev1. Try rev2 when the display works but backlight control does not.
 
-The hosted flasher installs the latest published GitHub Release. Preview builds add the current
-multi-board firmware, durable SD progress, OTA tag pinning, and companion app progress editing work
-described below.
+The following purchase links are affiliate links. A purchase may support RSVP Nano at no extra cost
+to you:
 
-Make sure your USB cable is a data cable.
+- [Touch LCD 3.49](https://www.waveshare.com/esp32-s3-touch-lcd-3.49.htm?&aff_id=ionutdecebal)
+- [Touch AMOLED 1.8](https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal)
+- [Touch AMOLED 2.06](https://www.waveshare.com/esp32-s3-touch-amoled-2.06.htm?&aff_id=ionutdecebal)
+- [Touch AMOLED 2.16](https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=ionutdecebal)
+- [Touch AMOLED 2.41](https://www.waveshare.com/esp32-s3-touch-amoled-2.41.htm?&aff_id=ionutdecebal)
 
-## Prepare The SD Card
+## Companion apps
 
-Use a microSD card formatted as FAT32.
+| Companion | UI | Status |
+| --- | --- | --- |
+| [Web](https://ionutdecebal.github.io/rsvpnano/) | Compose Multiplatform on Kotlin/Wasm | Hosted setup, flashing, conversion, USB, and LAN management |
+| [Android](RSVPNanoCompanion/apps/android/README.md) | Jetpack Compose | Build from source |
+| [iOS](RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/README.md) | SwiftUI | Build from source |
 
-- 8 GB to 32 GB cards are the safest choice.
-- 64 GB cards can work, but they usually need to be reformatted as FAT32 with a single partition.
-- exFAT is not the recommended format for this firmware.
+The companions share device models, API contracts, conversion, persistence formats, and workflows.
+Their layouts remain platform-specific.
 
-Create these folders on the card:
+To connect over Wi-Fi, open Companion Sync on the Nano. The apps prefer a reader discovered on the
+same local network and can fall back to the Nano's direct `RSVP-Nano-xxxxxx` network or a manual
+address. The web companion can also connect directly over USB on supported desktop browsers.
+
+## Library and SD card
+
+The firmware creates its standard folders when writable storage is available. The main layout is:
 
 ```text
 /books/books
 /books/articles
 /config
+/fonts
+/locales
+/themes
 ```
 
-Books go in `/books/books`. Articles go in `/books/articles`. Older libraries with files directly inside `/books` are still read for compatibility, but the split folders are the recommended layout.
+Books and articles may be uploaded by a companion or copied directly to the card. The reader creates
+rebuildable `.ridx` and `.rdat` index files plus hidden `.rstate.toml` files for durable progress and
+per-book typography.
 
-If the device cannot see the SD card, the most common causes are:
+Always eject USB mass storage before disconnecting it. Run the on-device SD card check if the
+library is missing, read-only, or using an unexpected filesystem layout.
 
-- The card is exFAT instead of FAT32.
-- The card has multiple partitions.
-- The folders are missing or named differently.
-- The card was removed without ejecting it from the computer.
-- The card is slow, worn out, or unreliable.
+Configuration is stored as versionless TOML. See [Configuration](docs/configuration.md) for settings,
+RSS, focus timers, themes, NVS mirroring, and recovery behavior.
 
-The device includes an `SD card check` tool under `Settings` to help diagnose card size, mount status, write access, and folder layout.
+## Build from source
 
-## Convert Books And Articles
-
-The recommended conversion workflow is still the browser converter on the hosted flasher page:
-
-<https://ionutdecebal.github.io/rsvpnano/>
-
-Use the converter to turn supported files into `.rsvp`, then upload or copy the `.rsvp` files to the device.
-
-Supported converter inputs include:
-
-- `.epub`
-- `.txt`
-- `.md` / `.markdown`
-- `.html` / `.htm` / `.xhtml`
-
-The firmware can still open `.txt` files and has an on-device EPUB fallback, but the browser converter is the best path for large books, cleaner formatting, and fewer surprises.
-
-## Add Files To The Device
-
-### Option 1: Copy To The SD Card
-
-Power the device off, remove the SD card, copy files from your computer, then reinsert the card.
-
-Use this layout:
-
-```text
-/books/books/my-book.rsvp
-/books/articles/my-article.rsvp
-```
-
-On first open, the firmware may create `.ridx` and `.rdat` sidecar files next to a book. These are the SD-backed word index and normalized word data used for long books. It also writes a hidden `.rstate.toml` book-state file for durable reading progress and per-book preferences. Leave these files on the card; cache files are rebuilt automatically if the source book changes, and stale state is ignored.
-
-Large books now load through the same indexed reading path as smaller books, with progress messages while indexes and time estimates are prepared. If a book cannot be prepared, the device should return to the menu with a readable reason instead of silently failing.
-
-### Option 2: USB Transfer Mode
-
-From the device:
-
-1. Swipe up from the bottom edge to open quick settings.
-2. Choose `Sync`.
-3. Choose `USB Sync`.
-4. Copy `.rsvp` files from your computer.
-5. Eject the device from the computer.
-6. Wait for the device to remount the SD card and refresh the library.
-
-Always eject before leaving USB transfer mode where possible. After the host ejects it, the device
-remounts the SD card and refreshes the library.
-
-### Option 3: Web Companion
-
-The device can host its own browser companion page.
-
-1. Swipe up from the bottom edge to open quick settings.
-2. Choose `Sync`.
-3. Choose `Wi-Fi Sync`.
-4. The device shows the Wi-Fi network name and the browser URL.
-5. Connect your phone, tablet, or computer to the `RSVP-Nano-xxxxxx` Wi-Fi network.
-6. Open the URL shown on the device, usually `http://192.168.4.1`.
-
-The web companion has pages for:
-
-- `Books`: upload book `.rsvp` files and view the book library.
-- `Articles`: write, paste, edit, preview, and upload articles.
-- `Settings`: edit device settings and save home Wi-Fi credentials.
-- `RSS`: manage RSS feed URLs.
-- `Help`: quick notes for connection, conversion, SD cards, and RSS.
-
-The web companion remains the easiest option from desktop browsers and for anyone who does not have
-a native companion app installed.
-
-### Option 4: Native Companion Apps
-
-The iOS and Android companion apps support companion sync, article drafts, share/import flows, RSS
-feed management, device settings, library progress, and setting a book's saved resume location.
-
-Public app distribution is not set up yet. The iOS app can be installed from a Mac with Xcode, and
-the Android app can be built and installed with Android Studio or the Android SDK.
-
-See:
-
-[`RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/README.md`](RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/README.md)
-
-[`RSVPNanoCompanion/apps/android/README.md`](RSVPNanoCompanion/apps/android/README.md)
-
-## Home Wi-Fi, RSS, And OTA
-
-The device can save home Wi-Fi credentials for features that need internet access, such as RSS feed checks and OTA firmware updates.
-
-You can set Wi-Fi credentials from:
-
-- The web companion `Settings` page.
-- The native companion app settings page.
-- The on-device Wi-Fi settings page.
-
-User preferences are mirrored to `/config/settings.toml` on the SD card. Wi-Fi passwords are deliberately excluded
-from that file and remain in device storage; configure or change them through one of the settings interfaces above.
-The settings document is versionless: missing fields receive current defaults, unknown fields are discarded, and a
-successful load rewrites both the SD mirror and NVS blob into the current canonical TOML shape. See
-[`docs/configuration.md`](docs/configuration.md) for the file formats and recovery behavior.
-Hardware-backed NVS encryption is optional under `Device -> Storage encryption`. Enabling it permanently reserves one
-per-device eFuse key block and cannot be undone. The firmware keeps the current public settings and Wi-Fi password in
-RAM while NVS is erased and reinitialized, then writes both into encrypted NVS before restarting. Encryption protects
-NVS against raw flash access; without Secure Boot it does not prevent unauthorized firmware from accessing settings
-while running on the device.
-
-RSS feeds are managed from the web companion or the native app, then checked from the device with
-`Articles -> Update RSS`. New articles are saved into `/books/articles`.
-
-RSS support in `v0.0.8` includes:
-
-- RSS and Atom feed parsing.
-- Redirect handling for common `301`, `302`, `303`, `307`, and `308` responses.
-- Live on-device progress while feeds are checked.
-- Duplicate skipping.
-- Feed item author, creator, or website name used as the article source.
-- Larger feed downloads than earlier test builds.
-- Better handling for feeds that send usable complete items before timing out.
-- Longer full-text article bodies before on-device truncation.
-
-Some feeds still block embedded clients, require JavaScript, return very large pages, or publish summaries instead of full articles. Those are feed or website limitations rather than SD card problems.
-
-OTA updates use GitHub Releases. Open `Settings -> Firmware update` on the device after Wi-Fi is configured.
-By default the updater follows the latest release; the device settings can set an OTA tag to pin checks to one
-release. Preview/fork channels can use
-`owner/repo@tag`, for example `ReKylee/rsvpnano@preview-v0.0.9`.
-
-## Device Controls
-
-The current UI is built around edge gestures, a small top-level menu, and quick settings. On paused
-reader screens, subtle handles at the top and bottom edges hint that those menus are available.
-
-### Hardware Buttons
-
-- Swipe down from the top edge: open the main menu.
-- Swipe up from the bottom edge: open quick settings.
-- Swipe right in menus: go back one level, or close the top-level menu.
-- On 3.49 rev1/rev2 and 2.41, `PWR` tap opens or closes the main menu.
-- On 3.49 rev1/rev2 and 2.41, `PWR` hold opens the power-off flow.
-- On 3.49 rev1/rev2 and 2.41, `BOOT` tap toggles play/pause in the reader and acts as Back in menus.
-- On 3.49 rev1/rev2 and 2.41, `BOOT` hold enters standby/screensaver.
-- On 2.16, `PWR` tap opens or closes the main menu and `PWR` hold opens the power-off flow.
-- On 2.16, `BOOT` tap cycles brightness and `BOOT` hold cycles the display theme.
-- On 2.16, `KEY` tap toggles play/pause and `KEY` hold enters standby/screensaver.
-- On 1.8, firmware ignores the unreliable PWR input. Use swipe down for the main menu, swipe up for quick settings, `BOOT` tap for play/pause or Back, and `BOOT` hold for standby/screensaver.
-- USB Transfer exits automatically when the computer ejects the device. On boards with firmware PWR input, holding `PWR` can also leave USB Transfer after copying is finished.
-
-### Reader Controls
-
-- Tap the rewind edge: left by default, or top-right when Reader controls is set to Rewind top-right. Rewinds to the start of the current sentence, or the previous sentence if you are already at the start.
-- Swipe left or right while paused: scrub through nearby text.
-- Tap after scrubbing: return to RSVP view.
-- Hold and move vertically in the scrub preview: browse through surrounding text.
-- Swipe up while paused: increase WPM.
-- Swipe down while paused: decrease WPM.
-- Tap the bottom-right footer label: switch between progress, chapter time remaining, book time remaining, and battery display modes.
-- Tap the top-right battery label: switch between percentage, time remaining, and voltage.
-- Hold the battery area: show or hide the battery icon. The setting is also available in the web and native companions.
-
-Pause behavior is configurable. In `Settings -> Word pacing`, choose whether reader shortcuts pause instantly or at the end of the sentence.
-
-### Quick Settings
-
-Open quick settings by swiping up from the bottom edge.
-
-```text
-Brightness
-Theme
-Focus Timer
-Sync
-```
-
-`Brightness` cycles through the brightness presets. `Theme` cycles Dark, Light, Night, and Yellow.
-`Focus Timer` opens the user-defined hourglass timers. `Sync` opens a second menu:
-
-```text
-Wi-Fi Sync
-USB Sync
-```
-
-`Wi-Fi Sync` starts the device-hosted companion page for browser or native app sync. `USB Sync`
-starts USB mass-storage transfer so files can be copied without removing the SD card.
-
-### Main Menu
-
-Open the main menu with a top-edge swipe. On boards with firmware PWR input, `PWR` tap also opens
-or closes this menu.
-
-```text
-Resume
-Chapters
-Books
-Articles
-Settings
-Power off
-```
-
-Swipe up or down to move through the menu. Tap to select. Swipe right to go back one level or close
-the top-level menu. Submenus keep an on-screen `Back` item at the top. On boards where `BOOT` acts
-as Back, pressing it returns one level or closes the menu.
-
-### Books And Articles
-
-`Books` shows files from `/books/books`.
-
-`Articles` opens a small submenu for browsing saved articles or updating RSS feeds.
-
-Both pages show readable titles, progress, and saved position where available. Select an item to load it into the reader.
-
-### Chapters
-
-The `Chapters` page lists chapter markers from the current book when available. Select a chapter to
-jump to it. Use the on-screen `Back` item, `BOOT` Back where available, or `PWR` where available to
-return to the main menu.
-
-### Settings
-
-Settings are grouped by how people actually use the device.
-
-`Display` includes:
-
-- Display theme.
-- Brightness.
-- Left/right handed layout.
-- Reader controls layout, including an option to put rewind in the top-right corner.
-- Language.
-- Screen saver: Life, Maze, Voronoi, Reaction, or Screen off.
-- Standby timer.
-- Footer and battery label behavior.
-- Battery icon visibility.
-- Optional battery, chapter, and book percentage labels while actively reading.
-- Menu repeat speed.
-
-`Typography` includes:
-
-- Font size.
-- Typeface.
-- Phantom words.
-- Red focus highlight.
-- Tracking.
-- Anchor position.
-- Guide width.
-- Guide gap.
-- Typography preview and reset.
-
-`Word pacing` includes:
-
-- RSVP or scroll reading behavior.
-- Instant pause or sentence-end pause.
-- Long-word delay.
-- Complexity delay.
-- Punctuation delay.
-- Pacing reset.
-
-`Wi-Fi` includes:
-
-- Saved network selection.
-- Choose or forget network.
-- Auto OTA.
-- OTA owner/source.
-- OTA release tag.
-
-`Battery` includes:
-
-- CPU speed for RSVP, scroll, paused, menu, and standby states.
-- Auto-dim delay.
-- Auto-dim brightness level.
-
-`Firmware update` checks GitHub Releases and installs newer firmware when available. `SD card
-check` also lives under Settings.
-
-### Companion Sync
-
-Use this page to connect the native companion app or the web companion.
-
-1. Swipe up from the bottom edge.
-2. Choose `Sync`.
-3. Choose `Wi-Fi Sync`.
-4. Connect to the Wi-Fi network shown on the device.
-5. Open the URL shown on the device.
-6. Use the web companion or native companion app.
-7. Exit from the device when finished.
-
-When Companion Sync exits, the device reloads settings and refreshes the library.
-
-### USB Transfer
-
-Use this page to copy files over USB without removing the SD card.
-
-1. Swipe up from the bottom edge.
-2. Choose `Sync`.
-3. Choose `USB Sync`.
-4. Copy files from your computer.
-5. Eject the device from the computer.
-
-Always eject before leaving USB transfer mode where possible. The device remounts the SD card and
-refreshes the library after the host ejects it. On boards with firmware PWR input, holding `PWR` can
-also leave USB Transfer.
-
-### RSS Feeds
-
-Use the web companion or native app to manage feed URLs. Then open `Articles -> Update RSS` on the
-device.
-
-The device shows live progress as it checks feeds. Saved articles appear in `Articles`.
-
-If a feed cannot be downloaded, the reader shows a plain-English reason such as `Feed not found`, `Site blocked reader`, or `Site took too long`.
-
-RSS checks can continue in the background, while installable firmware updates still ask for confirmation before the device changes itself.
-
-### Focus Timer
-
-The Focus Timer provides up to six custom Pomodoro routines. Each routine has its own name,
-focus duration, break duration, and round count. The defaults are stored in
-`/config/focus.toml` on the SD card, where they can also be edited as TOML. Timer names are limited
-to 14 UTF-8 bytes (14 ASCII characters) so they fit above the hourglass.
-
-1. Swipe up from the bottom edge.
-2. Choose `Focus Timer`.
-3. Tap a timer to start it, hold it to edit, or use Add to create one.
-4. Stand the device on either short end to begin focusing.
-5. When a phase finishes, flip it 180 degrees to start the next phase.
-6. Lay the device flat to pause, then return it to the same end to resume.
-7. Use Exit or Back to return to the timer list.
-
-The standard fallback routine is Pomodoro: 25 minutes of focus, 5 minutes of break, for four rounds.
-
-### SD Card Check
-
-Run `Settings -> SD card check` if books or articles do not appear. It checks whether the card
-mounts, whether it can write, and whether the expected library folders exist.
-
-If the old folder layout needs repair, the device now asks before changing the card.
-
-## Character Support
-
-`v0.0.8` includes the long-book and unsupported-character improvements from earlier releases. Common punctuation is normalized, ellipses and hyphenated sentence breaks are handled more carefully, and many accented Latin characters render directly or fall back to readable plain Latin equivalents.
-
-The current renderer is best for English and European Latin-script languages. Complex scripts still need additional font and shaping work.
-
-## Companion App Status
-
-The native companion apps are working locally, but public distribution is not set up yet.
-
-Current app features include:
-
-- Library view for books and articles.
-- Exact book progress and saved-location editing when the reader has indexed the book.
-- Article drafts, editing, preview, and sync.
-- Share/import flows.
-- Fetch article title and text where available.
-- Device settings editor.
-- RSS feed management.
-- Help and FAQ pages.
-
-Temporary install instructions are in:
-
-[`RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/README.md`](RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/README.md)
-
-[`RSVPNanoCompanion/apps/android/README.md`](RSVPNanoCompanion/apps/android/README.md)
-
-## Build From Source
-
-Firmware builds with PlatformIO:
+Clone submodules first:
 
 ```bash
-pio run
+git clone --recurse-submodules https://github.com/ionutdecebal/rsvpnano.git
+cd rsvpnano
 ```
 
-Firmware builds with PlatformIO. The default environment is the Touch LCD 3.49 rev1
-build:
+### Firmware
+
+Install [PlatformIO](https://platformio.org/), then build one target:
 
 ```bash
-pio run
+pio run -e waveshare_esp32s3_touch_lcd_349_rev1
 ```
 
-Current firmware environments:
-
-- `waveshare_esp32s3_touch_lcd_349_rev1`: Touch LCD 3.49 rev1.
-- `waveshare_esp32s3_touch_lcd_349_rev2`: Touch LCD 3.49 rev2.
-- `waveshare_esp32s3_touch_amoled_18_v1`: Touch AMOLED 1.8 v1.
-- `waveshare_esp32s3_touch_amoled_18_v2`: Touch AMOLED 1.8 v2.
-- `waveshare_esp32s3_touch_amoled_206`: Touch AMOLED 2.06.
-- `waveshare_esp32s3_touch_amoled_216`: Touch AMOLED 2.16.
-- `waveshare_esp32s3_touch_amoled_241`: Touch AMOLED 2.41.
-- `waveshare_esp32c6_touch_lcd_147`: ESP32-C6 Touch LCD 1.47.
-
-Board-independent app code uses the stable `src/board` API and `src/input/Input.*`. Board-specific
-wiring, rails, buses, and chip choices live under `src/platforms/<board>`, while reusable chip code
-lives under `src/drivers`.
-
-Use explicit targets for non-default boards:
+Upload to a connected board:
 
 ```bash
-pio run -e waveshare_esp32s3_touch_lcd_349_rev2
-pio run -e waveshare_esp32s3_touch_amoled_18_v1
-pio run -e waveshare_esp32s3_touch_amoled_18_v2
-pio run -e waveshare_esp32s3_touch_amoled_206
-pio run -e waveshare_esp32s3_touch_amoled_216
-pio run -e waveshare_esp32s3_touch_amoled_241
-pio run -e waveshare_esp32c6_touch_lcd_147
+pio run -e waveshare_esp32s3_touch_lcd_349_rev1 -t upload
 ```
 
-Upload to a connected device:
+Run native firmware tests:
 
 ```bash
-pio run -t upload
+pio test -e native_test
 ```
 
-Monitor serial output:
+### Web and mobile companions
+
+Companion builds require JDK 17. Android also requires the Android SDK; iOS requires macOS and Xcode.
 
 ```bash
-pio device monitor
+# Browser tests and staged Pages distribution
+./gradlew checkWeb
+
+# Shared tests and Android release build
+./gradlew checkAndroid
+
+# Shared iOS compilation and simulator tests
+./gradlew checkIos
 ```
 
-The iOS app lives in:
+The staged website is written to `build/webSite`. Detailed native setup is in the
+[Android](RSVPNanoCompanion/apps/android/README.md) and
+[iOS](RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/README.md) guides.
 
-```text
-RSVPNanoCompanion/apps/ios/RSVPNanoCompanion
-```
+## Repository layout
 
-Open the Xcode project from that folder when installing the app locally.
+| Path | Purpose |
+| --- | --- |
+| `src/` | Firmware application, board ports, reading engine, UI, storage, networking, and companion API |
+| `RSVPNanoCompanion/shared/` | Shared companion models, API clients, persistence, and workflows |
+| `RSVPNanoCompanion/conversionCore/` | Shared Kotlin Multiplatform document conversion |
+| `RSVPNanoCompanion/apps/` | Android, iOS, and web applications |
+| `fonts/`, `themes/`, `locale-packs/` | Installable catalogs |
+| `localization/` | Locale and UI-font generation |
+| `test/` | Native firmware tests |
+| `docs/` | Protocol, configuration, hardware, and release documentation |
 
-To export browser-flasher and OTA firmware assets for a release:
+## Documentation
 
-```bash
-python3 tools/export_web_firmware.py --version preview-v0.0.9
-```
+- [v0.0.9 release notes](docs/releases/v0.0.9.md)
+- [Companion API](docs/companion-api.md)
+- [USB companion protocol](docs/companion-serial.md)
+- [Conversion format and behavior](RSVPNanoCompanion/docs/conversion-spec.md)
+- [Configuration files](docs/configuration.md)
+- [Hardware architecture and bring-up notes](docs/hardware/README.md)
+- [Reader fonts](fonts/README.md)
+- [Themes](themes/README.md)
+- [Locale packs](locale-packs/README.md)
 
-That writes:
+## Contributing
 
-```text
-web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49.bin
-web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin
-web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin
-web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin
-web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8.bin
-web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin
-web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin
-web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin
-web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.06.bin
-web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.06-ota.bin
-web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.16.bin
-web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin
-web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.41.bin
-web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin
-web/firmware/manifest.json
-web/firmware/manifest-rev2.json
-web/firmware/manifest-esp32-s3-touch-amoled-1.8.json
-web/firmware/manifest-esp32-s3-touch-amoled-1.8-v2.json
-web/firmware/manifest-esp32-s3-touch-amoled-2.06.json
-web/firmware/manifest-esp32-s3-touch-amoled-2.16.json
-web/firmware/manifest-esp32-s3-touch-amoled-2.41.json
-```
+Issues and focused pull requests are welcome. Before opening a change:
 
-## Project Status
+1. Build the affected firmware or companion target.
+2. Run the smallest relevant test suite.
+3. Keep board-specific behavior inside its platform directory.
+4. Reuse shared companion and conversion logic instead of creating another platform implementation.
+5. Include hardware validation details for changes that affect display, touch, power, storage, or USB.
 
-`preview-v0.0.9` adds the current multi-board firmware base plus companion and storage polish:
-
-- Adds durable `.rstate.toml` book state next to each book for reading progress and per-book typography.
-- Keeps active progress in RAM and writes book state at book switches and other lifecycle boundaries.
-- Exposes opaque book IDs, source identity, word counts, exact saved positions, and chapters through
-  the companion API.
-- Lets the native companion app set a saved book location by chapter, slider, or exact word number.
-- Adds OTA release-tag pinning, including fork preview tags in `owner/repo@tag` form.
-- Uses board-specific full-image asset names for the LCD 3.49 browser flasher builds.
-
-`v0.0.8` focuses on reader touch ergonomics and more resilient RSS downloads:
-
-- Restricts top and bottom edge menu swipe areas toward the middle of the display so WPM changes are
-  less likely to open menus by mistake.
-- Adds right-swipe Back navigation throughout menus, including text entry.
-- Adds a Reader controls setting that can put rewind in the top-right corner for one-handed use,
-  while moving the battery label to the top-left.
-- Exposes the Reader controls setting on device, in the device-hosted web companion, and in the
-  shared native companion app.
-- Raises RSS feed and article size limits for longer full-text feeds.
-- Accepts usable partial RSS or Atom downloads when complete items arrive before a slow feed times
-  out.
-
-`v0.0.7` focused on multi-board release polish and the fixes found during hardware testing:
-
-- Adds the Waveshare Touch AMOLED 1.8 V2 Test firmware target for newer CO5300 display / CST816
-  touch hardware.
-- Keeps the original Touch AMOLED 1.8 target labeled as V1, for SH8601 display / FT3168 touch
-  hardware.
-- Adds the 1.8 V2 Test target to the hosted browser flasher, release asset export, release
-  download helper, and GitHub release workflows.
-- Enables USB SD-card transfer mode across all firmware targets and fixes the transfer path to use
-  the mounted FatFS SD drive.
-- Fixes Touch AMOLED 2.16 touch input by polling the CST92xx controller instead of depending on the
-  unreliable interrupt line.
-- Improves the focus timer layout on compact AMOLED screens, including centered countdown text,
-  non-overlapping Restart text on 1.8, and clearer break placement instructions.
-- Adds benchmark firmware targets for display, touch, audio, SD, and EPUB conversion checks.
-- Shares board display, storage, IMU, and GPIO-expander helper code so board profiles stay more
-  consistent.
-
-`v0.0.6` introduced the new cross-device input model, restructured menu, bottom-edge quick
-settings, Wi-Fi/USB Sync picker, browser flasher device dropdown, AMOLED 1.8, 2.16, and 2.41
-web-flash assets, USB transfer across firmware targets, battery and auto-dim settings, and the
-paused-reader edge handles that hint at the swipe menus.
-
-The next areas of work are:
-
-- Public app distribution.
-- More Android/iOS device testing and polish.
-- More capable article extraction for sites that do not expose full RSS content.
-- A fuller browser-hosted companion experience for desktop and Android users.
-- More font and script support.
+For questions, hardware reports, and development discussion, join the
+[RSVP Nano Discord](https://discord.gg/mB5xv2PG53).
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
-
-The bundled fonts include their upstream license files beside the corresponding catalog assets under [`fonts/`](fonts/).
+RSVP Nano is distributed under the [MIT license](LICENSE). Bundled fonts and third-party
+libraries retain their own licenses in their respective directories.

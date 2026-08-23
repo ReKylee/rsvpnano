@@ -1,26 +1,16 @@
-# conversionCore (Kotlin Multiplatform)
+# conversionCore
 
-This module contains the RSVP Nano document conversion engine.
+Kotlin Multiplatform document conversion shared by the Android, iOS, and web companions.
 
-It builds for Android, iOS, and JavaScript, and owns:
+The module owns `.rsvp`, EPUB, text, Markdown, HTML, and XHTML conversion, including EPUB package,
+navigation, chapter, direction, language, and vertical-writing metadata. The Compose web companion
+links it directly into the Kotlin/Wasm application, so no separate JavaScript converter is generated
+or published.
 
-- `.rsvp`, EPUB, text, Markdown, HTML, and XHTML conversion.
-- EPUB ZIP, OPF, NCX, EPUB3 navigation, and content parsing.
-- Browser/Node exports used by the hosted web converter.
-- Converter parity tests and fixtures.
-
-Quick start:
+Run the common and browser tests with:
 
 ```bash
-bash ./gradlew :conversionCore:wasmJsBrowserTest
-python RSVPNanoCompanion/tools/run_conversion_parity.py
+bash ./gradlew :conversionCore:testDebugUnitTest :conversionCore:wasmJsBrowserTest
 ```
 
-The web converter artifact is generated into:
-
-```text
-The web companion links this module directly through Kotlin/Wasm; no generated JavaScript converter is published.
-```
-
-That generated directory is intentionally ignored by Git. GitHub Pages builds it before uploading
-the website artifact.
+Reference inputs and expected `.rsvp` files live in `RSVPNanoCompanion/testdata`.

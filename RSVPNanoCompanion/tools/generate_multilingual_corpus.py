@@ -210,13 +210,21 @@ def outputs() -> dict[str, bytes]:
     }
 
 
+def output_matches(path: Path, generated: bytes) -> bool:
+    if not path.is_file():
+        return False
+    if path.suffix in {".txt", ".md", ".html", ".xhtml", ".rsvp"}:
+        return path.read_text(encoding="utf-8") == generated.decode()
+    return path.read_bytes() == generated
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate the deterministic multilingual format corpus.")
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     generated = outputs()
     if args.check:
-        stale = [name for name, data in generated.items() if not (OUTPUT / name).is_file() or (OUTPUT / name).read_bytes() != data]
+        stale = [name for name, data in generated.items() if not output_matches(OUTPUT / name, data)]
         if stale:
             raise SystemExit("Stale multilingual corpus: " + ", ".join(stale))
         return 0

@@ -157,9 +157,8 @@ producing empty output.
 
 | Runtime | Role |
 | --- | --- |
-| Kotlin Multiplatform `:conversionCore` | Source implementation for Android, iOS, and generated JavaScript. |
-| Generated web JavaScript | Product-facing browser converter built from `:conversionCore`. |
-| Python tools | CLI and SD-card batch converter. |
+| Kotlin Multiplatform `:conversionCore` | Source implementation for Android, iOS, and Kotlin/Wasm. |
+| Compose web companion | Browser file selection and conversion through `:conversionCore`. |
 | Firmware C++ | Constrained on-device fallback and RSVP parser. |
 
 Runtime-specific APIs such as file pickers, storage, and firmware cache management may differ. The
@@ -179,5 +178,6 @@ subtrees and non-content chapter headings while parsing.
 - Reference test cases must cover representative text, Markdown, HTML/XHTML, EPUB, existing `.rsvp`
   pass-through, directive escaping, paragraphs, chapters, Unicode normalization, and punctuation
   preservation.
-- Runnable converter implementations should be included in `tools/run_conversion_parity.py`.
+- `:conversionCore` common and browser tests should exercise the shared reference fixtures.
+- Firmware conversion behavior should use the same fixtures where its constrained streaming path applies.
 - Output comparisons should normalize line endings only; content differences are failures.

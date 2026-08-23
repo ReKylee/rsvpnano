@@ -16,7 +16,6 @@ class RoutingTest {
 
     @Test
     fun persistedThemeNamesRemainStable() {
-        assertEquals(WebTheme.System, WebTheme.valueOf("System"))
         assertEquals(WebTheme.Light, WebTheme.valueOf("Light"))
         assertEquals(WebTheme.Dark, WebTheme.valueOf("Dark"))
     }

@@ -4,13 +4,17 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -69,9 +73,10 @@ import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
 import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.readBytes
 import kotlinx.coroutines.launch
+import kotlinx.browser.window
 
 @Composable
-internal fun LibraryWorkspace(presenter: CompanionPresenter, state: CompanionUiState) {
+internal fun ColumnScope.LibraryWorkspace(presenter: CompanionPresenter, state: CompanionUiState) {
     val scope = rememberCoroutineScope()
     val picker = rememberFilePickerLauncher(
         type = FileKitType.File(extensions = listOf("epub", "txt", "html", "htm", "rsvp")),
@@ -83,7 +88,6 @@ internal fun LibraryWorkspace(presenter: CompanionPresenter, state: CompanionUiS
         if (state.isConnected && CompanionResource.Library !in state.loadedResources) presenter.refreshLibrary()
     }
 
-    WorkspaceHeading("Library")
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Button(onClick = { picker.launch() }, enabled = state.isConnected) { Text("Add book") }
         OutlinedButton(onClick = presenter::refreshLibrary, enabled = state.isConnected) { Text("Refresh") }
@@ -102,14 +106,18 @@ internal fun LibraryWorkspace(presenter: CompanionPresenter, state: CompanionUiS
             else LinearProgressIndicator(Modifier.fillMaxWidth())
         }
     }
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
         if (maxWidth >= 900.dp) {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                BookList(presenter, state, Modifier.weight(3f))
-                DraftEditor(presenter, state, Modifier.weight(2f))
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(Modifier.weight(3f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                    BookList(presenter, state)
+                }
+                Column(Modifier.weight(2f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                    DraftEditor(presenter, state)
+                }
             }
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 BookList(presenter, state)
                 DraftEditor(presenter, state)
             }
@@ -136,7 +144,7 @@ private fun BookRow(book: NanoBook, presenter: CompanionPresenter) {
             book.metadata.author.takeIf(String::isNotBlank)?.let(::add)
             if (book.metadata.wordCount > 0) add("${book.metadata.wordCount} words")
             if (book.bytes > 0) add(formatBytes(book.bytes))
-        }.joinToString(" · ")
+        }.joinToString(", ")
         if (detail.isNotBlank()) Text(detail, style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { presenter.setBookPosition(book, 0) }) { Text("Reset position") }
@@ -194,7 +202,7 @@ private fun DraftEditor(presenter: CompanionPresenter, state: CompanionUiState, 
 }
 
 @Composable
-internal fun AppearanceWorkspace(presenter: CompanionPresenter, state: CompanionUiState) {
+internal fun ColumnScope.AppearanceWorkspace(presenter: CompanionPresenter, state: CompanionUiState) {
     val scope = rememberCoroutineScope()
     val themePicker = rememberFilePickerLauncher(FileKitType.File(listOf("toml"))) { file ->
         if (file != null) scope.launch { presenter.uploadThemeFile(file.name, file.readBytes()) }
@@ -216,8 +224,6 @@ internal fun AppearanceWorkspace(presenter: CompanionPresenter, state: Companion
         presenter.refreshFontCatalog()
         presenter.refreshLocaleCatalog()
     }
-
-    WorkspaceHeading("Appearance")
 
     val themeEntries = remember(state.availableThemes, state.themeCatalog, state.settings, state.catalogInstall) {
         val installed = state.availableThemes.associateBy { it.id }
@@ -266,7 +272,7 @@ internal fun AppearanceWorkspace(presenter: CompanionPresenter, state: Companion
             add(CatalogEntry(
                 id = NanoLocales.DEFAULT,
                 title = "English",
-                subtitle = "Built in · Left-to-right",
+                subtitle = "Built in, left-to-right",
                 selected = state.settings?.`interface`?.locale == NanoLocales.DEFAULT,
                 onSelect = { presenter.selectLocale(NanoLocales.DEFAULT) },
             ))
@@ -289,18 +295,20 @@ internal fun AppearanceWorkspace(presenter: CompanionPresenter, state: Companion
     }
 
     var selectedCatalog by remember { mutableStateOf(0) }
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
         val catalogs = listOf<@Composable () -> Unit>(
             { CatalogColumn("Themes", state.themeCatalogUrl, themeEntries, presenter::refreshThemeCatalog) { themePicker.launch() } },
             { CatalogColumn("Reader fonts", state.fontCatalogUrl, fontEntries, presenter::refreshFontCatalog) { fontPicker.launch() } },
             { CatalogColumn("Interface languages", state.localeCatalogUrl, localeEntries, presenter::refreshLocaleCatalog) { localePicker.launch() } },
         )
         if (maxWidth >= 960.dp) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                catalogs.forEach { catalog -> Column(Modifier.weight(1f)) { catalog() } }
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                catalogs.forEach { catalog ->
+                    Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) { catalog() }
+                }
             }
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("Themes", "Fonts", "Languages").forEachIndexed { index, label ->
                         val active = selectedCatalog == index
@@ -315,7 +323,9 @@ internal fun AppearanceWorkspace(presenter: CompanionPresenter, state: Companion
                         }
                     }
                 }
-                catalogs[selectedCatalog]()
+                Box(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
+                    catalogs[selectedCatalog]()
+                }
             }
         }
     }
@@ -398,24 +408,46 @@ private fun catalogSourceLabel(url: String): String {
 }
 
 @Composable
-internal fun SettingsWorkspace(presenter: CompanionPresenter, state: CompanionUiState) {
+internal fun ColumnScope.SettingsWorkspace(presenter: CompanionPresenter, state: CompanionUiState, routeHash: String) {
     LaunchedEffect(state.isConnected) {
         if (!state.isConnected) return@LaunchedEffect
         presenter.refreshSettings()
         presenter.refreshWifiSettings()
     }
 
-    WorkspaceHeading("Settings")
     val settings = state.settings
     if (settings == null) {
         Text(if (state.isConnected) "Loading settings…" else "Connect a Nano to edit settings.")
         return
     }
 
-    ReadingSettings(presenter, settings)
-    DisplaySettings(presenter, settings)
-    UpdateSettings(presenter, state, settings)
-    NetworkSettings(presenter, state)
+    val sections = listOf(
+        "reading" to "Reading",
+        "display" to "Display",
+        "updates" to "Updates",
+        "wifi" to "Wi-Fi",
+    )
+    val selected = routeHash.substringAfterLast('/').takeIf { id -> sections.any { it.first == id } } ?: "reading"
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        sections.forEach { (id, label) ->
+            FilterChip(
+                selected = selected == id,
+                onClick = { window.location.hash = "#/settings/$id" },
+                label = { Text(label) },
+            )
+        }
+    }
+    Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
+        when (selected) {
+            "display" -> DisplaySettings(presenter, settings)
+            "updates" -> UpdateSettings(presenter, state, settings)
+            "wifi" -> NetworkSettings(presenter, state)
+            else -> ReadingSettings(presenter, settings)
+        }
+    }
 }
 
 @Composable
@@ -541,35 +573,37 @@ private fun NetworkSettings(presenter: CompanionPresenter, state: CompanionUiSta
 }
 
 @Composable
-internal fun FeedsWorkspace(presenter: CompanionPresenter, state: CompanionUiState) {
+internal fun ColumnScope.FeedsWorkspace(presenter: CompanionPresenter, state: CompanionUiState) {
     LaunchedEffect(state.isConnected) {
         if (!state.isConnected) return@LaunchedEffect
         presenter.refreshRssFeeds()
     }
-    WorkspaceHeading("Feeds")
-    SectionCard {
-        Text("RSS feeds", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(state.rssFeedDraft, presenter::setRssFeedDraft, Modifier.weight(1f), label = { Text("Feed URL") }, singleLine = true)
-            Button(onClick = presenter::addRssFeed) { Text("Add") }
-        }
-        state.rssFeeds.forEach { feed ->
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(feed, Modifier.weight(1f))
-                OutlinedButton(onClick = { presenter.deleteRssFeed(feed) }) { Text("Remove") }
+    Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
+        SectionCard {
+            Text("RSS feeds", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(state.rssFeedDraft, presenter::setRssFeedDraft, Modifier.weight(1f), label = { Text("Feed URL") }, singleLine = true)
+                Button(onClick = presenter::addRssFeed) { Text("Add") }
             }
+            state.rssFeeds.forEach { feed ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(feed, Modifier.weight(1f))
+                    OutlinedButton(onClick = { presenter.deleteRssFeed(feed) }) { Text("Remove") }
+                }
+            }
+            OutlinedButton(onClick = presenter::refreshRssFeeds) { Text("Fetch latest articles") }
         }
-        OutlinedButton(onClick = presenter::refreshRssFeeds) { Text("Fetch latest articles") }
     }
 }
 
 @Composable
-internal fun TimersWorkspace(presenter: CompanionPresenter, state: CompanionUiState) {
+internal fun ColumnScope.TimersWorkspace(presenter: CompanionPresenter, state: CompanionUiState) {
     LaunchedEffect(state.isConnected) {
         if (state.isConnected) presenter.refreshFocusTimers()
     }
-    WorkspaceHeading("Timers")
-    FocusEditor(presenter, state)
+    Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
+        FocusEditor(presenter, state)
+    }
 }
 
 @Composable

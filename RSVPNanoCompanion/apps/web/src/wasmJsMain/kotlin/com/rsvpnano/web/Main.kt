@@ -77,11 +77,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.ComposeViewport
 import androidx.compose.foundation.Image
 import com.rsvpnano.app.NanoConnectionState
@@ -94,8 +92,8 @@ import kotlinx.browser.document
 import kotlinx.browser.window
 import org.jetbrains.compose.resources.painterResource
 import com.rsvpnano.web.resources.Res
-import com.rsvpnano.web.resources.rsvp_nano_foreground
-import com.rsvpnano.web.resources.rsvp_nano_foreground_light
+import com.rsvpnano.web.resources.discord
+import com.rsvpnano.web.resources.rsvp_nano_horizontal
 
 private val LightColors = lightColorScheme(
     primary = Color(0xff35675f),
@@ -103,6 +101,7 @@ private val LightColors = lightColorScheme(
     secondary = Color(0xff9a5b24),
     tertiary = Color(0xffd84315),
     background = Color(0xfffaf8f2),
+    onBackground = Color(0xff252724),
     surface = Color(0xfffffdf7),
     onSurface = Color(0xff252724),
     outline = Color(0xff747874),
@@ -114,12 +113,13 @@ private val DarkColors = darkColorScheme(
     secondary = Color(0xffffb77a),
     tertiary = Color(0xffff7043),
     background = Color(0xff191c1a),
+    onBackground = Color(0xffe2e3df),
     surface = Color(0xff202421),
     onSurface = Color(0xffe2e3df),
     outline = Color(0xff8d938e),
 )
 
-internal enum class WebTheme { System, Light, Dark }
+internal enum class WebTheme { Light, Dark }
 
 internal enum class WebRoute(val hash: String, val label: String, val icon: ImageVector) {
     Setup("#/setup", "Setup", Icons.Outlined.Build),
@@ -133,7 +133,7 @@ internal enum class WebRoute(val hash: String, val label: String, val icon: Imag
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
-    ComposeViewport(document.body!!) { WebApp() }
+    ComposeViewport(viewportContainerId = "webApp") { WebApp() }
 }
 
 @Composable
@@ -143,41 +143,51 @@ private fun WebApp() {
     val state by presenter.uiState.collectAsState()
     var theme by remember {
         mutableStateOf(
-            runCatching { WebTheme.valueOf(window.localStorage.getItem("rsvpnano.web.theme") ?: "System") }
-                .getOrDefault(WebTheme.System),
+            runCatching { WebTheme.valueOf(window.localStorage.getItem("rsvpnano.web.theme").orEmpty()) }
+                .getOrElse {
+                    if (window.matchMedia("(prefers-color-scheme: dark)").matches) WebTheme.Dark else WebTheme.Light
+                },
         )
     }
-    val dark = when (theme) {
-        WebTheme.System -> window.matchMedia("(prefers-color-scheme: dark)").matches
-        WebTheme.Light -> false
-        WebTheme.Dark -> true
-    }
+    val dark = theme == WebTheme.Dark
 
     DisposableEffect(presenter) { onDispose { presenter.close() } }
+    LaunchedEffect(dark) {
+        val themeName = if (dark) "dark" else "light"
+        val background = if (dark) "#191c1a" else "#faf8f2"
+        document.documentElement?.setAttribute("data-theme", themeName)
+        document.querySelector("meta[name=theme-color]")?.setAttribute("content", background)
+    }
 
     MaterialTheme(colorScheme = if (dark) DarkColors else LightColors) {
         val pageBackground = MaterialTheme.colorScheme.background
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.linearGradient(
-                    listOf(
-                        pageBackground,
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.055f).compositeOver(pageBackground),
-                        pageBackground,
-                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.035f).compositeOver(pageBackground),
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onBackground,
+        ) {
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.linearGradient(
+                        listOf(
+                            pageBackground,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.055f).compositeOver(pageBackground),
+                            pageBackground,
+                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.035f).compositeOver(pageBackground),
+                        ),
                     ),
                 ),
-            ),
-        ) {
-            EditorialShell(
-                presenter = presenter,
-                state = state,
-                theme = theme,
-                onThemeChange = {
-                    theme = it
-                    window.localStorage.setItem("rsvpnano.web.theme", it.name)
-                },
-            )
+            ) {
+                EditorialShell(
+                    presenter = presenter,
+                    state = state,
+                    theme = theme,
+                    onThemeChange = {
+                        theme = it
+                        window.localStorage.setItem("rsvpnano.web.theme", it.name)
+                    },
+                )
+            }
         }
     }
 }
@@ -189,7 +199,8 @@ private fun EditorialShell(
     theme: WebTheme,
     onThemeChange: (WebTheme) -> Unit,
 ) {
-    var route by remember { mutableStateOf(routeFromHash()) }
+    var routeHash by remember { mutableStateOf(window.location.hash.ifBlank { WebRoute.Setup.hash }) }
+    val route = routeForHash(routeHash)
     var endpoint by remember { mutableStateOf(window.localStorage.getItem(EndpointStorageKey).orEmpty()) }
 
     LaunchedEffect(presenter) {
@@ -207,7 +218,7 @@ private fun EditorialShell(
     }
 
     DisposableEffect(Unit) {
-        window.onhashchange = { route = routeFromHash() }
+        window.onhashchange = { routeHash = window.location.hash }
         if (window.location.hash.isBlank()) window.location.hash = route.hash
         onDispose { window.onhashchange = null }
     }
@@ -244,12 +255,12 @@ private fun EditorialShell(
             if (wide) {
                 Row(Modifier.fillMaxSize()) {
                     NavigationRail(route, Modifier.width(210.dp).fillMaxHeight())
-                    Workspace(route, presenter, state, Modifier.weight(1f))
+                    Workspace(route, routeHash, presenter, state, Modifier.weight(1f))
                 }
             } else {
                 Column(Modifier.fillMaxSize()) {
                     NavigationStrip(route)
-                    Workspace(route, presenter, state, Modifier.weight(1f))
+                    Workspace(route, routeHash, presenter, state, Modifier.weight(1f))
                 }
             }
         }
@@ -272,19 +283,22 @@ private fun ConnectionToolbar(
     ) {
         val compact = maxWidth < 720.dp
         if (compact) {
+            val showStatus = maxWidth >= 480.dp
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    BrandAndStatus(state)
+                    BrandLogo()
                     Spacer(Modifier.weight(1f))
+                    DiscordButton()
                     ThemeButton(theme, onThemeChange)
                 }
-                EndpointControls(endpoint, onEndpointChange, onConnect, onUsbConnect, Modifier.fillMaxWidth())
+                EndpointControls(state, endpoint, onEndpointChange, onConnect, onUsbConnect, showStatus, Modifier.fillMaxWidth())
             }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                BrandAndStatus(state)
+                BrandLogo()
                 Spacer(Modifier.weight(1f))
-                EndpointControls(endpoint, onEndpointChange, onConnect, onUsbConnect)
+                EndpointControls(state, endpoint, onEndpointChange, onConnect, onUsbConnect)
+                DiscordButton()
                 ThemeButton(theme, onThemeChange)
             }
         }
@@ -292,49 +306,65 @@ private fun ConnectionToolbar(
 }
 
 @Composable
-private fun BrandAndStatus(state: CompanionUiState) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        val logo = if (MaterialTheme.colorScheme.background.luminance() > 0.5f) {
-            Res.drawable.rsvp_nano_foreground_light
-        } else {
-            Res.drawable.rsvp_nano_foreground
-        }
+private fun BrandLogo() {
+    Surface(shape = RoundedCornerShape(8.dp), color = Color(0xff202421)) {
         Image(
-            painter = painterResource(logo),
+            painter = painterResource(Res.drawable.rsvp_nano_horizontal),
             contentDescription = "RSVP Nano",
-            modifier = Modifier.width(112.dp).height(52.dp),
+            modifier = Modifier.width(200.dp).height(64.dp).padding(horizontal = 4.dp),
             contentScale = ContentScale.Fit,
         )
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.11f),
-        ) {
-            Text(
-                when (state.connectionState) {
-                    is NanoConnectionState.CheckingReader -> "Looking for your Nano…"
-                    is NanoConnectionState.ReaderConnected -> "Connected"
-                    else -> "Ready to connect"
-                },
-                Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                style = MaterialTheme.typography.labelMedium,
-            )
-        }
+    }
+}
+
+@Composable
+private fun ConnectionStatus(state: CompanionUiState) {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.11f),
+    ) {
+        Text(
+            when (state.connectionState) {
+                is NanoConnectionState.CheckingReader -> "Looking for your Nano…"
+                is NanoConnectionState.ReaderConnected -> "Connected"
+                else -> "Ready to connect"
+            },
+            Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            style = MaterialTheme.typography.labelMedium,
+        )
+    }
+}
+
+@Composable
+private fun DiscordButton() {
+    IconButton(onClick = { window.open("https://discord.gg/mB5xv2PG53", "_blank") }) {
+        Image(
+            painter = painterResource(Res.drawable.discord),
+            contentDescription = "Join the RSVP Nano Discord server",
+            modifier = Modifier.size(22.dp),
+        )
     }
 }
 
 @Composable
 private fun ThemeButton(theme: WebTheme, onThemeChange: (WebTheme) -> Unit) {
-    IconButton(onClick = { onThemeChange(WebTheme.entries[(theme.ordinal + 1) % WebTheme.entries.size]) }) {
-        Icon(if (theme == WebTheme.Dark) Icons.Outlined.DarkMode else Icons.Outlined.LightMode, "Change theme")
+    val next = if (theme == WebTheme.Dark) WebTheme.Light else WebTheme.Dark
+    IconButton(onClick = { onThemeChange(next) }) {
+        Icon(
+            if (next == WebTheme.Dark) Icons.Outlined.DarkMode else Icons.Outlined.LightMode,
+            "Use ${next.name.lowercase()} theme",
+        )
     }
 }
 
 @Composable
 private fun EndpointControls(
+    state: CompanionUiState,
     endpoint: String,
     onEndpointChange: (String) -> Unit,
     onConnect: () -> Unit,
     onUsbConnect: () -> Unit,
+    showStatus: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     var showAddress by remember(endpoint) { mutableStateOf(endpoint.isNotBlank()) }
@@ -348,6 +378,7 @@ private fun EndpointControls(
             Spacer(Modifier.width(6.dp))
             Text("USB")
         }
+        if (showStatus) ConnectionStatus(state)
         if (showAddress) {
             Row(
                 Modifier.height(40.dp).widthIn(min = 180.dp, max = 240.dp)
@@ -435,6 +466,7 @@ private fun NavigationItem(route: WebRoute, selected: Boolean, modifier: Modifie
 @Composable
 private fun Workspace(
     route: WebRoute,
+    routeHash: String,
     presenter: CompanionPresenter,
     state: CompanionUiState,
     modifier: Modifier = Modifier,
@@ -454,26 +486,24 @@ private fun Workspace(
         label = "workspace",
     ) { activeRoute ->
         Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 28.dp),
+            Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             when (activeRoute) {
-                WebRoute.Setup -> SetupWizard(presenter, state)
+                WebRoute.Setup -> SetupWizard(presenter, state, Modifier.fillMaxSize())
                 WebRoute.Device -> DeviceWorkspace(state)
                 WebRoute.Library -> LibraryWorkspace(presenter, state)
                 WebRoute.Appearance -> AppearanceWorkspace(presenter, state)
-                WebRoute.Settings -> SettingsWorkspace(presenter, state)
+                WebRoute.Settings -> SettingsWorkspace(presenter, state, routeHash)
                 WebRoute.Feeds -> FeedsWorkspace(presenter, state)
                 WebRoute.Timers -> TimersWorkspace(presenter, state)
             }
-            NoticeCard(state)
         }
     }
 }
 
 @Composable
 private fun DeviceWorkspace(state: CompanionUiState) {
-    WorkspaceHeading("Device")
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(6.dp)) {
         Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             DetailRow("Connection", when (state.connectionState.transport) {
@@ -483,14 +513,9 @@ private fun DeviceWorkspace(state: CompanionUiState) {
                 null -> "Not connected"
             })
             DetailRow("Connection address", state.baseUrl)
-            DetailRow("Software version", state.firmwareVersion.ifBlank { "—" })
+            DetailRow("Software version", state.firmwareVersion.ifBlank { "Not available" })
         }
     }
-}
-
-@Composable
-internal fun WorkspaceHeading(title: String) {
-    Text(title, fontSize = 34.sp, fontWeight = FontWeight.Black)
 }
 
 @Composable
@@ -498,13 +523,6 @@ internal fun DetailRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, fontWeight = FontWeight.Bold)
         Text(value, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f))
-    }
-}
-
-@Composable
-private fun NoticeCard(state: CompanionUiState) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.09f)), shape = RoundedCornerShape(4.dp)) {
-        Text(state.status, Modifier.fillMaxWidth().padding(14.dp), style = MaterialTheme.typography.bodyMedium)
     }
 }
 

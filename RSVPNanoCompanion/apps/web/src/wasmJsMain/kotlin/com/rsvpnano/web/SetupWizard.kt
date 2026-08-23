@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -89,10 +90,10 @@ private data class InstallerBoard(
 )
 
 private val InstallerBoards = listOf(
-    InstallerBoard("lcd349-v1", "LCD 3.49 · rev1", "RECOMMENDED", "For most 3.49-inch readers.", "https://www.waveshare.com/esp32-s3-touch-lcd-3.49.htm?&aff_id=ionutdecebal"),
-    InstallerBoard("lcd349-v2", "LCD 3.49 · rev2", "REVISION 2", "Try this if rev1 brightness does not work.", "https://www.waveshare.com/esp32-s3-touch-lcd-3.49.htm?&aff_id=ionutdecebal"),
-    InstallerBoard("amoled18-v1", "AMOLED 1.8 · V1", "VERSION 1", "The original 1.8-inch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal"),
-    InstallerBoard("amoled18-v2", "AMOLED 1.8 · V2", "VERSION 2", "The newer revision; still being tested.", "https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal"),
+    InstallerBoard("lcd349-v1", "LCD 3.49 / rev1", "RECOMMENDED", "For most 3.49-inch readers.", "https://www.waveshare.com/esp32-s3-touch-lcd-3.49.htm?&aff_id=ionutdecebal"),
+    InstallerBoard("lcd349-v2", "LCD 3.49 / rev2", "REVISION 2", "Try this if rev1 brightness does not work.", "https://www.waveshare.com/esp32-s3-touch-lcd-3.49.htm?&aff_id=ionutdecebal"),
+    InstallerBoard("amoled18-v1", "AMOLED 1.8 / V1", "VERSION 1", "The original 1.8-inch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal"),
+    InstallerBoard("amoled18-v2", "AMOLED 1.8 / V2", "VERSION 2", "The newer revision; still being tested.", "https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal"),
     InstallerBoard("amoled206", "AMOLED 2.06", "AMOLED", "The 2.06-inch touch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.06.htm?&aff_id=ionutdecebal"),
     InstallerBoard("amoled216", "AMOLED 2.16", "3 BUTTON", "The three-button 2.16-inch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=ionutdecebal"),
     InstallerBoard("amoled241", "AMOLED 2.41", "AMOLED", "The 2.41-inch touch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.41.htm?&aff_id=ionutdecebal"),
@@ -105,7 +106,7 @@ private data class DeployedRelease(val version: String, val firmware: Map<String
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState) {
+internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState, modifier: Modifier = Modifier) {
     var step by remember {
         mutableIntStateOf(window.localStorage.getItem("rsvpnano.web.setupStep")?.toIntOrNull()?.coerceIn(0, 4) ?: 0)
     }
@@ -144,20 +145,15 @@ internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState)
     }
 
     val stagedFirmware = deployedRelease?.firmware?.get(board.id)
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    BoxWithConstraints(modifier.fillMaxSize()) {
         val narrow = maxWidth < 760.dp
-        val frameHeight = if (narrow) 780.dp else 650.dp
         Column(
-            Modifier.align(Alignment.TopCenter).fillMaxWidth().widthIn(max = 1120.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            Modifier.align(Alignment.TopCenter).fillMaxSize().widthIn(max = 1120.dp),
         ) {
-            WorkspaceHeading("Set up a Nano")
-            WizardSteps(step, state.isConnected, ::advance)
-
             val frameShape = RoundedCornerShape(28.dp)
             val frameBase = MaterialTheme.colorScheme.surface
-            Box(
-                Modifier.fillMaxWidth().height(frameHeight).clip(frameShape)
+            Column(
+                Modifier.fillMaxWidth().weight(1f).clip(frameShape)
                     .background(
                         Brush.linearGradient(
                             listOf(
@@ -170,8 +166,13 @@ internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState)
                     .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.24f), frameShape),
             ) {
                 if (narrow) {
-                    Column(Modifier.fillMaxWidth()) {
-                        ReactionPanel(step, board, state, Modifier.fillMaxWidth().height(138.dp))
+                    WizardSteps(
+                        step,
+                        state.isConnected,
+                        ::advance,
+                        Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    )
+                    Box(Modifier.fillMaxWidth().weight(1f)) {
                         WizardStage(
                             step = step,
                             board = board,
@@ -195,37 +196,51 @@ internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState)
                             onInstallFile = { firmware -> launchLocalFirmware(board, firmware) },
                             onUsbConnect = { requestUsbConnection(presenter) },
                             onStep = ::advance,
-                            modifier = Modifier.fillMaxWidth().weight(1f),
+                            compact = true,
+                            modifier = Modifier.fillMaxSize(),
                         )
                     }
                 } else {
-                    Row(Modifier.fillMaxWidth()) {
-                        WizardStage(
-                            step = step,
-                            board = board,
-                            state = state,
-                            secure = secure,
-                            serialAvailable = serialAvailable,
-                            stagedFirmware = stagedFirmware,
-                            deployedRelease = deployedRelease,
-                            releaseError = releaseError,
-                            selectedFirmware = selectedFirmware,
-                            onBoardSelected = { candidate ->
-                                boardId = candidate.id
-                                window.localStorage.setItem("rsvpnano.web.board", candidate.id)
-                            },
-                            onInstallLatest = {
-                                stagedFirmware?.let { filename ->
-                                    launchFirmware(board, deployedRelease?.version.orEmpty(), absoluteUrl("firmware/$filename"))
-                                }
-                            },
-                            onChooseFile = { firmwarePicker.launch() },
-                            onInstallFile = { firmware -> launchLocalFirmware(board, firmware) },
-                            onUsbConnect = { requestUsbConnection(presenter) },
-                            onStep = ::advance,
-                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                    Row(Modifier.fillMaxSize()) {
+                        Column(Modifier.weight(1f).fillMaxHeight()) {
+                            WizardSteps(
+                                step,
+                                state.isConnected,
+                                ::advance,
+                                Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            )
+                            WizardStage(
+                                step = step,
+                                board = board,
+                                state = state,
+                                secure = secure,
+                                serialAvailable = serialAvailable,
+                                stagedFirmware = stagedFirmware,
+                                deployedRelease = deployedRelease,
+                                releaseError = releaseError,
+                                selectedFirmware = selectedFirmware,
+                                onBoardSelected = { candidate ->
+                                    boardId = candidate.id
+                                    window.localStorage.setItem("rsvpnano.web.board", candidate.id)
+                                },
+                                onInstallLatest = {
+                                    stagedFirmware?.let { filename ->
+                                        launchFirmware(board, deployedRelease?.version.orEmpty(), absoluteUrl("firmware/$filename"))
+                                    }
+                                },
+                                onChooseFile = { firmwarePicker.launch() },
+                                onInstallFile = { firmware -> launchLocalFirmware(board, firmware) },
+                                onUsbConnect = { requestUsbConnection(presenter) },
+                                onStep = ::advance,
+                                modifier = Modifier.weight(1f).fillMaxWidth(),
+                            )
+                        }
+                        ReactionPanel(
+                            step,
+                            board,
+                            state,
+                            modifier = Modifier.widthIn(min = 280.dp, max = 330.dp).fillMaxHeight(),
                         )
-                        ReactionPanel(step, board, state, Modifier.widthIn(min = 280.dp, max = 330.dp).fillMaxHeight())
                     }
                 }
             }
@@ -234,10 +249,10 @@ internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState)
 }
 
 @Composable
-private fun WizardSteps(step: Int, connected: Boolean, onStep: (Int) -> Unit) {
+private fun WizardSteps(step: Int, connected: Boolean, onStep: (Int) -> Unit, modifier: Modifier = Modifier) {
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
     ) {
         listOf("Choose device", "Install", "Connect", "Personalize", "Ready").forEachIndexed { index, label ->
             val selected = index == step
@@ -251,13 +266,14 @@ private fun WizardSteps(step: Int, connected: Boolean, onStep: (Int) -> Unit) {
                     .background(background)
                     .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.28f), shape)
                     .clickable(enabled = index <= step || connected) { onStep(index) }
-                    .padding(horizontal = 17.dp, vertical = 10.dp),
+                    .padding(horizontal = 13.dp, vertical = 7.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     label,
                     color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    style = MaterialTheme.typography.labelMedium,
                 )
             }
         }
@@ -282,9 +298,15 @@ private fun WizardStage(
     onInstallFile: (SelectedFirmware) -> Unit,
     onUsbConnect: () -> Unit,
     onStep: (Int) -> Unit,
+    compact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.padding(horizontal = 30.dp, vertical = 26.dp)) {
+    Column(
+        modifier.padding(
+            horizontal = if (compact) 18.dp else 30.dp,
+            vertical = if (compact) 14.dp else 26.dp,
+        ),
+    ) {
         AnimatedContent(
             targetState = step,
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -319,7 +341,7 @@ private fun WizardStage(
                 }
             }
         }
-        WizardFooter(step, board, state.isConnected, onStep)
+        WizardFooter(step, board, state.isConnected, compact, onStep)
     }
 }
 
@@ -524,9 +546,9 @@ private fun WizardIntro(eyebrow: String, title: String, description: String) {
 }
 
 @Composable
-private fun WizardFooter(step: Int, board: InstallerBoard, connected: Boolean, onStep: (Int) -> Unit) {
+private fun WizardFooter(step: Int, board: InstallerBoard, connected: Boolean, compact: Boolean, onStep: (Int) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(top = 14.dp),
+        Modifier.fillMaxWidth().padding(top = if (compact) 8.dp else 14.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -546,7 +568,12 @@ private fun WizardFooter(step: Int, board: InstallerBoard, connected: Boolean, o
 }
 
 @Composable
-private fun ReactionPanel(step: Int, board: InstallerBoard, state: CompanionUiState, modifier: Modifier = Modifier) {
+private fun ReactionPanel(
+    step: Int,
+    board: InstallerBoard,
+    state: CompanionUiState,
+    modifier: Modifier = Modifier,
+) {
     val captions = listOf(
         "Choose the hardware in front of you.",
         "Firmware brings the reader to life.",
@@ -580,7 +607,11 @@ private fun ReactionPanel(step: Int, board: InstallerBoard, state: CompanionUiSt
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             Text("REACTION", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.Black)
-            Text(captions[step], style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                captions[step],
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
             Text(
                 if (state.isConnected) "Nano connected" else board.name,
                 style = MaterialTheme.typography.bodySmall,
@@ -594,13 +625,14 @@ private fun ReactionPanel(step: Int, board: InstallerBoard, state: CompanionUiSt
 private fun BoardGrid(selectedId: String, onSelect: (InstallerBoard) -> Unit) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val columns = when {
-            maxWidth >= 620.dp -> 3
-            maxWidth >= 580.dp -> 2
+            maxWidth >= 600.dp -> 4
+            maxWidth >= 500.dp -> 3
+            maxWidth >= 340.dp -> 2
             else -> 1
         }
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
             InstallerBoards.chunked(columns).forEach { boards ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                     boards.forEach { board ->
                         BoardTile(board, board.id == selectedId, { onSelect(board) }, Modifier.weight(1f))
                     }
@@ -637,17 +669,17 @@ private fun BoardTile(board: InstallerBoard, selected: Boolean, onSelect: () -> 
         color = background,
         shape = shape,
     ) {
-        Column(Modifier.fillMaxWidth().height(126.dp).padding(15.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxWidth().height(122.dp).padding(11.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(board.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(board.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Text(board.badge, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
                 }
                 IconButton(onClick = { window.open(board.storeUrl, "_blank") }, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Outlined.ShoppingCart, "Open store page", Modifier.size(19.dp))
                 }
             }
-            Text(board.note, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f))
+            Text(board.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f))
         }
     }
 }

@@ -20,8 +20,10 @@ from compare import parse_log, parse_wpm_sweep, write_summary
 DEFAULT_ENV = "benchmark_waveshare_esp32s3_touch_lcd_349_rev1"
 DEFAULT_EPUB_FIXTURE = "RSVPNanoCompanion/testdata/conversion/Dracula-epub.epub"
 DEFAULT_MULTILINGUAL_FIXTURE = "RSVPNanoCompanion/testdata/multilingual/multilingual.rsvp"
+DEFAULT_VERTICAL_EPUB_FIXTURE = "RSVPNanoCompanion/testdata/multilingual/vertical-cjk.epub"
 DEVICE_EPUB_PATH = Path("benchmark/Dracula-epub.epub")
 DEVICE_MULTILINGUAL_PATH = Path("benchmark/multilingual.rsvp")
+DEVICE_VERTICAL_EPUB_PATH = Path("benchmark/vertical-cjk.epub")
 DEVICE_MARKER_PATH = Path("benchmark/.rsvpnano-benchmark")
 RUN_READY_PATH = Path("benchmark/.run-ready")
 FONT_MANIFEST_PATH = Path("benchmark/fonts.sha256")
@@ -159,6 +161,7 @@ def prepare_volume(
     root: Path,
     epub_fixture: Path,
     multilingual_fixture: Path,
+    vertical_epub_fixture: Path | None = None,
     fonts_root: Path | None = None,
 ) -> Path:
     if fonts_root is not None:
@@ -200,10 +203,10 @@ def prepare_volume(
                 os.fsync(output.fileno())
             print(f"[bench-script] synced {copied}/{len(sources)} fonts to device", flush=True)
 
-    for source_path, device_path in (
-        (epub_fixture, DEVICE_EPUB_PATH),
-        (multilingual_fixture, DEVICE_MULTILINGUAL_PATH),
-    ):
+    fixtures = [(epub_fixture, DEVICE_EPUB_PATH), (multilingual_fixture, DEVICE_MULTILINGUAL_PATH)]
+    if vertical_epub_fixture is not None:
+        fixtures.append((vertical_epub_fixture, DEVICE_VERTICAL_EPUB_PATH))
+    for source_path, device_path in fixtures:
         target = root / device_path
         target.parent.mkdir(parents=True, exist_ok=True)
         unchanged = (
@@ -322,6 +325,11 @@ def main() -> int:
         default=DEFAULT_MULTILINGUAL_FIXTURE,
         help="Host multilingual RSVP benchmark fixture",
     )
+    parser.add_argument(
+        "--vertical-epub-fixture",
+        default=DEFAULT_VERTICAL_EPUB_FIXTURE,
+        help="Host vertical CJK EPUB benchmark fixture",
+    )
     parser.add_argument("--sd-root", default="", help="Explicit mounted benchmark storage root")
     args = parser.parse_args()
     if args.runs < 1:
@@ -337,6 +345,9 @@ def main() -> int:
     multilingual_fixture = (repo_root / args.multilingual_fixture).resolve()
     if not multilingual_fixture.is_file():
         raise FileNotFoundError(f"multilingual fixture missing: {multilingual_fixture}")
+    vertical_epub_fixture = (repo_root / args.vertical_epub_fixture).resolve()
+    if not vertical_epub_fixture.is_file():
+        raise FileNotFoundError(f"vertical EPUB fixture missing: {vertical_epub_fixture}")
 
     devices = platformio_devices(repo_root)
     initial_port = select_serial_port(devices, args.port)
@@ -357,7 +368,7 @@ def main() -> int:
     for run_index in range(1, args.runs + 1):
         print(f"[bench-script] waiting for benchmark storage run={run_index}/{args.runs}", flush=True)
         volume = wait_for_benchmark_volume(args.sd_root, args.storage_timeout)
-        prepare_volume(volume, epub_fixture, multilingual_fixture, repo_root / "fonts")
+        prepare_volume(volume, epub_fixture, multilingual_fixture, vertical_epub_fixture, repo_root / "fonts")
         if args.manual_eject:
             input(f"Safely eject {volume}, then press Enter: ")
         else:

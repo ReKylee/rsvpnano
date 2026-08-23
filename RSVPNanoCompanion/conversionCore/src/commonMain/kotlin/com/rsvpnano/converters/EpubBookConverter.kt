@@ -8,6 +8,7 @@ import com.fleeksoft.ksoup.nodes.TextNode
 import com.fleeksoft.ksoup.parser.Parser
 
 internal object EpubBookConverter {
+    private val verticalWriting = Regex("(?:-epub-)?writing-mode\\s*:\\s*vertical-rl", RegexOption.IGNORE_CASE)
     private val blockTags = setOf(
         "address", "article", "aside", "blockquote", "body", "br", "dd", "div", "dl", "dt",
         "figcaption", "figure", "footer", "header", "hr", "li", "main", "ol", "p", "pre",
@@ -36,11 +37,13 @@ internal object EpubBookConverter {
         }
 
         val events = mutableListOf<RsvpEvent>()
+        var hasVerticalWriting = packageInfo.verticalWriting
         paths.forEachIndexed { index, spinePath ->
             val chapterData = normalizedEntries[EpubUtils.normalizeZipPath(spinePath).lowercase()] ?: return@forEachIndexed
             val rawMarkup = RsvpTextUtils.decodeText(chapterData) ?: return@forEachIndexed
             val tocEntries = packageInfo.tocTitlesByPath[EpubUtils.normalizeZipPath(spinePath).lowercase()].orEmpty()
             val chapterEvents = htmlEvents(rawMarkup, tocEntries, packageInfo.locale).toMutableList()
+            hasVerticalWriting = chapterEvents.removeAll { it == RsvpEvent.VerticalWriting } || hasVerticalWriting
             if (tocEntries.isNotEmpty()) {
                 chapterEvents.applyTocTitles(tocEntries.map { it.title }, packageInfo.title)
             } else if (packageInfo.tocTitlesByPath.isNotEmpty()) {
@@ -55,7 +58,11 @@ internal object EpubBookConverter {
             }
         }
 
-        if (events.isEmpty()) {
+        if (hasVerticalWriting) {
+            events.add(0, RsvpEvent.VerticalWriting)
+        }
+
+        if (events.none { it is RsvpEvent.Text }) {
             throw RsvpConversionError.unsupportedEpub
         }
 
@@ -123,6 +130,11 @@ internal object EpubBookConverter {
             locale = metadata?.firstTextByLocalName("language").orEmpty(),
             spinePaths = spinePaths,
             manifestContentPaths = manifestContentPaths,
+            verticalWriting = manifest.values.asSequence()
+                .filter { it.mediaType.equals("text/css", ignoreCase = true) }
+                .mapNotNull { entries[EpubUtils.normalizeZipPath(it.path).lowercase()] }
+                .mapNotNull(RsvpTextUtils::decodeText)
+                .any(verticalWriting::containsMatchIn),
             tocTitlesByPath = tocTitlesByPath(
                 entries = entries,
                 bookTitle = title,
@@ -235,6 +247,11 @@ internal object EpubBookConverter {
     private fun htmlEvents(markup: String, tocEntries: List<EpubTocEntry>, packageLocale: String): List<RsvpEvent> {
         val document = parseHtml(markup)
         val events = mutableListOf<RsvpEvent>()
+        if (document.allElements().any { element ->
+                verticalWriting.containsMatchIn(element.attr("style")) ||
+                    element.localName() == "style" && verticalWriting.containsMatchIn(element.html())
+            }
+        ) events += RsvpEvent.VerticalWriting
         val paragraph = mutableListOf<String>()
         val emittedFragments = mutableSetOf<String>()
         var paragraphStart = true
@@ -384,6 +401,7 @@ internal object EpubBookConverter {
         val locale: String,
         val spinePaths: List<String>,
         val manifestContentPaths: List<String>,
+        val verticalWriting: Boolean,
         val tocTitlesByPath: Map<String, List<EpubTocEntry>>,
     )
 

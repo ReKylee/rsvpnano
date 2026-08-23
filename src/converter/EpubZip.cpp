@@ -338,7 +338,7 @@ namespace EpubZip {
                                                        std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
                                                        std::string_view fallbackChapterTitle,
                                                        std::string_view bookTitle,
-                                                       std::string_view bookLocale,
+                                                       std::string_view bookLocale, bool& verticalWritingEmitted,
                                                        const EpubConverter::Options& options, size_t itemIndex,
                                                        size_t itemCount) {
         const ZipEntry* entry = find(name);
@@ -347,7 +347,8 @@ namespace EpubZip {
             return ContentExtractStatus::Failed;
         }
         return extractContentToRsvp(*entry, output, wordCount, maxWords, lastChapterTitle, chapterCount, tocEntries,
-                                    hasToc, fallbackChapterTitle, bookTitle, bookLocale, options, itemIndex, itemCount);
+                                    hasToc, fallbackChapterTitle, bookTitle, bookLocale, verticalWritingEmitted,
+                                    options, itemIndex, itemCount);
     }
 
     void Archive::logArchiveHints(const char* reason) const {
@@ -581,7 +582,7 @@ namespace EpubZip {
                                                        std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
                                                        std::string_view fallbackChapterTitle,
                                                        std::string_view bookTitle,
-                                                       std::string_view bookLocale,
+                                                       std::string_view bookLocale, bool& verticalWritingEmitted,
                                                        const EpubConverter::Options& options, size_t itemIndex,
                                                        size_t itemCount) {
         ESP_LOGD("epub-zip", "Extract content: %s method=%u flags=0x%04x c=%lu u=%lu", entry.name.c_str(), entry.method,
@@ -602,7 +603,8 @@ namespace EpubZip {
         }
 
         EpubContent::RsvpContentWriter writer(output, wordCount, maxWords, lastChapterTitle, chapterCount, tocEntries,
-                                              hasToc, fallbackChapterTitle, bookTitle, bookLocale);
+                                              hasToc, fallbackChapterTitle, bookTitle, verticalWritingEmitted,
+                                              bookLocale);
         uint32_t totalOutputBytes = 0;
         uint32_t lastProgressBytes = 0;
         ContentExtractStatus result = ContentExtractStatus::Complete;

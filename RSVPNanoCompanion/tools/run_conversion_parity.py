@@ -206,6 +206,17 @@ def run_multilingual_format_parity() -> None:
         if position != len(required):
             raise AssertionError(f"Multilingual language metadata was not preserved for {name}")
 
+    vertical_events = [
+        module.events_for_file(MULTILINGUAL / name)[2]
+        for name in ("vertical-cjk.xhtml", "vertical-cjk.epub")
+    ]
+    for events in vertical_events:
+        if events.count(("writing-mode", "vertical-rl")) != 1:
+            raise AssertionError("Vertical CJK writing mode was not preserved exactly once")
+    content = lambda events: [event for event in events if event[0] in {"chapter", "text"}]
+    if content(vertical_events[0]) != content(vertical_events[1]):
+        raise AssertionError("Vertical CJK XHTML and EPUB content events differed")
+
 
 def run_web_vector(tmp: Path, command: str, input_name: str, expected_name: str, title: str, label: str) -> None:
     node = shutil.which("node")

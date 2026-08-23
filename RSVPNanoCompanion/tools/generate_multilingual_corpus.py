@@ -10,6 +10,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "RSVPNanoCompanion" / "testdata" / "multilingual"
 TITLE = "Multilingual Reader Corpus"
+VERTICAL_TITLE = "Vertical CJK Reader Fixture"
+VERTICAL_PARAGRAPHS = (
+    ("ja", "縦書き日本語", "吾輩は猫である、名前はまだ無い。"),
+    ("zh-Hans", "竖排简体中文", "天地玄黄，宇宙洪荒。日月盈昃，辰宿列张。"),
+)
 PARAGRAPHS = (
     ("en", "ltr", "English", "Alice was beginning to get very tired of sitting by her sister on the bank."),
     ("es", "ltr", "Español", "En un lugar de la Mancha, de cuyo nombre no quiero acordarme."),
@@ -49,7 +54,7 @@ def rsvp_document() -> str:
     lines = ["@rsvp 1", f"@title {TITLE}", "@source public-domain multilingual excerpts", "", f"@chapter {TITLE}"]
     current_locale = ""
     current_direction = "auto"
-    for locale, direction, chapter, text in PARAGRAPHS:
+    for index, (locale, direction, chapter, text) in enumerate(PARAGRAPHS):
         lines.extend(("", f"@chapter {chapter}"))
         if locale != current_locale:
             lines.append(f"@language {locale}")
@@ -57,6 +62,8 @@ def rsvp_document() -> str:
         if direction != current_direction:
             lines.append(f"@direction {direction}")
             current_direction = direction
+        if index != 0:
+            lines.append("@para")
         lines.append(text)
     return "\n".join(lines) + "\n"
 
@@ -110,6 +117,73 @@ def epub(version: int) -> bytes:
     return output.getvalue()
 
 
+def vertical_xhtml() -> str:
+    body = "\n".join(
+        f'<section lang="{locale}"><h2>{chapter}</h2><p>{text}</p></section>'
+        for locale, chapter, text in VERTICAL_PARAGRAPHS
+    )
+    return f'''<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja">
+<head><meta charset="utf-8"/><title>{VERTICAL_TITLE}</title>
+<style>html {{ writing-mode: vertical-rl; }}</style></head>
+<body>{body}</body></html>
+'''
+
+
+def vertical_epub() -> bytes:
+    container = b'''<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
+</container>
+'''
+    package = f'''<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="id" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="id">urn:rsvpnano:vertical-cjk-fixture</dc:identifier>
+    <dc:title>{VERTICAL_TITLE}</dc:title><dc:language>ja</dc:language>
+  </metadata>
+  <manifest>
+    <item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/>
+    <item id="style" href="vertical.css" media-type="text/css"/>
+  </manifest>
+  <spine><itemref idref="chapter"/></spine>
+</package>
+'''.encode()
+    chapter = vertical_xhtml().replace(
+        '<style>html { writing-mode: vertical-rl; }</style>',
+        '<link rel="stylesheet" type="text/css" href="vertical.css"/>',
+    ).encode()
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        write_zip(archive, "mimetype", b"application/epub+zip", zipfile.ZIP_STORED)
+        write_zip(archive, "META-INF/container.xml", container, zipfile.ZIP_DEFLATED)
+        write_zip(archive, "OEBPS/content.opf", package, zipfile.ZIP_DEFLATED)
+        write_zip(archive, "OEBPS/chapter.xhtml", chapter, zipfile.ZIP_DEFLATED)
+        write_zip(archive, "OEBPS/vertical.css", b"html { -epub-writing-mode: vertical-rl; }", zipfile.ZIP_DEFLATED)
+    return output.getvalue()
+
+
+def vertical_rsvp() -> str:
+    lines = [
+        "@rsvp 1", f"@title {VERTICAL_TITLE}", "@source vertical-cjk.epub",
+        "@writing-mode vertical-rl", "@language ja", "",
+    ]
+    current_locale = "ja"
+    for index, (locale, chapter, text) in enumerate(VERTICAL_PARAGRAPHS):
+        if locale != current_locale:
+            lines.append(f"@language {locale}")
+            current_locale = locale
+        if index != 0:
+            lines.append("")
+        lines.append(f"@chapter {chapter}")
+        if index != 0:
+            lines.extend(("", "@para"))
+        lines.append(text)
+    if current_locale != "ja":
+        lines.append("@language ja")
+    return "\n".join(lines) + "\n"
+
+
 def write_zip(archive: zipfile.ZipFile, name: str, data: bytes, compression: int) -> None:
     info = zipfile.ZipInfo(name, (2026, 1, 1, 0, 0, 0))
     info.compress_type = compression
@@ -130,6 +204,9 @@ def outputs() -> dict[str, bytes]:
         "multilingual-epub2.epub": epub(2),
         "multilingual-epub3.epub": epub(3),
         "multilingual.rsvp": rsvp_document().encode(),
+        "vertical-cjk.xhtml": vertical_xhtml().encode(),
+        "vertical-cjk.epub": vertical_epub(),
+        "vertical-cjk-expected.rsvp": vertical_rsvp().encode(),
     }
 
 

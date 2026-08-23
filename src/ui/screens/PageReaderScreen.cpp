@@ -190,6 +190,7 @@ namespace screens::PageReader {
             const size_t wordCount = ReadingLoop::wordCount(session);
             size_t index = std::min(start, wordCount);
             clearPage(state);
+            state.vertical = false;
             state.pageStart = index;
             const int16_t maximumWidth = std::max<int16_t>(1, static_cast<int16_t>(area.w - kMarginX * 2));
             const int16_t bottom = static_cast<int16_t>(area.y + area.h - kMarginY);
@@ -296,6 +297,67 @@ namespace screens::PageReader {
             x = word.x;
             y = word.y;
             return true;
+        }
+
+        void layoutVertical(State& state, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
+                            const ReadingSession& session, ui::Rect area, size_t start) {
+            clearPage(state);
+            state.vertical = true;
+            const size_t wordCount = ReadingLoop::wordCount(session);
+            size_t index = std::min(start, wordCount);
+            state.pageStart = index;
+            const int16_t top = static_cast<int16_t>(area.y + kMarginY);
+            const int16_t bottom = static_cast<int16_t>(area.y + area.h - kMarginY);
+            int16_t y = top;
+            int16_t columnWidth = 0;
+            int16_t right = static_cast<int16_t>(area.x + area.w - kMarginX);
+            while (index < wordCount) {
+                const FontCatalog::Face face = typeface(index);
+                activateFace(text, face);
+                const int16_t advance = std::max<int16_t>(1, text.verticalAdvance());
+                const int16_t height = static_cast<int16_t>(std::min<size_t>(
+                    INT16_MAX, Utf8Text::count(ReadingLoop::wordAt(session, index)) * static_cast<size_t>(advance)));
+                const int16_t gap = paragraphStart(session, index) && y != top ? advance / 2 : 0;
+                if (y != top && y + gap + height > bottom) {
+                    right = static_cast<int16_t>(right - columnWidth - kLineGap);
+                    y = top;
+                    columnWidth = 0;
+                }
+                columnWidth = std::max(columnWidth, advance);
+                const int16_t centerX = static_cast<int16_t>(right - columnWidth / 2);
+                if (centerX - columnWidth / 2 < area.x + kMarginX)
+                    break;
+                const uint8_t faceIndex = rememberFace(state, face);
+                state.words.push_back({.x = centerX, .y = static_cast<int16_t>(y + gap), .faceIndex = faceIndex});
+                y = static_cast<int16_t>(y + gap + height);
+                ++index;
+            }
+            state.pageEnd = index;
+        }
+
+        void drawVerticalWord(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
+                              const ReadingSession& session, size_t index, ui::themes::ColorRole role) {
+            activateFace(text, faceAt(state, index));
+            text.setTextColor(ui.color(role), ui.color(ui::themes::ColorRole::Background));
+            const State::Word& word = wordAt(state, index);
+            int16_t y = word.y;
+            std::string_view value = ReadingLoop::wordAt(session, index);
+            uint32_t codepoint = 0;
+            while (Utf8Text::next(value, codepoint))
+                y = static_cast<int16_t>(y + text.drawVerticalCodepoint(codepoint, word.x, y));
+        }
+
+        void drawOverlay(ui::Context& ui, ui::Rect area, std::string_view overlay) {
+            if (overlay.empty())
+                return;
+            const int16_t width = ui::Context::textWidth(overlay, kOverlayTextSize);
+            const int16_t x = static_cast<int16_t>(area.x + (area.w - width) / 2);
+            const int16_t y = static_cast<int16_t>(area.y + area.h - kMarginY - kOverlayTextHeight);
+            ui.gfx().fillRect(static_cast<int16_t>(x - 4), static_cast<int16_t>(y - 2), static_cast<int16_t>(width + 8),
+                              static_cast<int16_t>(kOverlayTextHeight + 4),
+                              ui.color(ui::themes::ColorRole::Background));
+            ui.drawText({x, y, width, kOverlayTextHeight}, overlay, kOverlayTextSize,
+                        ui.color(ui::themes::ColorRole::Accent));
         }
 
         void drawShapedWord(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, size_t index,
@@ -405,12 +467,46 @@ namespace screens::PageReader {
             return;
         }
 
-        if (state.layoutArea != area || state.layoutRevision != typographyRevision) {
+        const bool vertical = session.metadata.writingMode == WritingMode::verticalRl;
+        if (state.layoutArea != area || state.layoutRevision != typographyRevision || state.vertical != vertical) {
             state.layoutArea = area;
             state.layoutRevision = typographyRevision;
             invalidate(state);
+            state.vertical = vertical;
         }
         const size_t current = std::min<size_t>(session.state.wordIndex, wordCount - 1);
+        if (vertical) {
+            if (state.pageStart == kInvalidIndex)
+                layoutVertical(state, text, typeface, session, area, anchorIndex(session, current));
+            if (current < state.pageStart)
+                layoutVertical(state, text, typeface, session, area, anchorIndex(session, current));
+            if (current >= state.pageEnd && state.pageEnd > state.pageStart)
+                layoutVertical(state, text, typeface, session, area,
+                               current == state.pageEnd ? state.pageEnd : anchorIndex(session, current));
+            if (current >= state.pageEnd)
+                layoutVertical(state, text, typeface, session, area, current);
+
+            uint32_t pageSignature = ui::Context::combine(Fnv1a::kOffsetBasis, static_cast<uint32_t>(state.pageStart));
+            pageSignature = ui::Context::combine(pageSignature, static_cast<uint32_t>(state.pageEnd));
+            pageSignature = ui::Context::combine(pageSignature, typographyRevision);
+            pageSignature = ui::Context::combine(pageSignature, static_cast<uint8_t>(WritingMode::verticalRl));
+            const uint32_t signature = ui::Context::signature(overlay, pageSignature);
+            if (ui.redraw(area, signature)) {
+                for (size_t index = state.pageStart; index < state.pageEnd; ++index)
+                    drawVerticalWord(state, ui, text, session, index,
+                                     index == current ? ui::themes::ColorRole::Accent
+                                                      : ui::themes::ColorRole::Foreground);
+                drawOverlay(ui, area, overlay);
+            } else if (state.highlighted != current) {
+                if (state.highlighted >= state.pageStart && state.highlighted < state.pageEnd)
+                    drawVerticalWord(state, ui, text, session, state.highlighted,
+                                     ui::themes::ColorRole::Foreground);
+                drawVerticalWord(state, ui, text, session, current, ui::themes::ColorRole::Accent);
+                ui.markDrawn();
+            }
+            state.highlighted = current;
+            return;
+        }
         if (state.pageStart == kInvalidIndex)
             layout(state, text, typeface, typography, session, area, anchorIndex(session, current));
         if (current < state.pageStart)
@@ -487,16 +583,7 @@ namespace screens::PageReader {
                 }
             }
         }
-        if (!overlay.empty()) {
-            const int16_t width = ui::Context::textWidth(overlay, kOverlayTextSize);
-            const int16_t x = static_cast<int16_t>(area.x + (area.w - width) / 2);
-            const int16_t y = static_cast<int16_t>(area.y + area.h - kMarginY - kOverlayTextHeight);
-            ui.gfx().fillRect(static_cast<int16_t>(x - 4), static_cast<int16_t>(y - 2), static_cast<int16_t>(width + 8),
-                              static_cast<int16_t>(kOverlayTextHeight + 4),
-                              ui.color(ui::themes::ColorRole::Background));
-            ui.drawText({x, y, width, kOverlayTextHeight}, overlay, kOverlayTextSize,
-                        ui.color(ui::themes::ColorRole::Accent));
-        }
+        drawOverlay(ui, area, overlay);
         state.highlighted = current;
     }
 

@@ -20,3 +20,7 @@ The excerpts are attributed to public-domain works:
 - Simplified Chinese: [*韩非子*, Project Gutenberg #24049](https://www.gutenberg.org/ebooks/24049).
 
 Full works stay out of ordinary CI. This fixture is deliberately short enough for converter and renderer tests.
+
+`vertical-cjk.epub` and `vertical-cjk.xhtml` are deterministic Japanese and Simplified Chinese fixtures. The EPUB
+declares `vertical-rl` in an external stylesheet; the XHTML declares it inline. Both exercise upright CJK glyphs,
+rotated punctuation, language changes, and the single book-level `@writing-mode vertical-rl` directive.

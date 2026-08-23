@@ -1,0 +1,15 @@
+@rsvp 1
+@title Vertical CJK Reader Fixture
+@source vertical-cjk.epub
+@writing-mode vertical-rl
+@language ja
+
+@chapter 縦書き日本語
+吾輩は猫である、名前はまだ無い。
+@language zh-Hans
+
+@chapter 竖排简体中文
+
+@para
+天地玄黄，宇宙洪荒。日月盈昃，辰宿列张。
+@language ja

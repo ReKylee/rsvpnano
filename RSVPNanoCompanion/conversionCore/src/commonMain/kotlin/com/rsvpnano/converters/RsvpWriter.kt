@@ -53,6 +53,8 @@ internal class RsvpWriter(
 
     fun setDirection(direction: String) = addDirective("direction", direction)
 
+    fun setVerticalWriting() = addDirective("writing-mode", "vertical-rl")
+
     fun addText(text: String) {
         val readableTokens = RsvpTextUtils.cleanWordTokens(text)
         var readableIndex = 0
@@ -122,7 +124,10 @@ internal class RsvpWriter(
         flushLine()
         val directive = "@$name ${RsvpTextUtils.directiveValue(value)}"
         for (index in lines.indices.reversed()) {
-            if (!lines[index].startsWith("@language ") && !lines[index].startsWith("@direction ")) break
+            if (!lines[index].startsWith("@language ") &&
+                !lines[index].startsWith("@direction ") &&
+                !lines[index].startsWith("@writing-mode ")
+            ) break
             if (lines[index].startsWith("@$name ")) {
                 lines[index] = directive
                 return

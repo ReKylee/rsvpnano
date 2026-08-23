@@ -977,6 +977,33 @@ void test_ui_text_uses_visual_bounds_for_every_alignment() {
     TEST_ASSERT_EQUAL_INT16(12, gfx.cursorX);
 }
 
+void test_page_reader_lays_explicit_vertical_books_out_in_right_to_left_columns() {
+    Arduino_GFX gfx(80, 30);
+    ui::Context context(gfx);
+    ui::fonts::AlphaTextRenderer<640> text(gfx);
+    TEST_ASSERT_TRUE(text.begin());
+    context.setTheme(theme());
+    settings::TypographySettings typography;
+    const std::array<std::string, 5> words{"日", "本", "語", "中", "文"};
+    ReadingSession session;
+    ReadingLoop::setWords(session, words, 0);
+    session.metadata.writingMode = WritingMode::verticalRl;
+    session.metadata.paragraphStarts = {0};
+    screens::PageReader::State state;
+    const auto typeface = [](size_t) -> FontCatalog::Face {
+        return {std::cref(kReaderFont), nullptr};
+    };
+
+    context.beginFrame(1);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, {0, 0, 80, 30});
+    context.endFrame();
+
+    TEST_ASSERT_TRUE(state.vertical);
+    TEST_ASSERT_GREATER_THAN(2, state.pageEnd);
+    TEST_ASSERT_GREATER_THAN(state.words[2].x, state.words[0].x);
+    TEST_ASSERT_GREATER_THAN(0, gfx.writes);
+}
+
 void test_labels_redraw_when_text_or_locale_changes() {
     Arduino_GFX gfx(320, 172);
     ui::Context context(gfx);
@@ -1466,6 +1493,7 @@ int main(int, char**) {
     RUN_TEST(test_page_reader_uses_reader_typeface_after_skipping_a_colliding_page_range);
     RUN_TEST(test_page_reader_reanchors_distant_forward_seek_without_laying_out_intermediate_pages);
     RUN_TEST(test_page_reader_uses_each_words_selected_typeface_for_layout);
+    RUN_TEST(test_page_reader_lays_explicit_vertical_books_out_in_right_to_left_columns);
     RUN_TEST(test_page_reader_caches_visual_bidi_layout);
     RUN_TEST(test_page_reader_only_runs_bidi_for_pages_that_need_it);
     RUN_TEST(test_page_reader_shapes_each_visible_word_once_and_caches_glyphs);

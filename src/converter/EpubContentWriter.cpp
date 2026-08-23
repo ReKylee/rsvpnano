@@ -22,6 +22,7 @@ namespace EpubContent {
             std::string anchor;
             std::string locale;
             std::string direction;
+            bool vertical = false;
             bool closing = false;
             bool selfClosing = false;
         };
@@ -130,6 +131,11 @@ namespace EpubContent {
             std::ranges::transform(info.direction, info.direction.begin(), AsciiText::toLower);
             if (info.direction != "auto" && info.direction != "ltr" && info.direction != "rtl")
                 info.direction.clear();
+            std::string style = tagAttributeValue(tag, "style");
+            std::ranges::transform(style, style.begin(), AsciiText::toLower);
+            style.erase(std::remove_if(style.begin(), style.end(), AsciiText::isWhitespace), style.end());
+            info.vertical = style.contains("writing-mode:vertical-rl")
+                         || style.contains("-epub-writing-mode:vertical-rl");
 
             for (int i = static_cast<int>(tag.length()) - 1; i >= 0; --i) {
                 if (AsciiText::isWhitespace(tag[i]) || tag[i] == '>') {
@@ -260,6 +266,7 @@ namespace EpubContent {
                                          std::string& lastChapterTitle, size_t& chapterCount,
                                          std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
                                          std::string_view fallbackChapterTitle, std::string_view bookTitle,
+                                         bool& verticalWritingEmitted,
                                          std::string_view initialLocale, std::string_view initialDirection) :
             output_(output),
             wordCount_(wordCount),
@@ -270,6 +277,7 @@ namespace EpubContent {
             hasToc_(hasToc),
             fallbackChapterTitle_(fallbackChapterTitle),
             bookTitle_(bookTitle),
+            verticalWritingEmitted_(verticalWritingEmitted),
             locale_(initialLocale.empty() ? "und" : initialLocale),
             direction_(initialDirection) {
         line_.reserve(160);
@@ -451,6 +459,14 @@ namespace EpubContent {
 
     bool RsvpContentWriter::processDecodedText(char c) {
         if (skipDepth_ > 0) {
+            if (inStyle_ && !styleVertical_ && !AsciiText::isWhitespace(c)) {
+                constexpr std::string_view pattern = "writing-mode:vertical-rl";
+                c = AsciiText::toLower(c);
+                verticalCssMatch_ = c == pattern[verticalCssMatch_]
+                                      ? static_cast<uint8_t>(verticalCssMatch_ + 1)
+                                      : static_cast<uint8_t>(c == pattern.front());
+                styleVertical_ = verticalCssMatch_ == pattern.size();
+            }
             return true;
         }
 
@@ -486,6 +502,18 @@ namespace EpubContent {
 
         if (tagInfo.name.empty() || tag.starts_with("<!") || tag.starts_with("<?")) {
             return true;
+        }
+
+        if (tagInfo.vertical && !emitVerticalWriting())
+            return false;
+        if (!tagInfo.closing && tagInfo.name == "style") {
+            inStyle_ = true;
+            styleVertical_ = false;
+            verticalCssMatch_ = 0;
+        } else if (tagInfo.closing && tagInfo.name == "style") {
+            inStyle_ = false;
+            if (styleVertical_ && !emitVerticalWriting())
+                return false;
         }
 
         const bool skipTag = isSkipTag(tagInfo.name);
@@ -568,6 +596,16 @@ namespace EpubContent {
             }
         }
 
+        return true;
+    }
+
+    bool RsvpContentWriter::emitVerticalWriting() {
+        if (verticalWritingEmitted_)
+            return true;
+        if (!flushLine(false))
+            return false;
+        output_.println("@writing-mode vertical-rl");
+        verticalWritingEmitted_ = true;
         return true;
     }
 

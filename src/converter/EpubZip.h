@@ -42,7 +42,7 @@ namespace EpubZip {
                                                   size_t maxWords, std::string& lastChapterTitle, size_t& chapterCount,
                                                   std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
                                                   std::string_view fallbackChapterTitle, std::string_view bookTitle,
-                                                  std::string_view bookLocale,
+                                                  std::string_view bookLocale, bool& verticalWritingEmitted,
                                                   const EpubConverter::Options& options, size_t itemIndex,
                                                   size_t itemCount);
 
@@ -54,7 +54,7 @@ namespace EpubZip {
                                                   size_t maxWords, std::string& lastChapterTitle, size_t& chapterCount,
                                                   std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
                                                   std::string_view fallbackChapterTitle, std::string_view bookTitle,
-                                                  std::string_view bookLocale,
+                                                  std::string_view bookLocale, bool& verticalWritingEmitted,
                                                   const EpubConverter::Options& options, size_t itemIndex,
                                                   size_t itemCount);
 

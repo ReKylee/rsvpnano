@@ -72,6 +72,22 @@ class RsvpParityTest {
     }
 
     @Test
+    fun verticalXhtmlProducesOneBookLevelWritingModeDirective() {
+        val file = RsvpConverter.rsvpFile(
+            title = "Vertical CJK",
+            source = "vertical.xhtml",
+            text = """<html lang="ja" style="writing-mode: vertical-rl"><body>
+                <h1>縦書き</h1><p>日本語、。</p><p lang="zh-Hans">中文，。</p>
+                </body></html>""",
+        )
+        val lines = file.data.decodeToString().lineSequence().toList()
+        assertEquals(1, lines.count { it == "@writing-mode vertical-rl" })
+        assertEquals(true, lines.contains("@chapter 縦書き"))
+        assertEquals(true, lines.contains("日本語、。"))
+        assertEquals(true, lines.contains("中文，。"))
+    }
+
+    @Test
     fun textToRsvpMatchesReferenceVector() {
         val file = RsvpConverter.rsvpFile(
             title = "Basic Text Vector",

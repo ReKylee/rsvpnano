@@ -62,6 +62,7 @@ namespace screens::PageReader {
         ui::Rect layoutArea;
         uint32_t layoutRevision = 0;
         bool bidi = false;
+        bool vertical = false;
     };
 
     void draw(State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,

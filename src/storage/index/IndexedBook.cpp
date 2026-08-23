@@ -82,7 +82,8 @@ namespace IndexedBook {
                 && header.recordsOffset >= sizeof(IndexHeader) && header.paragraphsOffset == recordsEnd
                 && header.chaptersOffset == paragraphsEnd && header.textRunsOffset == chaptersEnd
                 && textRunsEnd <= indexBytes && header.dataSize <= dataBytes
-                && header.baseDirection <= static_cast<uint8_t>(TextDirection::rtl);
+                && header.baseDirection <= static_cast<uint8_t>(TextDirection::rtl)
+                && header.writingMode <= static_cast<uint8_t>(WritingMode::verticalRl);
         }
 
         template<size_t Size>
@@ -313,6 +314,7 @@ namespace IndexedBook {
         header_.requiredCapabilities = metadata_.requiredCapabilities;
         storeFixedString(header_.locale, metadata_.locale);
         header_.baseDirection = static_cast<uint8_t>(metadata_.baseDirection);
+        header_.writingMode = static_cast<uint8_t>(metadata_.writingMode);
 
         for (const size_t paragraph: metadata_.paragraphStarts) {
             const uint32_t wordIndex = static_cast<uint32_t>(paragraph);
@@ -475,6 +477,14 @@ namespace IndexedBook {
                 if (wordCount_ == 0)
                     metadata_.baseDirection = *direction;
                 addTextRun();
+                return true;
+            }
+            if (RsvpText::prefixHasBoundary(trimmed, "@writing-mode")) {
+                const std::string value = RsvpText::directiveValue(trimmed, "@writing-mode");
+                if (const auto mode = ::writingMode(value))
+                    metadata_.writingMode = *mode;
+                else
+                    ESP_LOGW("storage-index", "ignoring invalid @writing-mode: %s", value.c_str());
                 return true;
             }
             return true;
@@ -683,6 +693,7 @@ namespace IndexedBook {
             metadata.baseDirection = static_cast<TextDirection>(header.baseDirection);
             metadata.scriptMask = header.scriptMask;
             metadata.requiredCapabilities = header.requiredCapabilities;
+            metadata.writingMode = static_cast<WritingMode>(header.writingMode);
             if (header.paragraphCount > 0) {
                 metadata.paragraphStarts.reserve(header.paragraphCount);
                 if (!indexFile.seek(header.paragraphsOffset)) {

@@ -53,6 +53,25 @@ class RsvpDemoBookParityAndroidTest {
         )
     }
 
+    @Test
+    fun verticalCjkEpubAndXhtmlPreserveExplicitWritingMode() {
+        val epub = RsvpConverter.bookFile(
+            corpusFile("vertical-cjk.epub").readBytes(),
+            "vertical-cjk.epub",
+        ).data
+        assertContentEquals(corpusFile("vertical-cjk-expected.rsvp").readBytes(), epub)
+
+        val xhtml = RsvpConverter.bookFile(
+            corpusFile("vertical-cjk.xhtml").readBytes(),
+            "vertical-cjk.xhtml",
+        ).data.decodeToString()
+        assertEquals(1, xhtml.lineSequence().count { it == "@writing-mode vertical-rl" })
+        assertTrue(xhtml.contains("@chapter 縦書き日本語\n"))
+        assertTrue(xhtml.contains("@chapter 竖排简体中文\n"))
+        assertTrue(xhtml.contains("吾輩は猫である、名前はまだ無い。"))
+        assertTrue(xhtml.contains("天地玄黄，宇宙洪荒。日月盈昃，辰宿列张。"))
+    }
+
     private fun demoBookFile(name: String): File {
         val candidates = generateSequence(File("").absoluteFile) { it.parentFile }
             .map { File(it, "RSVPNanoCompanion/testdata/localization/$name") }

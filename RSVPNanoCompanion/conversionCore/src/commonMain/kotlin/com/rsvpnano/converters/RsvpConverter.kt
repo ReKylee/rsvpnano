@@ -37,6 +37,7 @@ object RsvpConverter {
         val writer = RsvpWriter(title = title, author = author, source = source)
         events.forEach { event ->
             when (event) {
+                RsvpEvent.VerticalWriting -> writer.setVerticalWriting()
                 is RsvpEvent.Chapter -> writer.addChapter(event.title)
                 is RsvpEvent.Text -> {
                     if (event.startsParagraph) writer.beginParagraph()

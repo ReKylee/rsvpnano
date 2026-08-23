@@ -45,6 +45,8 @@ namespace {
     constexpr const char* kDraculaEpubPath = "/benchmark/Dracula-epub.epub";
     constexpr const char* kDraculaRsvpPath = "/benchmark/Dracula-epub.rsvp";
     constexpr const char* kMultilingualRsvpPath = "/benchmark/multilingual.rsvp";
+    constexpr const char* kVerticalEpubPath = "/benchmark/vertical-cjk.epub";
+    constexpr const char* kVerticalRsvpPath = "/benchmark/vertical-cjk.rsvp";
     constexpr size_t kSdProbeBytes = 256UL * 1024UL;
     constexpr size_t kSdChunkBytes = 4096;
     constexpr size_t kSdRandomIterations = 64;
@@ -290,24 +292,24 @@ namespace {
         showStatus("EPUB", line1 == nullptr ? "" : line1, percentLine.c_str());
     }
 
-    bool benchmarkDraculaConversion() {
-        if (!StorageFiles::fileExistsWithBytes(kDraculaEpubPath)) {
-            ESP_LOGW("bench", "missing_epub path=%s", kDraculaEpubPath);
-            showStatus("EPUB missing", "Copy Dracula-epub.epub", "to /benchmark on SD");
+    bool benchmarkEpubConversion(const char* epubPath, const char* rsvpPath, const char* label) {
+        if (!StorageFiles::fileExistsWithBytes(epubPath)) {
+            ESP_LOGW("bench", "missing_epub path=%s", epubPath);
+            showStatus("EPUB missing", label, "in /benchmark on SD");
             return false;
         }
 
-        Board::Storage::filesystem().remove(kDraculaRsvpPath);
+        Board::Storage::filesystem().remove(rsvpPath);
         Board::Storage::filesystem()
-            .remove(StoragePaths::siblingPathWithExtension(kDraculaEpubPath, StoragePaths::kTempExtension).c_str());
+            .remove(StoragePaths::siblingPathWithExtension(epubPath, StoragePaths::kTempExtension).c_str());
         Board::Storage::filesystem()
-            .remove(StoragePaths::siblingPathWithExtension(kDraculaEpubPath, StoragePaths::kFailedExtension).c_str());
+            .remove(StoragePaths::siblingPathWithExtension(epubPath, StoragePaths::kFailedExtension).c_str());
 
         EpubConverter::Options options;
         options.progressCallback = reportEpubProgress;
         options.progressTitle = "Benchmark";
-        options.progressLabel = "Dracula";
-        return EpubConverter::convertIfNeeded(kDraculaEpubPath, kDraculaRsvpPath, options).has_value();
+        options.progressLabel = label;
+        return EpubConverter::convertIfNeeded(epubPath, rsvpPath, options).has_value();
     }
 
     template<typename Operation>
@@ -936,12 +938,15 @@ namespace {
 
     bool benchmarkReadingSimulation() {
         if (!StorageFiles::fileExistsWithBytes(kDraculaRsvpPath)
-            || !StorageFiles::fileExistsWithBytes(kMultilingualRsvpPath)) {
-            ESP_LOGE("bench", "reading fixtures missing dracula=%u multilingual=%u",
+            || !StorageFiles::fileExistsWithBytes(kMultilingualRsvpPath)
+            || !StorageFiles::fileExistsWithBytes(kVerticalRsvpPath)) {
+            ESP_LOGE("bench", "reading fixtures missing dracula=%u multilingual=%u vertical=%u",
                      StorageFiles::fileExistsWithBytes(kDraculaRsvpPath) ? 1U : 0U,
-                     StorageFiles::fileExistsWithBytes(kMultilingualRsvpPath) ? 1U : 0U);
+                     StorageFiles::fileExistsWithBytes(kMultilingualRsvpPath) ? 1U : 0U,
+                     StorageFiles::fileExistsWithBytes(kVerticalRsvpPath) ? 1U : 0U);
             return false;
         }
+
         if (auto created = StorageFiles::ensureDirectory(StoragePaths::kBooksPath); !created) {
             ESP_LOGE("bench", "reading_books_directory_failed error=%s", created.error().message().c_str());
             return false;
@@ -988,6 +993,28 @@ namespace {
             ok = benchmarkSequentialReading(*reader, settings, storage, battery, preferences,
                                             "reading_multilingual_page", ReadingLoop::wordCount(reader->session))
               && ok;
+        }
+
+        ok = openReadingFixture(*reader, kVerticalRsvpPath, "reading_vertical_cjk_open") && ok;
+        if (reader->store.isOpen()) {
+            if (reader->session.metadata.writingMode != WritingMode::verticalRl) {
+                ESP_LOGE("bench", "vertical fixture lost writing mode");
+                ok = false;
+            } else {
+                settings.mode = settings::ReadingMode::rsvp;
+                reader->refreshTypography();
+                ok = benchmarkSequentialReading(*reader, settings, storage, battery, preferences,
+                                                "reading_vertical_cjk_rsvp",
+                                                ReadingLoop::wordCount(reader->session))
+                  && ok;
+                ReadingLoop::seekTo(reader->session, 0);
+                settings.mode = settings::ReadingMode::page;
+                reader->refreshTypography();
+                ok = benchmarkSequentialReading(*reader, settings, storage, battery, preferences,
+                                                "reading_vertical_cjk_page",
+                                                ReadingLoop::wordCount(reader->session))
+                  && ok;
+            }
         }
 
         ok = openReadingFixture(*reader, kDraculaRsvpPath, "reading_dracula_reopen") && ok;
@@ -1106,7 +1133,13 @@ namespace Benchmark {
             }
             Board::Storage::filesystem().remove(kSdWritePath);
             benchmarkFonts();
-            if (runTimed("epub_dracula_convert", benchmarkDraculaConversion))
+            const bool converted = runTimed("epub_dracula_convert", [] {
+                return benchmarkEpubConversion(kDraculaEpubPath, kDraculaRsvpPath, "Dracula");
+            });
+            const bool verticalConverted = runTimed("epub_vertical_cjk_convert", [] {
+                return benchmarkEpubConversion(kVerticalEpubPath, kVerticalRsvpPath, "Vertical CJK");
+            });
+            if (converted && verticalConverted)
                 benchmarkReadingSimulation();
             else
                 logMetric("reading_simulation", false, 0);

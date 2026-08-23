@@ -62,6 +62,7 @@ namespace {
         size_t wordCount = 0;
         size_t chapterCount = 0;
         std::string lastChapter;
+        bool verticalWritingEmitted = false;
         const std::vector<EpubPackage::TocEntry> toc = {
             {"content.xhtml", "I. The Arrival", "chapter-1"},
             {"content.xhtml", "II. Father and Son", "chapter-2"},
@@ -70,7 +71,7 @@ namespace {
             <p>The harbour was bright.</p><h2 id="chapter-2">II</h2><p>The door opened.</p></body>)";
 
         EpubContent::RsvpContentWriter writer(output, wordCount, 0, lastChapter, chapterCount, toc, true, "content",
-                                               "Book Title");
+                                               "Book Title", verticalWritingEmitted);
         TEST_ASSERT_TRUE(writer.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
         TEST_ASSERT_TRUE(writer.finish());
 
@@ -85,10 +86,11 @@ namespace {
         size_t wordCount = 0;
         size_t chapterCount = 0;
         std::string lastChapter;
+        bool verticalWritingEmitted = false;
         constexpr std::string_view markup = R"(<body><h1>Letter</h1><p>Dear Reader <span>,</span></p></body>)";
 
         EpubContent::RsvpContentWriter writer(output, wordCount, 0, lastChapter, chapterCount, {}, false, "Letter",
-                                               "Letter");
+                                               "Letter", verticalWritingEmitted);
         TEST_ASSERT_TRUE(writer.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
         TEST_ASSERT_TRUE(writer.finish());
 
@@ -101,11 +103,12 @@ namespace {
         size_t wordCount = 0;
         size_t chapterCount = 0;
         std::string lastChapter;
+        bool verticalWritingEmitted = false;
         constexpr std::string_view markup =
             R"(<body lang="ja"><p>日本語 <span xml:lang="en" dir="ltr"><span>English</span></span> 続き</p><p lang="ar" dir="rtl">مرحبا 123</p></body>)";
 
         EpubContent::RsvpContentWriter writer(output, wordCount, 0, lastChapter, chapterCount, {}, false, "Fixture",
-                                               "Fixture", "ja");
+                                               "Fixture", verticalWritingEmitted, "ja");
         TEST_ASSERT_TRUE(writer.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
         TEST_ASSERT_TRUE(writer.finish());
 
@@ -113,6 +116,33 @@ namespace {
         TEST_ASSERT_TRUE(output.contents().contains("@language ja\n@direction auto\n続き\n"));
         TEST_ASSERT_TRUE(output.contents().contains("@language ar\n@direction rtl\n"));
         TEST_ASSERT_TRUE(output.contents().contains("مرحبا 123\n@language ja\n@direction auto\n"));
+    }
+
+    void test_writer_emits_explicit_vertical_writing_mode_once() {
+        File output;
+        size_t wordCount = 0;
+        size_t chapterCount = 0;
+        std::string lastChapter;
+        bool verticalWritingEmitted = false;
+        constexpr std::string_view markup =
+            R"(<head><style>html { -epub-writing-mode: vertical-rl; }</style></head><body><p style="writing-mode: vertical-rl">日本語</p></body>)";
+
+        EpubContent::RsvpContentWriter writer(output, wordCount, 0, lastChapter, chapterCount, {}, false, "Fixture",
+                                               "Fixture", verticalWritingEmitted, "ja");
+        TEST_ASSERT_TRUE(writer.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
+        TEST_ASSERT_TRUE(writer.finish());
+        TEST_ASSERT_EQUAL_STRING("@writing-mode vertical-rl\n@chapter Fixture\n日本語\n", output.contents().c_str());
+
+        File secondOutput;
+        size_t secondWordCount = 0;
+        size_t secondChapterCount = 0;
+        std::string secondLastChapter;
+        EpubContent::RsvpContentWriter secondWriter(secondOutput, secondWordCount, 0, secondLastChapter,
+                                                     secondChapterCount, {}, false, "Second", "Fixture",
+                                                     verticalWritingEmitted, "ja");
+        TEST_ASSERT_TRUE(secondWriter.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
+        TEST_ASSERT_TRUE(secondWriter.finish());
+        TEST_ASSERT_FALSE(secondOutput.contents().contains("@writing-mode"));
     }
 
 } // namespace
@@ -125,5 +155,6 @@ int main(int, char**) {
     RUN_TEST(test_writer_uses_ordered_toc_labels_and_paragraph_markers);
     RUN_TEST(test_writer_preserves_punctuation_only_inline_fragments_without_counting_them_as_words);
     RUN_TEST(test_writer_preserves_nested_language_and_direction_changes);
+    RUN_TEST(test_writer_emits_explicit_vertical_writing_mode_once);
     return UNITY_END();
 }

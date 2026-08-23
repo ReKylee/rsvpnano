@@ -30,6 +30,7 @@ public:
         uint32_t requiredCapabilities = 0;
         std::array<char, 36> locale{};
         uint8_t baseDirection = 0;
+        uint8_t writingMode = 0;
     };
 
     struct __attribute__((packed)) WordRecord {
@@ -51,7 +52,7 @@ public:
     };
 
     static constexpr uint32_t kMagic = 0x58444952UL; // RIDX
-    static constexpr uint32_t kVersion = 11;
+    static constexpr uint32_t kVersion = 12;
     static constexpr size_t kWordCacheSize = 256;
 
     IndexedBookStore() = default;

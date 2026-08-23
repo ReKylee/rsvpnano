@@ -10,6 +10,7 @@
 
 #include "text/TextDirection.h"
 #include "text/UnicodeText.h"
+#include "text/WritingMode.h"
 
 struct ChapterMarker {
     std::string title;
@@ -28,6 +29,7 @@ struct BookMetadata {
     TextDirection baseDirection = TextDirection::automatic;
     uint32_t scriptMask = 0;
     uint32_t requiredCapabilities = 0;
+    WritingMode writingMode = WritingMode::horizontalTb;
     std::vector<ChapterMarker> chapters;
     std::vector<size_t> paragraphStarts;
     std::vector<BookTextRun> textRuns;
@@ -42,6 +44,7 @@ struct BookMetadata {
         baseDirection = TextDirection::automatic;
         scriptMask = 0;
         requiredCapabilities = 0;
+        writingMode = WritingMode::horizontalTb;
         chapters.clear();
         paragraphStarts.clear();
         textRuns.clear();

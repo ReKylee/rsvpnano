@@ -18,6 +18,7 @@ namespace EpubContent {
         RsvpContentWriter(File& output, size_t& wordCount, size_t maxWords, std::string& lastChapterTitle,
                           size_t& chapterCount, std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
                           std::string_view fallbackChapterTitle, std::string_view bookTitle,
+                          bool& verticalWritingEmitted,
                           std::string_view initialLocale = "und", std::string_view initialDirection = "auto");
 
         bool write(const uint8_t* data, size_t length);
@@ -47,6 +48,7 @@ namespace EpubContent {
         bool processCommentChar(char c);
         bool processChar(char c);
         bool changeLanguageState(std::string_view locale, std::string_view direction);
+        bool emitVerticalWriting();
 
         struct LanguageScope {
             std::string tag;
@@ -77,6 +79,10 @@ namespace EpubContent {
         bool reachedWordLimit_ = false;
         bool paragraphOpen_ = false;
         bool documentChapterWritten_ = false;
+        bool& verticalWritingEmitted_;
+        bool inStyle_ = false;
+        bool styleVertical_ = false;
+        uint8_t verticalCssMatch_ = 0;
         size_t nextTocEntry_ = 0;
         int skipDepth_ = 0;
     };

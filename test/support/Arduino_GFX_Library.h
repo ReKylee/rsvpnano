@@ -11,6 +11,22 @@ public:
     explicit Arduino_GFX(int16_t width = 320, int16_t height = 172) : width_(width), height_(height) {}
     virtual ~Arduino_GFX() = default;
 
+    virtual bool begin(int32_t = -1) {
+        return true;
+    }
+    virtual void writePixelPreclipped(int16_t, int16_t, uint16_t) {
+        ++writes;
+    }
+    virtual void writeFastHLine(int16_t x, int16_t y, int16_t width, uint16_t color) {
+        drawFastHLine(x, y, width, color);
+    }
+    virtual void writeFastVLine(int16_t x, int16_t y, int16_t height, uint16_t color) {
+        drawFastVLine(x, y, height, color);
+    }
+    virtual void writeFillRectPreclipped(int16_t x, int16_t y, int16_t width, int16_t height, uint16_t color) {
+        fillRect(x, y, width, height, color);
+    }
+
     virtual int16_t width() const {
         return width_;
     }

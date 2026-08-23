@@ -107,7 +107,8 @@ namespace ui {
         gfx_.fillRect(static_cast<int16_t>(cx - 3), static_cast<int16_t>(cy - 9), 7, 10, surface);
         gfx_.drawFastVLine(cx, static_cast<int16_t>(cy - 9), 9, ink);
     }
-    void Context::drawBatteryIcon(Rect rect, uint8_t percent, bool charging, uint16_t ink, uint16_t surface) {
+    void Context::drawBatteryIcon(Arduino_GFX& output, Rect rect, uint8_t percent, bool charging, uint16_t ink,
+                                  uint16_t surface) {
         constexpr uint16_t kBatteryGood = ui::themes::rgb565(126, 176, 92);
         constexpr uint16_t kBatteryMedium = ui::themes::rgb565(214, 163, 58);
         constexpr uint16_t kBatteryLow = ui::themes::rgb565(200, 82, 82);
@@ -127,26 +128,26 @@ namespace ui {
                                  : percent <= 18            ? kBatteryLow
                                                             : kBatteryMedium;
 
-        gfx_.drawRect(rect.x, rect.y, bodyWidth, rect.h, ink);
+        output.drawRect(rect.x, rect.y, bodyWidth, rect.h, ink);
 
-        gfx_.fillRect(static_cast<int16_t>(rect.x + bodyWidth), static_cast<int16_t>(rect.y + (rect.h - capHeight) / 2),
-                      capWidth, capHeight, ink);
+        output.fillRect(static_cast<int16_t>(rect.x + bodyWidth),
+                        static_cast<int16_t>(rect.y + (rect.h - capHeight) / 2), capWidth, capHeight, ink);
 
         const int16_t innerWidth = std::max<int16_t>(0, static_cast<int16_t>(bodyWidth - 4));
         const int16_t fill = charging ? innerWidth : static_cast<int16_t>(innerWidth * percent / 100);
 
         if (fill > 0) {
-            gfx_.fillRect(static_cast<int16_t>(rect.x + 2), static_cast<int16_t>(rect.y + 2), fill,
-                          static_cast<int16_t>(rect.h - 4), fillColor);
+            output.fillRect(static_cast<int16_t>(rect.x + 2), static_cast<int16_t>(rect.y + 2), fill,
+                            static_cast<int16_t>(rect.h - 4), fillColor);
         }
 
         if (charging) {
-            gfx_.drawLine(static_cast<int16_t>(rect.x + 15), static_cast<int16_t>(rect.y + 2),
-                          static_cast<int16_t>(rect.x + 11), static_cast<int16_t>(rect.y + 7), surface);
-            gfx_.drawLine(static_cast<int16_t>(rect.x + 11), static_cast<int16_t>(rect.y + 7),
-                          static_cast<int16_t>(rect.x + 16), static_cast<int16_t>(rect.y + 7), surface);
-            gfx_.drawLine(static_cast<int16_t>(rect.x + 16), static_cast<int16_t>(rect.y + 7),
-                          static_cast<int16_t>(rect.x + 12), static_cast<int16_t>(rect.y + 12), surface);
+            output.drawLine(static_cast<int16_t>(rect.x + 15), static_cast<int16_t>(rect.y + 2),
+                            static_cast<int16_t>(rect.x + 11), static_cast<int16_t>(rect.y + 7), surface);
+            output.drawLine(static_cast<int16_t>(rect.x + 11), static_cast<int16_t>(rect.y + 7),
+                            static_cast<int16_t>(rect.x + 16), static_cast<int16_t>(rect.y + 7), surface);
+            output.drawLine(static_cast<int16_t>(rect.x + 16), static_cast<int16_t>(rect.y + 7),
+                            static_cast<int16_t>(rect.x + 12), static_cast<int16_t>(rect.y + 12), surface);
         }
 
         markDrawn();

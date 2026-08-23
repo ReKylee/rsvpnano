@@ -19,6 +19,34 @@ namespace screens {
             return {static_cast<int16_t>(std::max<int16_t>(0, width - 126)), 0, 116, 36};
         }
 
+        constexpr ui::Rect portraitTopStrip(int16_t width) {
+            return {0, 0, width, 58};
+        }
+
+        constexpr ui::Rect portraitBatteryRect() {
+            return {6, 4, 92, 30};
+        }
+
+        constexpr ui::Rect portraitFooterRect(int16_t width) {
+            return {static_cast<int16_t>(width - 72), 4, 66, 30};
+        }
+
+        constexpr ui::Rect portraitChapterRect(int16_t width, int16_t height) {
+            return {static_cast<int16_t>(width - 36), 58, 30, static_cast<int16_t>(height - 106)};
+        }
+
+        constexpr ui::Rect portraitFeedbackRect() {
+            return {6, 36, 118, 20};
+        }
+
+        constexpr ui::Rect portraitBottomStrip(int16_t width, int16_t height) {
+            return {0, static_cast<int16_t>(height - 48), width, 48};
+        }
+
+        constexpr ui::Rect portraitPreviousRect(int16_t width, int16_t height, bool leftHanded) {
+            return {static_cast<int16_t>(leftHanded ? 8 : width - 48), static_cast<int16_t>(height - 40), 40, 30};
+        }
+
         constexpr uint16_t kPreviousSentenceTapWidth = 112;
         constexpr uint16_t kTapSlop = 26;
         constexpr uint16_t kDoubleTapSlop = 92;
@@ -433,6 +461,7 @@ namespace screens {
         const bool reading = session.playing;
         const settings::ReadingSettings& settings = settings_;
         const bool pageView = settings.mode == settings::ReadingMode::page || pagePreview_;
+        const bool vertical = session.metadata.writingMode == WritingMode::verticalRl;
         if (!pageView)
             refreshTypeface();
         const auto nextChapter = std::ranges::upper_bound(session.metadata.chapters, session.state.wordIndex, {},
@@ -468,10 +497,15 @@ namespace screens {
         const bool cjkPacing = ReadingLoop::pacingMode(session) == settings::ReadingPacing::cjkPhrase;
         const bool overlayVisible = wpmFeedbackUntilMs_ > nowMs;
 
-        const ui::Rect readingArea{0, 36, ui.width(), static_cast<int16_t>(std::max<int16_t>(0, ui.height() - 72))};
+        const int16_t readingLeft = vertical && pageView ? portraitTopStrip(ui.height()).h : 0;
+        const int16_t readingRight = vertical && pageView ? portraitBottomStrip(ui.height(), ui.width()).h : 0;
+        const ui::Rect readingArea{
+            readingLeft, 36, static_cast<int16_t>(std::max<int16_t>(0, ui.width() - readingLeft - readingRight)),
+            static_cast<int16_t>(std::max<int16_t>(0, ui.height() - 72))};
         if (pageView) {
-            const std::string overlay =
-                overlayVisible ? std::to_string(settings.wpm) + (cjkPacing ? " CPM" : " WPM") : "";
+            const std::string overlay = vertical || !overlayVisible
+                                          ? ""
+                                          : std::to_string(settings.wpm) + (cjkPacing ? " CPM" : " WPM");
             const auto typeface = [this](size_t wordIndex) -> FontCatalog::Face {
                 return pageTypeface(wordIndex);
             };
@@ -487,7 +521,6 @@ namespace screens {
                                ui.color(ui::themes::ColorRole::Background));
 
             const std::string& word = session.currentWord;
-            const bool vertical = session.metadata.writingMode == WritingMode::verticalRl;
             const std::string before = settings.phantomWords ? phantomBefore(session, typography_.fontSizeIndex) : "";
             const std::string after = settings.phantomWords ? phantomAfter(session, typography_.fontSizeIndex) : "";
             const bool bidi = session.metadata.requiresBidi(session.state.wordIndex, session.state.wordIndex + 1);
@@ -678,18 +711,20 @@ namespace screens {
                             rightToLeft ? static_cast<int16_t>(x - 24) : static_cast<int16_t>(x + wordWidth + 24),
                             rightToLeft, baseline, vertical, ui);
 
-            gfx.setFont(static_cast<const GFXfont*>(nullptr));
-            gfx.setTextWrap(false);
-            gfx.setTextSize(2);
-            gfx.setTextColor(ui.color(ui::themes::ColorRole::Muted));
-            gfx.setCursor(settings.leftHanded ? 18 : static_cast<int16_t>(ui.width() - 42),
-                          static_cast<int16_t>(ui.height() / 2 - 8));
-            gfx.print("<<");
-            if (!overlay.empty()) {
-                gfx.setTextColor(ui.color(ui::themes::ColorRole::Accent));
-                gfx.setCursor(static_cast<int16_t>((ui.width() - overlay.size() * 12) / 2),
-                              static_cast<int16_t>(ui.height() - 56));
-                gfx.print(overlay.c_str());
+            if (!vertical) {
+                gfx.setFont(static_cast<const GFXfont*>(nullptr));
+                gfx.setTextWrap(false);
+                gfx.setTextSize(2);
+                gfx.setTextColor(ui.color(ui::themes::ColorRole::Muted));
+                gfx.setCursor(settings.leftHanded ? 18 : static_cast<int16_t>(ui.width() - 42),
+                              static_cast<int16_t>(ui.height() / 2 - 8));
+                gfx.print("<<");
+                if (!overlay.empty()) {
+                    gfx.setTextColor(ui.color(ui::themes::ColorRole::Accent));
+                    gfx.setCursor(static_cast<int16_t>((ui.width() - overlay.size() * 12) / 2),
+                                  static_cast<int16_t>(ui.height() - 56));
+                    gfx.print(overlay.c_str());
+                }
             }
         }
 
@@ -698,19 +733,6 @@ namespace screens {
         const bool showProgress = !reading || settings.progressVisibleWhileReading;
         const bool showBattery = !reading || settings.batteryVisibleWhileReading;
         const bool showBatteryIcon = settings.batteryIconVisible && showBattery;
-        const int16_t footerWidth = showProgress ? static_cast<int16_t>(footer.size() * 12) : 0;
-        const int16_t footerX = settings.leftHanded ? 18 : static_cast<int16_t>(ui.width() - 18 - footerWidth);
-        const int16_t chapterX =
-            settings.leftHanded && showProgress ? static_cast<int16_t>(footerX + footerWidth + 24) : 18;
-        const int16_t chapterWidth =
-            showProgress ? static_cast<int16_t>(ui.width() - 60 - footerWidth) : static_cast<int16_t>(ui.width() - 36);
-        ui.label({chapterX, static_cast<int16_t>(ui.height() - 26), chapterWidth, 26},
-                 showChapter ? chapterLabel.empty() ? ui.text(UiText::Start) : chapterLabel : std::string_view{}, 2,
-                 ui::themes::ColorRole::Muted, settings.leftHanded ? ui::TextAlign::Right : ui::TextAlign::Left, 1,
-                 chapter == nullptr ? session.metadata.locale : session.metadata.localeAt(chapter->wordIndex));
-        ui.label({footerX, static_cast<int16_t>(ui.height() - 26), footerWidth, 26}, footer, 2,
-                 ui::themes::ColorRole::Muted, settings.leftHanded ? ui::TextAlign::Left : ui::TextAlign::Right);
-
         char batteryText[12];
         if (settings.batteryLabel == settings::BatteryLabel::voltage && battery.status.voltage > 0)
             std::snprintf(batteryText, sizeof(batteryText), "%.2fV", battery.status.voltage);
@@ -725,13 +747,73 @@ namespace screens {
         } else
             std::snprintf(batteryText, sizeof(batteryText), "%u%%", static_cast<unsigned int>(battery.status.percent));
         const std::string_view batteryLabel{batteryText};
-        const ui::Rect batteryArea = batteryRect(ui.width());
+        if (vertical) {
+            const int16_t portraitWidth = ui.height();
+            const int16_t portraitHeight = ui.width();
+            const std::string overlay =
+                overlayVisible ? std::to_string(settings.wpm) + (cjkPacing ? " CPM" : " WPM") : "";
+            uint32_t topState = pageView ? ui::Context::signature(overlay)
+                                         : frameSignature(session.currentWord, overlayVisible, cjkPacing, settings);
+            topState = ui::Context::signature(footer, topState);
+            topState = ui::Context::signature(batteryLabel, topState);
+            topState = ui::Context::combine(topState, battery.status.percent);
+            topState = ui::Context::combine(topState, battery.charging);
+            topState = ui::Context::combine(topState, showBattery);
+            topState = ui::Context::combine(topState, showBatteryIcon);
+            topState = ui::Context::combine(topState, showProgress);
+            if (ui.redraw(ui::rotateClockwise(portraitTopStrip(portraitWidth), portraitWidth), topState)) {
+                if (showBattery)
+                    ui.portraitBattery(portraitBatteryRect(), battery.status.percent, battery.charging, batteryLabel,
+                                       showBatteryIcon);
+                if (showProgress)
+                    ui.portraitText(portraitFooterRect(portraitWidth), footer, 2,
+                                    ui.color(ui::themes::ColorRole::Muted), ui::TextAlign::Right);
+                if (!overlay.empty())
+                    ui.portraitText(portraitFeedbackRect(), overlay, 1,
+                                    ui.color(ui::themes::ColorRole::Accent), ui::TextAlign::Center);
+            }
 
-        ui.battery(batteryArea, battery.status.percent, battery.charging, batteryLabel, showBatteryIcon);
+            const std::string_view visibleChapter =
+                showChapter ? chapterLabel.empty() ? ui.text(UiText::Start) : chapterLabel : std::string_view{};
+            uint32_t chapterState = ui::Context::signature(visibleChapter);
+            chapterState = ui::Context::combine(chapterState, showChapter);
+            const ui::Rect chapterArea = portraitChapterRect(portraitWidth, portraitHeight);
+            if (ui.redraw(ui::rotateClockwise(chapterArea, portraitWidth), chapterState))
+                ui.portraitVerticalText(chapterArea, visibleChapter, 1,
+                                        ui.color(ui::themes::ColorRole::Muted),
+                                        chapter == nullptr ? session.metadata.locale
+                                                           : session.metadata.localeAt(chapter->wordIndex));
+
+            uint32_t bottomState = pageView ? ui::Context::combine(0, settings.leftHanded)
+                                            : frameSignature(session.currentWord, overlayVisible, cjkPacing, settings);
+            if (ui.redraw(ui::rotateClockwise(portraitBottomStrip(portraitWidth, portraitHeight), portraitWidth),
+                          bottomState)) {
+                ui.portraitText(portraitPreviousRect(portraitWidth, portraitHeight, settings.leftHanded), "<<", 2,
+                                ui.color(ui::themes::ColorRole::Muted), ui::TextAlign::Center);
+            }
+        } else {
+            const int16_t footerWidth = showProgress ? static_cast<int16_t>(footer.size() * 12) : 0;
+            const int16_t footerX = settings.leftHanded ? 18 : static_cast<int16_t>(ui.width() - 18 - footerWidth);
+            const int16_t chapterX =
+                settings.leftHanded && showProgress ? static_cast<int16_t>(footerX + footerWidth + 24) : 18;
+            const int16_t chapterWidth = showProgress ? static_cast<int16_t>(ui.width() - 60 - footerWidth)
+                                                      : static_cast<int16_t>(ui.width() - 36);
+            ui.label({chapterX, static_cast<int16_t>(ui.height() - 26), chapterWidth, 26},
+                     showChapter ? chapterLabel.empty() ? ui.text(UiText::Start) : chapterLabel : std::string_view{}, 2,
+                     ui::themes::ColorRole::Muted, settings.leftHanded ? ui::TextAlign::Right : ui::TextAlign::Left, 1,
+                     chapter == nullptr ? session.metadata.locale : session.metadata.localeAt(chapter->wordIndex));
+            ui.label({footerX, static_cast<int16_t>(ui.height() - 26), footerWidth, 26}, footer, 2,
+                     ui::themes::ColorRole::Muted, settings.leftHanded ? ui::TextAlign::Left : ui::TextAlign::Right);
+            ui.battery(batteryRect(ui.width()), battery.status.percent, battery.charging, batteryLabel,
+                       showBatteryIcon);
+        }
     }
 
     bool ReaderScreen::batteryTouched(const ui::Touch& touch) const {
-        return ui::contains(batteryRect(gfx_.width()), touch.x, touch.y);
+        const ui::Rect rect = session.metadata.writingMode == WritingMode::verticalRl
+                                ? ui::rotateClockwise(portraitBatteryRect(), gfx_.height())
+                                : batteryRect(gfx_.width());
+        return ui::contains(rect, touch.x, touch.y);
     }
 
     bool ReaderScreen::batteryTapped(const ui::Touch& touch) const {
@@ -743,6 +825,11 @@ namespace screens {
     }
 
     bool ReaderScreen::previousSentenceTapped(uint16_t x, uint16_t y) const {
+        if (session.metadata.writingMode == WritingMode::verticalRl) {
+            const ui::Rect previous = ui::rotateClockwise(
+                portraitPreviousRect(gfx_.height(), gfx_.width(), settings_.leftHanded), gfx_.height());
+            return ui::contains(previous, x, y);
+        }
         if (ui::contains(batteryRect(gfx_.width()), x, y))
             return false;
         return settings_.leftHanded
@@ -840,6 +927,8 @@ namespace screens {
                 lastTapValid_ = false;
                 touchIntent_ = TouchIntent::Scrub;
                 pagePreview_ = settings_.mode != settings::ReadingMode::page;
+                if (pagePreview_)
+                    pageState_.pageStart = SIZE_MAX;
             } else if (absY > absX + kAxisBias && (pagePreview_ || absY >= kSwipeThreshold)) {
                 lastTapValid_ = false;
                 touchIntent_ = pagePreview_ ? TouchIntent::Paragraph : TouchIntent::Wpm;
@@ -892,10 +981,19 @@ namespace screens {
             pagePreview_ = false;
             return;
         }
-        const uint16_t footerTapWidth = std::min<uint16_t>(220, static_cast<uint16_t>(gfx_.width() / 2));
-        if (touch.y >= static_cast<uint16_t>(std::max<int16_t>(0, gfx_.height() - 40))
-            && (settings_.leftHanded ? touch.x <= footerTapWidth
-                                     : touch.x >= static_cast<uint16_t>(gfx_.width() - footerTapWidth))) {
+        const bool footerTapped = session.metadata.writingMode == WritingMode::verticalRl
+                                    ? ui::contains(ui::rotateClockwise(portraitFooterRect(gfx_.height()), gfx_.height()),
+                                                   touch.x, touch.y)
+                                    : [&] {
+                                          const uint16_t width =
+                                              std::min<uint16_t>(220, static_cast<uint16_t>(gfx_.width() / 2));
+                                          return touch.y >= static_cast<uint16_t>(
+                                                                      std::max<int16_t>(0, gfx_.height() - 40))
+                                              && (settings_.leftHanded
+                                                      ? touch.x <= width
+                                                      : touch.x >= static_cast<uint16_t>(gfx_.width() - width));
+                                      }();
+        if (footerTapped) {
             settings_.footerMetric = settings::cycleEnum(settings_.footerMetric);
             settingsStore.acceptChanges();
             lastTapValid_ = false;

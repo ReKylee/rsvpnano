@@ -555,7 +555,15 @@ void test_layout_cursors_are_deterministic() {
     TEST_ASSERT_EQUAL_INT16(24, grid.next().y);
 }
 
-void test_page_reader_uses_reader_typeface_after_skipping_a_colliding_page_range() {
+void test_portrait_rects_map_to_the_landscape_framebuffer() {
+    TEST_ASSERT_TRUE(ui::Rect({0, 0, 58, 172}) == ui::rotateClockwise({0, 0, 172, 58}, 172));
+    TEST_ASSERT_TRUE(ui::Rect({592, 0, 48, 172}) == ui::rotateClockwise({0, 592, 172, 48}, 172));
+    TEST_ASSERT_TRUE(ui::Rect({58, 6, 534, 30}) == ui::rotateClockwise({136, 58, 30, 534}, 172));
+    TEST_ASSERT_TRUE(ui::contains(ui::rotateClockwise({6, 4, 92, 30}, 172), 10, 100));
+    TEST_ASSERT_FALSE(ui::contains(ui::rotateClockwise({6, 4, 92, 30}, 172), 100, 10));
+}
+
+void test_page_reader_reselects_typeface_after_seek_or_invalidation() {
     Arduino_GFX gfx(136, 17);
     ui::Context context(gfx);
     ui::fonts::AlphaTextRenderer<640> text(gfx);
@@ -570,7 +578,9 @@ void test_page_reader_uses_reader_typeface_after_skipping_a_colliding_page_range
     ReadingLoop::setWords(session, words, 0);
     session.metadata.paragraphStarts = {0, 4, 8};
     screens::PageReader::State state;
-    const auto typeface = [](size_t) -> FontCatalog::Face {
+    size_t selections = 0;
+    const auto typeface = [&](size_t) -> FontCatalog::Face {
+        ++selections;
         return {std::cref(kReaderFont), nullptr};
     };
     constexpr ui::Rect area{0, 0, 136, 17};
@@ -593,6 +603,17 @@ void test_page_reader_uses_reader_typeface_after_skipping_a_colliding_page_range
     TEST_ASSERT_EQUAL_INT16(8, state.words.front().width);
     TEST_ASSERT_EQUAL(4, gfx.bitmapWrites);
     TEST_ASSERT_EQUAL(0, gfx.textWrites);
+
+    const size_t faceCapacity = state.faces.capacity();
+    const size_t wordCapacity = state.words.capacity();
+    selections = 0;
+    state.pageStart = SIZE_MAX;
+    context.beginFrame(1);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, area);
+    context.endFrame();
+    TEST_ASSERT_GREATER_THAN(0, selections);
+    TEST_ASSERT_EQUAL(faceCapacity, state.faces.capacity());
+    TEST_ASSERT_EQUAL(wordCapacity, state.words.capacity());
 }
 
 void test_page_reader_reanchors_distant_forward_seek_without_laying_out_intermediate_pages() {
@@ -1492,7 +1513,8 @@ int main(int, char**) {
     RUN_TEST(test_disabled_button_ignores_touch);
     RUN_TEST(test_tap_target_handles_touch_without_drawing);
     RUN_TEST(test_layout_cursors_are_deterministic);
-    RUN_TEST(test_page_reader_uses_reader_typeface_after_skipping_a_colliding_page_range);
+    RUN_TEST(test_portrait_rects_map_to_the_landscape_framebuffer);
+    RUN_TEST(test_page_reader_reselects_typeface_after_seek_or_invalidation);
     RUN_TEST(test_page_reader_reanchors_distant_forward_seek_without_laying_out_intermediate_pages);
     RUN_TEST(test_page_reader_uses_each_words_selected_typeface_for_layout);
     RUN_TEST(test_page_reader_maps_vertical_columns_to_the_landscape_framebuffer);

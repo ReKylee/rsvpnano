@@ -35,6 +35,10 @@ namespace ui {
         return x >= rect.x && y >= rect.y && x < rect.x + rect.w && y < rect.y + rect.h;
     }
 
+    constexpr Rect rotateClockwise(Rect rect, int16_t sourceWidth) {
+        return {rect.y, static_cast<int16_t>(sourceWidth - rect.x - rect.w), rect.h, rect.w};
+    }
+
     struct Column {
         Rect bounds;
         int16_t gap = 0;
@@ -212,6 +216,12 @@ namespace ui {
         void markDrawn();
         void drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
                       TextAlign align = TextAlign::Start, uint8_t maxLines = 1, std::string_view textLocale = {});
+        void portraitText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
+                          TextAlign align = TextAlign::Start, uint8_t maxLines = 1,
+                          std::string_view textLocale = {});
+        void portraitVerticalText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
+                                  std::string_view textLocale = {});
+        void portraitBattery(Rect rect, uint8_t percent, bool charging, std::string_view label, bool showIcon);
 
         uint16_t color(ui::themes::ColorRole role) const;
         uint16_t blend(ui::themes::ColorRole role, uint8_t alpha) const;
@@ -269,7 +279,10 @@ namespace ui {
         void drawLanguageIcon(Rect rect, uint16_t ink);
         void drawHourglassIcon(Rect rect, uint16_t ink);
         void drawPowerIcon(Rect rect, uint16_t ink, uint16_t surface);
-        void drawBatteryIcon(Rect rect, uint8_t percent, bool charging, uint16_t ink, uint16_t surface);
+        void drawBatteryIcon(Arduino_GFX& output, Rect rect, uint8_t percent, bool charging, uint16_t ink,
+                             uint16_t surface);
+        void drawText(Arduino_GFX& output, Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
+                      TextAlign align, uint8_t maxLines, std::string_view textLocale);
         int valueAt(Rect rect, uint16_t x, int minimum, int maximum, int step) const;
         bool tapped(size_t slot, Rect rect);
         bool sliderValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,

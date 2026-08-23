@@ -74,6 +74,11 @@ internal object BrowserSerial {
             }
             .getOrDefault(false)
     }
+
+    suspend fun releaseForInstaller(presenter: CompanionPresenter) {
+        api.release()
+        presenter.cancelNanoSelection()
+    }
 }
 
 internal fun requestUsbConnection(presenter: CompanionPresenter) = BrowserSerial.connect(presenter)
@@ -84,6 +89,7 @@ internal class WebSerialNanoApi : NanoApi {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val requestMutex = Mutex()
+    private val sessionMutex = Mutex()
     private val writeMutex = Mutex()
     private var frames = Channel<SerialFrame>(Channel.UNLIMITED)
     private var readerJob: Job? = null
@@ -91,7 +97,7 @@ internal class WebSerialNanoApi : NanoApi {
     private var nextRequestId = 1u
     private var opened = false
 
-    suspend fun open(authorizedOnly: Boolean = false): Boolean {
+    suspend fun open(authorizedOnly: Boolean = false): Boolean = sessionMutex.withLock {
         closeSession()
         if (authorizedOnly) {
             if (!bridgeOpenAuthorized()) return false
@@ -122,15 +128,19 @@ internal class WebSerialNanoApi : NanoApi {
                     runCatching { sendFrame(SerialFrame(SerialFrameType.Ping)) }
                 }
             }
-            return true
+            true
         } catch (error: Throwable) {
             bridgeCloseIgnoringErrors()
             throw error
         }
     }
 
+    suspend fun release() = sessionMutex.withLock {
+        closeSession()
+    }
+
     override fun close() {
-        scope.launch { closeSession() }
+        scope.launch { release() }
     }
 
     override suspend fun fetchDevice(baseUrl: String): NanoInfo = get("/api/v2/device", NanoInfo.serializer())

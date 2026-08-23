@@ -62,6 +62,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.rsvpnano.app.NanoConnectionTransport
 import com.rsvpnano.ui.CompanionPresenter
 import com.rsvpnano.ui.CompanionUiState
 import io.github.vinceglb.filekit.BrowserFile
@@ -119,6 +120,7 @@ internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState,
     val board = InstallerBoards.firstOrNull { it.id == boardId } ?: InstallerBoards.first()
     val serialAvailable = supportsWebSerial()
     val secure = isSecureContext()
+    val installerReady = state.connectionState.transport != NanoConnectionTransport.Usb
     val firmwarePicker = rememberFilePickerLauncher(FileKitType.File(listOf("bin"))) { file ->
         val browserFile = (file?.webFile as? WebFile.FileWrapper)?.file
         selectedFirmware = if (file != null && browserFile != null) SelectedFirmware(file.name, browserFile) else null
@@ -141,6 +143,12 @@ internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState,
                 if (reconnectAuthorizedUsb(presenter)) return@LaunchedEffect
                 delay(3_000)
             }
+        }
+    }
+
+    androidx.compose.runtime.LaunchedEffect(step, state.connectionState.transport) {
+        if (step == 1 && state.connectionState.transport == NanoConnectionTransport.Usb) {
+            BrowserSerial.releaseForInstaller(presenter)
         }
     }
 
@@ -179,6 +187,7 @@ internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState,
                             state = state,
                             secure = secure,
                             serialAvailable = serialAvailable,
+                            installerReady = installerReady,
                             stagedFirmware = stagedFirmware,
                             deployedRelease = deployedRelease,
                             releaseError = releaseError,
@@ -215,6 +224,7 @@ internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState,
                                 state = state,
                                 secure = secure,
                                 serialAvailable = serialAvailable,
+                                installerReady = installerReady,
                                 stagedFirmware = stagedFirmware,
                                 deployedRelease = deployedRelease,
                                 releaseError = releaseError,
@@ -288,6 +298,7 @@ private fun WizardStage(
     state: CompanionUiState,
     secure: Boolean,
     serialAvailable: Boolean,
+    installerReady: Boolean,
     stagedFirmware: String?,
     deployedRelease: DeployedRelease?,
     releaseError: String?,
@@ -327,6 +338,7 @@ private fun WizardStage(
                         board = board,
                         secure = secure,
                         serialAvailable = serialAvailable,
+                        installerReady = installerReady,
                         stagedFirmware = stagedFirmware,
                         deployedRelease = deployedRelease,
                         releaseError = releaseError,
@@ -366,6 +378,7 @@ private fun InstallPage(
     board: InstallerBoard,
     secure: Boolean,
     serialAvailable: Boolean,
+    installerReady: Boolean,
     stagedFirmware: String?,
     deployedRelease: DeployedRelease?,
     releaseError: String?,
@@ -381,6 +394,7 @@ private fun InstallPage(
         WizardIntro("FIRMWARE", "Install RSVP Nano", "Plug in ${board.name}, then choose it when your browser asks.")
         if (!secure) Text("Open this page over HTTPS before installing.", color = MaterialTheme.colorScheme.error)
         if (!serialAvailable) Text("Use Chrome or Edge on a computer to install over USB.", color = MaterialTheme.colorScheme.tertiary)
+        if (!installerReady) Text("Preparing USB for the installer...", color = MaterialTheme.colorScheme.tertiary)
         if (deployedRelease != null && stagedFirmware == null) {
             Text("The latest release does not include this Nano yet.", color = MaterialTheme.colorScheme.tertiary)
         } else if (releaseError != null) {
@@ -391,13 +405,13 @@ private fun InstallPage(
             val stacked = maxWidth < 620.dp
             if (stacked) {
                 Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                    LatestInstallChoice(deployedRelease, secure && serialAvailable && stagedFirmware != null, onInstallLatest)
-                    LocalInstallChoice(selectedFirmware, board, secure, serialAvailable, onChooseFile, onInstallFile)
+                    LatestInstallChoice(deployedRelease, secure && serialAvailable && installerReady && stagedFirmware != null, onInstallLatest)
+                    LocalInstallChoice(selectedFirmware, board, secure, serialAvailable && installerReady, onChooseFile, onInstallFile)
                 }
             } else {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(26.dp)) {
                     Column(Modifier.weight(1f)) {
-                        LatestInstallChoice(deployedRelease, secure && serialAvailable && stagedFirmware != null, onInstallLatest)
+                        LatestInstallChoice(deployedRelease, secure && serialAvailable && installerReady && stagedFirmware != null, onInstallLatest)
                     }
                     Column(
                         Modifier.weight(1f).border(
@@ -406,7 +420,7 @@ private fun InstallPage(
                             shape = RoundedCornerShape(18.dp),
                         ).padding(18.dp),
                     ) {
-                        LocalInstallChoice(selectedFirmware, board, secure, serialAvailable, onChooseFile, onInstallFile)
+                        LocalInstallChoice(selectedFirmware, board, secure, serialAvailable && installerReady, onChooseFile, onInstallFile)
                     }
                 }
             }

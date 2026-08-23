@@ -34,7 +34,7 @@ jobs:
   build-ios:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
@@ -46,7 +46,7 @@ jobs:
         run: bash ./gradlew checkIos --no-daemon
       - name: Upload Gradle reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ios-gradle-reports
           path: |
@@ -56,7 +56,7 @@ jobs:
         run: bash RSVPNanoCompanion/tools/build_shared_xcframework.sh
       - name: Upload shared artifacts
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: shared-xcframework
           path: RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/SharedFrameworks/shared.xcframework

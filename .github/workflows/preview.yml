@@ -26,7 +26,7 @@ jobs:
       commit_sha: ${{ steps.preview.outputs.commit_sha }}
       title: ${{ steps.preview.outputs.title }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -71,7 +71,7 @@ jobs:
     needs: [prepare, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: firmware-assets
           path: web/firmware

@@ -50,10 +50,10 @@ namespace screens {
         int focusOffset(std::string_view word) const;
         int16_t wordAdvance(std::span<const BidiText::Codepoint> word) const;
         void drawPhantom(std::string_view value, bool rightToLeft, int16_t edge, bool extendsLeft, int16_t baseline,
-                         ui::Context& ui);
-        void drawWord(std::string_view word, int16_t x, int16_t baseline, int focus, ui::Context& ui);
+                         bool vertical, ui::Context& ui);
+        void drawWord(std::string_view word, int16_t x, int16_t baseline, int focus, bool vertical, ui::Context& ui);
         void drawWord(std::span<const BidiText::Codepoint> word, int16_t x, int16_t baseline, size_t wordOffset,
-                      int focus, ui::Context& ui);
+                      int focus, bool vertical, ui::Context& ui);
         std::string phantomBefore(const ReadingSession& reader, uint8_t sizeIndex) const;
         std::string phantomAfter(const ReadingSession& reader, uint8_t sizeIndex) const;
         uint32_t frameSignature(std::string_view word, bool overlayVisible, bool cjkPacing,

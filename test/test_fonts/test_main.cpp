@@ -483,6 +483,73 @@ void test_compact_strike_renders_one_bit_rows() {
     TEST_ASSERT_EQUAL(2, gfx.writes);
 }
 
+class BitmapBoundsGfx final : public Arduino_GFX {
+public:
+    using Arduino_GFX::Arduino_GFX;
+
+    void draw16bitRGBBitmap(int16_t x, int16_t y, uint16_t*, int16_t width, int16_t height) override {
+        minX = std::min(minX, x);
+        minY = std::min(minY, y);
+        maxX = std::max<int16_t>(maxX, x + width);
+        maxY = std::max<int16_t>(maxY, y + height);
+        Arduino_GFX::draw16bitRGBBitmap(x, y, nullptr, width, height);
+    }
+
+    void resetBounds() {
+        minX = minY = INT16_MAX;
+        maxX = maxY = INT16_MIN;
+    }
+
+    int16_t inkWidth() const {
+        return static_cast<int16_t>(maxX - minX);
+    }
+
+    int16_t inkHeight() const {
+        return static_cast<int16_t>(maxY - minY);
+    }
+
+    int16_t minX = INT16_MAX;
+    int16_t minY = INT16_MAX;
+    int16_t maxX = INT16_MIN;
+    int16_t maxY = INT16_MIN;
+};
+
+void test_vertical_glyphs_are_counter_rotated_for_the_portrait_panel() {
+    constexpr uint8_t bitmap[]{0x80, 0x80, 0xC0};
+    constexpr ui::fonts::AlphaGlyph glyphs[]{
+        {.bitmapOffset = 0, .width = 2, .height = 3, .rowStride = 1, .xAdvance = 4, .bitmapBytes = 3},
+        {.bitmapOffset = 0, .width = 2, .height = 3, .rowStride = 1, .xAdvance = 4, .bitmapBytes = 3},
+    };
+    constexpr ui::fonts::AlphaGlyphIdentity identities[]{{'A', 0}, {0x65E5, 0}};
+    constexpr RFont4::VerticalRule rules[]{{'A', RFont4::kRotateVerticalGlyph}};
+    const ui::fonts::AlphaFont font{
+        .bitmap = bitmap,
+        .glyphs = glyphs,
+        .identities = identities,
+        .verticalRules = rules,
+        .glyphCount = 2,
+        .verticalRuleCount = 1,
+        .yAdvance = 4,
+        .ascent = 3,
+        .pixelsPerEm = 4,
+        .bitsPerPixel = 1,
+    };
+    BitmapBoundsGfx gfx{20, 20};
+    ui::fonts::AlphaTextRenderer<20> renderer{gfx};
+    TEST_ASSERT_TRUE(renderer.begin());
+    renderer.setFont(font);
+    renderer.setTextColor(0xFFFF, 0);
+
+    TEST_ASSERT_EQUAL_INT16(4, renderer.drawVerticalCodepoint(0x65E5, 4, 10));
+    TEST_ASSERT_EQUAL_INT16(3, gfx.inkWidth());
+    TEST_ASSERT_EQUAL_INT16(2, gfx.inkHeight());
+
+    gfx.resetBounds();
+    TEST_ASSERT_EQUAL_INT16(4, renderer.drawVerticalCodepoint('A', 4, 10));
+    TEST_ASSERT_EQUAL_INT16(2, gfx.inkWidth());
+    TEST_ASSERT_EQUAL_INT16(3, gfx.inkHeight());
+}
+
 void test_vertical_cjk_fixtures_render_from_sparse_rules() {
     constexpr std::array fixtures{
         std::pair{"fonts/Noto Serif Japanese/font.rfont4", std::string_view{"日本語「縦書き。」"}},
@@ -493,20 +560,20 @@ void test_vertical_cjk_fixtures_render_from_sparse_rules() {
         const auto header = recordAt<RFont4::Header>(bytes, 0);
         TEST_ASSERT_GREATER_THAN(0, header.verticalRuleCount);
         const auto font = residentStrike(bytes, RFont4::kCompactStrikeIndex);
-        Arduino_GFX gfx{96, 172};
-        ui::fonts::AlphaTextRenderer<96> renderer{gfx};
+        Arduino_GFX gfx{172, 96};
+        ui::fonts::AlphaTextRenderer<172> renderer{gfx};
         TEST_ASSERT_TRUE(renderer.begin());
         renderer.setFont(font);
         renderer.setTextColor(0xFFFF, 0);
 
-        int16_t top = 0;
+        int16_t x = 0;
         std::string_view remaining = text;
         uint32_t codepoint = 0;
         size_t count = 0;
         while (Utf8Text::next(remaining, codepoint)) {
-            const int16_t advance = renderer.drawVerticalCodepoint(codepoint, 48, top);
+            const int16_t advance = renderer.drawVerticalCodepoint(codepoint, x, 48);
             TEST_ASSERT_GREATER_THAN(0, advance);
-            top = static_cast<int16_t>(top + advance);
+            x = static_cast<int16_t>(x + advance);
             ++count;
         }
         TEST_ASSERT_GREATER_THAN(5, count);
@@ -524,6 +591,7 @@ int main(int, char**) {
     RUN_TEST(test_all_rfont4_assets_are_fully_validated_off_device);
     RUN_TEST(test_shaper_reuses_rfont4_nominal_glyphs_and_advances);
     RUN_TEST(test_compact_strike_renders_one_bit_rows);
+    RUN_TEST(test_vertical_glyphs_are_counter_rotated_for_the_portrait_panel);
     RUN_TEST(test_vertical_cjk_fixtures_render_from_sparse_rules);
     return UNITY_END();
 }

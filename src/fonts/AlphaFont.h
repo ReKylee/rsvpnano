@@ -359,19 +359,30 @@ namespace ui::fonts {
             return drawAlpha(*glyph, x, baseline);
         }
 
-        int16_t verticalAdvance() const {
-            return font_ == nullptr ? 0 : std::max<int16_t>(font_->pixelsPerEm, font_->yAdvance);
-        }
-
-        int16_t drawVerticalCodepoint(uint32_t codepoint, int16_t centerX, int16_t top) {
+        int16_t drawVerticalCodepoint(uint32_t codepoint, int16_t x, int16_t centerY) {
             uint16_t glyphIndex = 0;
             if (!findGlyphIndex(codepoint, glyphIndex))
                 return 0;
+            const AlphaGlyph* canonical = glyphAt(glyphIndex);
+            if (canonical == nullptr)
+                return 0;
+            const int16_t advance = readGlyph(*canonical).xAdvance;
+            return drawVerticalGlyph(glyphIndex, codepoint, advance, x, centerY);
+        }
+
+        int16_t drawVerticalGlyph(const PositionedGlyph& positioned, uint32_t codepoint, int16_t x, int16_t centerY) {
+            return drawVerticalGlyph(positioned.glyphIndex, codepoint, positioned.xAdvance,
+                                     static_cast<int16_t>(x + positioned.xOffset), centerY);
+        }
+
+    private:
+        int16_t drawVerticalGlyph(uint16_t glyphIndex, uint32_t codepoint, int16_t advance, int16_t x,
+                                  int16_t centerY) {
             RFont4::VerticalRule rule;
-            bool rotate = false;
+            bool sideways = false;
             if (verticalRule(codepoint, rule)) {
                 if (rule.alternateIndex == RFont4::kRotateVerticalGlyph)
-                    rotate = true;
+                    sideways = true;
                 else
                     glyphIndex = rule.alternateIndex;
             }
@@ -379,20 +390,16 @@ namespace ui::fonts {
             if (glyph == nullptr)
                 return 0;
             const AlphaGlyph metrics = readGlyph(*glyph);
-            const int16_t advance = verticalAdvance();
-            const int16_t inkWidth = rotate ? metrics.height : metrics.width;
-            const int16_t inkHeight = rotate ? metrics.width : metrics.height;
-            const int16_t x = rotate ? static_cast<int16_t>(centerX - inkWidth / 2)
-                                     : static_cast<int16_t>(centerX - advance / 2 + metrics.xOffset);
-            const int16_t y = rotate ? static_cast<int16_t>(top + (advance - inkHeight) / 2)
-                                     : static_cast<int16_t>(top + font_->ascent + metrics.yOffset);
-            if (rotate)
-                drawRotatedGlyph(metrics, x, y);
+            if (sideways)
+                drawGlyph(metrics, static_cast<int16_t>(x + (advance - metrics.width) / 2),
+                          static_cast<int16_t>(centerY - metrics.height / 2));
             else
-                drawGlyph(metrics, x, y);
+                drawCounterRotatedGlyph(metrics, static_cast<int16_t>(x + (advance - metrics.height) / 2),
+                                        static_cast<int16_t>(centerY - metrics.width / 2));
             return advance;
         }
 
+    public:
         void prepare(std::string_view text) {
             if (ready_ && font_ != nullptr)
                 prepareBitmaps(text);
@@ -1043,7 +1050,7 @@ namespace ui::fonts {
             }
         }
 
-        void drawRotatedGlyph(const AlphaGlyph& glyph, int16_t x, int16_t y) {
+        void drawCounterRotatedGlyph(const AlphaGlyph& glyph, int16_t x, int16_t y) {
             if (glyph.width == 0 || glyph.height == 0 || glyph.height > MaxRowWidth)
                 return;
             for (uint8_t sourceX = 0; sourceX < glyph.width; ++sourceX) {
@@ -1053,7 +1060,7 @@ namespace ui::fonts {
                     const uint8_t* packedRow = nullptr;
                     if (!prepareRow(glyph, sourceY, packedRow))
                         return;
-                    const int16_t destinationX = static_cast<int16_t>(glyph.height - sourceY - 1);
+                    const int16_t destinationX = sourceY;
                     const uint8_t coverage = coverageAt(packedRow, sourceX);
                     strip_[0][destinationX] = blend_[coverage];
                     if (coverage != 0) {
@@ -1062,7 +1069,8 @@ namespace ui::fonts {
                     }
                 }
                 if (firstInk < lastInk)
-                    output_.draw16bitRGBBitmap(static_cast<int16_t>(x + firstInk), static_cast<int16_t>(y + sourceX),
+                    output_.draw16bitRGBBitmap(static_cast<int16_t>(x + firstInk),
+                                               static_cast<int16_t>(y + glyph.width - sourceX - 1),
                                                strip_[0] + firstInk, lastInk - firstInk, 1);
             }
         }

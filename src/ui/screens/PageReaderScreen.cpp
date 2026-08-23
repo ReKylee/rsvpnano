@@ -306,30 +306,33 @@ namespace screens::PageReader {
             const size_t wordCount = ReadingLoop::wordCount(session);
             size_t index = std::min(start, wordCount);
             state.pageStart = index;
-            const int16_t top = static_cast<int16_t>(area.y + kMarginY);
+            const int16_t left = static_cast<int16_t>(area.x + kMarginX);
+            const int16_t right = static_cast<int16_t>(area.x + area.w - kMarginX);
             const int16_t bottom = static_cast<int16_t>(area.y + area.h - kMarginY);
-            int16_t y = top;
-            int16_t columnWidth = 0;
-            int16_t right = static_cast<int16_t>(area.x + area.w - kMarginX);
+            int16_t x = left;
+            int16_t rowTop = static_cast<int16_t>(area.y + kMarginY);
+            int16_t rowHeight = 0;
             while (index < wordCount) {
                 const FontCatalog::Face face = typeface(index);
                 activateFace(text, face);
-                const int16_t advance = std::max<int16_t>(1, text.verticalAdvance());
-                const int16_t height = static_cast<int16_t>(std::min<size_t>(
-                    INT16_MAX, Utf8Text::count(ReadingLoop::wordAt(session, index)) * static_cast<size_t>(advance)));
-                const int16_t gap = paragraphStart(session, index) && y != top ? advance / 2 : 0;
-                if (y != top && y + gap + height > bottom) {
-                    right = static_cast<int16_t>(right - columnWidth - kLineGap);
-                    y = top;
-                    columnWidth = 0;
+                const std::string_view value = ReadingLoop::wordAt(session, index);
+                const int16_t width = text.textAdvance(value);
+                const int16_t glyphHeight = std::max<int16_t>(1, text.pixelsPerEm());
+                const int16_t gap = paragraphStart(session, index) && x != left ? glyphHeight / 2 : 0;
+                if (x != left && x + gap + width > right) {
+                    rowTop = static_cast<int16_t>(rowTop + rowHeight + kLineGap);
+                    x = left;
+                    rowHeight = 0;
                 }
-                columnWidth = std::max(columnWidth, advance);
-                const int16_t centerX = static_cast<int16_t>(right - columnWidth / 2);
-                if (centerX - columnWidth / 2 < area.x + kMarginX)
+                rowHeight = std::max(rowHeight, glyphHeight);
+                if (rowTop + rowHeight > bottom)
                     break;
                 const uint8_t faceIndex = rememberFace(state, face);
-                state.words.push_back({.x = centerX, .y = static_cast<int16_t>(y + gap), .faceIndex = faceIndex});
-                y = static_cast<int16_t>(y + gap + height);
+                state.words.push_back({.width = width,
+                                       .x = static_cast<int16_t>(x + gap),
+                                       .y = static_cast<int16_t>(rowTop + rowHeight / 2),
+                                       .faceIndex = faceIndex});
+                x = static_cast<int16_t>(x + gap + width);
                 ++index;
             }
             state.pageEnd = index;
@@ -340,11 +343,11 @@ namespace screens::PageReader {
             activateFace(text, faceAt(state, index));
             text.setTextColor(ui.color(role), ui.color(ui::themes::ColorRole::Background));
             const State::Word& word = wordAt(state, index);
-            int16_t y = word.y;
+            int16_t x = word.x;
             std::string_view value = ReadingLoop::wordAt(session, index);
             uint32_t codepoint = 0;
             while (Utf8Text::next(value, codepoint))
-                y = static_cast<int16_t>(y + text.drawVerticalCodepoint(codepoint, word.x, y));
+                x = static_cast<int16_t>(x + text.drawVerticalCodepoint(codepoint, x, word.y));
         }
 
         void drawOverlay(ui::Context& ui, ui::Rect area, std::string_view overlay) {

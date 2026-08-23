@@ -50,6 +50,15 @@ namespace screens {
             return 4;
         }
 
+        uint32_t codepointAt(std::string_view text, size_t offset) {
+            if (offset >= text.size())
+                return 0;
+            text.remove_prefix(offset);
+            uint32_t codepoint = 0;
+            Utf8Text::next(text, codepoint);
+            return codepoint;
+        }
+
     } // namespace
 
     ReaderScreen::ReaderScreen(Arduino_GFX& gfx, settings::ReadingSettings& settings) :
@@ -442,53 +451,7 @@ namespace screens {
                                ui.color(ui::themes::ColorRole::Background));
 
             const std::string& word = session.currentWord;
-            if (session.metadata.writingMode == WritingMode::verticalRl) {
-                const int focus = focusOffset(word);
-                const int16_t advance = std::max<int16_t>(1, text_.verticalAdvance());
-                size_t offset = 0;
-                int16_t focusOrdinal = 0;
-                int16_t ordinal = 0;
-                for (std::string_view remaining = word; !remaining.empty(); ++ordinal) {
-                    const size_t bytes = remaining.size();
-                    uint32_t codepoint = 0;
-                    Utf8Text::next(remaining, codepoint);
-                    if (focus >= 0 && offset == static_cast<size_t>(focus))
-                        focusOrdinal = ordinal;
-                    offset += bytes - remaining.size();
-                }
-                const int16_t anchor = static_cast<int16_t>(readingArea.y
-                                     + (readingArea.h * typography_.anchor) / 100);
-                const int16_t centerX = static_cast<int16_t>(readingArea.x + readingArea.w / 2);
-                int16_t top = static_cast<int16_t>(anchor - focusOrdinal * advance - advance / 2);
-                const uint16_t guide = ui.blend(ui::themes::ColorRole::Foreground, 96);
-                const int16_t guideLeft = static_cast<int16_t>(centerX - advance / 2 - 6);
-                const int16_t guideRight = static_cast<int16_t>(centerX + advance / 2 + 6);
-                gfx.drawFastVLine(guideLeft, static_cast<int16_t>(anchor - typography_.guideWidth),
-                                  static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
-                gfx.drawFastVLine(guideLeft, static_cast<int16_t>(anchor + typography_.guideGap),
-                                  static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
-                gfx.drawFastVLine(guideRight, static_cast<int16_t>(anchor - typography_.guideWidth),
-                                  static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
-                gfx.drawFastVLine(guideRight, static_cast<int16_t>(anchor + typography_.guideGap),
-                                  static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
-                const uint16_t marker = typography_.focusHighlight ? ui.color(ui::themes::ColorRole::Accent) : guide;
-                gfx.drawFastHLine(guideLeft, anchor, 5, marker);
-                gfx.drawFastHLine(static_cast<int16_t>(guideRight - 4), anchor, 5, marker);
-                offset = 0;
-                std::string_view remaining = word;
-                while (!remaining.empty()) {
-                    const size_t bytes = remaining.size();
-                    uint32_t codepoint = 0;
-                    Utf8Text::next(remaining, codepoint);
-                    text_.setTextColor(typography_.focusHighlight && focus >= 0
-                                               && offset == static_cast<size_t>(focus)
-                                           ? ui.color(ui::themes::ColorRole::Accent)
-                                           : ui.color(ui::themes::ColorRole::Foreground),
-                                       background_);
-                    top = static_cast<int16_t>(top + text_.drawVerticalCodepoint(codepoint, centerX, top));
-                    offset += bytes - remaining.size();
-                }
-            } else {
+            const bool vertical = session.metadata.writingMode == WritingMode::verticalRl;
             const std::string before = settings.phantomWords ? phantomBefore(session, typography_.fontSizeIndex) : "";
             const std::string after = settings.phantomWords ? phantomAfter(session, typography_.fontSizeIndex) : "";
             const bool bidi = session.metadata.requiresBidi(session.state.wordIndex, session.state.wordIndex + 1);
@@ -645,26 +608,34 @@ namespace screens {
                     text_.setTextColor(ui.color(highlighted ? ui::themes::ColorRole::Accent
                                                             : ui::themes::ColorRole::Foreground),
                                        background_);
-                    cursor =
-                        static_cast<int16_t>(cursor
-                                             + text_.drawGlyphs(std::span{rsvpGlyphs_}.subspan(first, last - first),
-                                                                cursor, baseline));
+                    if (vertical) {
+                        for (size_t index = first; index < last; ++index) {
+                            const auto& glyph = rsvpGlyphs_[index];
+                            cursor = static_cast<int16_t>(
+                                cursor + text_.drawVerticalGlyph(glyph,
+                                                                 codepointAt(rsvpParagraph_.text, glyph.cluster),
+                                                                 cursor, ui.height() / 2));
+                        }
+                    } else {
+                        cursor = static_cast<int16_t>(
+                            cursor + text_.drawGlyphs(std::span{rsvpGlyphs_}.subspan(first, last - first), cursor,
+                                                      baseline));
+                    }
                     first = last;
                 }
             } else if (bidi)
-                drawWord(rsvpVisual_, x, baseline, wordOffset, focus, ui);
+                drawWord(rsvpVisual_, x, baseline, wordOffset, focus, vertical, ui);
             else
-                drawWord(word, x, baseline, focus, ui);
+                drawWord(word, x, baseline, focus, vertical, ui);
             const bool rightToLeft = bidi && rsvpBidi_.rightToLeft();
             if (!before.empty())
                 drawPhantom(before, rightToLeft,
                             rightToLeft ? static_cast<int16_t>(x + wordWidth + 24) : static_cast<int16_t>(x - 24),
-                            !rightToLeft, baseline, ui);
+                            !rightToLeft, baseline, vertical, ui);
             if (!after.empty())
                 drawPhantom(after, rightToLeft,
                             rightToLeft ? static_cast<int16_t>(x - 24) : static_cast<int16_t>(x + wordWidth + 24),
-                            rightToLeft, baseline, ui);
-            }
+                            rightToLeft, baseline, vertical, ui);
 
             gfx.setFont(static_cast<const GFXfont*>(nullptr));
             gfx.setTextWrap(false);
@@ -1102,7 +1073,7 @@ namespace screens {
     }
 
     void ReaderScreen::drawPhantom(std::string_view value, bool rightToLeft, int16_t edge, bool extendsLeft,
-                                   int16_t baseline, ui::Context& ui) {
+                                   int16_t baseline, bool vertical, ui::Context& ui) {
         if (value.empty())
             return;
 
@@ -1149,23 +1120,39 @@ namespace screens {
             x = static_cast<int16_t>(x - std::clamp<int32_t>(width, 0, INT16_MAX));
         text_.setTextColor(ui.blend(ui::themes::ColorRole::Foreground, 62), background_);
         if (shaped) {
-            text_.drawGlyphs(phantomGlyphs_, x, baseline);
+            if (vertical) {
+                for (const auto& glyph: phantomGlyphs_)
+                    x = static_cast<int16_t>(x + text_.drawVerticalGlyph(glyph, codepointAt(value, glyph.cluster), x,
+                                                                        ui.height() / 2));
+            } else
+                text_.drawGlyphs(phantomGlyphs_, x, baseline);
         } else if (bidi) {
             uint32_t previous = 0;
             bool previousValid = false;
             for (const BidiText::Codepoint& codepoint: phantomVisual_) {
                 if (previousValid && !codepoint.rightToLeft)
                     x = static_cast<int16_t>(x + text_.kerningAdjust(previous, codepoint.value));
-                x = static_cast<int16_t>(x + text_.drawCodepoint(codepoint.value, x, baseline) + typography_.tracking);
+                x = static_cast<int16_t>(
+                    x + (vertical ? text_.drawVerticalCodepoint(codepoint.value, x, ui.height() / 2)
+                                  : text_.drawCodepoint(codepoint.value, x, baseline))
+                    + typography_.tracking);
                 previous = codepoint.value;
                 previousValid = true;
             }
-        } else {
+        } else if (!vertical) {
             text_.drawString(value, x, baseline, typography_.tracking);
+        } else {
+            while (!value.empty()) {
+                uint32_t codepoint = 0;
+                Utf8Text::next(value, codepoint);
+                x = static_cast<int16_t>(x + text_.drawVerticalCodepoint(codepoint, x, ui.height() / 2)
+                                         + (value.empty() ? 0 : typography_.tracking));
+            }
         }
     }
 
-    void ReaderScreen::drawWord(std::string_view word, int16_t x, int16_t baseline, int focus, ui::Context& ui) {
+    void ReaderScreen::drawWord(std::string_view word, int16_t x, int16_t baseline, int focus, bool vertical,
+                                ui::Context& ui) {
         size_t offset = 0;
         while (!word.empty()) {
             const size_t bytes = word.size();
@@ -1175,13 +1162,15 @@ namespace screens {
                                    ? ui.color(ui::themes::ColorRole::Accent)
                                    : ui.color(ui::themes::ColorRole::Foreground),
                                ui.color(ui::themes::ColorRole::Background));
-            x = static_cast<int16_t>(x + text_.drawCodepoint(codepoint, x, baseline) + typography_.tracking);
+            x = static_cast<int16_t>(x + (vertical ? text_.drawVerticalCodepoint(codepoint, x, ui.height() / 2)
+                                                   : text_.drawCodepoint(codepoint, x, baseline))
+                                     + typography_.tracking);
             offset += bytes - word.size();
         }
     }
 
     void ReaderScreen::drawWord(std::span<const BidiText::Codepoint> word, int16_t x, int16_t baseline,
-                                size_t wordOffset, int focus, ui::Context& ui) {
+                                size_t wordOffset, int focus, bool vertical, ui::Context& ui) {
         uint32_t previous = 0;
         bool previousValid = false;
         for (size_t index = 0; index < word.size(); ++index) {
@@ -1193,7 +1182,8 @@ namespace screens {
                                    ? ui.color(ui::themes::ColorRole::Accent)
                                    : ui.color(ui::themes::ColorRole::Foreground),
                                ui.color(ui::themes::ColorRole::Background));
-            x = static_cast<int16_t>(x + text_.drawCodepoint(codepoint.value, x, baseline)
+            x = static_cast<int16_t>(x + (vertical ? text_.drawVerticalCodepoint(codepoint.value, x, ui.height() / 2)
+                                                   : text_.drawCodepoint(codepoint.value, x, baseline))
                                      + (index + 1 < word.size() ? typography_.tracking : 0));
             previous = codepoint.value;
             previousValid = true;

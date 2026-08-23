@@ -977,8 +977,8 @@ void test_ui_text_uses_visual_bounds_for_every_alignment() {
     TEST_ASSERT_EQUAL_INT16(12, gfx.cursorX);
 }
 
-void test_page_reader_lays_explicit_vertical_books_out_in_right_to_left_columns() {
-    Arduino_GFX gfx(80, 30);
+void test_page_reader_maps_vertical_columns_to_the_landscape_framebuffer() {
+    Arduino_GFX gfx(50, 30);
     ui::Context context(gfx);
     ui::fonts::AlphaTextRenderer<640> text(gfx);
     TEST_ASSERT_TRUE(text.begin());
@@ -995,12 +995,14 @@ void test_page_reader_lays_explicit_vertical_books_out_in_right_to_left_columns(
     };
 
     context.beginFrame(1);
-    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, {0, 0, 80, 30});
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, {0, 0, 50, 30});
     context.endFrame();
 
     TEST_ASSERT_TRUE(state.vertical);
-    TEST_ASSERT_GREATER_THAN(2, state.pageEnd);
-    TEST_ASSERT_GREATER_THAN(state.words[2].x, state.words[0].x);
+    TEST_ASSERT_EQUAL(5, state.pageEnd);
+    TEST_ASSERT_EQUAL(state.words[0].y, state.words[2].y);
+    TEST_ASSERT_GREATER_THAN(state.words[0].x, state.words[2].x);
+    TEST_ASSERT_GREATER_THAN(state.words[0].y, state.words[4].y);
     TEST_ASSERT_GREATER_THAN(0, gfx.writes);
 }
 
@@ -1493,7 +1495,7 @@ int main(int, char**) {
     RUN_TEST(test_page_reader_uses_reader_typeface_after_skipping_a_colliding_page_range);
     RUN_TEST(test_page_reader_reanchors_distant_forward_seek_without_laying_out_intermediate_pages);
     RUN_TEST(test_page_reader_uses_each_words_selected_typeface_for_layout);
-    RUN_TEST(test_page_reader_lays_explicit_vertical_books_out_in_right_to_left_columns);
+    RUN_TEST(test_page_reader_maps_vertical_columns_to_the_landscape_framebuffer);
     RUN_TEST(test_page_reader_caches_visual_bidi_layout);
     RUN_TEST(test_page_reader_only_runs_bidi_for_pages_that_need_it);
     RUN_TEST(test_page_reader_shapes_each_visible_word_once_and_caches_glyphs);

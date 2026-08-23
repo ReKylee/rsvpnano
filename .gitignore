@@ -1,6 +1,7 @@
 .pio
 .gradle/
 .kotlin/
+kotlin-js-store/
 .local/
 build/
 **/build/
@@ -28,6 +29,7 @@ RSVPNanoCompanion/testdata/conversion/from-nano/
 *.ridx
 *.rdat
 web/firmware/*.bin
+web/firmware/release.json
 RSVPNanoCompanion/web/generated/
 web/generated/
 .cache/

@@ -94,6 +94,7 @@ import org.jetbrains.compose.resources.painterResource
 import com.rsvpnano.web.resources.Res
 import com.rsvpnano.web.resources.discord
 import com.rsvpnano.web.resources.rsvp_nano_horizontal
+import com.rsvpnano.web.resources.rsvp_nano_horizontal_light
 
 private val LightColors = lightColorScheme(
     primary = Color(0xff35675f),
@@ -286,7 +287,7 @@ private fun ConnectionToolbar(
             val showStatus = maxWidth >= 480.dp
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    BrandLogo()
+                    BrandLogo(theme)
                     Spacer(Modifier.weight(1f))
                     DiscordButton()
                     ThemeButton(theme, onThemeChange)
@@ -295,7 +296,7 @@ private fun ConnectionToolbar(
             }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                BrandLogo()
+                BrandLogo(theme)
                 Spacer(Modifier.weight(1f))
                 EndpointControls(state, endpoint, onEndpointChange, onConnect, onUsbConnect)
                 DiscordButton()
@@ -306,15 +307,16 @@ private fun ConnectionToolbar(
 }
 
 @Composable
-private fun BrandLogo() {
-    Surface(shape = RoundedCornerShape(8.dp), color = Color(0xff202421)) {
-        Image(
-            painter = painterResource(Res.drawable.rsvp_nano_horizontal),
-            contentDescription = "RSVP Nano",
-            modifier = Modifier.width(200.dp).height(64.dp).padding(horizontal = 4.dp),
-            contentScale = ContentScale.Fit,
-        )
-    }
+private fun BrandLogo(theme: WebTheme) {
+    Image(
+        painter = painterResource(
+            if (theme == WebTheme.Dark) Res.drawable.rsvp_nano_horizontal
+            else Res.drawable.rsvp_nano_horizontal_light,
+        ),
+        contentDescription = "RSVP Nano",
+        modifier = Modifier.width(200.dp).height(64.dp),
+        contentScale = ContentScale.Fit,
+    )
 }
 
 @Composable

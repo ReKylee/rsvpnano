@@ -36,12 +36,8 @@
         transition: opacity 160ms ease-out;
       }
       #startup-surface img {
-        box-sizing: border-box;
         width: min(280px, 64vw);
         height: auto;
-        padding: 10px 14px;
-        border-radius: 14px;
-        background: #202421;
       }
       #startup-surface.ready { opacity: 0; pointer-events: none; }
       #unsupported { display: none; box-sizing: border-box; max-width: 42rem; margin: 12vh auto; padding: 2rem; }
@@ -50,6 +46,10 @@
   </head>
   <body>
     <div id="startup-surface" aria-hidden="true"><img src="icon.svg" alt="" /></div>
+    <script>
+      document.querySelector("#startup-surface img").src =
+        document.documentElement.dataset.theme === "dark" ? "icon.svg" : "icon_light.svg";
+    </script>
     <div id="webApp"></div>
     <noscript>RSVP Nano requires JavaScript to install firmware and manage a reader.</noscript>
     <div id="unsupported">

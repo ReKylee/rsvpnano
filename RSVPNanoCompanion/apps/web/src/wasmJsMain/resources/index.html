@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#35675f" />
+    <meta name="description" content="Install and manage RSVP Nano readers." />
+    <title>RSVP Nano</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <script>
+      let startupTheme = null;
+      try {
+        startupTheme = localStorage.getItem("rsvpnano.web.theme");
+      } catch (_) {}
+      const startupDark = startupTheme === "Dark" ||
+        (startupTheme !== "Light" && matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.dataset.theme = startupDark ? "dark" : "light";
+      document.querySelector('meta[name="theme-color"]').content = startupDark ? "#191c1a" : "#faf8f2";
+    </script>
+    <style>
+      :root { --startup-background: #faf8f2; }
+      :root[data-theme="dark"] { --startup-background: #191c1a; }
+      html, body, #webApp { width: 100%; height: 100%; }
+      html, body { margin: 0; padding: 0; overflow: hidden; background: var(--startup-background); }
+      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      #webApp { overflow: hidden; background: var(--startup-background); }
+      #webApp canvas { display: block; background: var(--startup-background); }
+      #startup-surface {
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        display: grid;
+        place-items: center;
+        background: var(--startup-background);
+        transition: opacity 160ms ease-out;
+      }
+      #startup-surface img {
+        width: min(280px, 64vw);
+        height: auto;
+      }
+      #startup-surface.ready { opacity: 0; pointer-events: none; }
+      #unsupported { display: none; box-sizing: border-box; max-width: 42rem; margin: 12vh auto; padding: 2rem; }
+      noscript { display: block; padding: 2rem; }
+    </style>
+  </head>
+  <body>
+    <div id="startup-surface" aria-hidden="true"><img src="icon.svg" alt="" /></div>
+    <script>
+      document.querySelector("#startup-surface img").src =
+        document.documentElement.dataset.theme === "dark" ? "icon.svg" : "icon_light.svg";
+    </script>
+    <div id="webApp"></div>
+    <noscript>RSVP Nano requires JavaScript to install firmware and manage a reader.</noscript>
+    <div id="unsupported">
+      <h1 id="startup-title">RSVP Nano couldn't start.</h1>
+      <p id="startup-message">Reload the page. If the problem continues, try the latest version of your browser.</p>
+      <pre id="startup-details" hidden></pre>
+    </div>
+    <esp-web-install-button id="rsvp-installer">
+      <button id="rsvp-installer-trigger" slot="activate" type="button" tabindex="-1" aria-hidden="true">Install</button>
+    </esp-web-install-button>
+    <style>#rsvp-installer { position: fixed; left: -10000px; top: 0; }</style>
+    <script type="module" src="https://unpkg.com/esp-web-tools@10.1.0/dist/web/install-button.js?module"></script>
+    <script type="module">
+      const development = location.port === "8080";
+      waitForComposeCanvas();
+
+      window.addEventListener("error", event => showStartupError(event.error || new Error(event.message)), { once: true });
+      window.addEventListener("unhandledrejection", event => showStartupError(event.reason), { once: true });
+
+      if (development && "serviceWorker" in navigator) {
+        const controlled = navigator.serviceWorker.controller !== null;
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map(registration => registration.unregister()));
+        await Promise.all((await caches.keys()).map(key => caches.delete(key)));
+        if (controlled) {
+          location.reload();
+        } else {
+          loadApplication();
+        }
+      } else {
+        loadApplication();
+      }
+
+      function loadApplication() {
+        const script = document.createElement("script");
+        script.src = "./rsvpnano-web.js";
+        script.onload = () => {
+          if (!development && "serviceWorker" in navigator) {
+            window.setTimeout(() => navigator.serviceWorker.register("./service-worker.js"), 10000);
+          }
+        };
+        script.onerror = () => showStartupError(new Error("The application bundle could not be loaded."));
+        document.body.appendChild(script);
+      }
+
+      function showStartupError(error) {
+        console.error("Failed to start RSVP Nano", error);
+        hideStartupSurface();
+        const unsupported = error instanceof WebAssembly.CompileError;
+        if (unsupported) {
+          document.getElementById("startup-title").textContent = "This browser is not supported yet.";
+          document.getElementById("startup-message").textContent =
+            "Try the latest Chrome, Edge, or Firefox. To install or connect by USB, use Chrome or Edge on a computer.";
+        } else if (development) {
+          const details = document.getElementById("startup-details");
+          details.textContent = error?.stack || String(error);
+          details.hidden = false;
+        }
+        document.getElementById("unsupported").style.display = "block";
+      }
+
+      function hideStartupSurface() {
+        const surface = document.getElementById("startup-surface");
+        if (!surface) return;
+        surface.classList.add("ready");
+        window.setTimeout(() => surface.remove(), 180);
+      }
+
+      function waitForComposeCanvas() {
+        const hosts = document.querySelectorAll("#webApp *");
+        const ready = Array.from(hosts).some(host => host.shadowRoot?.querySelector("canvas"));
+        if (ready) requestAnimationFrame(hideStartupSurface);
+        else if (document.getElementById("startup-surface")) requestAnimationFrame(waitForComposeCanvas);
+      }
+    </script>
+  </body>
+</html>

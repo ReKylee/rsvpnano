@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 
 plugins {
@@ -27,6 +28,11 @@ kotlin {
 		}
 	}
 	iosSimulatorArm64()
+
+	@OptIn(ExperimentalWasmDsl::class)
+	wasmJs {
+		browser()
+	}
 
 	jvmToolchain(17)
 
@@ -70,6 +76,10 @@ kotlin {
 
 		iosMain.dependencies {
 			implementation(libs.ktor.client.darwin)
+		}
+
+		wasmJsMain.dependencies {
+			implementation(libs.ktor.client.js)
 		}
 	}
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -60,7 +59,7 @@ def run_kotlin() -> None:
             "-File",
             str(LOCAL_GRADLE),
             ":conversionCore:testDebugUnitTest",
-            ":conversionCore:publishWebConverterJs",
+            ":conversionCore:wasmJsBrowserTest",
             ":shared:testDebugUnitTest",
             "--no-daemon",
             "--no-configuration-cache",
@@ -218,40 +217,6 @@ def run_multilingual_format_parity() -> None:
         raise AssertionError("Vertical CJK XHTML and EPUB content events differed")
 
 
-def run_web_vector(tmp: Path, command: str, input_name: str, expected_name: str, title: str, label: str) -> None:
-    node = shutil.which("node")
-    if node is None:
-        print("Skipping web parity: node not found")
-        return
-    output = tmp / f"web-{Path(input_name).stem}.rsvp"
-    run(
-        [
-            node,
-            str(ROOT / "web" / "converter_cli.cjs"),
-            command,
-            str(VECTORS / input_name),
-            str(output),
-            title,
-        ]
-    )
-    assert_same(VECTORS / expected_name, output, label)
-
-
-def run_web_text(tmp: Path) -> None:
-    for input_name, expected_name, title in TEXT_CASES:
-        run_web_vector(tmp, "text", input_name, expected_name, title, f"Web {Path(input_name).suffix}")
-
-
-def run_web_html(tmp: Path) -> None:
-    for input_name, expected_name, title in HTML_CASES:
-        run_web_vector(tmp, "html", input_name, expected_name, title, f"Web {Path(input_name).suffix}")
-
-
-def run_web_epub(tmp: Path) -> None:
-    for input_name, expected_name, title in EPUB_CASES:
-        run_web_vector(tmp, "book", input_name, expected_name, title, f"Web {Path(input_name).suffix}")
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run cross-runtime RSVP converter parity checks.")
     parser.add_argument("--skip-kotlin", action="store_true", help="Skip Gradle/Kotlin tests.")
@@ -265,10 +230,6 @@ def main() -> int:
         run_python_html(tmp)
         run_python_epub_toc()
         run_multilingual_format_parity()
-        run_web_text(tmp)
-        run_web_html(tmp)
-        run_web_epub(tmp)
-
     print("Conversion parity checks passed.")
     return 0
 

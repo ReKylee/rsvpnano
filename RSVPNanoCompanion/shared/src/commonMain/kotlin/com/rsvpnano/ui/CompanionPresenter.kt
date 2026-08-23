@@ -138,6 +138,15 @@ class CompanionPresenter(
         connectionCheckJob = scope.launch { connectLocalNano(endpoint) }
     }
 
+    fun connectEndpoint(
+        endpoint: NanoEndpoint,
+        transport: NanoConnectionTransport = NanoConnectionTransport.LocalNetwork,
+    ) {
+        connectionCheckJob?.cancel()
+        suppressedRememberPrompt = null
+        connectionCheckJob = scope.launch { connectEndpointNow(endpoint, transport) }
+    }
+
     fun cancelNanoSelection() {
         updateState {
             it.copy(
@@ -148,13 +157,20 @@ class CompanionPresenter(
         }
     }
 
-    private suspend fun connectLocalNano(endpoint: NanoEndpoint) {
+    fun reportConnectionFailure(message: String) {
+        markDisconnected(message)
+    }
+
+    private suspend fun connectLocalNano(endpoint: NanoEndpoint) =
+        connectEndpointNow(endpoint, NanoConnectionTransport.LocalNetwork)
+
+    private suspend fun connectEndpointNow(endpoint: NanoEndpoint, transport: NanoConnectionTransport) {
         updateState {
             it.copy(
                 discoveredNanos = emptyList(),
                 connectionState = NanoConnectionState.CheckingReader(
                     endpoint.nano,
-                    NanoConnectionTransport.LocalNetwork,
+                    transport,
                 ),
                 notice = CompanionNotice.Attention("Connecting to ${endpoint.nano.ssid}..."),
             )

@@ -12,7 +12,7 @@ on:
       - 'gradle/wrapper/**'
       - 'RSVPNanoCompanion/conversionCore/**'
       - 'RSVPNanoCompanion/shared/**'
-      - 'RSVPNanoCompanion/ios/**'
+      - 'RSVPNanoCompanion/apps/ios/**'
       - '.github/workflows/**'
   pull_request:
     paths:
@@ -22,7 +22,7 @@ on:
       - 'gradle/wrapper/**'
       - 'RSVPNanoCompanion/conversionCore/**'
       - 'RSVPNanoCompanion/shared/**'
-      - 'RSVPNanoCompanion/ios/**'
+      - 'RSVPNanoCompanion/apps/ios/**'
       - '.github/workflows/**'
 
 jobs:
@@ -52,4 +52,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: shared-xcframework
-          path: RSVPNanoCompanion/ios/RSVPNanoCompanion/SharedFrameworks/shared.xcframework
+          path: RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/SharedFrameworks/shared.xcframework

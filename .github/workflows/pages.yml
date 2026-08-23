@@ -34,14 +34,14 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Check and build web converter
-        run: bash ./gradlew checkWeb --no-daemon
-
       - name: Download latest release firmware
         if: github.repository == 'ionutdecebal/rsvpnano'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python tools/fetch_release_firmware.py --repo "${{ github.repository }}"
+
+      - name: Check and stage web companion
+        run: bash ./gradlew checkWeb --no-daemon
 
       - name: Configure GitHub Pages
         if: github.repository == 'ionutdecebal/rsvpnano'
@@ -51,7 +51,7 @@ jobs:
         if: github.repository == 'ionutdecebal/rsvpnano'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: web
+          path: build/webSite
 
   deploy:
     if: github.repository == 'ionutdecebal/rsvpnano' && (github.ref == 'refs/heads/main' || github.event_name == 'release' || github.event_name == 'workflow_dispatch')

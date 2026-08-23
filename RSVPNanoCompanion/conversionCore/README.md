@@ -12,14 +12,14 @@ It builds for Android, iOS, and JavaScript, and owns:
 Quick start:
 
 ```bash
-bash ./gradlew checkWeb
+bash ./gradlew :conversionCore:wasmJsBrowserTest
 python RSVPNanoCompanion/tools/run_conversion_parity.py
 ```
 
 The web converter artifact is generated into:
 
 ```text
-web/generated/converter/rsvpnano_converter.mjs
+The web companion links this module directly through Kotlin/Wasm; no generated JavaScript converter is published.
 ```
 
 That generated directory is intentionally ignored by Git. GitHub Pages builds it before uploading

@@ -1,26 +1,16 @@
-import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 plugins {
 	alias(libs.plugins.kotlin.multiplatform)
 	alias(libs.plugins.android.library)
 }
 
-@OptIn(ExperimentalKotlinGradlePluginApi::class)
 kotlin {
-	compilerOptions {
-		freeCompilerArgs.add("-Xexpect-actual-classes")
-	}
-
 	androidTarget()
 
-	js {
-		compilerOptions {
-			outputModuleName.set("rsvpnano_converter")
-		}
-		useEsModules()
+	@OptIn(ExperimentalWasmDsl::class)
+	wasmJs {
 		browser()
-		nodejs()
-		binaries.executable()
 	}
 
 	iosArm64()
@@ -53,13 +43,4 @@ android {
 		sourceCompatibility = JavaVersion.VERSION_17
 		targetCompatibility = JavaVersion.VERSION_17
 	}
-}
-
-tasks.register<Sync>("publishWebConverterJs") {
-	dependsOn("compileProductionExecutableKotlinJs")
-	from(layout.buildDirectory.dir("compileSync/js/main/productionExecutable/kotlin")) {
-		include("*.mjs")
-		include("*.mjs.map")
-	}
-	into(rootProject.layout.projectDirectory.dir("web/generated/converter"))
 }

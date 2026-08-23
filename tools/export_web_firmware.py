@@ -11,50 +11,51 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB_FIRMWARE_DIR = ROOT / "web" / "firmware"
+RELEASE_METADATA_PATH = WEB_FIRMWARE_DIR / "release.json"
 BOOT_APP0_GLOB = "framework-arduinoespressif32*/tools/partitions/boot_app0.bin"
 VERSION_DECLARATION = "inline constexpr char kFirmwareVersion[] = "
 
 FLASH_EXPORTS = (
     {
+        "id": "lcd349-v1",
         "env": "waveshare_esp32s3_touch_lcd_349_rev1",
         "binary": "rsvp-nano-esp32-s3-touch-lcd-3.49.bin",
-        "manifest": "manifest.json",
         "label": "RSVP Nano Touch LCD 3.49 rev1 firmware",
     },
     {
+        "id": "lcd349-v2",
         "env": "waveshare_esp32s3_touch_lcd_349_rev2",
         "binary": "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin",
-        "manifest": "manifest-rev2.json",
         "label": "RSVP Nano Touch LCD 3.49 rev2 firmware",
     },
     {
+        "id": "amoled18-v1",
         "env": "waveshare_esp32s3_touch_amoled_18_v1",
         "binary": "rsvp-nano-esp32-s3-touch-amoled-1.8.bin",
-        "manifest": "manifest-esp32-s3-touch-amoled-1.8.json",
         "label": "RSVP Nano Touch AMOLED 1.8 v1 firmware",
     },
     {
+        "id": "amoled18-v2",
         "env": "waveshare_esp32s3_touch_amoled_18_v2",
         "binary": "rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin",
-        "manifest": "manifest-esp32-s3-touch-amoled-1.8-v2.json",
         "label": "RSVP Nano Touch AMOLED 1.8 v2 firmware",
     },
     {
+        "id": "amoled206",
         "env": "waveshare_esp32s3_touch_amoled_206",
         "binary": "rsvp-nano-esp32-s3-touch-amoled-2.06.bin",
-        "manifest": "manifest-esp32-s3-touch-amoled-2.06.json",
         "label": "RSVP Nano Touch AMOLED 2.06 firmware",
     },
     {
+        "id": "amoled216",
         "env": "waveshare_esp32s3_touch_amoled_216",
         "binary": "rsvp-nano-esp32-s3-touch-amoled-2.16.bin",
-        "manifest": "manifest-esp32-s3-touch-amoled-2.16.json",
         "label": "RSVP Nano Touch AMOLED 2.16 firmware",
     },
     {
+        "id": "amoled241",
         "env": "waveshare_esp32s3_touch_amoled_241",
         "binary": "rsvp-nano-esp32-s3-touch-amoled-2.41.bin",
-        "manifest": "manifest-esp32-s3-touch-amoled-2.41.json",
         "label": "RSVP Nano Touch AMOLED 2.41 firmware",
     },
 )
@@ -203,10 +204,9 @@ def generated_version(envs: list[str]) -> str:
     return versions.pop()
 
 
-def update_manifest(path: Path, version: str) -> None:
-    manifest = json.loads(path.read_text(encoding="utf-8"))
-    manifest["version"] = version
-    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+def write_release_metadata(version: str, firmware: dict[str, str]) -> None:
+    metadata = {"version": version, "firmware": firmware}
+    RELEASE_METADATA_PATH.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
 
 def main() -> int:
@@ -237,7 +237,8 @@ def main() -> int:
         output = WEB_FIRMWARE_DIR / export["binary"]
         print(f"Exporting {export['label']} -> {output}")
         merge_firmware(export["env"], output)
-        update_manifest(WEB_FIRMWARE_DIR / export["manifest"], version)
+
+    write_release_metadata(version, {export["id"]: export["binary"] for export in FLASH_EXPORTS})
 
     for export in OTA_EXPORTS:
         ota_output = WEB_FIRMWARE_DIR / export["binary"]

@@ -8,7 +8,8 @@
 
 #include "board/BoardDisplay.h"
 #include "board/BoardPower.h"
-#include "companion/CompanionApi.h"
+#include "companion/http/CompanionApi.h"
+#include "companion/serial/CompanionSerial.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "input/Input.h"
@@ -99,6 +100,7 @@ private:
     CompanionApi companionApi_{settingsStore_,   storage_,       localeCatalog_, immediateUi_, readerScreen_,
                                interfaceScreen_, networkScreen_, libraryScreen_, focusScreen_};
     UsbMassStorageManager usbTransfer_;
+    CompanionSerial serialCompanion_{companionApi_, usbTransfer_};
     screens::StandbyScreen standbyScreen_;
     QueueHandle_t jobQueue_ = nullptr;
     JobKind jobKind_ = JobKind::None;

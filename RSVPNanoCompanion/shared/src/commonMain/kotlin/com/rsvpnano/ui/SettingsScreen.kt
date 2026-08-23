@@ -1033,7 +1033,7 @@ private fun TypographySlider(
 }
 
 @Composable
-private fun TypographyPreview(
+fun TypographyPreview(
     typography: NanoSettings.Typography,
     phantomWords: Boolean,
     modifier: Modifier = Modifier,
@@ -1550,7 +1550,7 @@ private fun catalogSource(settings: NanoSettings): String {
     return "${source.owner}/${source.repository}@${source.tag.ifBlank { "main" }}"
 }
 
-private fun localeDetails(
+fun localeDetails(
     englishName: String,
     direction: String,
     status: String,
@@ -1562,7 +1562,7 @@ private fun localeDetails(
     version.takeIf(String::isNotBlank)?.let { "v$it" }.orEmpty(),
 ).filter(String::isNotBlank).joinToString(INLINE_DIVIDER)
 
-internal fun fontDetails(scripts: List<String>, builtIn: Boolean, shaping: Boolean): String =
+fun fontDetails(scripts: List<String>, builtIn: Boolean, shaping: Boolean): String =
     (scripts.map(::scriptName) +
         listOfNotNull("Built in".takeIf { builtIn }, "Shaping".takeIf { shaping }))
         .joinToString(INLINE_DIVIDER)

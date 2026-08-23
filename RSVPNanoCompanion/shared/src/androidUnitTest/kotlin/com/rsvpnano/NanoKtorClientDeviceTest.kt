@@ -2,6 +2,8 @@ package com.rsvpnano
 
 import com.rsvpnano.api.NanoClientError
 import com.rsvpnano.api.NanoKtorClient
+import com.rsvpnano.app.catalogContentUrl
+import com.rsvpnano.app.releaseSource
 import com.rsvpnano.models.NanoChapter
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -81,13 +83,16 @@ class NanoKtorClientDeviceTest {
             assertEquals("Book not found", missing.message)
 
             if (writeEnabled) {
-                val info = measured("catalog-device") { client.fetchDevice(baseUrl) }
-                val revision = info.firmwareVersion.substringAfter('+').substringBefore('.')
-                val catalogRoot = "https://raw.githubusercontent.com/rekylee/rsvpnano/$revision"
+                val catalogSettings = measured("catalog-settings") { client.fetchSettings(baseUrl) }
+                val catalog = requireNotNull(
+                    releaseSource(catalogSettings.updates.repositoryOwner, catalogSettings.updates.releaseTag),
+                )
                 val installedFonts = measured("catalog-installed-fonts") { client.listFonts(baseUrl) }
-                val font = measured("catalog-fonts") { client.fetchFontCatalog("$catalogRoot/fonts/index.json") }.first()
+                val font = measured("catalog-fonts") {
+                    client.fetchFontCatalog(catalog.catalogContentUrl("fonts/index.json"))
+                }.first()
                 val fontData = measured("catalog-font-download") {
-                    client.downloadFont("$catalogRoot/fonts/${font.file}")
+                    client.downloadFont(catalog.catalogContentUrl("fonts/${font.file}"))
                 }
                 assertTrue(fontData.isNotEmpty())
                 if (installedFonts.none { it.id == font.id }) {
@@ -102,10 +107,10 @@ class NanoKtorClientDeviceTest {
 
                 val installedLocales = measured("catalog-installed-locales") { client.listLocales(baseUrl) }
                 val locale = measured("catalog-locales") {
-                    client.fetchLocaleCatalog("$catalogRoot/locale-packs/index.json")
+                    client.fetchLocaleCatalog(catalog.catalogContentUrl("locale-packs/index.json"))
                 }.first()
                 val localeData = measured("catalog-locale-download") {
-                    client.downloadLocalePack("$catalogRoot/locale-packs/${locale.file}")
+                    client.downloadLocalePack(catalog.catalogContentUrl("locale-packs/${locale.file}"))
                 }
                 assertTrue(localeData.isNotEmpty())
                 if (installedLocales.none { it.id == locale.id }) {

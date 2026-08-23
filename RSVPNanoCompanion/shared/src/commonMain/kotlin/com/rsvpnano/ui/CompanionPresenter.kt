@@ -15,7 +15,6 @@ import com.rsvpnano.app.NanoWifiRequestResult
 import com.rsvpnano.app.NanoWifiSnapshot
 import com.rsvpnano.app.SharedAppUtils
 import com.rsvpnano.app.catalogContentUrl
-import com.rsvpnano.app.firmwareRevision
 import com.rsvpnano.app.releaseSource
 import com.rsvpnano.converters.ImportPreparation
 import com.rsvpnano.converters.RsvpConverter
@@ -1659,7 +1658,7 @@ class CompanionPresenter(
         val settings = current.settings ?: error("Connect to your Nano before loading catalogs.")
         val source = releaseSource(settings.updates.repositoryOwner, settings.updates.releaseTag)
             ?: error("Configure a GitHub release owner on your Nano first.")
-        return source.catalogContentUrl(path, firmwareRevision(current.firmwareVersion) ?: source.tag)
+        return source.catalogContentUrl(path)
     }
 
     private fun currentRememberableNano(): RememberedNano? {

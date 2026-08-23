@@ -72,13 +72,8 @@ internal data class FirmwareReleaseSource(
     val tag: String,
 )
 
-internal fun FirmwareReleaseSource.catalogContentUrl(path: String, revision: String = tag): String =
-    "https://raw.githubusercontent.com/$owner/$repository/${revision.ifBlank { "main" }}/$path"
-
-internal fun firmwareRevision(version: String): String? =
-    version.substringAfter('+', "").substringBefore('.').takeIf { revision ->
-        revision.length in 7..40 && revision.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
-    }
+internal fun FirmwareReleaseSource.catalogContentUrl(path: String): String =
+    "https://raw.githubusercontent.com/$owner/$repository/${tag.ifBlank { "main" }}/$path"
 
 internal fun releaseSource(ownerValue: String, tagValue: String): FirmwareReleaseSource? {
     var owner = ownerValue.trim()

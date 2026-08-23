@@ -191,22 +191,25 @@ namespace screens {
 
         constexpr int16_t progressWidth = 76;
         constexpr int16_t detailGap = 12;
+        constexpr int16_t detailHeight = 43;
+        const int16_t detailTextY = static_cast<int16_t>(
+            detailRect.y + std::max<int16_t>(0, static_cast<int16_t>(detailRect.h - detailHeight)));
         const int16_t textWidth = static_cast<int16_t>(detailRect.w - progressWidth - detailGap);
         const LibraryItem& item = items[selectedIndex_];
         const std::string_view author = item.book == nullptr || item.book->author.empty()
                                           ? ui.text(UiText::Unknown)
                                           : std::string_view{item.book->author};
-        ui.label({detailRect.x, detailRect.y, textWidth, 18}, title(item), 2);
-        ui.label({detailRect.x, static_cast<int16_t>(detailRect.y + 20), textWidth, 10}, author, 1,
+        ui.label({detailRect.x, detailTextY, textWidth, 18}, title(item), 2);
+        ui.label({detailRect.x, static_cast<int16_t>(detailTextY + 20), textWidth, 10}, author, 1,
                  ui::themes::ColorRole::Muted);
-        ui.label({detailRect.x, static_cast<int16_t>(detailRect.y + 33), textWidth, 10}, item.chapter, 1,
+        ui.label({detailRect.x, static_cast<int16_t>(detailTextY + 33), textWidth, 10}, item.chapter, 1,
                  ui::themes::ColorRole::Muted);
         std::array<char, 5> progress{};
         const auto [end, error] = std::to_chars(progress.data(), progress.data() + progress.size() - 1, item.progress);
         const size_t digits = error == std::errc{} ? static_cast<size_t>(end - progress.data()) : 1;
         progress[digits] = '%';
-        ui.label({static_cast<int16_t>(detailRect.x + detailRect.w - progressWidth), detailRect.y, progressWidth,
-                  detailRect.h},
+        ui.label({static_cast<int16_t>(detailRect.x + detailRect.w - progressWidth), detailTextY, progressWidth,
+                  std::min<int16_t>(detailHeight, detailRect.h)},
                  std::string_view{progress.data(), digits + 1}, 3, ui::themes::ColorRole::Accent, ui::TextAlign::Right);
         return result;
     }

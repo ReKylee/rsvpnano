@@ -186,7 +186,6 @@ def vertical_rsvp() -> str:
 
 def write_zip(archive: zipfile.ZipFile, name: str, data: bytes, compression: int) -> None:
     info = zipfile.ZipInfo(name, (2026, 1, 1, 0, 0, 0))
-    info.create_system = 0
     info.compress_type = compression
     info.external_attr = 0o644 << 16
     archive.writestr(info, data)

@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-#include "companion/CompanionHttp.h"
+#include "companion/http/CompanionHttp.h"
 #include "locales/LocaleCatalog.h"
 #include "settings/SettingsGlaze.h"
 #include "settings/SettingsStore.h"

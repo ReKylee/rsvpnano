@@ -1,4 +1,4 @@
-#include "companion/CompanionHttp.h"
+#include "companion/http/CompanionHttp.h"
 
 #include <WebServer.h>
 

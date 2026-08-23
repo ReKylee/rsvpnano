@@ -1,4 +1,4 @@
-#include "companion/CompanionApi.h"
+#include "companion/http/CompanionApi.h"
 
 #include <algorithm>
 #include <limits>
@@ -8,7 +8,7 @@
 
 #include "board/BoardStorage.h"
 #include "companion/serial/CompanionBufferedRequest.h"
-#include "companion/CompanionUpload.h"
+#include "companion/http/CompanionUpload.h"
 #include "logging/Logger.h"
 #include "reader/ReadingLoop.h"
 #include "storage/fs/StorageFiles.h"

@@ -1,4 +1,4 @@
-#include "companion/CompanionApi.h"
+#include "companion/http/CompanionApi.h"
 
 #include <system_error>
 #include <utility>

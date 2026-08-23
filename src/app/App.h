@@ -8,7 +8,7 @@
 
 #include "board/BoardDisplay.h"
 #include "board/BoardPower.h"
-#include "companion/CompanionApi.h"
+#include "companion/http/CompanionApi.h"
 #include "companion/serial/CompanionSerial.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"

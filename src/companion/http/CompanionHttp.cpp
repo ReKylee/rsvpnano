@@ -1,4 +1,4 @@
-#include "companion/CompanionApi.h"
+#include "companion/http/CompanionApi.h"
 #include "companion/serial/CompanionBufferedRequest.h"
 #include <esp_log.h>
 #include <glaze/net/url.hpp>

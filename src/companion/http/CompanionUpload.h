@@ -10,7 +10,7 @@
 #include <string_view>
 #include <system_error>
 
-#include "companion/CompanionHttp.h"
+#include "companion/http/CompanionHttp.h"
 
 namespace companion {
 

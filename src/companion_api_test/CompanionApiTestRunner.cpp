@@ -4,7 +4,7 @@
 #include "board/Board.h"
 #include "board/BoardDisplay.h"
 #include "board/BoardStorage.h"
-#include "companion/CompanionApi.h"
+#include "companion/http/CompanionApi.h"
 #include "locales/LocaleCatalog.h"
 #include "logging/Logger.h"
 #include "settings/NvsSecurity.h"

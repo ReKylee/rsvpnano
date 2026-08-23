@@ -10,7 +10,7 @@
 #include <string_view>
 #include <utility>
 
-#include "companion/CompanionApi.h"
+#include "companion/http/CompanionApi.h"
 #include "companion/CompanionApiModels.h"
 #include "companion/serial/CompanionBufferedRequest.h"
 #include "board/BoardStorage.h"

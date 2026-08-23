@@ -1,4 +1,4 @@
-#include "companion/CompanionApi.h"
+#include "companion/http/CompanionApi.h"
 
 #include <algorithm>
 #include <string>
@@ -6,7 +6,7 @@
 #include <utility>
 
 #include "board/BoardStorage.h"
-#include "companion/CompanionUpload.h"
+#include "companion/http/CompanionUpload.h"
 #include "display/ThemeStore.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"

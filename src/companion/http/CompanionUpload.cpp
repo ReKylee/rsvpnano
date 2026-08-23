@@ -1,4 +1,4 @@
-#include "companion/CompanionUpload.h"
+#include "companion/http/CompanionUpload.h"
 #include "companion/serial/CompanionBufferedRequest.h"
 
 #include <esp_log.h>

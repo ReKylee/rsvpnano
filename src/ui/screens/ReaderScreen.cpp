@@ -34,7 +34,7 @@ namespace screens {
         constexpr size_t kPhantomAfterTargets[] = {96, 144, 208};
 #if defined(BOARD_HAS_PSRAM)
         constexpr size_t kFontReadAheadWords = ui::fonts::RFontFileCache::kBlockCount;
-        constexpr size_t kFontReadAheadTargetBlocks = 8;
+        constexpr size_t kFontReadAheadTargetBlocks = 12;
         constexpr uint32_t kFontReadAheadMinimumSlackMs = 10;
 #endif
 
@@ -176,6 +176,25 @@ namespace screens {
                 text_.prepare(std::span<const ui::fonts::PositionedGlyph>{rsvpGlyphs_});
         }
         rsvpGlyphs_.clear();
+
+#if defined(BOARD_HAS_PSRAM)
+        if (session.metadata.writingMode == WritingMode::verticalRl) {
+            const size_t current = session.state.wordIndex;
+            const size_t family = fontChoice(current, settings, overrides);
+            const FontCatalog::Face currentFace = fonts.loadFace(family, sizeIndex);
+            const auto bounds = ReadingLoop::paragraphBoundsAt(session, current);
+            size_t loadedBlocks = 0;
+            for (size_t index = current;
+                 index < bounds.second && loadedBlocks < ui::fonts::RFontFileCache::kBlockCount; ++index) {
+                if (fontChoice(index, settings, overrides) != family)
+                    break;
+                loadedBlocks += ui::fonts::prefetchGlyphBitmaps(
+                    currentFace.raster.get(), ReadingLoop::wordAt(session, index),
+                    ui::fonts::RFontFileCache::kBlockCount - loadedBlocks, true);
+            }
+            activateFace(currentFace);
+        }
+#endif
     }
 
     size_t ReaderScreen::fontChoice(size_t wordIndex) const {
@@ -254,8 +273,9 @@ namespace screens {
                  index < end && readAheadBlockCount_ < kFontReadAheadTargetBlocks && hasSlack(millis()); ++index) {
                 if (fontChoice(index) != family)
                     break;
-                readAheadBlockCount_ +=
-                    ui::fonts::prefetchGlyphBitmaps(upcoming.raster.get(), ReadingLoop::wordAt(session, index), 1);
+                readAheadBlockCount_ += ui::fonts::prefetchGlyphBitmaps(
+                    upcoming.raster.get(), ReadingLoop::wordAt(session, index), 1,
+                    session.metadata.writingMode == WritingMode::verticalRl);
             }
             return;
         }
@@ -284,7 +304,8 @@ namespace screens {
                 if (fontChoice(index) != nextFamily)
                     break;
                 loadedBlocks += ui::fonts::prefetchGlyphBitmaps(
-                    nextFace.raster.get(), ReadingLoop::wordAt(session, index), blockBudget - loadedBlocks);
+                    nextFace.raster.get(), ReadingLoop::wordAt(session, index), blockBudget - loadedBlocks,
+                    session.metadata.writingMode == WritingMode::verticalRl);
             }
             return;
         }
@@ -327,7 +348,22 @@ namespace screens {
         if (changingFamily || face_.shaper || face_.raster.get().bitmap != nullptr)
             return;
         activateFace(face_);
-        text_.prepare(ReadingLoop::wordAt(session, next));
+        if (session.metadata.writingMode == WritingMode::verticalRl) {
+#if defined(BOARD_HAS_PSRAM)
+            constexpr size_t blockBudget = 4;
+            size_t loadedBlocks = 0;
+            const auto bounds = ReadingLoop::paragraphBoundsAt(session, next);
+            for (size_t index = next; index < bounds.second && loadedBlocks < blockBudget; ++index) {
+                if (fontChoice(index) != nextFamily)
+                    break;
+                loadedBlocks += ui::fonts::prefetchGlyphBitmaps(
+                    face_.raster.get(), ReadingLoop::wordAt(session, index), blockBudget - loadedBlocks, true);
+            }
+#endif
+            text_.prepareVertical(ReadingLoop::wordAt(session, next));
+        } else {
+            text_.prepare(ReadingLoop::wordAt(session, next));
+        }
     }
 
     FontCatalog::Face ReaderScreen::pageTypeface(size_t wordIndex) {
@@ -592,8 +628,13 @@ namespace screens {
             gfx.drawFastVLine(anchor, guideTop, 5, marker);
             gfx.drawFastVLine(anchor, static_cast<int16_t>(guideBottom - 4), 5, marker);
 
-            if (!shaped)
+            if (vertical) {
+                if (shaped)
+                    text_.prepare(std::span<const ui::fonts::PositionedGlyph>{rsvpGlyphs_});
+                text_.prepareVertical(word);
+            } else if (!shaped) {
                 text_.prepare(word);
+            }
             if (shaped) {
                 int16_t cursor = x;
                 size_t first = 0;
@@ -1142,12 +1183,7 @@ namespace screens {
         } else if (!vertical) {
             text_.drawString(value, x, baseline, typography_.tracking);
         } else {
-            while (!value.empty()) {
-                uint32_t codepoint = 0;
-                Utf8Text::next(value, codepoint);
-                x = static_cast<int16_t>(x + text_.drawVerticalCodepoint(codepoint, x, ui.height() / 2)
-                                         + (value.empty() ? 0 : typography_.tracking));
-            }
+            text_.drawVerticalString(value, x, ui.height() / 2, typography_.tracking);
         }
     }
 

@@ -27,7 +27,7 @@ namespace ui::fonts {
     struct RFontFileCache {
         static constexpr size_t kBlockSize = 4096;
 #if defined(BOARD_HAS_PSRAM)
-        static constexpr size_t kBlockCount = 16;
+        static constexpr size_t kBlockCount = 20;
 #else
         static constexpr size_t kBlockCount = 2;
 #endif
@@ -247,7 +247,27 @@ namespace ui::fonts {
         return true;
     }
 
-    inline size_t prefetchGlyphBitmaps(const AlphaFont& font, std::string_view text, size_t maxBlockReads) {
+    inline bool residentVerticalRule(const AlphaFont& font, uint32_t codepoint, RFont4::VerticalRule& rule) {
+        if (font.verticalRules == nullptr)
+            return false;
+        uint16_t first = 0;
+        uint16_t last = font.verticalRuleCount;
+        while (first < last) {
+            const uint16_t middle = static_cast<uint16_t>(first + (last - first) / 2);
+            std::memcpy(&rule, font.verticalRules + middle, sizeof(rule));
+            if (rule.codepoint < codepoint)
+                first = static_cast<uint16_t>(middle + 1);
+            else
+                last = middle;
+        }
+        if (first >= font.verticalRuleCount)
+            return false;
+        std::memcpy(&rule, font.verticalRules + first, sizeof(rule));
+        return rule.codepoint == codepoint;
+    }
+
+    inline size_t prefetchGlyphBitmaps(const AlphaFont& font, std::string_view text, size_t maxBlockReads,
+                                       bool vertical = false) {
         if (maxBlockReads == 0 || font.bitmap != nullptr || font.glyphs == nullptr || !font.file || !font.fileCache)
             return 0;
 
@@ -259,6 +279,11 @@ namespace ui::fonts {
             if (!residentGlyphIndex(font, codepoint, glyphIndex) || glyphIndex == kMissingGlyphIndex
                 || glyphIndex >= font.glyphCount)
                 continue;
+
+            RFont4::VerticalRule rule;
+            if (vertical && residentVerticalRule(font, codepoint, rule)
+                && rule.alternateIndex != RFont4::kRotateVerticalGlyph)
+                glyphIndex = rule.alternateIndex;
 
             AlphaGlyph glyph;
             std::memcpy(&glyph, font.glyphs + glyphIndex, sizeof(glyph));
@@ -375,27 +400,66 @@ namespace ui::fonts {
                                      static_cast<int16_t>(x + positioned.xOffset), centerY);
         }
 
+        int16_t drawVerticalString(std::string_view text, int16_t x, int16_t centerY, int8_t tracking = 0) {
+            constexpr size_t kBatchGlyphs = 4;
+            const int16_t start = x;
+            const int16_t margin = font_ == nullptr ? 0 : font_->yAdvance;
+            while (!text.empty()) {
+                std::string_view remaining = text;
+                uint32_t codepoint = 0;
+                Utf8Text::next(remaining, codepoint);
+                const int16_t advance = glyphAdvance(codepoint);
+                if (x + advance + margin <= 0) {
+                    text = remaining;
+                    x = static_cast<int16_t>(x + advance + (text.empty() ? 0 : tracking));
+                    continue;
+                }
+                if (x - margin >= output_.width())
+                    break;
+
+                std::string_view batch = text;
+                size_t bytes = 0;
+                int16_t batchX = x;
+                for (size_t count = 0; count < kBatchGlyphs && !batch.empty(); ++count) {
+                    const size_t before = batch.size();
+                    Utf8Text::next(batch, codepoint);
+                    bytes += before - batch.size();
+                    batchX = static_cast<int16_t>(batchX + glyphAdvance(codepoint) + (batch.empty() ? 0 : tracking));
+                    if (batchX - margin >= output_.width())
+                        break;
+                }
+                const std::string_view visible{text.data(), bytes};
+                prepareVertical(visible);
+                while (text.data() < visible.data() + visible.size()) {
+                    Utf8Text::next(text, codepoint);
+                    x = static_cast<int16_t>(x + drawVerticalCodepoint(codepoint, x, centerY)
+                                             + (text.empty() ? 0 : tracking));
+                }
+            }
+            return static_cast<int16_t>(x - start);
+        }
+
     private:
         int16_t drawVerticalGlyph(uint16_t glyphIndex, uint32_t codepoint, int16_t advance, int16_t x,
                                   int16_t centerY) {
-            RFont4::VerticalRule rule;
             bool sideways = false;
-            if (verticalRule(codepoint, rule)) {
-                if (rule.alternateIndex == RFont4::kRotateVerticalGlyph)
-                    sideways = true;
-                else
-                    glyphIndex = rule.alternateIndex;
-            }
+            glyphIndex = verticalGlyphIndex(glyphIndex, codepoint, sideways);
             const AlphaGlyph* glyph = glyphAt(glyphIndex);
             if (glyph == nullptr)
                 return 0;
             const AlphaGlyph metrics = readGlyph(*glyph);
+            const int16_t drawX =
+                static_cast<int16_t>(x + (advance - (sideways ? metrics.width : metrics.height)) / 2);
+            const int16_t drawY =
+                static_cast<int16_t>(centerY - (sideways ? metrics.height : metrics.width) / 2);
+            const int16_t drawW = sideways ? metrics.width : metrics.height;
+            const int16_t drawH = sideways ? metrics.height : metrics.width;
+            if (drawX >= output_.width() || drawX + drawW <= 0 || drawY >= output_.height() || drawY + drawH <= 0)
+                return advance;
             if (sideways)
-                drawGlyph(metrics, static_cast<int16_t>(x + (advance - metrics.width) / 2),
-                          static_cast<int16_t>(centerY - metrics.height / 2));
+                drawGlyph(metrics, drawX, drawY);
             else
-                drawCounterRotatedGlyph(metrics, static_cast<int16_t>(x + (advance - metrics.height) / 2),
-                                        static_cast<int16_t>(centerY - metrics.width / 2));
+                drawCounterRotatedGlyph(metrics, drawX, drawY);
             return advance;
         }
 
@@ -408,6 +472,11 @@ namespace ui::fonts {
         void prepare(std::span<const PositionedGlyph> glyphs) {
             if (ready_ && font_ != nullptr)
                 prepareBitmaps(glyphs);
+        }
+
+        void prepareVertical(std::string_view text) {
+            if (ready_ && font_ != nullptr)
+                prepareVerticalBitmaps(text);
         }
 
         int16_t glyphAdvance(uint32_t codepoint) const {
@@ -1344,6 +1413,22 @@ namespace ui::fonts {
             });
         }
 
+        bool prepareVerticalBitmaps(std::string_view text) {
+            return prepareBitmaps([&](size_t& used) {
+                uint32_t codepoint = 0;
+                while (Utf8Text::next(text, codepoint)) {
+                    uint16_t glyphIndex = 0;
+                    if (!findGlyphIndex(codepoint, glyphIndex))
+                        continue;
+                    bool sideways = false;
+                    const AlphaGlyph* glyph = glyphAt(verticalGlyphIndex(glyphIndex, codepoint, sideways));
+                    if (glyph != nullptr && !appendPreparedBitmap(readGlyph(*glyph), used))
+                        return false;
+                }
+                return true;
+            });
+        }
+
         bool prepareVisibleBitmaps(std::string_view text, int16_t x, int16_t baseline, int8_t tracking) {
             return prepareBitmaps([&](size_t& used) {
                 int16_t cursorX = x;
@@ -1485,15 +1570,14 @@ namespace ui::fonts {
         }
 
         bool verticalRule(uint32_t codepoint, RFont4::VerticalRule& rule) const {
+            if (font_->verticalRules != nullptr)
+                return residentVerticalRule(*font_, codepoint, rule);
             uint16_t first = 0;
             uint16_t last = font_->verticalRuleCount;
             while (first < last) {
                 const uint16_t middle = static_cast<uint16_t>(first + (last - first) / 2);
-                if (font_->verticalRules != nullptr)
-                    rule = readPacked(font_->verticalRules[middle]);
-                else if (!font_->file
-                         || !readFile(font_->fileHeader.verticalRulesOffset + middle * sizeof(rule), &rule,
-                                      sizeof(rule)))
+                if (!font_->file
+                    || !readFile(font_->fileHeader.verticalRulesOffset + middle * sizeof(rule), &rule, sizeof(rule)))
                     return false;
                 if (rule.codepoint < codepoint)
                     first = static_cast<uint16_t>(middle + 1);
@@ -1502,11 +1586,20 @@ namespace ui::fonts {
             }
             if (first >= font_->verticalRuleCount)
                 return false;
-            if (font_->verticalRules != nullptr)
-                rule = readPacked(font_->verticalRules[first]);
-            else if (!readFile(font_->fileHeader.verticalRulesOffset + first * sizeof(rule), &rule, sizeof(rule)))
+            if (!readFile(font_->fileHeader.verticalRulesOffset + first * sizeof(rule), &rule, sizeof(rule)))
                 return false;
             return rule.codepoint == codepoint;
+        }
+
+        uint16_t verticalGlyphIndex(uint16_t glyphIndex, uint32_t codepoint, bool& sideways) const {
+            RFont4::VerticalRule rule;
+            if (!verticalRule(codepoint, rule))
+                return glyphIndex;
+            if (rule.alternateIndex == RFont4::kRotateVerticalGlyph) {
+                sideways = true;
+                return glyphIndex;
+            }
+            return rule.alternateIndex;
         }
 
         bool findGlyphIndexBinary(uint32_t codepoint, uint16_t& glyphIndex) const {

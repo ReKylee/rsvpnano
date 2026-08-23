@@ -149,6 +149,10 @@ namespace screens {
             const std::string_view word = ReadingLoop::wordAt(session, wordIndex);
             if (!face.shaper) {
                 text_.prepare(word);
+                const size_t next = wordIndex + 1;
+                if (next < ReadingLoop::wordCount(session)
+                    && fontChoice(next, settings, overrides) == family)
+                    text_.prepare(ReadingLoop::wordAt(session, next));
                 continue;
             }
             const ReadingLoop::TextParagraph paragraph = ReadingLoop::paragraphAt(session, wordIndex);

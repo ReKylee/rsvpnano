@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#35675f" />
+    <meta name="description" content="Install and manage RSVP Nano readers." />
+    <title>RSVP Nano</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <style>
+      html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #faf8f2; }
+      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      #unsupported { display: none; box-sizing: border-box; max-width: 42rem; margin: 12vh auto; padding: 2rem; }
+      noscript { display: block; padding: 2rem; }
+    </style>
+  </head>
+  <body>
+    <noscript>RSVP Nano requires JavaScript to install firmware and manage a reader.</noscript>
+    <div id="unsupported">
+      <h1>This browser is not supported yet.</h1>
+      <p>Try the latest Chrome, Edge, or Firefox. To install or connect by USB, use Chrome or Edge on a computer.</p>
+    </div>
+    <esp-web-install-button id="rsvp-installer">
+      <button id="rsvp-installer-trigger" slot="activate" type="button" tabindex="-1" aria-hidden="true">Install</button>
+    </esp-web-install-button>
+    <style>#rsvp-installer { position: fixed; left: -10000px; top: 0; }</style>
+    <script type="module" src="https://unpkg.com/esp-web-tools@10.1.0/dist/web/install-button.js?module"></script>
+    <script type="module">
+      const development = location.port === "8080";
+
+      if (development && "serviceWorker" in navigator) {
+        const controlled = navigator.serviceWorker.controller !== null;
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map(registration => registration.unregister()));
+        await Promise.all((await caches.keys()).map(key => caches.delete(key)));
+        if (controlled) {
+          location.reload();
+        } else {
+          import("./rsvpnano-web.js").catch(showStartupError);
+        }
+      } else {
+      import("./rsvpnano-web.js")
+        .then(() => {
+          if ("serviceWorker" in navigator) {
+              window.setTimeout(() => navigator.serviceWorker.register("./service-worker.js"), 10000);
+            }
+          })
+          .catch(showStartupError);
+      }
+
+      function showStartupError(error) {
+        console.error("Failed to start RSVP Nano", error);
+        document.getElementById("unsupported").style.display = "block";
+      }
+    </script>
+  </body>
+</html>

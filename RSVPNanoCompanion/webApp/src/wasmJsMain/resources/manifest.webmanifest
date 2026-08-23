@@ -1,0 +1,13 @@
+{
+  "name": "RSVP Nano Web Companion",
+  "short_name": "RSVP Nano",
+  "description": "Install and manage RSVP Nano readers.",
+  "start_url": "./#/setup",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#faf8f2",
+  "theme_color": "#35675f",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

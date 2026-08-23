@@ -12,6 +12,7 @@
 
 namespace focus {
 
+    constexpr size_t kMaxConfigBytes = 4096;
     constexpr size_t kMaxTimers = 6;
     constexpr size_t kMaxTimerNameBytes = 14;
     struct Timer {

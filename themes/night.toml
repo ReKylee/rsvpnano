@@ -1,14 +1,5 @@
 name = "Night"
 
-[typography]
-fontId = "literata"
-fontSizeIndex = 0
-focusHighlight = true
-tracking = 0
-anchor = 30
-guideWidth = 30
-guideGap = 5
-
 [colors]
 background = "#000000"
 foreground = "#FF9C00"

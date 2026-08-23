@@ -10,74 +10,18 @@
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 
-namespace {
-
-    constexpr size_t kMaxThemeBytes = 4096;
-
-    struct Repair {
-        std::string path;
-        size_t themeIndex;
-    };
-
-    bool writeThemeFile(const char* path, const ui::themes::Theme& theme) {
-        if (!StorageFiles::ensureDirectory(StoragePaths::kThemesPath))
-            return false;
-        auto encoded = ui::themes::encodeToml(theme.definition);
-        if (!encoded) {
-            ESP_LOGE("theme", "encode failed: %s", encoded.error().message.c_str());
-            return false;
-        }
-        const std::string tmpPath = std::string{path} + ".tmp";
-        const std::string backupPath = std::string{path} + ".bak";
-        auto& filesystem = Board::Storage::filesystem();
-        filesystem.remove(tmpPath.c_str());
-        filesystem.remove(backupPath.c_str());
-
-        File file = filesystem.open(tmpPath.c_str(), FILE_WRITE);
-        if (!file)
-            return false;
-        const size_t count = file.write(reinterpret_cast<const uint8_t*>(encoded->data()), encoded->size());
-        const bool written = count == encoded->size() && file.getWriteError() == 0;
-        file.close();
-        if (!written) {
-            filesystem.remove(tmpPath.c_str());
-            return false;
-        }
-
-        const bool hadOriginal = StorageFiles::fileExists(path);
-        if (hadOriginal && !filesystem.rename(path, backupPath.c_str())) {
-            filesystem.remove(tmpPath.c_str());
-            return false;
-        }
-        if (filesystem.rename(tmpPath.c_str(), path)) {
-            if (hadOriginal)
-                filesystem.remove(backupPath.c_str());
-            return true;
-        }
-        if (hadOriginal)
-            filesystem.rename(backupPath.c_str(), path);
-        filesystem.remove(tmpPath.c_str());
-        return false;
-    }
-
-} // namespace
-
-void ThemeStore::loadFromSd(const FontCatalog& fonts, const settings::TypographySettings& defaults) {
-    const std::string selectedId = selected().id;
-    themes_ = {ui::themes::defaultTheme(defaults)};
-    selectedIndex_ = 0;
+void ThemeStore::loadFromSd() {
+    themes_ = {ui::themes::defaultTheme()};
 
     File dir = Board::Storage::filesystem().open(StoragePaths::kThemesPath);
     if (!dir || !dir.isDirectory()) {
         if (dir) {
             dir.close();
         }
-        selectById(selectedId);
         return;
     }
 
     std::vector<ui::themes::Theme> loaded;
-    std::vector<Repair> repairs;
     while (true) {
         File entry = dir.openNextFile();
         if (!entry) {
@@ -94,8 +38,9 @@ void ThemeStore::loadFromSd(const FontCatalog& fonts, const settings::Typography
             continue;
         }
 
-        if (entry.size() > kMaxThemeBytes) {
-            ESP_LOGW("theme", "skipped %s: file exceeds %u bytes", path.c_str(), static_cast<unsigned>(kMaxThemeBytes));
+        if (entry.size() > kMaximumFileBytes) {
+            ESP_LOGW("theme", "skipped %s: file exceeds %u bytes", path.c_str(),
+                     static_cast<unsigned>(kMaximumFileBytes));
             entry.close();
             continue;
         }
@@ -106,27 +51,15 @@ void ThemeStore::loadFromSd(const FontCatalog& fonts, const settings::Typography
             ESP_LOGW("theme", "skipped %s: incomplete read", path.c_str());
             continue;
         }
-        auto parsed = ui::themes::decodeToml(text, ui::themes::themeIdFromPath(path), defaults);
+        auto parsed = ui::themes::decodeToml(text, ui::themes::themeIdFromPath(path));
         if (!parsed) {
             ESP_LOGW("theme", "skipped %s: %s", path.c_str(), parsed.error().message.c_str());
             continue;
         }
 
-        auto& fontId = parsed->definition.typography.fontId;
-        if (fonts.find(fontId) == nullptr && !fonts.families().empty()) {
-            ESP_LOGW("theme", "%s references missing font '%s'; using '%s'", path.c_str(), fontId.c_str(),
-                     fonts.families().front().id.c_str());
-            fontId = fonts.families().front().id;
-            repairs.push_back({path, loaded.size()});
-        }
         loaded.push_back(std::move(*parsed));
     }
     dir.close();
-
-    for (const Repair& repair: repairs) {
-        if (!writeThemeFile(repair.path.c_str(), loaded[repair.themeIndex]))
-            ESP_LOGE("theme", "could not repair typeface in %s", repair.path.c_str());
-    }
 
     std::ranges::sort(loaded, {}, &ui::themes::Theme::id);
     const auto duplicates = std::ranges::unique(loaded, {}, &ui::themes::Theme::id);
@@ -139,23 +72,94 @@ void ThemeStore::loadFromSd(const FontCatalog& fonts, const settings::Typography
         loaded.erase(defaultTheme);
     }
     themes_.insert(themes_.end(), std::make_move_iterator(loaded.begin()), std::make_move_iterator(loaded.end()));
-    selectById(selectedId);
 }
 
-bool ThemeStore::selectById(std::string_view id) {
+std::expected<std::reference_wrapper<const ui::themes::Theme>, std::string> ThemeStore::
+    install(std::string_view stagedPath, std::string_view finalPath) {
+    const std::string staged{stagedPath};
+    const std::string final{finalPath};
+    const std::string id = ui::themes::themeIdFromPath(final);
+    return StorageFiles::ensureDirectory(StoragePaths::kThemesPath)
+        .transform_error([](std::error_code) {
+            return std::string{"Theme folder could not be created"};
+        })
+        .and_then([&]() -> std::expected<ui::themes::Theme, std::string> {
+            if (find(id) != nullptr)
+                return std::unexpected("Theme already exists");
+            return StorageFiles::readTextFile(Board::Storage::filesystem(), staged.c_str(), kMaximumFileBytes)
+                .transform_error([](std::error_code) {
+                    return std::string{"Theme file could not be read"};
+                })
+                .and_then([&](const std::string& text) -> std::expected<ui::themes::Theme, std::string> {
+                    if (text.empty())
+                        return std::unexpected("Theme file is empty");
+                    return ui::themes::decodeToml(text, id).transform_error([](const auto& error) {
+                        return error.message;
+                    });
+                });
+        })
+        .and_then([&](ui::themes::Theme installed)
+                      -> std::expected<std::reference_wrapper<const ui::themes::Theme>, std::string> {
+            auto replaced = StorageFiles::replaceFileAtomic(Board::Storage::filesystem(), final.c_str(), staged.c_str(),
+                                                            (final + ".bak").c_str());
+            if (!replaced)
+                return std::unexpected("Theme file could not be installed");
+            if (id == ui::themes::kDefaultThemeId) {
+                installed.builtIn = true;
+                themes_.front() = std::move(installed);
+            } else {
+                themes_.push_back(std::move(installed));
+                std::ranges::sort(themes_.begin() + 1, themes_.end(), {}, &ui::themes::Theme::id);
+            }
+            return std::cref(resolve(id));
+        });
+}
+
+std::expected<void, std::string> ThemeStore::remove(std::string_view id) {
+    const auto theme = std::ranges::find(themes_, id, &ui::themes::Theme::id);
+    if (theme == themes_.end())
+        return std::unexpected("Theme not found");
+    if (theme->builtIn)
+        return std::unexpected("Built-in theme cannot be removed");
+
+    File directory = Board::Storage::filesystem().open(StoragePaths::kThemesPath);
+    while (directory && directory.isDirectory()) {
+        File entry = directory.openNextFile();
+        if (!entry)
+            break;
+        const std::string path = entry.path();
+        const bool matches =
+            !entry.isDirectory() && ui::themes::hasThemeExtension(path) && ui::themes::themeIdFromPath(path) == id;
+        entry.close();
+        if (!matches)
+            continue;
+        const bool removed = Board::Storage::filesystem().remove(path.c_str());
+        directory.close();
+        if (!removed)
+            return std::unexpected("Theme file could not be removed");
+        themes_.erase(theme);
+        return {};
+    }
+    if (directory)
+        directory.close();
+    return std::unexpected("Theme file not found");
+}
+
+const ui::themes::Theme* ThemeStore::find(std::string_view id) const {
     const auto found = std::ranges::find(themes_, id, &ui::themes::Theme::id);
-    if (found == themes_.end())
-        return false;
-    selectedIndex_ = found - themes_.begin();
-    return true;
+    return found == themes_.end() ? nullptr : &*found;
 }
 
-void ThemeStore::selectNext() {
-    selectedIndex_ = (selectedIndex_ + 1) % themes_.size();
+const ui::themes::Theme& ThemeStore::resolve(std::string_view id) const {
+    const ui::themes::Theme* found = find(id);
+    return found == nullptr ? themes_.front() : *found;
 }
 
-const ui::themes::Theme& ThemeStore::selected() const {
-    return themes_[selectedIndex_];
+const ui::themes::Theme& ThemeStore::next(std::string_view id) const {
+    const ui::themes::Theme* current = find(id);
+    if (current == nullptr || current == &themes_.back())
+        return themes_.front();
+    return *std::next(current);
 }
 
 std::span<const ui::themes::Theme> ThemeStore::themes() const {

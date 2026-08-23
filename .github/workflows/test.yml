@@ -11,9 +11,19 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: recursive
 
       - name: Install PlatformIO
-        run: pip install platformio
+        run: pip install platformio freetype-py fonttools uharfbuzz lz4
+
+      - name: Check generated localization
+        run: |
+          python localization/generate_localization.py --check
+          python localization/generate_locale_packs.py --check
+          python RSVPNanoCompanion/tools/generate_multilingual_corpus.py --check
+          python -m unittest localization/test_locale_packs.py
+          python -m unittest discover -s fonts -p "test_*.py"
 
       - name: Run pacing tests
         run: pio test -e native_test

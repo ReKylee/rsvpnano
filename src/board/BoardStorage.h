@@ -13,6 +13,9 @@
 
 namespace Board::Storage {
 
+    // Indexed books use two files while multilingual pages may keep one font file per text run.
+    inline constexpr size_t kMaximumOpenFiles = 16;
+
     enum class CardType : uint8_t {
         None = 0,
         Mmc = 1,

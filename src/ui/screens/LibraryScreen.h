@@ -13,23 +13,14 @@
 namespace screens {
 
     struct LibraryItem {
-        std::string title;
-        std::string author;
+        const BookLibrary::Entry* book = nullptr;
         std::string chapter;
-        std::string progressLabel;
-        std::string spineLabel;
         uint8_t progress = 0;
-        bool article = false;
-    };
-
-    struct LibraryResult {
-        Action action = Action::None;
-        bool open = false;
     };
 
     class LibraryScreen {
     public:
-        LibraryResult draw(ui::Context& ui, const std::vector<LibraryItem>& items, uint32_t nowMs, Screen& screen);
+        Action draw(ui::Context& ui, const std::vector<LibraryItem>& items, uint32_t nowMs, Screen& screen);
         void reset();
         void invalidate();
         const std::vector<LibraryItem>& items(StorageManager& storage, const IndexedBookStore& bookStore,
@@ -47,9 +38,6 @@ namespace screens {
         int16_t spineWidth(const LibraryItem& item, size_t index) const;
         int16_t spineHeight(const LibraryItem& item, size_t index) const;
         uint32_t signature(const std::vector<LibraryItem>& items, size_t current) const;
-        static std::string spineLabel(std::string_view title);
-        static std::string progressLabel(uint8_t progress);
-
         bool dragging_ = false;
         bool moved_ = false;
         uint16_t startX_ = 0;
@@ -59,7 +47,6 @@ namespace screens {
         uint32_t lastDrawMs_ = 0;
         size_t selectedIndex_ = 0;
         std::vector<LibraryItem> items_;
-        size_t sourceCount_ = 0;
         bool itemsValid_ = false;
     };
 

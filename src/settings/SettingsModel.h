@@ -2,13 +2,17 @@
 
 #include <cstdint>
 #include <optional>
+#include <ranges>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "settings/SettingsRules.h"
 #include "standby/ScreensaverTypes.h"
-#include "ui/Localization.h"
-
+#include "text/UnicodeText.h"
 namespace settings {
+
+    inline constexpr std::string_view kMathFontTarget = "math";
 
     enum class ReadingMode : uint8_t {
         rsvp,
@@ -39,7 +43,7 @@ namespace settings {
 
     struct TypographySettings {
         std::string fontId = "literata";
-        BoundedValue<uint8_t, 0, 2> fontSizeIndex{0};
+        BoundedValue<uint8_t, 0, 3> fontSizeIndex{0};
         bool focusHighlight = true;
         BoundedValue<int, -2, 3> tracking{0};
         BoundedValue<uint8_t, 30, 40> anchor{30};
@@ -49,9 +53,31 @@ namespace settings {
         bool operator==(const TypographySettings&) const = default;
     };
 
-    inline const TypographySettings& effectiveTypography(const std::optional<TypographySettings>& bookOverride,
-                                                         const TypographySettings& theme) {
-        return bookOverride ? *bookOverride : theme;
+    enum class ReadingPacing : uint8_t {
+        words,
+        cjkPhrase,
+    };
+
+    struct LanguageFont {
+        std::string locale;
+        std::string fontId;
+
+        bool operator==(const LanguageFont&) const = default;
+    };
+
+    struct ReadingOverrides {
+        std::vector<LanguageFont> languageFonts;
+        std::optional<std::string> locale;
+        std::optional<ReadingPacing> pacing;
+
+        bool operator==(const ReadingOverrides&) const = default;
+    };
+
+    inline std::string_view fontForText(const ReadingOverrides& overrides, std::string_view locale, uint32_t scripts,
+                                        std::string_view fallback) {
+        const std::string_view target = (scripts & UnicodeText::ScriptMath) != 0 ? kMathFontTarget : locale;
+        const auto selected = std::ranges::find(overrides.languageFonts, target, &LanguageFont::locale);
+        return selected == overrides.languageFonts.end() ? fallback : std::string_view{selected->fontId};
     }
 
     struct PacingSettings {
@@ -83,7 +109,7 @@ namespace settings {
 
     struct InterfaceSettings {
         BoundedValue<uint8_t, 5, 100, 5> brightnessPercent{70};
-        UiLanguage language = UiLanguage::english;
+        std::string locale = "en";
         BoundedValue<uint8_t, 0, 4> standbyTimerIndex{1};
         standby::Kind screensaver = standby::Kind::life;
         std::string selectedThemeId = "default";
@@ -92,7 +118,7 @@ namespace settings {
     };
 
     struct NetworkSettings {
-        std::string wifiSsid;
+        std::string ssid;
 
         bool operator==(const NetworkSettings&) const = default;
     };

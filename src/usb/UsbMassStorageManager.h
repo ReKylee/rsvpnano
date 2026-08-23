@@ -25,6 +25,7 @@ public:
     bool begin(bool writeEnabled);
     void end();
     bool active() const;
+    bool ejected() const;
     uint64_t cardSizeBytes() const;
     const char* statusMessage() const;
 

@@ -50,13 +50,13 @@ namespace Board {
         void logStartupDiagnostics() {
             Logger::logResetReason();
 
-            const Board::Power::DiagnosticSnapshot power = Board::Power::diagnosticSnapshot();
+            const Board::Power::Diagnostics power = Board::Power::readDiagnostics();
             if (!power.available) {
-                ESP_LOGW("diag", "power_snapshot=unavailable");
+                ESP_LOGW("diag", "power_diagnostics=unavailable");
                 return;
             }
 
-            ESP_LOGD("diag", "power_snapshot=vbus:%u axp_status1:0x%02X axp_status2:0x%02X axp_pwr_irq:0x%02X",
+            ESP_LOGD("diag", "power_diagnostics=vbus:%u axp_status1:0x%02X axp_status2:0x%02X axp_pwr_irq:0x%02X",
                      power.externalPowerPresent ? 1 : 0, power.status1, power.status2, power.powerKeyIrqStatus);
         }
 

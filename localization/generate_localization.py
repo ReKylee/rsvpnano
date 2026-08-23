@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Generate firmware and companion localization data from localization/strings.toml.
+"""Generate the rescue firmware UI and companion locale default from strings.toml.
 
 The firmware output stays direct and length-aware:
-- UiLanguage and UiText enums generated from TOML order
-- constexpr std::string_view tables indexed as [language][text]
-- default-language fallback for missing translations
+- stable UiText IDs generated from TOML order
+- one constexpr English rescue table indexed by text ID
+
+Non-English translations are packaged as installable locale assets, not firmware tables.
 
 Requires Python 3.11+ for the standard-library tomllib module.
 """
@@ -42,7 +43,7 @@ DEFAULT_COMPANION = (
 	/ "com"
 	/ "rsvpnano"
 	/ "models"
-	/ "NanoLanguages.generated.kt"
+	/ "NanoLocales.generated.kt"
 )
 
 
@@ -51,10 +52,22 @@ class LocalizationError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class UiFont:
+	source: str
+	license: str
+	pixel_size: int | None = None
+	shaping_source: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Language:
 	name: str
 	code: str
 	label: str
+	scripts: tuple[str, ...]
+	ui_font: UiFont | None
+	direction: str
+	translation_status: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,15 +203,48 @@ def load_languages(data: TomlTable) -> list[Language]:
 		seen.add(name)
 
 		table = as_table(language_tables.get(name), f"languages.{name}")
+		raw_scripts = table.get("scripts")
+		if not isinstance(raw_scripts, list) or not raw_scripts:
+			raise LocalizationError(f"languages.{name}.scripts must be a non-empty array")
+		scripts = tuple(as_string(script, f"languages.{name}.scripts") for script in raw_scripts)
+		if any(not re.fullmatch(r"[A-Z][a-z]{3}", script) for script in scripts):
+			raise LocalizationError(f"languages.{name}.scripts must contain ISO 15924 codes")
+		raw_ui_font = table.get("ui_font")
+		ui_font = None
+		if raw_ui_font is not None:
+			font = as_table(raw_ui_font, f"languages.{name}.ui_font")
+			ui_font = UiFont(
+				source=as_string(font.get("source"), f"languages.{name}.ui_font.source"),
+				license=as_string(font.get("license"), f"languages.{name}.ui_font.license"),
+				pixel_size=as_positive_int_or_none(
+					font.get("pixel_size"), f"languages.{name}.ui_font.pixel_size"
+				),
+				shaping_source=(
+					as_string(font.get("shaping_source"), f"languages.{name}.ui_font.shaping_source")
+					if font.get("shaping_source") is not None
+					else None
+				),
+			)
+		direction = as_string(table.get("direction"), f"languages.{name}.direction")
+		if direction not in {"ltr", "rtl"}:
+			raise LocalizationError(f"languages.{name}.direction must be ltr or rtl")
+		translation_status = as_string(
+			table.get("translation_status"), f"languages.{name}.translation_status"
+		)
+		if translation_status not in {"preview", "reviewed"}:
+			raise LocalizationError(f"languages.{name}.translation_status must be preview or reviewed")
 		languages.append(
 			Language(
 				name=name,
 				code=as_string(table.get("code"), f"languages.{name}.code"),
 				label=as_string(table.get("name"), f"languages.{name}.name"),
+				scripts=scripts,
+				ui_font=ui_font,
+				direction=direction,
+				translation_status=translation_status,
 			)
 		)
 
-	validate_enum_count(len(languages), "UiLanguage")
 	return languages
 
 
@@ -338,16 +384,13 @@ def generate_header(model: LocalizationModel) -> str:
 	writer.add("#include <cstdint>")
 	writer.add("#include <string_view>")
 	writer.add()
-	write_enum(writer, "UiLanguage", [language.name.lower() for language in model.languages])
-	writer.add()
 	write_enum(writer, "UiText", [text.key for text in model.texts])
 	writer.add()
 	writer.add("namespace Localization {")
 	writer.add()
-	writer.add("    UiLanguage sanitizeLanguage(uint8_t value);")
-	writer.add("    UiLanguage nextLanguage(UiLanguage current);")
-	writer.add("    std::string_view languageName(UiLanguage language);")
-	writer.add("    std::string_view text(UiLanguage language, UiText key);")
+	writer.add(f"    inline constexpr std::string_view kDefaultLocale = {cxx_string_literal(model.languages[model.default_language_index].code)};")
+	writer.add()
+	writer.add("    std::string_view text(UiText key);")
 	writer.add()
 	writer.add("} // namespace Localization")
 	return writer.render()
@@ -374,22 +417,10 @@ def generate_cpp(model: LocalizationModel) -> str:
 	writer.add("// clang-format off")
 	writer.add("namespace {")
 	writer.add()
-	writer.add("    constexpr size_t kLanguageCount = static_cast<size_t>(UiLanguage::Count);")
 	writer.add("    constexpr size_t kTextCount = static_cast<size_t>(UiText::Count);")
-	writer.add(f"    constexpr size_t kDefaultLanguageIndex = {model.default_language_index};")
-	writer.add(
-		f'    static_assert(kLanguageCount == {len(model.languages)}, "UiLanguage count mismatch");'
-	)
 	writer.add(f'    static_assert(kTextCount == {len(model.texts)}, "UiText count mismatch");')
 	writer.add()
-	writer.extend(generate_language_names(model))
-	writer.add()
 	writer.extend(generate_texts(model))
-	writer.add()
-	writer.add("    size_t languageIndex(UiLanguage language) {")
-	writer.add("        const size_t value = static_cast<size_t>(language);")
-	writer.add("        return value < kLanguageCount ? value : kDefaultLanguageIndex;")
-	writer.add("    }")
 	writer.add()
 	writer.add("} // namespace")
 	writer.add()
@@ -403,71 +434,30 @@ def generate_cpp(model: LocalizationModel) -> str:
 	return writer.render()
 
 
-def generate_language_names(model: LocalizationModel) -> list[str]:
-	lines = ["    constexpr std::array<std::string_view, kLanguageCount> kLanguageNames = {{"]
-	lines.extend(
-		f"        /* {language.name:<8} */ {cxx_string_literal(language.label)},"
-		for language in model.languages
-	)
-	lines.append("    }};")
-	return lines
-
-
 def generate_texts(model: LocalizationModel) -> list[str]:
+	default = model.languages[model.default_language_index]
 	lines = [
 		"    using TextRow = std::array<std::string_view, kTextCount>;",
-		"    using TextTable = std::array<TextRow, kLanguageCount>;",
 		"",
-		"    constexpr TextTable kTexts = {{",
+		"    constexpr TextRow kTexts = {{",
 	]
-
-	for language in model.languages:
-		lines.append(f"        // {language.name} ({language.code})")
-		lines.append("        {{")
-		lines.extend(
-			f"            /* {text.key:<24} */ "
-			+ (cxx_string_literal(text.values.get(language.name, "")) if text.values.get(language.name, "") else "{}")
-			+ ","
-			for text in model.texts
-		)
-		lines.append("        }},")
-
+	lines.extend(
+		f"        /* {text.key:<24} */ {cxx_string_literal(text.values[default.name])},"
+		for text in model.texts
+	)
 	lines.append("    }};")
 	return lines
 
 
 def generate_localization_functions() -> list[str]:
 	return [
-		"    UiLanguage sanitizeLanguage(uint8_t value) {",
-		"        if (value >= kLanguageCount) {",
-		"            return static_cast<UiLanguage>(kDefaultLanguageIndex);",
-		"        }",
-		"        return static_cast<UiLanguage>(value);",
-		"    }",
-		"",
-		"    UiLanguage nextLanguage(UiLanguage current) {",
-		"        const size_t value = languageIndex(current);",
-		"        return static_cast<UiLanguage>((value + 1) % kLanguageCount);",
-		"    }",
-		"",
-		"    std::string_view languageName(UiLanguage language) {",
-		"        return kLanguageNames[languageIndex(language)];",
-		"    }",
-		"",
-		"    std::string_view text(UiLanguage language, UiText key) {",
+		"    std::string_view text(UiText key) {",
 		"        const size_t textIndex = static_cast<size_t>(key);",
 		"        if (textIndex >= kTextCount) {",
 		"            return \"\";",
 		"        }",
 		"",
-		"        const size_t lang = languageIndex(language);",
-		"        std::string_view value = kTexts[lang][textIndex];",
-		"",
-		"        if (value.empty()) {",
-		"            value = kTexts[kDefaultLanguageIndex][textIndex];",
-		"        }",
-		"",
-		"        return value;",
+		"        return kTexts[textIndex];",
 		"    }",
 	]
 
@@ -477,16 +467,9 @@ def generate_companion(model: LocalizationModel) -> str:
 	writer.extend(generated_banner())
 	writer.add("package com.rsvpnano.models")
 	writer.add()
-	writer.add("object NanoLanguages {")
-	default_value = model.default_language.lower()
+	writer.add("object NanoLocales {")
+	default_value = model.languages[model.default_language_index].code
 	writer.add(f"    const val DEFAULT = {json.dumps(default_value, ensure_ascii=False)}")
-	writer.add()
-	writer.add("    val OPTIONS = listOf(")
-	for language in model.languages:
-		value = json.dumps(language.name.lower(), ensure_ascii=False)
-		label = json.dumps(language.label, ensure_ascii=False)
-		writer.add(f"        {value} to {label},")
-	writer.add("    )")
 	writer.add("}")
 	return writer.render()
 

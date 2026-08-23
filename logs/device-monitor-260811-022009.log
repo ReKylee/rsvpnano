@@ -1,0 +1,73 @@
+02:20:11.809 > [ 70525][W][BenchmarkRunner.cpp:465] waitForStartInput(): [bench] still_waiting_for_start_input
+02:20:14.810 > [ 73527][W][BenchmarkRunner.cpp:465] waitForStartInput(): [bench] still_waiting_for_start_input
+02:20:17.811 > [ 76528][W][BenchmarkRunner.cpp:465] waitForStartInput(): [bench] still_waiting_for_start_input
+02:20:20.812 > [ 79529][W][BenchmarkRunner.cpp:465] waitForStartInput(): [bench] still_waiting_for_start_input
+02:20:23.813 > [ 82530][W][BenchmarkRunner.cpp:465] waitForStartInput(): [bench] still_waiting_for_start_input
+02:20:26.833 > [ 85550][W][BenchmarkRunner.cpp:465] waitForStartInput(): [bench] still_waiting_for_start_input
+02:20:29.834 > [ 88552][W][BenchmarkRunner.cpp:465] waitForStartInput(): [bench] still_waiting_for_start_input
+02:20:32.835 > [ 91553][W][BenchmarkRunner.cpp:465] waitForStartInput(): [bench] still_waiting_for_start_input
+02:20:35.836 > [ 94554][W][BenchmarkRunner.cpp:465] waitForStartInput(): [bench] still_waiting_for_start_input
+02:20:38.837 > [ 97555][W][BenchmarkRunner.cpp:465] waitForStartInput(): [bench] still_waiting_for_start_input
+02:20:40.678 > [ 99396][I][BenchmarkRunner.cpp:471] waitForStartInput(): [bench] start_input_received
+02:20:40.678 > [ 99396][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Benchmark line1=Starting line2=
+02:20:41.017 > [ 99735][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Benchmark line1=display_push_full line2=Running
+02:20:41.068 > [ 99786][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=display_push_full ok=1 ms=12 us=11259 iterations=1 avg_us=11259 bytes=220160 rate_kib_s=19095 heap_before=182176 heap_after=182176 heap_min=8323996
+02:20:41.070 > [ 99789][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Benchmark OK line1=display_push_full line2=11 ms
+02:20:41.357 > [100075][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=audio_begin ok=0 ms=0 us=0 iterations=1 avg_us=0 bytes=0 rate_kib_s=0 heap_before=0 heap_after=0 heap_min=0
+02:20:41.359 > [100077][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=audio_beep ok=0 ms=0 us=0 iterations=1 avg_us=0 bytes=0 rate_kib_s=0 heap_before=0 heap_after=0 heap_min=0
+02:20:41.920 > [100638][I][SdCard.cpp:303] mount(): [sd-check] selected cached SD frequency 40000 kHz
+02:20:41.921 > [100639][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=sd_mount ok=1 ms=560 us=559899 iterations=1 avg_us=559899 bytes=0 rate_kib_s=0 heap_before=0 heap_after=0 heap_min=0
+02:20:41.922 > [100640][I][BenchmarkRunner.cpp:501] run(): [bench] sd_frequency_khz=40000
+02:20:41.923 > [100641][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Benchmark line1=sd_write_read line2=Running
+02:20:42.310 > [101027][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=sd_write_read ok=1 ms=350 us=349611 iterations=1 avg_us=349611 bytes=524288 rate_kib_s=1464 heap_before=180476 heap_after=180476 heap_min=8303844
+02:20:42.311 > [101029][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Benchmark OK line1=sd_write_read line2=349 ms
+02:20:42.595 > [101313][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Benchmark line1=font_catalog_load line2=Running
+02:20:42.825 > [101543][I][FontCatalog.cpp:120] loadFromSd(): [font] catalog ready installed=11 rejected=0
+02:20:42.825 > [101544][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_catalog_load ok=1 ms=195 us=194831 iterations=1 avg_us=194831 bytes=0 rate_kib_s=0 heap_before=180440 heap_after=177648 heap_min=8303648
+02:20:42.828 > [101546][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Benchmark OK line1=font_catalog_load line2=194 ms
+02:20:43.112 > [101830][I][BenchmarkRunner.cpp:407] benchmarkFonts(): [bench] font_catalog families=12
+02:20:43.128 > [101846][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=bidi_hebrew_paragraph ok=1 ms=16 us=15387 iterations=64 avg_us=240 bytes=0 rate_kib_s=0 heap_before=177592 heap_after=177292 heap_min=8309804
+02:20:43.148 > [101866][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=bidi_arabic_paragraph ok=1 ms=18 us=17722 iterations=64 avg_us=276 bytes=0 rate_kib_s=0 heap_before=177592 heap_after=177260 heap_min=8309604
+02:20:43.174 > [101892][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=bidi_mixed_paragraph ok=1 ms=24 us=23823 iterations=64 avg_us=372 bytes=0 rate_kib_s=0 heap_before=177592 heap_after=177136 heap_min=8308784
+02:20:43.176 > [101895][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Font benchmark line1=Literata line2=latin
+02:20:43.238 > [101956][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_literata_render_rsvp ok=1 ms=26 us=25304 iterations=8 avg_us=3163 bytes=0 rate_kib_s=0 heap_before=177592 heap_after=177592 heap_min=8311136
+02:20:43.254 > [101972][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_literata_render_page ok=1 ms=15 us=14330 iterations=8 avg_us=1791 bytes=0 rate_kib_s=0 heap_before=177592 heap_after=177272 heap_min=8310412
+02:20:43.257 > [101976][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Font benchmark line1=Amiri line2=arabic
+02:20:43.326 > [102043][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Benchmark line1=font_amiri_shape_cold line2=Running
+02:20:44.631 > [103349][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_amiri_shape_cold ok=1 ms=1270 us=1269888 iterations=1 avg_us=1269888 bytes=0 rate_kib_s=0 heap_before=170740 heap_after=153192 heap_min=8218596
+02:20:44.633 > [103352][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Benchmark OK line1=font_amiri_shape_cold line2=1269 ms
+02:21:29.802 > [148523][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_amiri_shape_warm ok=1 ms=44888 us=44887747 iterations=64 avg_us=701371 bytes=0 rate_kib_s=0 heap_before=153192 heap_after=153192 heap_min=8218596
+02:21:40.663 > [159384][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_amiri_render_rsvp ok=1 ms=10859 us=10858935 iterations=8 avg_us=1357366 bytes=0 rate_kib_s=0 heap_before=153192 heap_after=153192 heap_min=8218596
+02:22:12.145 > [190869][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_amiri_render_page ok=1 ms=31467 us=31466313 iterations=8 avg_us=3933289 bytes=0 rate_kib_s=0 heap_before=153500 heap_after=153260 heap_min=8218260
+02:22:12.159 > [190883][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Font benchmark line1=Andika line2=latin
+02:22:17.692 > [196416][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_andika_render_rsvp ok=1 ms=5483 us=5482759 iterations=8 avg_us=685344 bytes=0 rate_kib_s=0 heap_before=171468 heap_after=171468 heap_min=8304464
+02:22:35.233 > [213958][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_andika_render_page ok=1 ms=17533 us=17532152 iterations=8 avg_us=2191519 bytes=0 rate_kib_s=0 heap_before=171468 heap_after=171468 heap_min=8304060
+02:22:35.238 > [213964][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Font benchmark line1=Atkinson Hyperlegible line2=latin
+02:22:42.879 > [221604][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_atkinson-hyperlegible_render_rsvp ok=1 ms=7599 us=7598007 iterations=8 avg_us=949750 bytes=0 rate_kib_s=0 heap_before=171380 heap_after=171380 heap_min=8304376
+02:22:53.791 > [232517][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_atkinson-hyperlegible_render_page ok=1 ms=10903 us=10902897 iterations=8 avg_us=1362862 bytes=0 rate_kib_s=0 heap_before=171380 heap_after=171380 heap_min=8303972
+02:22:53.795 > [232522][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Font benchmark line1=Courier Prime line2=latin
+02:22:55.282 > [234009][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_courier-prime_render_rsvp ok=1 ms=1442 us=1441884 iterations=8 avg_us=180235 bytes=0 rate_kib_s=0 heap_before=171404 heap_after=171404 heap_min=8304400
+02:23:09.314 > [248042][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_courier-prime_render_page ok=1 ms=14023 us=14022299 iterations=8 avg_us=1752787 bytes=0 rate_kib_s=0 heap_before=171404 heap_after=171404 heap_min=8303996
+02:23:09.320 > [248048][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Font benchmark line1=Frank Ruhl Libre line2=hebrew
+02:23:09.372 > [248099][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Benchmark line1=font_frank-ruhl-libre_shape_cold line2=Running
+02:23:09.482 > [248210][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_frank-ruhl-libre_shape_cold ok=1 ms=74 us=73723 iterations=1 avg_us=73723 bytes=0 rate_kib_s=0 heap_before=170628 heap_after=161752 heap_min=8294940
+02:23:09.485 > [248212][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Benchmark OK line1=font_frank-ruhl-libre_shape_cold line2=73 ms
+02:23:11.692 > [250419][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_frank-ruhl-libre_shape_warm ok=1 ms=1923 us=1922629 iterations=64 avg_us=30041 bytes=0 rate_kib_s=0 heap_before=161752 heap_after=161752 heap_min=8294748
+02:23:12.337 > [251064][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_frank-ruhl-libre_render_rsvp ok=1 ms=643 us=642556 iterations=8 avg_us=80319 bytes=0 rate_kib_s=0 heap_before=161752 heap_after=161752 heap_min=8294748
+02:23:16.105 > [254833][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_frank-ruhl-libre_render_page ok=1 ms=3760 us=3759505 iterations=8 avg_us=469938 bytes=0 rate_kib_s=0 heap_before=161940 heap_after=161940 heap_min=8294524
+02:23:16.110 > [254838][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Font benchmark line1=Noto Naskh Arabic line2=arabic
+02:23:16.172 > [254900][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Benchmark line1=font_noto-naskh-arabic_shape_cold line2=Running
+02:23:16.875 > [255603][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_noto-naskh-arabic_shape_cold ok=1 ms=667 us=666380 iterations=1 avg_us=666380 bytes=0 rate_kib_s=0 heap_before=170460 heap_after=162220 heap_min=8281512
+02:23:16.877 > [255606][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Benchmark OK line1=font_noto-naskh-arabic_shape_cold line2=666 ms
+02:23:40.130 > [278859][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_noto-naskh-arabic_shape_warm ok=1 ms=22970 us=22969125 iterations=64 avg_us=358892 bytes=0 rate_kib_s=0 heap_before=162216 heap_after=162216 heap_min=8281508
+02:23:45.148 > [283877][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_noto-naskh-arabic_render_rsvp ok=1 ms=5017 us=5016154 iterations=8 avg_us=627019 bytes=0 rate_kib_s=0 heap_before=162216 heap_after=162216 heap_min=8281508
+02:24:09.949 > [308681][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_noto-naskh-arabic_render_page ok=1 ms=24790 us=24789914 iterations=8 avg_us=3098739 bytes=0 rate_kib_s=0 heap_before=162524 heap_after=162524 heap_min=8281412
+02:24:09.957 > [308689][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Font benchmark line1=Noto Serif Hebrew line2=hebrew
+02:24:10.013 > [308744][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Benchmark line1=font_noto-serif-hebrew_shape_cold line2=Running
+02:24:10.091 > [308822][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_noto-serif-hebrew_shape_cold ok=1 ms=42 us=41260 iterations=1 avg_us=41260 bytes=0 rate_kib_s=0 heap_before=170580 heap_after=162640 heap_min=8295736
+02:24:10.093 > [308825][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Benchmark OK line1=font_noto-serif-hebrew_shape_cold line2=41 ms
+02:24:10.457 > [309188][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_noto-serif-hebrew_shape_warm ok=1 ms=79 us=78890 iterations=64 avg_us=1232 bytes=0 rate_kib_s=0 heap_before=162640 heap_after=162640 heap_min=8295636
+02:24:11.115 > [309847][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_noto-serif-hebrew_render_rsvp ok=1 ms=657 us=656592 iterations=8 avg_us=82074 bytes=0 rate_kib_s=0 heap_before=162640 heap_after=162640 heap_min=8295636
+02:24:14.837 > [313569][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_noto-serif-hebrew_render_page ok=1 ms=3713 us=3712457 iterations=8 avg_us=464057 bytes=0 rate_kib_s=0 heap_before=162828 heap_after=162828 heap_min=8295420
+02:24:14.842 > [313574][I][BenchmarkRunner.cpp:70] showStatus(): [bench] screen title=Font benchmark line1=Noto Serif Japanese line2=cjk
+02:24:25.090 > [323823][I][BenchmarkRunner.cpp:84] logMetric(): [bench] metric=font_noto-serif-japanese_render_rsvp ok=1 ms=10160 us=10159331 iterations=8 avg_us=1269916 bytes=0 rate_kib_s=0 heap_before=171340 heap_after=171340 heap_min=8304336

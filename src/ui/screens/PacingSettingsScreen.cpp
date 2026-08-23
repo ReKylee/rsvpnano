@@ -4,27 +4,29 @@ namespace screens {
     bool pacingSettings(ui::Context& ui, settings::PacingSettings& config, Screen& screen) {
         bool changed = false;
         const ui::Rect content = detail::content(ui);
-        if (ui.button({content.x, content.y, 64, detail::kBackButtonHeight}, "<<"))
+        constexpr int16_t gap = 6;
+        constexpr int16_t backWidth = 56;
+        constexpr int16_t resetWidth = 90;
+        const int16_t rowHeight = static_cast<int16_t>((content.h - gap * 2) / 3);
+
+        if (ui.button({content.x, content.y, backWidth, rowHeight}, "<<"))
             screen = Screen::Settings;
-        ui.label({static_cast<int16_t>(content.x + 74), content.y, static_cast<int16_t>(content.w - 74), 24},
-                 ui.text(UiText::WordPacing), 2);
+        changed |= ui.slider({static_cast<int16_t>(content.x + backWidth + gap), content.y,
+                              static_cast<int16_t>(content.w - backWidth - gap), rowHeight},
+                             ui.text(UiText::LongWords), config.longWordDelayMs, " ms");
 
-        const int16_t gap = 6;
-        const int16_t cardWidth = static_cast<int16_t>((content.w - gap * 2) / 3);
-        ui.separator({content.x, static_cast<int16_t>(content.y + 30), content.w, 10},
-                     ui.text(UiText::AdditionalDelaySection));
-        const int16_t sliderY = static_cast<int16_t>(content.y + 44);
-        changed |=
-            ui.slider({content.x, sliderY, cardWidth, 50}, ui.text(UiText::LongWords), config.longWordDelayMs, " ms");
-        changed |= ui.slider({static_cast<int16_t>(content.x + cardWidth + gap), sliderY, cardWidth, 50},
-                             ui.text(UiText::Complexity), config.complexWordDelayMs, " ms");
-        changed |= ui.slider({static_cast<int16_t>(content.x + (cardWidth + gap) * 2), sliderY, cardWidth, 50},
-                             ui.text(UiText::Punctuation), config.punctuationDelayMs, " ms");
+        const int16_t secondRowY = static_cast<int16_t>(content.y + rowHeight + gap);
+        changed |= ui.slider({content.x, secondRowY, content.w, rowHeight}, ui.text(UiText::Complexity),
+                             config.complexWordDelayMs, " ms");
 
-        if (ui.button({content.x, static_cast<int16_t>(sliderY + 58), content.w, 38}, ui.text(UiText::ResetPacing))) {
+        const int16_t thirdRowY = static_cast<int16_t>(secondRowY + rowHeight + gap);
+        if (ui.button({content.x, thirdRowY, resetWidth, rowHeight}, ui.text(UiText::Reset))) {
+            changed |= config != settings::PacingSettings{};
             config = {};
-            changed = true;
         }
+        changed |= ui.slider({static_cast<int16_t>(content.x + resetWidth + gap), thirdRowY,
+                              static_cast<int16_t>(content.w - resetWidth - gap), rowHeight},
+                             ui.text(UiText::Punctuation), config.punctuationDelayMs, " ms");
         return changed;
     }
 

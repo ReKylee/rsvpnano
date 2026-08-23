@@ -5,14 +5,17 @@
 #include <limits>
 #include <utility>
 #include "board/BoardStorage.h"
+#include "storage/fs/StoragePaths.h"
 
 using StoreHeader = IndexedBookStore::Header;
 using StoreWordRecord = IndexedBookStore::WordRecord;
 using StoreChapterRecord = IndexedBookStore::ChapterRecord;
+using StoreTextRunRecord = IndexedBookStore::TextRunRecord;
 
-static_assert(sizeof(StoreHeader) == 52, "RIDX header size changed");
+static_assert(sizeof(StoreHeader) == 108, "RIDX header size changed");
 static_assert(sizeof(StoreWordRecord) == 6, "RIDX word record size changed");
 static_assert(sizeof(StoreChapterRecord) == 72, "RIDX chapter record size changed");
+static_assert(sizeof(StoreTextRunRecord) == 45, "RIDX text run record size changed");
 
 namespace {
 
@@ -28,35 +31,41 @@ namespace {
         // Reject corrupt sidecars before later reads seek through the files.
         if (header.magic != IndexedBookStore::kMagic || header.version != IndexedBookStore::kVersion
             || header.headerSize != sizeof(StoreHeader) || header.recordSize != sizeof(StoreWordRecord)
-            || header.wordCount == 0) {
+            || header.identity.wordCount == 0) {
             return false;
         }
 
         uint32_t recordsBytes = 0;
-        if (header.wordCount > std::numeric_limits<uint32_t>::max() / sizeof(StoreWordRecord)) {
+        if (header.identity.wordCount > std::numeric_limits<uint32_t>::max() / sizeof(StoreWordRecord)) {
             return false;
         }
-        recordsBytes = header.wordCount * sizeof(StoreWordRecord);
+        recordsBytes = header.identity.wordCount * sizeof(StoreWordRecord);
 
         uint32_t recordsEnd = 0;
         uint32_t paragraphsEnd = 0;
         uint32_t chaptersEnd = 0;
+        uint32_t textRunsEnd = 0;
         if (!checkedAdd(header.recordsOffset, recordsBytes, recordsEnd)
             || header.paragraphCount > std::numeric_limits<uint32_t>::max() / sizeof(uint32_t)
             || !checkedAdd(header.paragraphsOffset, header.paragraphCount * sizeof(uint32_t), paragraphsEnd)
             || header.chapterCount > std::numeric_limits<uint32_t>::max() / sizeof(StoreChapterRecord)
-            || !checkedAdd(header.chaptersOffset, header.chapterCount * sizeof(StoreChapterRecord), chaptersEnd)) {
+            || !checkedAdd(header.chaptersOffset, header.chapterCount * sizeof(StoreChapterRecord), chaptersEnd)
+            || header.textRunCount > std::numeric_limits<uint32_t>::max() / sizeof(StoreTextRunRecord)
+            || !checkedAdd(header.textRunsOffset, header.textRunCount * sizeof(StoreTextRunRecord), textRunsEnd)) {
             return false;
         }
 
         return header.recordsOffset >= sizeof(StoreHeader) && header.paragraphsOffset == recordsEnd
-            && header.chaptersOffset == paragraphsEnd && chaptersEnd <= indexBytes && header.dataSize <= dataBytes;
+            && header.chaptersOffset == paragraphsEnd && header.textRunsOffset == chaptersEnd
+            && textRunsEnd <= indexBytes && header.dataSize <= dataBytes;
     }
 
 } // namespace
 
-bool IndexedBookStore::open(const char* indexPath, const char* dataPath, const Header& header) {
-    File nextIndexFile = Board::Storage::filesystem().open(indexPath, FILE_READ);
+bool IndexedBookStore::open(std::string_view sourcePath, const Header& header) {
+    const std::string indexPath = StoragePaths::indexedIndexPathFor(sourcePath);
+    const std::string dataPath = StoragePaths::indexedDataPathFor(sourcePath);
+    File nextIndexFile = Board::Storage::filesystem().open(indexPath.c_str(), FILE_READ);
     if (!nextIndexFile || nextIndexFile.isDirectory()) {
         if (nextIndexFile) {
             nextIndexFile.close();
@@ -64,7 +73,7 @@ bool IndexedBookStore::open(const char* indexPath, const char* dataPath, const H
         return false;
     }
 
-    File nextDataFile = Board::Storage::filesystem().open(dataPath, FILE_READ);
+    File nextDataFile = Board::Storage::filesystem().open(dataPath.c_str(), FILE_READ);
     if (!nextDataFile || nextDataFile.isDirectory()) {
         nextIndexFile.close();
         if (nextDataFile) {
@@ -74,22 +83,20 @@ bool IndexedBookStore::open(const char* indexPath, const char* dataPath, const H
     }
 
     if (!validateLayout(header, nextIndexFile.size(), nextDataFile.size())) {
-        ESP_LOGW("storage-index", "invalid store layout index=%s data=%s", indexPath, dataPath);
+        ESP_LOGW("storage-index", "invalid store layout index=%s data=%s", indexPath.c_str(), dataPath.c_str());
         nextIndexFile.close();
         nextDataFile.close();
         return false;
     }
 
     close();
-    indexPath_ = indexPath;
-    dataPath_ = dataPath;
-    header_ = header;
+    sourcePath_ = sourcePath;
+    identity_ = header.identity;
+    recordsOffset_ = header.recordsOffset;
+    dataSize_ = header.dataSize;
     indexFile_ = nextIndexFile;
     dataFile_ = nextDataFile;
-    cachedStart_ = static_cast<size_t>(-1);
-    cachedDataStart_ = 0;
-    cachedRecords_.clear();
-    cachedData_.clear();
+    releaseCache();
     return true;
 }
 
@@ -100,21 +107,26 @@ void IndexedBookStore::close() {
     if (dataFile_) {
         dataFile_.close();
     }
-    indexPath_ = "";
-    dataPath_ = "";
-    header_ = Header();
-    cachedRecords_.clear();
-    cachedData_.clear();
+    sourcePath_.clear();
+    identity_ = {};
+    recordsOffset_ = 0;
+    dataSize_ = 0;
+    releaseCache();
+}
+
+void IndexedBookStore::releaseCache() {
+    std::vector<WordRecord>{}.swap(cachedRecords_);
+    std::vector<char>{}.swap(cachedData_);
     cachedStart_ = static_cast<size_t>(-1);
     cachedDataStart_ = 0;
 }
 
 bool IndexedBookStore::isOpen() const {
-    return indexFile_ && dataFile_ && header_.magic == kMagic && header_.wordCount > 0;
+    return indexFile_ && dataFile_ && identity_.wordCount > 0;
 }
 
 size_t IndexedBookStore::wordCount() const {
-    return isOpen() ? static_cast<size_t>(header_.wordCount) : 0;
+    return isOpen() ? static_cast<size_t>(identity_.wordCount) : 0;
 }
 
 std::string_view IndexedBookStore::wordAt(size_t index) const {
@@ -159,7 +171,7 @@ bool IndexedBookStore::readRecords(size_t startIndex, size_t count, std::vector<
         return false;
     }
     uint32_t offset = 0;
-    if (!checkedAdd(header_.recordsOffset, static_cast<uint32_t>(startIndex * sizeof(WordRecord)), offset)) {
+    if (!checkedAdd(recordsOffset_, static_cast<uint32_t>(startIndex * sizeof(WordRecord)), offset)) {
         records.clear();
         return false;
     }
@@ -198,7 +210,7 @@ bool IndexedBookStore::loadWordWindow(size_t index) const {
     if (!checkedAdd(last.offset, last.length, dataEnd)) {
         return false;
     }
-    if (dataEnd < dataStart || dataEnd > header_.dataSize) {
+    if (dataEnd < dataStart || dataEnd > dataSize_) {
         return false;
     }
 

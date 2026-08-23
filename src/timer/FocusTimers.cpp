@@ -10,9 +10,6 @@
 
 namespace focus {
     namespace {
-
-        constexpr size_t kMaxFileBytes = 4096;
-
         bool validTimerName(std::string_view text) {
             uint32_t codepoint = 0;
             while (!text.empty()) {
@@ -49,7 +46,7 @@ namespace focus {
     }
 
     std::expected<Timers, std::error_code> decodeToml(std::string_view content) {
-        if (content.empty() || content.size() > kMaxFileBytes)
+        if (content.empty() || content.size() > kMaxConfigBytes)
             return std::unexpected(std::make_error_code(content.empty() ? std::errc::invalid_argument
                                                                         : std::errc::value_too_large));
 

@@ -1,12 +1,8 @@
 #include <Arduino.h>
 #include <esp_log.h>
-#include "logging/Logger.h"
-
 #include "app/App.h"
-#if RSVP_BENCHMARK_MODE
-#include "benchmark/BenchmarkRunner.h"
-#endif
 #include "board/Board.h"
+#include "logging/Logger.h"
 #include "settings/NvsSecurity.h"
 
 App app;
@@ -27,20 +23,12 @@ void setup() {
         ESP.restart();
         return;
     }
-#if RSVP_BENCHMARK_MODE
-    ESP_LOGI("main", "benchmark setup");
-    Benchmark::run();
-#else
     ESP_LOGI("main", "app setup task=%s core=%d", pcTaskGetName(nullptr), xPortGetCoreID());
     app.begin();
-#endif
+    Logger::checkpoint("running");
 }
 
 void loop() {
-#if RSVP_BENCHMARK_MODE
-    delay(1000);
-#else
     const uint32_t now = millis();
     app.update(now);
-#endif
 }

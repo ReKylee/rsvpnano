@@ -26,6 +26,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import java.net.InetAddress
+import java.net.Socket
+import javax.net.SocketFactory
 
 class AndroidNanoNetworkController(
     context: Context,
@@ -40,18 +44,16 @@ class AndroidNanoNetworkController(
     private var monitorCallback: ConnectivityManager.NetworkCallback? = null
     private var requestCallback: ConnectivityManager.NetworkCallback? = null
     private var requestedNetwork: Network? = null
+    @Volatile
     private var currentNetwork: Network? = null
+    val socketFactory: SocketFactory = NetworkSocketFactory { currentNetwork }
 
     override fun start() {
         if (monitorCallback != null) return
-        val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                updateFromNetwork(network, source = NetworkEventSource.Monitor)
-            }
-
-            override fun onLosing(network: Network, maxMsToLive: Int) {
-                clearIfCurrent(network)
-            }
+        val callback = object : ConnectivityManager.NetworkCallback(
+            ConnectivityManager.NetworkCallback.FLAG_INCLUDE_LOCATION_INFO,
+        ) {
+            override fun onAvailable(network: Network) = Unit
 
             override fun onLost(network: Network) {
                 clearIfCurrent(network)
@@ -74,7 +76,9 @@ class AndroidNanoNetworkController(
     override fun stop() {
         monitorCallback?.let { runCatching { connectivityManager.unregisterNetworkCallback(it) } }
         monitorCallback = null
-        releaseRequestedNanoNetwork()
+        cancelNanoRequest()
+        currentNetwork = null
+        _snapshot.value = NanoWifiSnapshot()
     }
 
     override fun requestNanoNetwork(
@@ -82,7 +86,7 @@ class AndroidNanoNetworkController(
     ): NanoWifiRequestResult {
         val current = snapshot.value
         if (current.isAttached) return NanoWifiRequestResult.AlreadyAttached
-        if (requestCallback != null) return NanoWifiRequestResult.AlreadyRequesting
+        if (current.isRequesting) return NanoWifiRequestResult.AlreadyRequesting
         if (!hasRequiredPermissions()) {
             return NanoWifiRequestResult.MissingPermissions
         }
@@ -93,9 +97,9 @@ class AndroidNanoNetworkController(
             val callback = nanoRequestCallback()
             requestCallback = callback
             markRequestStarted(rememberedNano = rememberedNano)
-            connectivityManager.requestNetwork(request, callback, REQUEST_TIMEOUT_MS)
+            connectivityManager.requestNetwork(request, callback)
             NanoWifiRequestResult.Started
-        }.onFailure { error ->
+        }.onFailure {
             requestCallback = null
             requestedNetwork = null
             markRequestStopped()
@@ -120,14 +124,11 @@ class AndroidNanoNetworkController(
     }
 
     private fun nanoRequestCallback(): ConnectivityManager.NetworkCallback {
-        return object : ConnectivityManager.NetworkCallback() {
+        return object : ConnectivityManager.NetworkCallback(
+            ConnectivityManager.NetworkCallback.FLAG_INCLUDE_LOCATION_INFO,
+        ) {
                 override fun onAvailable(network: Network) {
                     requestedNetwork = network
-                    updateFromRequestedNetwork(network)
-                }
-
-                override fun onLosing(network: Network, maxMsToLive: Int) {
-                    clearIfCurrent(network)
                 }
 
                 override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
@@ -135,16 +136,13 @@ class AndroidNanoNetworkController(
                 }
 
                 override fun onUnavailable() {
-                    requestCallback = null
-                    requestedNetwork = null
-                    markRequestStopped()
+                    cancelNanoRequest()
                     publish(NanoWifiEvent.RequestUnavailable)
                 }
 
                 override fun onLost(network: Network) {
                     if (requestedNetwork == network) {
                         requestedNetwork = null
-                        requestCallback = null
                     }
                     clearIfCurrent(network)
                 }
@@ -179,19 +177,6 @@ class AndroidNanoNetworkController(
         _snapshot.update { it.copy(isRequesting = false) }
     }
 
-    private fun releaseRequestedNanoNetwork() {
-        val networkToRelease = requestedNetwork
-        cancelNanoRequest()
-        _snapshot.update {
-            if (networkToRelease != null && currentNetwork == networkToRelease) {
-                currentNetwork = null
-                NanoWifiSnapshot()
-            } else {
-                it
-            }
-        }
-    }
-
     override fun refreshSnapshot() {
         val network = currentNetwork
         if (network == null) {
@@ -211,17 +196,6 @@ class AndroidNanoNetworkController(
         }
 
         updateFromCapabilities(network, capabilities, source = NetworkEventSource.Monitor)
-    }
-
-    override suspend fun <T> withNanoNetwork(block: suspend () -> T): T {
-        val network = currentNetwork ?: return block()
-        val previous = connectivityManager.boundNetworkForProcess
-        return try {
-            connectivityManager.bindProcessToNetwork(network)
-            block()
-        } finally {
-            connectivityManager.bindProcessToNetwork(previous)
-        }
     }
 
     fun hasRequiredPermissions(): Boolean {
@@ -261,6 +235,17 @@ class AndroidNanoNetworkController(
                     completed = true
                     cleanup()
                     if (continuation.isActive) continuation.resume(Unit)
+                }
+
+                fun fail(errorCode: Int) {
+                    if (completed) return
+                    completed = true
+                    cleanup()
+                    if (continuation.isActive) {
+                        continuation.resumeWithException(
+                            IllegalStateException("Local discovery failed with Android NSD error $errorCode."),
+                        )
+                    }
                 }
 
                 listener = object : NsdManager.DiscoveryListener {
@@ -313,7 +298,7 @@ class AndroidNanoNetworkController(
                     }
 
                     override fun onDiscoveryStopped(serviceType: String) = finish()
-                    override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) = finish()
+                    override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) = fail(errorCode)
                     override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) = Unit
                 }
 
@@ -321,27 +306,7 @@ class AndroidNanoNetworkController(
                 nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
             }
         }
-        return endpoints.values.toList()
-    }
-
-    private fun updateFromNetwork(network: Network, source: NetworkEventSource) {
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return
-        updateFromCapabilities(network, capabilities, source = source)
-    }
-
-    private fun updateFromRequestedNetwork(network: Network) {
-        val capabilities = connectivityManager.getNetworkCapabilities(network)
-        if (capabilities != null) {
-            updateFromCapabilities(network, capabilities, source = NetworkEventSource.Request)
-            return
-        }
-
-        currentNetwork = network
-        _snapshot.value = NanoWifiSnapshot(
-            currentNano = snapshot.value.currentNano,
-            isAttached = true,
-            isRequesting = false,
-        )
+        return endpoints.values.sortedBy { it.nano.ssid }
     }
 
     private fun updateFromCapabilities(
@@ -385,7 +350,6 @@ class AndroidNanoNetworkController(
 
     companion object {
         private const val DISCOVERY_TIMEOUT_MS = 2_500L
-        private const val REQUEST_TIMEOUT_MS = 6_000
         private const val SERVICE_TYPE = "_rsvpnano._tcp."
     }
 
@@ -393,4 +357,30 @@ class AndroidNanoNetworkController(
         Monitor,
         Request,
     }
+}
+
+private class NetworkSocketFactory(
+    private val network: () -> Network?,
+) : SocketFactory() {
+    private fun delegate(): SocketFactory = network()?.socketFactory ?: getDefault()
+
+    override fun createSocket(): Socket = delegate().createSocket()
+
+    override fun createSocket(host: String, port: Int): Socket = delegate().createSocket(host, port)
+
+    override fun createSocket(
+        host: String,
+        port: Int,
+        localHost: InetAddress,
+        localPort: Int,
+    ): Socket = delegate().createSocket(host, port, localHost, localPort)
+
+    override fun createSocket(host: InetAddress, port: Int): Socket = delegate().createSocket(host, port)
+
+    override fun createSocket(
+        address: InetAddress,
+        port: Int,
+        localAddress: InetAddress,
+        localPort: Int,
+    ): Socket = delegate().createSocket(address, port, localAddress, localPort)
 }

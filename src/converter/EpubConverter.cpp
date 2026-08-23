@@ -9,14 +9,17 @@
 #include "converter/EpubZip.h"
 #include "storage/fs/StoragePaths.h"
 #include "text/AsciiText.h"
+#include "text/LocaleTag.h"
 #include "text/TextNormalizer.h"
+#include "text/WritingMode.h"
 
 namespace {
 
     constexpr size_t kMaxOpfBytes = 256UL * 1024UL;
     constexpr size_t kMaxTocBytes = 256UL * 1024UL;
     constexpr size_t kMaxContainerBytes = 32UL * 1024UL;
-    constexpr const char* kConverterVersion = "stream-v8";
+    constexpr size_t kMaxCssBytes = 256UL * 1024UL;
+    constexpr const char* kConverterVersion = "stream-v10";
 
     using EpubPackage::basenameWithoutExtension;
     using EpubPackage::directoryForPath;
@@ -132,9 +135,9 @@ namespace {
         return order;
     }
 
-    std::vector<std::string> buildReadingOrder(std::string_view opfXml, std::string_view opfBaseDir,
+    std::vector<std::string> buildReadingOrder(const std::vector<ManifestItem>& manifest, std::string_view opfXml,
+                                               std::string_view opfBaseDir,
                                                const EpubConverter::Options& options) {
-        const std::vector<ManifestItem> manifest = parseManifestItems(opfXml, opfBaseDir);
         const std::vector<std::string> spineIds = parseSpineIds(opfXml);
 
         ESP_LOGD("epub", "Package parsed: manifest=%u spine=%u base=%.*s", static_cast<unsigned int>(manifest.size()),
@@ -181,9 +184,9 @@ namespace {
         return {};
     }
 
-    std::vector<TocEntry> readToc(EpubZip::Archive& zip, std::string_view opfXml, std::string_view opfBaseDir,
+    std::vector<TocEntry> readToc(EpubZip::Archive& zip, const std::vector<ManifestItem>& manifest,
+                                  std::string_view opfXml,
                                   std::string_view bookTitle) {
-        const std::vector<ManifestItem> manifest = parseManifestItems(opfXml, opfBaseDir);
         std::vector<const ManifestItem*> navDocuments;
         std::vector<const ManifestItem*> ncxDocuments;
 
@@ -217,12 +220,28 @@ namespace {
         return title;
     }
 
-    void writeRsvpHeader(File& output, std::string_view epubPath, std::string_view opfXml) {
+    WritingMode explicitWritingMode(EpubZip::Archive& zip, const std::vector<ManifestItem>& manifest) {
+        for (const ManifestItem& item: manifest) {
+            if (toLowerCopy(item.mediaType) != "text/css")
+                continue;
+            std::string css;
+            if (!zip.extractToString(item.path, css, kMaxCssBytes))
+                continue;
+            std::ranges::transform(css, css.begin(), AsciiText::toLower);
+            css.erase(std::remove_if(css.begin(), css.end(), AsciiText::isWhitespace), css.end());
+            if (css.contains("writing-mode:vertical-rl") || css.contains("-epub-writing-mode:vertical-rl"))
+                return WritingMode::verticalRl;
+        }
+        return WritingMode::horizontalTb;
+    }
+
+    void writeRsvpHeader(File& output, std::string_view epubPath, std::string_view opfXml, WritingMode writingMode) {
         const std::string title = [&]() {
             const std::string metadataTitle = parseDcMetadata(opfXml, "title");
             return metadataTitle.empty() ? basenameWithoutExtension(epubPath) : metadataTitle;
         }();
         const std::string author = parseDcMetadata(opfXml, "creator");
+        const auto locale = LocaleTag::normalize(parseDcMetadata(opfXml, "language"));
 
         output.println("@rsvp 1");
         output.print("@title ");
@@ -231,10 +250,16 @@ namespace {
             output.print("@author ");
             output.println(RsvpText::normalizeDisplayText(author).c_str());
         }
+        if (locale) {
+            output.print("@language ");
+            output.println(locale->c_str());
+        }
         output.print("@source ");
         output.println(RsvpText::normalizeDisplayText(epubPath).c_str());
         output.print("@converter ");
         output.println(kConverterVersion);
+        if (writingMode == WritingMode::verticalRl)
+            output.println("@writing-mode vertical-rl");
         output.println();
     }
 
@@ -246,9 +271,11 @@ namespace {
 
     void streamReadingOrder(EpubZip::Archive& zip, File& output, const std::vector<std::string>& readingOrder,
                             const std::vector<TocEntry>& tocEntries, std::string_view bookTitle,
+                            std::string_view bookLocale, WritingMode writingMode,
                             const EpubConverter::Options& options, size_t& wordCount, size_t& chapterCount) {
         std::string lastChapterTitle;
         const bool hasToc = !tocEntries.empty();
+        bool verticalWritingEmitted = writingMode == WritingMode::verticalRl;
 
         const auto withinWordLimit = [&]() {
             return options.maxWords == 0 || wordCount < options.maxWords;
@@ -265,17 +292,17 @@ namespace {
             reportItemProgress("Extracting content", i);
 
             std::vector<TocEntry> documentTocEntries;
-            const std::string loweredPath = toLowerCopy(readingOrder[i]);
             std::copy_if(tocEntries.begin(), tocEntries.end(), std::back_inserter(documentTocEntries),
                          [&](const TocEntry& entry) {
-                             return toLowerCopy(entry.path) == loweredPath;
+                             return std::ranges::equal(entry.path, readingOrder[i], {}, AsciiText::toLower,
+                                                       AsciiText::toLower);
                          });
 
             const EpubZip::ContentExtractStatus extractStatus =
                 zip.extractContentToRsvp(readingOrder[i], output, wordCount, options.maxWords, lastChapterTitle,
                                          chapterCount, documentTocEntries, hasToc,
-                                         fallbackChapterTitle(readingOrder[i]), bookTitle, options, i,
-                                         readingOrder.size());
+                                         fallbackChapterTitle(readingOrder[i]), bookTitle, bookLocale,
+                                         verticalWritingEmitted, options, i, readingOrder.size());
 
             reportItemProgress("Parsed content", i + 1);
 
@@ -332,8 +359,9 @@ namespace {
             return failWithClosedZip();
         }
 
+        const std::vector<ManifestItem> manifest = parseManifestItems(documents.opfXml, documents.opfBaseDir);
         const std::vector<std::string> readingOrder =
-            buildReadingOrder(documents.opfXml, documents.opfBaseDir, options);
+            buildReadingOrder(manifest, documents.opfXml, documents.opfBaseDir, options);
         if (readingOrder.empty()) {
             ESP_LOGD("epub", "No readable XHTML spine items found");
             return failWithClosedZip();
@@ -344,7 +372,10 @@ namespace {
             const std::string metadataTitle = parseDcMetadata(documents.opfXml, "title");
             return metadataTitle.empty() ? basenameWithoutExtension(epubPath) : metadataTitle;
         }();
-        const std::vector<TocEntry> tocEntries = readToc(zip, documents.opfXml, documents.opfBaseDir, bookTitle);
+        const auto normalizedBookLocale = LocaleTag::normalize(parseDcMetadata(documents.opfXml, "language"));
+        const std::string bookLocale = normalizedBookLocale ? std::move(*normalizedBookLocale) : "und";
+        const std::vector<TocEntry> tocEntries = readToc(zip, manifest, documents.opfXml, bookTitle);
+        const WritingMode writingMode = explicitWritingMode(zip, manifest);
         ESP_LOGD("epub", "Usable TOC entries: %u", static_cast<unsigned int>(tocEntries.size()));
 
         Board::Storage::filesystem().remove(temporaryPath.c_str());
@@ -354,11 +385,12 @@ namespace {
             return failWithClosedZip();
         }
 
-        writeRsvpHeader(output, epubPath, documents.opfXml);
+        writeRsvpHeader(output, epubPath, documents.opfXml, writingMode);
 
         size_t wordCount = 0;
         size_t chapterCount = 0;
-        streamReadingOrder(zip, output, readingOrder, tocEntries, bookTitle, options, wordCount, chapterCount);
+        streamReadingOrder(zip, output, readingOrder, tocEntries, bookTitle, bookLocale, writingMode, options, wordCount,
+                           chapterCount);
 
         const std::string finishingDetail = wordCountDetail(wordCount);
         reportProgress(options, "Finishing EPUB", finishingDetail.c_str(), 96);

@@ -21,7 +21,7 @@ class FirmwareUpdatesTest {
         assertEquals(
             "https://raw.githubusercontent.com/reader-owner/reader-firmware/preview-v2/themes/index.json",
             requireNotNull(releaseSource("reader-owner/reader-firmware", "preview-v2"))
-                .rawContentUrl("themes/index.json"),
+                .catalogContentUrl("themes/index.json"),
         )
     }
 

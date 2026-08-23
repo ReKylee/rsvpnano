@@ -1,0 +1,73 @@
+02:33:54.080 > [ 25264][W][BenchmarkRunner.cpp:491] waitForStartInput(): [bench] still_waiting_for_start_input
+02:33:57.102 > [ 28285][W][BenchmarkRunner.cpp:491] waitForStartInput(): [bench] still_waiting_for_start_input
+02:34:00.123 > [ 31306][W][BenchmarkRunner.cpp:491] waitForStartInput(): [bench] still_waiting_for_start_input
+02:34:03.145 > [ 34327][W][BenchmarkRunner.cpp:491] waitForStartInput(): [bench] still_waiting_for_start_input
+02:34:06.166 > [ 37348][W][BenchmarkRunner.cpp:491] waitForStartInput(): [bench] still_waiting_for_start_input
+02:34:09.188 > [ 40369][W][BenchmarkRunner.cpp:491] waitForStartInput(): [bench] still_waiting_for_start_input
+02:34:12.209 > [ 43390][W][BenchmarkRunner.cpp:491] waitForStartInput(): [bench] still_waiting_for_start_input
+02:34:15.231 > [ 46411][W][BenchmarkRunner.cpp:491] waitForStartInput(): [bench] still_waiting_for_start_input
+02:34:18.252 > [ 49432][W][BenchmarkRunner.cpp:491] waitForStartInput(): [bench] still_waiting_for_start_input
+02:34:21.273 > [ 52453][W][BenchmarkRunner.cpp:491] waitForStartInput(): [bench] still_waiting_for_start_input
+02:34:24.295 > [ 55474][W][BenchmarkRunner.cpp:491] waitForStartInput(): [bench] still_waiting_for_start_input
+02:34:27.316 > [ 58495][W][BenchmarkRunner.cpp:491] waitForStartInput(): [bench] still_waiting_for_start_input
+02:34:30.338 > [ 61516][W][BenchmarkRunner.cpp:491] waitForStartInput(): [bench] still_waiting_for_start_input
+02:34:32.699 > [ 63877][I][BenchmarkRunner.cpp:497] waitForStartInput(): [bench] start_input_received
+02:34:32.702 > [ 63878][I][BenchmarkRunner.cpp:67] showStatus(): [bench] screen title=Benchmark line1=Starting line2=
+02:34:33.039 > [ 64216][I][BenchmarkRunner.cpp:67] showStatus(): [bench] screen title=Benchmark line1=display_push_full line2=Running
+02:34:33.114 > [ 64292][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=display_push_full ok=1 ms=36 us=35974 iterations=1 avg_us=35974 bytes=220160 rate_kib_s=5976 heap_before=182176 heap_after=182176 heap_min=8345504
+02:34:33.116 > [ 64294][I][BenchmarkRunner.cpp:67] showStatus(): [bench] screen title=Benchmark OK line1=display_push_full line2=35 ms
+02:34:33.400 > [ 64578][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=audio_begin ok=0 ms=0 us=0 iterations=1 avg_us=0 bytes=0 rate_kib_s=0 heap_before=0 heap_after=0 heap_min=0
+02:34:33.402 > [ 64580][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=audio_beep ok=0 ms=0 us=0 iterations=1 avg_us=0 bytes=0 rate_kib_s=0 heap_before=0 heap_after=0 heap_min=0
+02:34:33.896 > [ 65074][I][SdCard.cpp:303] mount(): [sd-check] selected cached SD frequency 40000 kHz
+02:34:33.897 > [ 65075][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=sd_mount ok=1 ms=494 us=493868 iterations=1 avg_us=493868 bytes=0 rate_kib_s=0 heap_before=0 heap_after=0 heap_min=0
+02:34:33.899 > [ 65077][I][BenchmarkRunner.cpp:527] run(): [bench] sd_frequency_khz=40000
+02:34:33.900 > [ 65078][I][BenchmarkRunner.cpp:67] showStatus(): [bench] screen title=Benchmark line1=sd_write_read line2=Running
+02:34:34.253 > [ 65431][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=sd_write_read ok=1 ms=317 us=316865 iterations=1 avg_us=316865 bytes=524288 rate_kib_s=1615 heap_before=180476 heap_after=180476 heap_min=8303844
+02:34:34.255 > [ 65433][I][BenchmarkRunner.cpp:67] showStatus(): [bench] screen title=Benchmark OK line1=sd_write_read line2=316 ms
+02:34:34.538 > [ 65716][I][BenchmarkRunner.cpp:67] showStatus(): [bench] screen title=Benchmark line1=font_catalog_load line2=Running
+02:34:34.771 > [ 65949][I][FontCatalog.cpp:120] loadFromSd(): [font] catalog ready installed=11 rejected=0
+02:34:34.772 > [ 65950][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_catalog_load ok=1 ms=198 us=197366 iterations=1 avg_us=197366 bytes=0 rate_kib_s=0 heap_before=180440 heap_after=177648 heap_min=8303648
+02:34:34.774 > [ 65952][I][BenchmarkRunner.cpp:67] showStatus(): [bench] screen title=Benchmark OK line1=font_catalog_load line2=197 ms
+02:34:35.057 > [ 66235][I][BenchmarkRunner.cpp:433] benchmarkFonts(): [bench] font_catalog families=12
+02:34:35.074 > [ 66252][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=bidi_hebrew_paragraph ok=1 ms=16 us=15424 iterations=64 avg_us=241 bytes=0 rate_kib_s=0 heap_before=177592 heap_after=177292 heap_min=8309804
+02:34:35.094 > [ 66272][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=bidi_arabic_paragraph ok=1 ms=18 us=17585 iterations=64 avg_us=274 bytes=0 rate_kib_s=0 heap_before=177592 heap_after=177260 heap_min=8309604
+02:34:35.120 > [ 66298][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=bidi_mixed_paragraph ok=1 ms=24 us=23542 iterations=64 avg_us=367 bytes=0 rate_kib_s=0 heap_before=177592 heap_after=177136 heap_min=8308784
+02:34:35.223 > [ 66401][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_literata_render_rsvp ok=1 ms=26 us=25092 iterations=8 avg_us=3136 bytes=0 rate_kib_s=0 heap_before=177592 heap_after=177592 heap_min=8311136
+02:34:35.286 > [ 66464][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_literata_render_page ok=1 ms=15 us=14288 iterations=8 avg_us=1786 bytes=0 rate_kib_s=0 heap_before=177592 heap_after=177272 heap_min=8310412
+02:34:36.648 > [ 67825][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_amiri_shape_cold ok=1 ms=1269 us=1268106 iterations=1 avg_us=1268106 bytes=0 rate_kib_s=0 heap_before=170740 heap_after=153192 heap_min=8218596
+02:35:21.517 > [112687][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_amiri_shape_warm ok=1 ms=44860 us=44859832 iterations=64 avg_us=700934 bytes=0 rate_kib_s=0 heap_before=153192 heap_after=153192 heap_min=8218596
+02:35:32.406 > [123575][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_amiri_render_rsvp ok=1 ms=10852 us=10851909 iterations=8 avg_us=1356488 bytes=0 rate_kib_s=0 heap_before=153192 heap_after=153192 heap_min=8218596
+02:36:06.817 > [157981][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_amiri_render_page ok=1 ms=34349 us=34348861 iterations=8 avg_us=4293607 bytes=0 rate_kib_s=0 heap_before=153500 heap_after=153260 heap_min=8218260
+02:36:12.427 > [163591][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_andika_render_rsvp ok=1 ms=5479 us=5478067 iterations=8 avg_us=684758 bytes=0 rate_kib_s=0 heap_before=171468 heap_after=171468 heap_min=8304464
+02:36:31.356 > [182516][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_andika_render_page ok=1 ms=18870 us=18869976 iterations=8 avg_us=2358747 bytes=0 rate_kib_s=0 heap_before=171468 heap_after=171468 heap_min=8304060
+02:36:39.066 > [190225][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_atkinson-hyperlegible_render_rsvp ok=1 ms=7590 us=7589071 iterations=8 avg_us=948633 bytes=0 rate_kib_s=0 heap_before=171380 heap_after=171380 heap_min=8304376
+02:36:50.923 > [202080][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_atkinson-hyperlegible_render_page ok=1 ms=11800 us=11799463 iterations=8 avg_us=1474932 bytes=0 rate_kib_s=0 heap_before=171380 heap_after=171380 heap_min=8303972
+02:36:52.485 > [203642][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_courier-prime_render_rsvp ok=1 ms=1441 us=1440507 iterations=8 avg_us=180063 bytes=0 rate_kib_s=0 heap_before=171404 heap_after=171404 heap_min=8304400
+02:37:07.741 > [218896][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_courier-prime_render_page ok=1 ms=15199 us=15198238 iterations=8 avg_us=1899779 bytes=0 rate_kib_s=0 heap_before=171404 heap_after=171404 heap_min=8303996
+02:37:07.908 > [219063][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_frank-ruhl-libre_shape_cold ok=1 ms=74 us=73264 iterations=1 avg_us=73264 bytes=0 rate_kib_s=0 heap_before=170628 heap_after=161752 heap_min=8294940
+02:37:09.830 > [220985][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_frank-ruhl-libre_shape_warm ok=1 ms=1920 us=1919216 iterations=64 avg_us=29987 bytes=0 rate_kib_s=0 heap_before=161752 heap_after=161752 heap_min=8294748
+02:37:10.506 > [221661][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_frank-ruhl-libre_render_rsvp ok=1 ms=642 us=641427 iterations=8 avg_us=80178 bytes=0 rate_kib_s=0 heap_before=161752 heap_after=161752 heap_min=8294748
+02:37:14.620 > [225774][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_frank-ruhl-libre_render_page ok=1 ms=4067 us=4066320 iterations=8 avg_us=508290 bytes=0 rate_kib_s=0 heap_before=161940 heap_after=161940 heap_min=8294524
+02:37:15.392 > [226546][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_noto-naskh-arabic_shape_cold ok=1 ms=671 us=670030 iterations=1 avg_us=670030 bytes=0 rate_kib_s=0 heap_before=170460 heap_after=162220 heap_min=8281512
+02:37:38.359 > [249510][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_noto-naskh-arabic_shape_warm ok=1 ms=22962 us=22961045 iterations=64 avg_us=358766 bytes=0 rate_kib_s=0 heap_before=162216 heap_after=162216 heap_min=8281508
+02:37:43.403 > [254553][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_noto-naskh-arabic_render_rsvp ok=1 ms=5008 us=5007726 iterations=8 avg_us=625965 bytes=0 rate_kib_s=0 heap_before=162216 heap_after=162216 heap_min=8281508
+02:38:09.418 > [280564][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_noto-naskh-arabic_render_page ok=1 ms=25959 us=25958539 iterations=8 avg_us=3244817 bytes=0 rate_kib_s=0 heap_before=162524 heap_after=162524 heap_min=8281412
+02:38:09.562 > [280708][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_noto-serif-hebrew_shape_cold ok=1 ms=45 us=44867 iterations=1 avg_us=44867 bytes=0 rate_kib_s=0 heap_before=170580 heap_after=162640 heap_min=8295736
+02:38:09.641 > [280787][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_noto-serif-hebrew_shape_warm ok=1 ms=77 us=76728 iterations=64 avg_us=1198 bytes=0 rate_kib_s=0 heap_before=162640 heap_after=162640 heap_min=8295636
+02:38:10.329 > [281475][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_noto-serif-hebrew_render_rsvp ok=1 ms=653 us=652365 iterations=8 avg_us=81545 bytes=0 rate_kib_s=0 heap_before=162640 heap_after=162640 heap_min=8295636
+02:38:14.499 > [285645][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_noto-serif-hebrew_render_page ok=1 ms=4125 us=4124095 iterations=8 avg_us=515511 bytes=0 rate_kib_s=0 heap_before=162828 heap_after=162828 heap_min=8295420
+02:38:24.801 > [295945][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_noto-serif-japanese_render_rsvp ok=1 ms=10139 us=10138629 iterations=8 avg_us=1267328 bytes=0 rate_kib_s=0 heap_before=171340 heap_after=171340 heap_min=8304336
+02:40:18.537 > [409665][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_noto-serif-japanese_render_page ok=1 ms=113615 us=113614018 iterations=8 avg_us=14201752 bytes=0 rate_kib_s=0 heap_before=171340 heap_after=171340 heap_min=8303932
+02:40:35.781 > [426905][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_noto-serif-simplified-chinese_render_rsvp ok=1 ms=17010 us=17009172 iterations=8 avg_us=2126146 bytes=0 rate_kib_s=0 heap_before=171308 heap_after=171308 heap_min=8304304
+02:42:56.370 > [567474][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_noto-serif-simplified-chinese_render_page ok=1 ms=140419 us=140418609 iterations=8 avg_us=17552326 bytes=0 rate_kib_s=0 heap_before=171308 heap_after=171308 heap_min=8303900
+02:43:01.248 > [572351][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_opendyslexic_render_rsvp ok=1 ms=4676 us=4675169 iterations=8 avg_us=584396 bytes=0 rate_kib_s=0 heap_before=171364 heap_after=171364 heap_min=8304360
+02:43:17.101 > [588201][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_opendyslexic_render_page ok=1 ms=15796 us=15795454 iterations=8 avg_us=1974431 bytes=0 rate_kib_s=0 heap_before=171364 heap_after=171364 heap_min=83039[588803][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_stix-two-math_render_rsvp ok=1 ms=477 us=476580 iterations=8 avg_us=59572 bytes=0 rate_kib_s=0 heap_before=171360 heap_after=171360 heap_min=8304356
+02:43:20.781 > [591882][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=font_stix-two-math_render_page ok=1 ms=3027 us=3026840 iterations=8 avg_us=378355 bytes=0 rate_kib_s=0 heap_before=171360 heap_after=171360 heap_min=8303952
+02:44:51.466 > [682553][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=multilingual_page_pipeline ok=1 ms=90576 us=90575700 iterations=8 avg_us=11321962 bytes=0 rate_kib_s=0 heap_before=177000 heap_after=126728 heap_min=8191728
+02:44:51.562 > [682649][I][BenchmarkRunner.cpp:67] showStatus(): [bench] screen title=Benchmark line1=epub_dracula_convert line2=Running
+02:44:51.608 > [682695][W][BenchmarkRunner.cpp:211] benchmarkDraculaConversion(): [bench] missing_epub path=/benchmark/Dracula-epub.epub
+02:44:51.609 > [682697][I][BenchmarkRunner.cpp:67] showStatus(): [bench] screen title=EPUB missing line1=Copy Dracula-epub.epub line2=to /benchmark on SD
+02:44:51.647 > [682734][I][BenchmarkRunner.cpp:115] logMetric(): [bench] metric=epub_dracula_convert ok=0 ms=43 us=42914 iterations=1 avg_us=42914 bytes=0 rate_kib_s=0 heap_before=176548 heap_after=176548 heap_min=8308568
+02:44:51.648 > [682736][I][BenchmarkRunner.cpp:67] showStatus(): [bench] screen title=Benchmark failed line1=epub_dracula_convert line2=42 ms
+02:44:51.935 > [683022][I][BenchmarkRunner.cpp:537] run(): [bench] done
+02:44:51.935 > [683023][I][BenchmarkRunner.cpp:67] showStatus(): [bench] screen title=Benchmark 

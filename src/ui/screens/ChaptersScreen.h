@@ -17,8 +17,7 @@ namespace screens {
                     const settings::ReadingSettings& settings, uint32_t nowMs, Screen& screen);
 
     private:
-        const ChapterMarker* source_ = nullptr;
-        size_t sourceCount_ = 0;
+        std::span<const ChapterMarker> source_;
         size_t centeredIndex_ = 0;
         size_t dragStartIndex_ = 0;
         int16_t offset_ = 0;

@@ -3,8 +3,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#if __has_include(<esp_log.h>)
+#include <esp_log.h>
+#endif
 
 #include "fonts/UiFont6x9.h"
+#include "text/UnicodeText.h"
 #include "text/Utf8Text.h"
 
 namespace ui {
@@ -15,15 +19,38 @@ namespace ui {
 
         constexpr uint8_t kUiFontCellWidth = 6;
         constexpr uint8_t kUiFontHeight = 9;
+        constexpr uint32_t kBuiltInUiScripts = UnicodeText::ScriptLatin | UnicodeText::ScriptCyrillic;
         constexpr uint8_t kTapCancelOutsideSamples = 2;
 
-        size_t fittedLength(std::string_view text, size_t capacity) {
-            if (Utf8Text::count(text) <= capacity)
-                return text.size();
-            if (capacity <= 3)
-                return 0;
-            return Utf8Text::prefixBytes(text, capacity - 3);
-        }
+        class PortraitGfx final : public Arduino_GFX {
+        public:
+            explicit PortraitGfx(Arduino_GFX& output) : Arduino_GFX(output.height(), output.width()), output_(output) {}
+
+            bool begin(int32_t = -1) override {
+                return true;
+            }
+
+            void writePixelPreclipped(int16_t x, int16_t y, uint16_t color) override {
+                output_.writePixelPreclipped(y, static_cast<int16_t>(output_.height() - 1 - x), color);
+            }
+
+            void writeFastHLine(int16_t x, int16_t y, int16_t width, uint16_t color) override {
+                output_.writeFastVLine(y, static_cast<int16_t>(output_.height() - x - width), width, color);
+            }
+
+            void writeFastVLine(int16_t x, int16_t y, int16_t height, uint16_t color) override {
+                output_.writeFastHLine(y, static_cast<int16_t>(output_.height() - 1 - x), height, color);
+            }
+
+            void writeFillRectPreclipped(int16_t x, int16_t y, int16_t width, int16_t height,
+                                         uint16_t color) override {
+                output_.writeFillRectPreclipped(y, static_cast<int16_t>(output_.height() - x - width), height, width,
+                                                color);
+            }
+
+        private:
+            Arduino_GFX& output_;
+        };
 
     } // namespace
 
@@ -39,6 +66,52 @@ namespace ui {
         return static_cast<int16_t>(kUiFontHeight * std::max<uint8_t>(1, size));
     }
 
+    const locales::UiAssets* Context::fontAssetsFor(std::string_view text, std::string_view textLocale) const {
+        if (languageAssets_.owns(text) && !languageAssets_.font.empty())
+            return &languageAssets_;
+        const uint32_t requiredScripts = UnicodeText::scriptsIn(text) & ~kBuiltInUiScripts;
+        if (requiredScripts == 0 || languageFilesystem_ == nullptr || languageCatalog_ == nullptr
+            || languageFontLoader_ == nullptr)
+            return nullptr;
+        const std::string_view preferredLocale = textLocale.empty() ? std::string_view{locale_} : textLocale;
+        const locales::InstalledPack* pack =
+            locales::findPackForScripts(*languageCatalog_, preferredLocale, requiredScripts);
+        if (pack == nullptr)
+            return nullptr;
+        if (pack->locale == locale_ && !languageAssets_.font.empty())
+            return &languageAssets_;
+        const auto cached =
+            std::ranges::find(contentFonts_, pack->id, [](const auto& entry) -> const std::string& {
+                return entry.first;
+            });
+        if (cached != contentFonts_.end())
+            return cached->second.font.empty() ? nullptr : &cached->second;
+
+        auto& [id, assets] =
+            contentFonts_.emplace_back(pack->id, locales::UiAssets{.direction = pack->direction});
+        auto loaded = languageFontLoader_(*languageFilesystem_, *pack);
+        if (loaded)
+            assets.font = std::move(*loaded);
+#if __has_include(<esp_log.h>)
+        else
+            ESP_LOGW("ui", "content font unavailable pack=%s: %s", id.c_str(), loaded.error().c_str());
+#endif
+        return assets.font.empty() ? nullptr : &assets;
+    }
+
+    int16_t Context::textWidthFor(std::string_view text, uint8_t size, std::string_view textLocale) const {
+        const locales::UiAssets* assets = fontAssetsFor(text, textLocale);
+        const uint8_t cellWidth = assets == nullptr ? kUiFontCellWidth : locales::uiFontCellWidth(assets->font);
+        const int32_t width = static_cast<int32_t>(Utf8Text::count(text)) * cellWidth * std::max<uint8_t>(1, size);
+        return static_cast<int16_t>(std::min<int32_t>(width, INT16_MAX));
+    }
+
+    int16_t Context::textHeightFor(std::string_view text, uint8_t size, std::string_view textLocale) const {
+        const locales::UiAssets* assets = fontAssetsFor(text, textLocale);
+        const uint8_t height = assets == nullptr ? kUiFontHeight : locales::uiFontHeight(assets->font);
+        return static_cast<int16_t>(height * std::max<uint8_t>(1, size));
+    }
+
     void Context::setTheme(const ui::themes::Theme& theme) {
         if (theme_ != &theme) {
             theme_ = &theme;
@@ -46,10 +119,26 @@ namespace ui {
         }
     }
 
-    void Context::setLanguage(UiLanguage language) {
-        language = Localization::sanitizeLanguage(static_cast<uint8_t>(language));
-        if (language_ != language) {
-            language_ = language;
+    void Context::setLanguageCatalog(fs::FS* filesystem, const locales::Catalog* catalog,
+                                     LanguageFontLoader fontLoader) {
+        languageFilesystem_ = filesystem;
+        languageCatalog_ = catalog;
+        languageFontLoader_ = fontLoader;
+        contentFonts_.clear();
+        invalidate();
+    }
+
+    void Context::setLanguageAssets(locales::UiAssets assets) {
+        languageAssets_ = std::move(assets);
+        contentFonts_.clear();
+        invalidate();
+    }
+
+    void Context::setLocale(std::string_view locale) {
+        if (locale.empty())
+            locale = Localization::kDefaultLocale;
+        if (locale_ != locale) {
+            locale_ = locale;
             invalidate();
         }
     }
@@ -64,7 +153,10 @@ namespace ui {
     }
 
     std::string_view Context::text(UiText key) const {
-        return Localization::text(language_, key);
+        const std::string_view translated = languageAssets_.text(static_cast<size_t>(key));
+        if (!translated.empty())
+            return translated;
+        return Localization::text(key);
     }
 
     void Context::setTouchSource(TouchSource source) {
@@ -98,6 +190,7 @@ namespace ui {
         drew_ = false;
         if (screen_ != screen) {
             screen_ = screen;
+            contentFonts_.clear();
             invalid_ = true;
             capturedSlot_ = kSlotCapacity;
         }
@@ -134,16 +227,21 @@ namespace ui {
         invalid_ = true;
     }
 
+    void Context::prepareTextFont(std::string_view text, std::string_view textLocale) const {
+        (void)fontAssetsFor(text, textLocale);
+    }
+
     void Context::label(Rect rect, std::string_view text, uint8_t textSize, ui::themes::ColorRole role, TextAlign align,
-                        uint8_t textLines) {
+                        uint8_t textLines, std::string_view textLocale) {
         uint32_t state = combine(signature(text), textSize);
         state = combine(state, role);
         state = combine(state, static_cast<uint8_t>(align));
         state = combine(state, textLines);
+        state = signature(textLocale, state);
         if (!claim(Kind::Label, rect, state).changed) {
             return;
         }
-        drawText(rect, text, textSize, color(role), align, textLines);
+        drawText(rect, text, textSize, color(role), align, textLines, textLocale);
     }
 
     void Context::separator(Rect rect, std::string_view text) {
@@ -151,7 +249,7 @@ namespace ui {
             return;
 
         gfx_.fillRect(rect.x, rect.y, rect.w, rect.h, color(ui::themes::ColorRole::Background));
-        const int16_t labelWidth = std::min<int16_t>(rect.w, Context::textWidth(text, 1));
+        const int16_t labelWidth = std::min<int16_t>(rect.w, textWidthFor(text, 1));
         drawText({rect.x, rect.y, labelWidth, rect.h}, text, 1, color(ui::themes::ColorRole::Muted));
         const int16_t lineX = static_cast<int16_t>(rect.x + labelWidth + 6);
         if (lineX < rect.x + rect.w)
@@ -170,12 +268,12 @@ namespace ui {
             gfx_.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
             const int16_t textWidth = std::max<int16_t>(0, static_cast<int16_t>(rect.w - 14));
             if (layout == SettingLayout::Inline) {
-                const int16_t labelRequired = Context::textWidth(label, 2);
+                const int16_t labelRequired = textWidthFor(label, 2);
                 uint8_t valueSize = 2;
-                int16_t valueRequired = Context::textWidth(value, 2);
+                int16_t valueRequired = textWidthFor(value, 2);
                 if (labelRequired + valueRequired + 8 > textWidth) {
                     valueSize = 1;
-                    valueRequired = Context::textWidth(value, 1);
+                    valueRequired = textWidthFor(value, 1);
                 }
                 const int16_t labelWidth = labelRequired + valueRequired + 8 <= textWidth
                                              ? labelRequired
@@ -186,12 +284,12 @@ namespace ui {
                 drawText({static_cast<int16_t>(rect.x + rect.w - valueWidth - 7), rect.y, valueWidth, rect.h}, value,
                          valueSize, color(ui::themes::ColorRole::Accent), TextAlign::Right);
             } else {
-                const bool largeValue = Context::textWidth(value, 2) <= textWidth;
+                const bool largeValue = textWidthFor(value, 2) <= textWidth;
                 drawText({static_cast<int16_t>(rect.x + 7), static_cast<int16_t>(rect.y + 3), textWidth, 8}, label, 1,
                          color(ui::themes::ColorRole::Muted));
                 drawText({static_cast<int16_t>(rect.x + 7), static_cast<int16_t>(rect.y + 11), textWidth,
                           static_cast<int16_t>(std::max<int16_t>(0, rect.h - 13))},
-                         value, largeValue ? 2 : 1, color(ui::themes::ColorRole::Accent), TextAlign::Left,
+                         value, largeValue ? 2 : 1, color(ui::themes::ColorRole::Accent), TextAlign::Start,
                          !largeValue && rect.h >= 32 ? 2 : 1);
             }
         }
@@ -338,7 +436,7 @@ namespace ui {
         if (showIcon) {
             const int16_t iconY = static_cast<int16_t>(rect.y + std::max<int16_t>(0, (rect.h - iconHeight) / 2));
 
-            drawBatteryIcon({x, iconY, iconWidth, iconHeight}, percent, charging, ink, surface);
+            drawBatteryIcon(gfx_, {x, iconY, iconWidth, iconHeight}, percent, charging, ink, surface);
         }
 
         drawText(
@@ -442,7 +540,20 @@ namespace ui {
                               suffix.data());
                 const std::string_view valueView{valueText};
                 const int16_t headerWidth = static_cast<int16_t>(visual.w - 14);
-                if (visual.h >= 44) {
+                const bool largeInline = visual.h >= 40 && textHeightFor(label, 3) <= visual.h - 10
+                                      && textHeightFor(valueView, 3) <= visual.h - 10
+                                      && textWidthFor(label, 3) + textWidthFor(valueView, 3) + 8 <= headerWidth;
+                if (largeInline) {
+                    const int16_t valueWidth = textWidthFor(valueView, 3);
+                    const int16_t labelWidth = static_cast<int16_t>(headerWidth - valueWidth - 8);
+                    const int16_t textHeight = static_cast<int16_t>(visual.h - 10);
+                    drawText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 1), labelWidth,
+                              textHeight},
+                             label, 3, color(ui::themes::ColorRole::Foreground));
+                    drawText({static_cast<int16_t>(visual.x + visual.w - valueWidth - 7),
+                              static_cast<int16_t>(visual.y + 1), valueWidth, textHeight},
+                             valueView, 3, color(activeRole), TextAlign::Right);
+                } else if (visual.h >= 44) {
                     drawText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 2), headerWidth, 16},
                              label, 2, color(ui::themes::ColorRole::Foreground));
                     drawText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 18), headerWidth, 16},
@@ -450,12 +561,12 @@ namespace ui {
                 } else {
                     uint8_t labelSize = visual.h >= 30 ? 2 : 1;
                     uint8_t valueSize = labelSize;
-                    int16_t valueWidth = Context::textWidth(valueView, valueSize);
-                    if (headerWidth < Context::textWidth(label, labelSize) + valueWidth + 8) {
+                    int16_t valueWidth = textWidthFor(valueView, valueSize);
+                    if (headerWidth < textWidthFor(label, labelSize) + valueWidth + 8) {
                         valueSize = 1;
-                        valueWidth = Context::textWidth(valueView, 1);
+                        valueWidth = textWidthFor(valueView, 1);
                     }
-                    if (headerWidth < Context::textWidth(label, labelSize) + valueWidth + 8)
+                    if (headerWidth < textWidthFor(label, labelSize) + valueWidth + 8)
                         labelSize = 1;
                     const int16_t labelWidth = std::max<int16_t>(0, static_cast<int16_t>(headerWidth - valueWidth - 8));
                     const int16_t textY = static_cast<int16_t>(visual.y + 2);
@@ -825,15 +936,11 @@ namespace ui {
     }
 
     uint32_t Context::signature(std::string_view text, uint32_t seed) {
-        for (const char value: text) {
-            seed ^= static_cast<uint8_t>(value);
-            seed *= 16777619U;
-        }
-        return seed;
+        return Fnv1a::append(seed, text);
     }
 
     uint32_t Context::combine(uint32_t seed, uint32_t value) {
-        return (seed ^ value) * 16777619U;
+        return (seed ^ value) * Fnv1a::kPrime;
     }
 
     Context::Claim Context::claim(Kind kind, Rect rect, uint32_t state) {
@@ -874,22 +981,85 @@ namespace ui {
     }
 
     void Context::drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t textColor, TextAlign align,
-                           uint8_t maxLines) {
+                           uint8_t maxLines, std::string_view textLocale) {
+        drawText(gfx_, rect, text, textSize, textColor, align, maxLines, textLocale);
+    }
+
+    void Context::portraitText(Rect rect, std::string_view text, uint8_t textSize, uint16_t textColor, TextAlign align,
+                               uint8_t maxLines, std::string_view textLocale) {
+        PortraitGfx portrait{gfx_};
+        drawText(portrait, rect, text, textSize, textColor, align, maxLines, textLocale);
+    }
+
+    void Context::portraitVerticalText(Rect rect, std::string_view text, uint8_t textSize, uint16_t textColor,
+                                       std::string_view textLocale) {
+        const int16_t lineHeight = textHeightFor(text, textSize);
+        if (lineHeight <= 0)
+            return;
+        for (int16_t y = rect.y; !text.empty() && y + lineHeight <= rect.y + rect.h;
+             y = static_cast<int16_t>(y + lineHeight)) {
+            const char* glyph = text.data();
+            const size_t remaining = text.size();
+            uint32_t codepoint = 0;
+            Utf8Text::next(text, codepoint);
+            portraitText({rect.x, y, rect.w, lineHeight}, {glyph, remaining - text.size()}, textSize, textColor,
+                         TextAlign::Center, 1, textLocale);
+        }
+    }
+
+    void Context::portraitBattery(Rect rect, uint8_t percent, bool charging, std::string_view labelText,
+                                  bool showIcon) {
+        if (!showIcon && labelText.empty())
+            return;
+        PortraitGfx portrait{gfx_};
+        constexpr int16_t iconWidth = 29;
+        constexpr int16_t iconHeight = 13;
+        constexpr int16_t labelGap = 5;
+        const int16_t iconAreaWidth = showIcon ? iconWidth + labelGap : 0;
+        const uint16_t ink = color(ui::themes::ColorRole::Muted);
+        const uint16_t surface = color(ui::themes::ColorRole::Background);
+        if (showIcon) {
+            const int16_t iconY = static_cast<int16_t>(rect.y + std::max<int16_t>(0, (rect.h - iconHeight) / 2));
+            drawBatteryIcon(portrait, {rect.x, iconY, iconWidth, iconHeight}, percent, charging, ink, surface);
+        }
+        drawText(portrait,
+                 {static_cast<int16_t>(rect.x + iconAreaWidth), rect.y,
+                  static_cast<int16_t>(std::max<int16_t>(0, rect.w - iconAreaWidth)), rect.h},
+                 labelText, 2, ink, TextAlign::Left, 1, {});
+    }
+
+    void Context::drawText(Arduino_GFX& output, Rect rect, std::string_view text, uint8_t textSize,
+                           uint16_t textColor, TextAlign align, uint8_t maxLines, std::string_view textLocale) {
         if (rect.w <= 0 || rect.h <= 0)
             return;
-        const uint8_t size = std::max<uint8_t>(1, textSize);
-        const size_t capacity = static_cast<size_t>(std::max<int16_t>(0, rect.w) / (kUiFontCellWidth * size));
+        const locales::UiAssets* assets = fontAssetsFor(text, textLocale);
+        const bool externalFont = assets != nullptr;
+        const uint8_t cellWidth = externalFont ? locales::uiFontCellWidth(assets->font) : kUiFontCellWidth;
+        const uint8_t fontHeight = externalFont ? locales::uiFontHeight(assets->font) : kUiFontHeight;
+        const size_t codepoints = Utf8Text::count(text);
+        uint8_t size = std::max<uint8_t>(1, textSize);
+        while (size > 1) {
+            const size_t columns = static_cast<size_t>(rect.w) / (cellWidth * size);
+            const size_t lines = columns == 0 ? SIZE_MAX : (codepoints + columns - 1) / columns;
+            if (lines <= maxLines && static_cast<size_t>(fontHeight) * size * lines <= static_cast<size_t>(rect.h))
+                break;
+            --size;
+        }
+        const size_t capacity = static_cast<size_t>(std::max<int16_t>(0, rect.w) / (cellWidth * size));
         if (capacity == 0)
             return;
-        gfx_.setFont(u8g2_font_rsvpnano_ui_6x9_tf);
-        gfx_.setUTF8Print(true);
-        gfx_.setTextSize(size);
-        gfx_.setTextWrap(false);
-        gfx_.setTextColor(textColor);
+        output.setFont(externalFont ? assets->font.data() : u8g2_font_rsvpnano_ui_6x9_tf);
+        output.setUTF8Print(true);
+        output.setTextSize(size);
+        output.setTextWrap(false);
+        output.setTextColor(textColor);
+        const bool rightToLeft = (externalFont ? assets->direction : languageAssets_.direction) == TextDirection::rtl;
+        if (align == TextAlign::Start)
+            align = rightToLeft ? TextAlign::Right : TextAlign::Left;
 
         std::string_view first = text;
         std::string_view second;
-        if (maxLines > 1 && Utf8Text::count(text) > capacity) {
+        if (maxLines > 1 && codepoints > capacity) {
             size_t split = Utf8Text::prefixBytes(text, capacity);
             const size_t space = text.rfind(' ', split);
             if (space != std::string_view::npos && Utf8Text::count(text.substr(0, space)) >= capacity / 2)
@@ -901,29 +1071,60 @@ namespace ui {
         }
 
         const uint8_t lineCount = second.empty() ? 1 : 2;
-        const int16_t lineHeight = textHeight(size);
+        const int16_t lineHeight = static_cast<int16_t>(fontHeight * size);
         const int16_t firstY =
             static_cast<int16_t>(rect.y + std::max<int16_t>(0, (rect.h - lineHeight * lineCount) / 2));
-        const auto drawLine = [&](std::string_view line, int16_t y) {
-            const bool truncated = Utf8Text::count(line) > capacity;
-            const size_t length = fittedLength(line, capacity);
+        const auto drawLine = [&](std::string_view line, size_t lineCodepoints, int16_t y) {
+            const bool truncated = lineCodepoints > capacity;
+            const size_t length = truncated && capacity > 3 ? Utf8Text::prefixBytes(line, capacity - 3)
+                                                            : truncated ? 0 : line.size();
             const size_t dots = truncated ? std::min<size_t>(3, capacity) : 0;
-            const int16_t renderedWidth = static_cast<int16_t>(textWidth(line.substr(0, length), size)
-                                                               + textWidth(std::string_view{"...", dots}, size));
-            const int16_t x = align == TextAlign::Center
-                                ? std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + (rect.w - renderedWidth) / 2))
-                            : align == TextAlign::Right
-                                ? std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + rect.w - renderedWidth))
-                                : rect.x;
-            gfx_.setCursor(x, static_cast<int16_t>(y + lineHeight - size));
-            for (size_t index = 0; index < length; ++index)
-                gfx_.write(static_cast<uint8_t>(line[index]));
-            for (size_t index = 0; index < dots; ++index)
-                gfx_.write('.');
+            const std::string_view visible = line.substr(0, length);
+            const bool bidiReady = rightToLeft && bidiAnalysis_.reset(visible, TextDirection::rtl)
+                                && bidiAnalysis_.resolve({0, visible.size()}, bidiLine_);
+            if (bidiReady)
+                BidiText::visualCodepoints(visible, bidiLine_, bidiCodepoints_);
+
+            const auto drawBytes = [&](std::string_view value) {
+                for (const char byte: value)
+                    output.write(static_cast<uint8_t>(byte));
+            };
+            const auto appendVisual = [&](std::string& output) {
+                if (!bidiReady) {
+                    output.append(visible);
+                    return;
+                }
+                std::array<char, 4> encoded{};
+                for (const BidiText::Codepoint& codepoint: bidiCodepoints_)
+                    output.append(encoded.data(), Utf8Text::encode(codepoint.value, encoded));
+            };
+
+            std::string rendered;
+            rendered.reserve(visible.size() + dots);
+            if (rightToLeft)
+                rendered.append(dots, '.');
+            appendVisual(rendered);
+            if (!rightToLeft)
+                rendered.append(dots, '.');
+
+            int16_t inkX = 0;
+            int16_t inkY = 0;
+            uint16_t inkWidth = 0;
+            uint16_t inkHeight = 0;
+            output.getTextBounds(rendered.c_str(), 0, 0, &inkX, &inkY, &inkWidth, &inkHeight);
+            const int16_t left = static_cast<int16_t>(rect.x - inkX);
+            const int16_t x =
+                align == TextAlign::Center
+                    ? std::max<int16_t>(left, static_cast<int16_t>(rect.x + (rect.w - inkWidth) / 2 - inkX))
+                : align == TextAlign::Right
+                    ? std::max<int16_t>(left, static_cast<int16_t>(rect.x + rect.w - inkWidth - inkX))
+                    : left;
+            output.setCursor(x, static_cast<int16_t>(y + lineHeight - size));
+            drawBytes(rendered);
         };
-        drawLine(first, firstY);
+        drawLine(first, second.empty() ? codepoints : Utf8Text::count(first), firstY);
         if (!second.empty())
-            drawLine(second, static_cast<int16_t>(firstY + lineHeight));
+            drawLine(second, Utf8Text::count(second), static_cast<int16_t>(firstY + lineHeight));
         drew_ = true;
     }
 

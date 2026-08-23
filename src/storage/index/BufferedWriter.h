@@ -11,7 +11,6 @@ public:
     static constexpr size_t kDefaultCapacity = 4096;
 
     explicit BufferedWriter(File& file, size_t capacity = kDefaultCapacity);
-    ~BufferedWriter();
 
     std::expected<void, std::error_code> write(const void* data, size_t len);
     std::expected<void, std::error_code> flush();

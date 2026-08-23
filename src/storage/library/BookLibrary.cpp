@@ -3,9 +3,13 @@
 
 #include <Arduino.h>
 #include <algorithm>
+#include <array>
+#include <charconv>
+#include <system_error>
 #include <vector>
 #include "board/BoardStorage.h"
 
+#include "hash/Fnv1a.h"
 #include "storage/fs/StoragePaths.h"
 #include "storage/library/EpubCache.h"
 #include "text/AsciiText.h"
@@ -21,15 +25,18 @@ namespace BookLibrary {
 
         struct DirectoryEntryInfo {
             std::string path;
-            std::string loweredPath;
             size_t bytes = 0;
+            bool readable = false;
         };
 
-        struct Counts {
-            size_t rsvp = 0;
-            size_t text = 0;
-            size_t pendingEpub = 0;
-        };
+        std::string_view fileName(std::string_view path) {
+            const size_t separator = path.find_last_of('/');
+            return separator == std::string_view::npos ? path : path.substr(separator + 1);
+        }
+
+        bool equalsIgnoreCase(std::string_view left, std::string_view right) {
+            return std::ranges::equal(left, right, {}, AsciiText::toLower, AsciiText::toLower);
+        }
 
         std::vector<DirectoryEntryInfo> scanLibraryDirectories() {
             std::vector<DirectoryEntryInfo> entries;
@@ -37,8 +44,6 @@ namespace BookLibrary {
                 DirectoryEntryInfo info;
                 info.path.reserve(directoryPath.size() + name.size() + 1);
                 info.path.append(directoryPath).append("/").append(name);
-                info.loweredPath = info.path;
-                std::ranges::transform(info.loweredPath, info.loweredPath.begin(), AsciiText::toLower);
                 info.bytes = bytes;
                 return info;
             };
@@ -53,8 +58,7 @@ namespace BookLibrary {
 
                 for (File entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
                     if (!entry.isDirectory()) {
-                        const std::string name = StoragePaths::displayNameForPath(entry.name());
-
+                        const std::string_view name = fileName(entry.name());
                         if (!name.empty())
                             entries.push_back(makeEntryInfo(directoryPath, name, static_cast<size_t>(entry.size())));
                     }
@@ -72,18 +76,15 @@ namespace BookLibrary {
         }
 
         bool inventoryHasFileWithBytes(const std::vector<DirectoryEntryInfo>& entries, std::string_view path) {
-            std::string loweredPath{path};
-            std::ranges::transform(loweredPath, loweredPath.begin(), AsciiText::toLower);
-
             return std::ranges::any_of(entries, [&](const DirectoryEntryInfo& candidate) {
-                return candidate.loweredPath == loweredPath && candidate.bytes > 0;
+                return candidate.bytes > 0 && equalsIgnoreCase(candidate.path, path);
             });
         }
 
-        std::vector<std::string> collectBookPaths(bool onDeviceEpubConversionEnabled) {
-            std::vector<std::string> bookPaths;
+        std::vector<DirectoryEntryInfo> collectBooks(bool onDeviceEpubConversionEnabled) {
             const uint32_t startedMs = millis();
-            const std::vector<DirectoryEntryInfo> entries = scanLibraryDirectories();
+            std::vector<DirectoryEntryInfo> entries = scanLibraryDirectories();
+            const size_t fileCount = entries.size();
             size_t cacheProbeCount = 0;
 
             auto hasStaleGeneratedRsvp = [&](std::string_view path) {
@@ -116,88 +117,69 @@ namespace BookLibrary {
                 return !EpubCache::hasCurrentCache(path);
             };
 
-            for (const DirectoryEntryInfo& entry: entries) {
+            for (DirectoryEntryInfo& entry: entries) {
                 const std::string& path = entry.path;
-                if (StoragePaths::isHiddenOrSidecarPath(path)) {
+                if (StoragePaths::isHiddenOrSidecarPath(path))
                     continue;
-                }
-
-                if ((!hasStaleGeneratedRsvp(path) && StoragePaths::hasRsvpExtension(path)) || isReadableText(path)
-                    || isPendingEpub(path)) {
-                    bookPaths.push_back(path);
-                }
+                entry.readable = (!hasStaleGeneratedRsvp(path) && StoragePaths::hasRsvpExtension(path))
+                              || isReadableText(path) || isPendingEpub(path);
             }
+            std::erase_if(entries, [](const DirectoryEntryInfo& entry) {
+                return !entry.readable;
+            });
 
-            std::ranges::sort(bookPaths, [](const std::string& left, const std::string& right) {
-                std::string leftKey = StoragePaths::displayNameForPath(left);
-                std::string rightKey = StoragePaths::displayNameForPath(right);
-                std::ranges::transform(leftKey, leftKey.begin(), AsciiText::toLower);
-                std::ranges::transform(rightKey, rightKey.begin(), AsciiText::toLower);
-                return leftKey < rightKey;
+            std::ranges::sort(entries, [](const DirectoryEntryInfo& left, const DirectoryEntryInfo& right) {
+                return std::ranges::lexicographical_compare(fileName(left.path), fileName(right.path), {},
+                                                            AsciiText::toLower, AsciiText::toLower);
             });
 
             ESP_LOGD("storage", "Directory inventory: %u files, %u books, %u cache probes in %lu ms",
-                     static_cast<unsigned int>(entries.size()), static_cast<unsigned int>(bookPaths.size()),
+                     static_cast<unsigned int>(fileCount), static_cast<unsigned int>(entries.size()),
                      static_cast<unsigned int>(cacheProbeCount), static_cast<unsigned long>(millis() - startedMs));
 
-            return bookPaths;
+            return entries;
         }
 
     } // namespace
 
-    using RsvpText::normalizeDisplayText;
     using namespace StoragePaths;
 
-    void clear(Listing& listing) {
-        listing.paths.clear();
-        listing.titles.clear();
-        listing.authors.clear();
-    }
-
     void refresh(Listing& listing, bool includeMetadata, bool onDeviceEpubConversionEnabled) {
-        listing.paths = collectBookPaths(onDeviceEpubConversionEnabled);
+        auto books = collectBooks(onDeviceEpubConversionEnabled);
+        listing.clear();
+        listing.reserve(books.size());
+        for (DirectoryEntryInfo& book: books) {
+            Entry entry{.path = std::move(book.path), .bytes = book.bytes};
+            entry.title = RsvpText::normalizeDisplayText(displayNameWithoutExtension(entry.path));
+            listing.push_back(std::move(entry));
+        }
 
-        const Counts counts = [&]() {
-            Counts counts;
-            counts.rsvp = std::ranges::count_if(listing.paths, [](const std::string& path) {
-                return hasRsvpExtension(path);
-            });
-            counts.text = std::ranges::count_if(listing.paths, [](const std::string& path) {
-                return hasTextExtension(path);
-            });
-            counts.pendingEpub = std::ranges::count_if(listing.paths, [](const std::string& path) {
-                return hasEpubExtension(path);
-            });
-            return counts;
-        }();
+        const std::array counts{
+            std::ranges::count_if(listing,
+                                  [](const Entry& book) {
+                                      return hasRsvpExtension(book.path);
+                                  }),
+            std::ranges::count_if(listing,
+                                  [](const Entry& book) {
+                                      return hasTextExtension(book.path);
+                                  }),
+            std::ranges::count_if(listing,
+                                  [](const Entry& book) {
+                                      return hasEpubExtension(book.path);
+                                  }),
+        };
 
         auto rebuildMetadata = [&]() {
-            listing.titles.clear();
-            listing.authors.clear();
-            listing.titles.reserve(listing.paths.size());
-            listing.authors.reserve(listing.paths.size());
-
             const uint32_t startedMs = millis();
             size_t rsvpMetadataCount = 0;
-            for (const std::string& storedPath: listing.paths) {
-                std::string title;
-                std::string author;
-
-                if (hasRsvpExtension(storedPath)) {
-                    const RsvpDirectiveValues values = readRsvpDirectiveValues(storedPath);
-                    title = values.title;
-                    author = values.author;
+            for (Entry& book: listing) {
+                refreshMetadata(book);
+                if (hasRsvpExtension(book.path))
                     ++rsvpMetadataCount;
-                } else if (hasEpubExtension(storedPath)) {
-                    author = EpubCache::libraryLabel(storedPath);
-                }
-
-                listing.titles.push_back(std::move(title));
-                listing.authors.push_back(std::move(author));
             }
 
             ESP_LOGD("storage", "Metadata cache: %u entries (%u rsvp) in %lu ms",
-                     static_cast<unsigned int>(listing.paths.size()), static_cast<unsigned int>(rsvpMetadataCount),
+                     static_cast<unsigned int>(listing.size()), static_cast<unsigned int>(rsvpMetadataCount),
                      static_cast<unsigned long>(millis() - startedMs));
         };
 
@@ -205,66 +187,69 @@ namespace BookLibrary {
         if (includeMetadata) {
             rebuildMetadata();
         } else {
-            listing.titles.clear();
-            listing.authors.clear();
-            ESP_LOGW("storage", "Metadata cache skipped for %u entries",
-                     static_cast<unsigned int>(listing.paths.size()));
+            ESP_LOGW("storage", "Metadata cache skipped for %u entries", static_cast<unsigned int>(listing.size()));
         }
 
         ESP_LOGD("storage", "Library scan: %u books (%u rsvp, %u txt, %u pending epub)",
-                 static_cast<unsigned int>(listing.paths.size()), static_cast<unsigned int>(counts.rsvp),
-                 static_cast<unsigned int>(counts.text), static_cast<unsigned int>(counts.pendingEpub));
+                 static_cast<unsigned int>(listing.size()), static_cast<unsigned int>(counts[0]),
+                 static_cast<unsigned int>(counts[1]), static_cast<unsigned int>(counts[2]));
     }
 
-    std::string pathAt(const Listing& listing, size_t index) {
-        if (index >= listing.paths.size()) {
-            return "";
+    void refreshMetadata(Entry& book) {
+        if (book.metadataLoaded)
+            return;
+        if (hasRsvpExtension(book.path)) {
+            RsvpDirectiveValues values = readRsvpDirectiveValues(book.path);
+            if (!values.title.empty())
+                book.title = RsvpText::normalizeDisplayText(values.title);
+            book.author = RsvpText::normalizeDisplayText(values.author);
+        } else if (hasEpubExtension(book.path)) {
+            book.author = RsvpText::normalizeDisplayText(EpubCache::libraryLabel(book.path));
         }
-        return listing.paths[index];
+        book.metadataLoaded = true;
     }
 
-    bool isArticle(const Listing& listing, size_t index) {
-        const std::string path = pathAt(listing, index);
-        return std::string_view{path}.starts_with(kArticleFilesPrefix);
+    const Entry* at(const Listing& listing, size_t index) {
+        return index < listing.size() ? &listing[index] : nullptr;
     }
 
-    std::string displayName(const Listing& listing, size_t index) {
-        const std::string path = pathAt(listing, index);
-        if (path.empty()) {
-            return "";
-        }
-
-        if (index < listing.titles.size() && !listing.titles[index].empty()) {
-            return listing.titles[index];
-        }
-
-        return normalizeDisplayText(displayNameWithoutExtension(path));
+    bool isArticle(const Entry& book) {
+        return std::string_view{book.path}.starts_with(kArticleFilesPrefix);
     }
 
-    std::string authorName(const Listing& listing, size_t index) {
-        const std::string path = pathAt(listing, index);
-        if (path.empty()) {
-            return "";
-        }
+    std::string_view displayName(const Entry& book) {
+        return book.title;
+    }
 
-        if (index < listing.authors.size()) {
-            return listing.authors[index];
-        }
+    std::string_view relativeName(const Entry& book) {
+        constexpr std::string_view prefix = "/books/";
+        const std::string_view path = book.path;
+        if (path.starts_with(prefix))
+            return path.substr(prefix.length());
+        const size_t separator = path.find_last_of('/');
+        return separator == std::string_view::npos ? path : path.substr(separator + 1);
+    }
 
-        if (hasEpubExtension(path)) {
-            return EpubCache::libraryLabel(path);
-        }
+    std::string id(const Entry& book) {
+        const uint32_t hash = Fnv1a::hash(book.path);
+        std::array<char, 8> digits{};
+        const auto [end, error] = std::to_chars(digits.data(), digits.data() + digits.size(), hash, 16);
+        if (error != std::errc{})
+            return "b00000000";
 
-        const RsvpDirectiveValues values = readRsvpDirectiveValues(path.c_str());
-        return values.author;
+        std::string result{"b"};
+        const size_t digitCount = static_cast<size_t>(end - digits.data());
+        result.append(digits.size() - digitCount, '0');
+        result.append(digits.data(), digitCount);
+        return result;
     }
 
     int indexOfPath(const Listing& listing, std::string_view target) {
-        const auto item = std::ranges::find(listing.paths, target);
-        if (item == listing.paths.end()) {
+        const auto item = std::ranges::find(listing, target, &Entry::path);
+        if (item == listing.end()) {
             return -1;
         }
-        return static_cast<int>(std::distance(listing.paths.begin(), item));
+        return static_cast<int>(std::distance(listing.begin(), item));
     }
 
 } // namespace BookLibrary

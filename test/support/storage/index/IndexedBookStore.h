@@ -5,6 +5,14 @@
 
 class IndexedBookStore {
 public:
+    bool isOpen() const {
+        return false;
+    }
+
+    std::string_view sourcePath() const {
+        return {};
+    }
+
     size_t wordCount() const {
         return 0;
     }

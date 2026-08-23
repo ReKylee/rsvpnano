@@ -48,7 +48,7 @@ namespace screens {
             return;
         const standby::Frame frame = screensaver_.frame();
         ui.beginFrame(static_cast<uint8_t>(Screen::Standby));
-        if (!frame.cells.valid() || columns_ == 0 || rows_ == 0) {
+        if (frame.cells.empty() || columns_ == 0 || rows_ == 0) {
             ui.endFrame();
             return;
         }
@@ -66,13 +66,13 @@ namespace screens {
             gfx.fillRect(static_cast<int16_t>(originX + x * kCellSize), static_cast<int16_t>(originY + y * kCellSize),
                          static_cast<int16_t>((last - first + 1U) * kCellSize), kCellSize, color);
         };
-        if (frame.fullRedraw || !frame.dirtyCells.valid()) {
+        if (frame.fullRedraw || frame.dirtyCells.empty()) {
             gfx.fillScreen(ui.color(ui::themes::ColorRole::Background));
             const auto drawCells = [&](standby::PackedGridView cells, uint16_t color) {
                 size_t runStart = cellCount;
                 size_t runEnd = 0;
-                for (size_t wordIndex = 0; wordIndex < cells.wordCount; ++wordIndex) {
-                    uint32_t bits = cells.words[wordIndex];
+                for (size_t wordIndex = 0; wordIndex < cells.size(); ++wordIndex) {
+                    uint32_t bits = cells[wordIndex];
                     while (bits != 0) {
                         const size_t index = wordIndex * standby::kPackedBitsPerWord + std::countr_zero(bits);
                         if (index >= cellCount)
@@ -90,7 +90,7 @@ namespace screens {
                 if (runStart < cellCount)
                     drawRun(runStart, runEnd, color);
             };
-            if (frame.dimCells.valid())
+            if (!frame.dimCells.empty())
                 drawCells(frame.dimCells, dim);
             drawCells(frame.cells, bright);
             ui.markDrawn();
@@ -98,16 +98,16 @@ namespace screens {
             size_t runStart = cellCount;
             size_t runEnd = 0;
             uint16_t runColor = 0;
-            for (size_t wordIndex = 0; wordIndex < frame.dirtyCells.wordCount; ++wordIndex) {
-                uint32_t bits = frame.dirtyCells.words[wordIndex];
+            for (size_t wordIndex = 0; wordIndex < frame.dirtyCells.size(); ++wordIndex) {
+                uint32_t bits = frame.dirtyCells[wordIndex];
                 while (bits != 0) {
                     const unsigned bit = std::countr_zero(bits);
                     const uint32_t mask = 1UL << bit;
                     const size_t index = wordIndex * standby::kPackedBitsPerWord + bit;
                     if (index >= cellCount)
                         break;
-                    const uint16_t color = (frame.cells.words[wordIndex] & mask) != 0 ? bright
-                                         : frame.dimCells.valid() && (frame.dimCells.words[wordIndex] & mask) != 0
+                    const uint16_t color = (frame.cells[wordIndex] & mask) != 0 ? bright
+                                         : !frame.dimCells.empty() && (frame.dimCells[wordIndex] & mask) != 0
                                              ? dim
                                              : ui.color(ui::themes::ColorRole::Background);
                     if (runStart < cellCount && (index != runEnd + 1U || index % columns_ == 0 || color != runColor)) {

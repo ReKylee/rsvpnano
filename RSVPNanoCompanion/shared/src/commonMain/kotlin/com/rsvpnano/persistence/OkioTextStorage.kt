@@ -5,7 +5,7 @@ import okio.Path
 
 class OkioTextStorage(
     private val path: Path,
-    private val fileSystem: FileSystem = FileSystem.SYSTEM,
+    private val fileSystem: FileSystem,
 ) : TextStorage {
     override suspend fun readText(): String? {
         if (!fileSystem.exists(path)) return null

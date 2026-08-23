@@ -5,9 +5,15 @@
 
 #include <array>
 #include <cstdint>
+#include <expected>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
+#include "hash/Fnv1a.h"
+#include "locales/LocaleCatalog.h"
+#include "text/BidiText.h"
 #include "ui/Localization.h"
 #include "ui/Theme.h"
 #include "ui/Touch.h"
@@ -27,6 +33,10 @@ namespace ui {
 
     constexpr bool contains(Rect rect, uint16_t x, uint16_t y) {
         return x >= rect.x && y >= rect.y && x < rect.x + rect.w && y < rect.y + rect.h;
+    }
+
+    constexpr Rect rotateClockwise(Rect rect, int16_t sourceWidth) {
+        return {rect.y, static_cast<int16_t>(sourceWidth - rect.x - rect.w), rect.h, rect.w};
     }
 
     struct Column {
@@ -95,11 +105,13 @@ namespace ui {
         Books,
         Edit,
         Device,
+        Language,
         Hourglass,
         Power,
     };
 
     enum class TextAlign : uint8_t {
+        Start,
         Left,
         Center,
         Right,
@@ -113,11 +125,15 @@ namespace ui {
     class Context {
     public:
         static constexpr size_t kSlotCapacity = 64;
+        using LanguageFontLoader = std::expected<std::vector<uint8_t>, std::string> (*)(fs::FS&,
+                                                                                        const locales::InstalledPack&);
 
         explicit Context(Arduino_GFX& gfx);
 
         void setTheme(const ui::themes::Theme& theme);
-        void setLanguage(UiLanguage language);
+        void setLanguageCatalog(fs::FS* filesystem, const locales::Catalog* catalog, LanguageFontLoader fontLoader);
+        void setLanguageAssets(locales::UiAssets assets);
+        void setLocale(std::string_view locale);
         void setOrientation(Orientation orientation);
         Orientation orientation() const {
             return touchOrientation_;
@@ -131,10 +147,11 @@ namespace ui {
         void beginFrame(uint8_t screen);
         void endFrame();
         void invalidate();
+        void prepareTextFont(std::string_view text, std::string_view textLocale = {}) const;
 
         void label(Rect rect, std::string_view text, uint8_t textSize = 2,
-                   ui::themes::ColorRole role = ui::themes::ColorRole::Foreground, TextAlign align = TextAlign::Left,
-                   uint8_t textLines = 1);
+                   ui::themes::ColorRole role = ui::themes::ColorRole::Foreground, TextAlign align = TextAlign::Start,
+                   uint8_t textLines = 1, std::string_view textLocale = {});
         void separator(Rect rect, std::string_view text);
         bool setting(Rect rect, std::string_view label, std::string_view value,
                      SettingLayout layout = SettingLayout::Stacked);
@@ -198,7 +215,13 @@ namespace ui {
         bool redraw(Rect rect, uint32_t signature);
         void markDrawn();
         void drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
-                      TextAlign align = TextAlign::Left, uint8_t maxLines = 1);
+                      TextAlign align = TextAlign::Start, uint8_t maxLines = 1, std::string_view textLocale = {});
+        void portraitText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
+                          TextAlign align = TextAlign::Start, uint8_t maxLines = 1,
+                          std::string_view textLocale = {});
+        void portraitVerticalText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
+                                  std::string_view textLocale = {});
+        void portraitBattery(Rect rect, uint8_t percent, bool charging, std::string_view label, bool showIcon);
 
         uint16_t color(ui::themes::ColorRole role) const;
         uint16_t blend(ui::themes::ColorRole role, uint8_t alpha) const;
@@ -211,7 +234,7 @@ namespace ui {
         int16_t height() const {
             return gfx_.height();
         }
-        static uint32_t signature(std::string_view text, uint32_t seed = 2166136261U);
+        static uint32_t signature(std::string_view text, uint32_t seed = Fnv1a::kOffsetBasis);
         static uint32_t combine(uint32_t seed, uint32_t value);
         static int16_t textWidth(std::string_view text, uint8_t size);
         static int16_t textHeight(uint8_t size);
@@ -253,9 +276,13 @@ namespace ui {
         void drawBooksIcon(Rect rect, uint16_t ink);
         void drawEditIcon(Rect rect, uint16_t ink);
         void drawDeviceIcon(Rect rect, uint16_t ink);
+        void drawLanguageIcon(Rect rect, uint16_t ink);
         void drawHourglassIcon(Rect rect, uint16_t ink);
         void drawPowerIcon(Rect rect, uint16_t ink, uint16_t surface);
-        void drawBatteryIcon(Rect rect, uint8_t percent, bool charging, uint16_t ink, uint16_t surface);
+        void drawBatteryIcon(Arduino_GFX& output, Rect rect, uint8_t percent, bool charging, uint16_t ink,
+                             uint16_t surface);
+        void drawText(Arduino_GFX& output, Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
+                      TextAlign align, uint8_t maxLines, std::string_view textLocale);
         int valueAt(Rect rect, uint16_t x, int minimum, int maximum, int step) const;
         bool tapped(size_t slot, Rect rect);
         bool sliderValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,
@@ -263,12 +290,23 @@ namespace ui {
         bool stepperValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,
                           std::string_view suffix, ui::themes::ColorRole activeRole);
         void resetTouchGesture();
+        const locales::UiAssets* fontAssetsFor(std::string_view text, std::string_view textLocale = {}) const;
+        int16_t textWidthFor(std::string_view text, uint8_t size, std::string_view textLocale = {}) const;
+        int16_t textHeightFor(std::string_view text, uint8_t size, std::string_view textLocale = {}) const;
         TouchContact mapTouch(TouchContact contact) const;
         bool updateTouch(const TouchContact& contact, uint32_t nowMs);
 
         Arduino_GFX& gfx_;
         const ui::themes::Theme* theme_ = nullptr;
-        UiLanguage language_ = UiLanguage::english;
+        fs::FS* languageFilesystem_ = nullptr;
+        const locales::Catalog* languageCatalog_ = nullptr;
+        LanguageFontLoader languageFontLoader_ = nullptr;
+        locales::UiAssets languageAssets_;
+        mutable std::vector<std::pair<std::string, locales::UiAssets>> contentFonts_;
+        BidiText::Analysis bidiAnalysis_;
+        BidiText::Line bidiLine_;
+        std::vector<BidiText::Codepoint> bidiCodepoints_;
+        std::string locale_{Localization::kDefaultLocale};
         TouchSource touchSource_{};
         Touch touchEvent_{};
         Orientation touchOrientation_ = Orientation::Portrait;

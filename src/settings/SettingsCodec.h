@@ -47,8 +47,6 @@ namespace settings {
 
         SettingsResult<DeviceSettings> decodeToml(std::string_view input, SettingsSource source);
         SettingsResult<std::string> encodeToml(const DeviceSettings& value, SettingsSource source);
-        SettingsResult<DeviceSettings> decodeJson(std::string_view input, SettingsSource source);
-        SettingsResult<std::string> encodeJson(const DeviceSettings& value, SettingsSource source);
         SettingsResult<DeviceSecrets> decodeSecrets(std::string_view input, SettingsSource source);
         SettingsResult<std::string> encodeSecrets(const DeviceSecrets& value, SettingsSource source);
 

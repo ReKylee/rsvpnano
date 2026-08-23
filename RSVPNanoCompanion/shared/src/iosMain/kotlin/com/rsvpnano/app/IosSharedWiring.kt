@@ -5,7 +5,6 @@ import com.rsvpnano.api.ArticleFetchClient
 import com.rsvpnano.persistence.JsonAppSettingsStore
 import com.rsvpnano.persistence.OkioTextStorage
 import com.rsvpnano.persistence.PendingUploadJsonStore
-import com.rsvpnano.persistence.PendingUploadRepository
 import com.rsvpnano.ui.CompanionPresenter
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.darwin.Darwin
@@ -13,6 +12,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import kotlinx.coroutines.CoroutineScope
+import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
 import platform.Foundation.NSFileManager
@@ -25,7 +25,7 @@ fun createIosCompanionPresenter(scope: CoroutineScope): CompanionPresenter {
     val root = appGroupRootPath(DefaultAppGroupIdentifier)
     val settingsStore = createIosSettingsStore(root)
     return CompanionPresenter(
-        companionController = NanoCompanionController(createIosDraftService(root, httpClient), nanoClient),
+        companionController = NanoCompanionController(createIosDraftService(root, httpClient), nanoClient, nanoClient),
         firmwareUpdates = FirmwareUpdates(nanoClient, settingsStore),
         nanoNetworkController = IosNanoWifiConnector(),
         settingsStore = settingsStore,
@@ -43,22 +43,26 @@ fun createIosCompanionController(
 ): NanoCompanionController {
     val httpClient = createIosHttpClient()
     val root = appGroupRootPath(appGroupIdentifier)
+    val client = NanoKtorClient(httpClient)
     return NanoCompanionController(
         draftService = createIosDraftService(root, httpClient),
-        client = NanoKtorClient(httpClient),
+        nanoApi = client,
+        repository = client,
     )
 }
 
 private fun createIosDraftService(root: Path, httpClient: HttpClient): PendingDraftService =
     PendingDraftService(
-        repository = PendingUploadRepository(
-            PendingUploadJsonStore(OkioTextStorage(root.resolve("PendingUploads/drafts.json"))),
+        store = PendingUploadJsonStore(
+            OkioTextStorage(root.resolve("PendingUploads/drafts.json"), FileSystem.SYSTEM),
         ),
         articleFetchClient = ArticleFetchClient(httpClient),
     )
 
 private fun createIosSettingsStore(root: Path): JsonAppSettingsStore =
-    JsonAppSettingsStore(OkioTextStorage(root.resolve("Settings/companion_settings.json")))
+    JsonAppSettingsStore(
+        OkioTextStorage(root.resolve("Settings/companion_settings.json"), FileSystem.SYSTEM),
+    )
 
 private fun createIosHttpClient(): HttpClient {
     return HttpClient(Darwin) {

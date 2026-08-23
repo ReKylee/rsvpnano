@@ -31,6 +31,9 @@ namespace EpubZip {
     public:
         bool open(std::string_view path);
         void close();
+        std::span<const ZipEntry> entries() const {
+            return entries_;
+        }
         bool contains(std::string_view name) const;
         const ZipEntry* find(std::string_view name) const;
 
@@ -39,6 +42,7 @@ namespace EpubZip {
                                                   size_t maxWords, std::string& lastChapterTitle, size_t& chapterCount,
                                                   std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
                                                   std::string_view fallbackChapterTitle, std::string_view bookTitle,
+                                                  std::string_view bookLocale, bool& verticalWritingEmitted,
                                                   const EpubConverter::Options& options, size_t itemIndex,
                                                   size_t itemCount);
 
@@ -50,6 +54,7 @@ namespace EpubZip {
                                                   size_t maxWords, std::string& lastChapterTitle, size_t& chapterCount,
                                                   std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
                                                   std::string_view fallbackChapterTitle, std::string_view bookTitle,
+                                                  std::string_view bookLocale, bool& verticalWritingEmitted,
                                                   const EpubConverter::Options& options, size_t itemIndex,
                                                   size_t itemCount);
 

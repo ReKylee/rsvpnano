@@ -1,13 +1,13 @@
 package com.rsvpnano.app
 
 import com.rsvpnano.api.ArticleFetchClient
-import com.rsvpnano.api.NanoClient
+import com.rsvpnano.api.NanoApi
 import com.rsvpnano.converters.ArticleFormatter
 import com.rsvpnano.converters.RsvpBookFile
 import com.rsvpnano.converters.RsvpConverter
 import com.rsvpnano.converters.SharedArticle
 import com.rsvpnano.models.PendingUpload
-import com.rsvpnano.persistence.PendingUploadRepository
+import com.rsvpnano.persistence.PendingUploadJsonStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
  * Shared domain service for saved article drafts and pending uploads.
  */
 class PendingDraftService(
-    private val repository: PendingUploadRepository,
+    private val store: PendingUploadJsonStore,
     private val articleFetchClient: ArticleFetchClient? = null,
 ) {
     suspend fun fetchArticleIfAvailable(title: String, source: String): SharedArticle? {
@@ -23,14 +23,14 @@ class PendingDraftService(
         return runCatching { client.fetch(title, source) }.getOrNull()
     }
 
-    suspend fun loadDrafts(): List<PendingUpload> = repository.loadAll()
+    suspend fun loadDrafts(): List<PendingUpload> = store.loadAll()
 
     suspend fun saveDraft(item: PendingUpload) {
-        repository.save(item)
+        store.save(item)
     }
 
     suspend fun deleteDraft(item: PendingUpload) {
-        repository.delete(item)
+        store.delete(item)
     }
 
     suspend fun bookFileFor(item: PendingUpload): RsvpBookFile = withContext(Dispatchers.Default) {
@@ -47,12 +47,12 @@ class PendingDraftService(
         )
     }
 
-    suspend fun syncPendingUploads(client: NanoClient, baseUrl: String, items: List<PendingUpload>): List<PendingUpload> {
+    suspend fun syncPendingUploads(client: NanoApi, baseUrl: String, items: List<PendingUpload>): List<PendingUpload> {
         items.forEach { item ->
             val file = bookFileFor(item)
             client.uploadBook(baseUrl = baseUrl, name = file.filename, data = file.data, category = "article")
-            repository.delete(item)
+            store.delete(item)
         }
-        return repository.loadAll()
+        return store.loadAll()
     }
 }

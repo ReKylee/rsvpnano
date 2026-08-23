@@ -14,13 +14,13 @@ namespace rss {
     }
 
     std::expected<void, std::error_code> save(fs::FS& filesystem, Config config) {
-        auto content = encodeToml(std::move(config));
-        if (!content)
-            return std::unexpected(content.error());
-        if (auto directory = StorageFiles::ensureDirectory(StoragePaths::kConfigPath); !directory)
-            return directory;
-        return StorageFiles::writeFileAtomic(filesystem, StoragePaths::kRssConfigPath, StoragePaths::kRssConfigTempPath,
-                                             StoragePaths::kRssConfigBackupPath, *content);
+        return encodeToml(std::move(config)).and_then([&](const std::string& content) {
+            return StorageFiles::ensureDirectory(StoragePaths::kConfigPath).and_then([&] {
+                return StorageFiles::writeFileAtomic(filesystem, StoragePaths::kRssConfigPath,
+                                                     StoragePaths::kRssConfigTempPath,
+                                                     StoragePaths::kRssConfigBackupPath, content);
+            });
+        });
     }
 
 } // namespace rss

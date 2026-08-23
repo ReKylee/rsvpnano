@@ -11,11 +11,14 @@
 #endif
 
 #include "text/TextNormalizer.h"
+#include "text/UnicodeText.h"
+#include "text/Utf8Text.h"
 
 namespace RsvpText {
 
     constexpr size_t kMaxBookWords = static_cast<size_t>(RSVP_MAX_BOOK_WORDS);
     constexpr size_t kMaxBookLineChars = 4096;
+    constexpr uint8_t kCjkPhraseCharacters = 2;
 
     struct ParseStats {
         NormalizationStats normalization;
@@ -29,6 +32,7 @@ namespace RsvpText {
 
         bool isWordBoundary(char c);
         bool isInlineWordHyphen(std::string_view text, size_t index);
+        bool endsCjkPhrase(uint32_t codepoint);
 
     } // namespace Detail
 
@@ -59,7 +63,7 @@ namespace RsvpText {
             return withinWordLimit();
         };
 
-        auto finishToken = [&](std::string token) -> bool {
+        auto queueToken = [&](std::string_view token) -> bool {
             if (token.empty()) {
                 return true;
             }
@@ -84,8 +88,41 @@ namespace RsvpText {
             if (!flushPending()) {
                 return false;
             }
-            pendingToken = std::move(token);
+            pendingToken.assign(token);
             return true;
+        };
+
+        auto finishToken = [&](std::string token) -> bool {
+            if (!UnicodeText::isCjkText(token))
+                return queueToken(token);
+
+            size_t phraseStart = 0;
+            size_t offset = 0;
+            uint8_t characters = 0;
+            bool breakBeforeCharacter = false;
+            std::string_view remaining{token};
+            while (!remaining.empty()) {
+                const size_t codepointStart = offset;
+                const size_t bytesBefore = remaining.size();
+                uint32_t codepoint = 0;
+                Utf8Text::next(remaining, codepoint);
+                offset += bytesBefore - remaining.size();
+
+                if (UnicodeText::isWordCharacter(codepoint)) {
+                    if ((characters >= kCjkPhraseCharacters || breakBeforeCharacter)
+                        && !queueToken(std::string_view{token}.substr(phraseStart, codepointStart - phraseStart)))
+                        return false;
+                    if (characters >= kCjkPhraseCharacters || breakBeforeCharacter) {
+                        phraseStart = codepointStart;
+                        characters = 0;
+                        breakBeforeCharacter = false;
+                    }
+                    ++characters;
+                }
+                if (Detail::endsCjkPhrase(codepoint))
+                    breakBeforeCharacter = true;
+            }
+            return queueToken(std::string_view{token}.substr(phraseStart));
         };
 
         auto flushCurrent = [&]() -> bool {

@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 VECTORS = ROOT / "RSVPNanoCompanion" / "testdata" / "conversion"
+MULTILINGUAL = ROOT / "RSVPNanoCompanion" / "testdata" / "multilingual"
 LOCAL_GRADLE = ROOT / ".local" / "run_local_gradle.ps1"
 
 TEXT_CASES = [
@@ -91,6 +92,8 @@ def run_python_vector(tmp: Path, input_name: str, expected_name: str, title: str
     for kind, value in events:
         if kind == "chapter":
             writer.add_chapter(value)
+        elif kind in {"language", "direction"}:
+            writer.add_directive(kind, value)
         else:
             writer.begin_paragraph()
             writer.add_text(value)
@@ -167,6 +170,54 @@ def run_python_epub_toc() -> None:
             raise AssertionError("Python TCOMC kept generated contents/title-page chapters")
 
 
+def run_multilingual_format_parity() -> None:
+    module = load_python_converter()
+    names = (
+        "multilingual.txt",
+        "multilingual.md",
+        "multilingual.html",
+        "multilingual.xhtml",
+        "multilingual-epub2.epub",
+        "multilingual-epub3.epub",
+    )
+    content_events = lambda path: [
+        event for event in module.events_for_file(path)[2] if event[0] in {"chapter", "text"}
+    ]
+    expected = content_events(MULTILINGUAL / names[0])
+    for name in names[1:]:
+        actual = content_events(MULTILINGUAL / name)
+        if actual != expected:
+            raise AssertionError(f"Multilingual content events differed for {name}")
+
+    required = [
+        ("language", "he"),
+        ("direction", "rtl"),
+        ("language", "ar"),
+        ("language", "ja"),
+        ("direction", "ltr"),
+        ("language", "zh-Hans"),
+    ]
+    for name in names[2:]:
+        events = module.events_for_file(MULTILINGUAL / name)[2]
+        position = 0
+        for event in events:
+            if position < len(required) and event == required[position]:
+                position += 1
+        if position != len(required):
+            raise AssertionError(f"Multilingual language metadata was not preserved for {name}")
+
+    vertical_events = [
+        module.events_for_file(MULTILINGUAL / name)[2]
+        for name in ("vertical-cjk.xhtml", "vertical-cjk.epub")
+    ]
+    for events in vertical_events:
+        if events.count(("writing-mode", "vertical-rl")) != 1:
+            raise AssertionError("Vertical CJK writing mode was not preserved exactly once")
+    content = lambda events: [event for event in events if event[0] in {"chapter", "text"}]
+    if content(vertical_events[0]) != content(vertical_events[1]):
+        raise AssertionError("Vertical CJK XHTML and EPUB content events differed")
+
+
 def run_web_vector(tmp: Path, command: str, input_name: str, expected_name: str, title: str, label: str) -> None:
     node = shutil.which("node")
     if node is None:
@@ -213,6 +264,7 @@ def main() -> int:
         run_python_text(tmp)
         run_python_html(tmp)
         run_python_epub_toc()
+        run_multilingual_format_parity()
         run_web_text(tmp)
         run_web_html(tmp)
         run_web_epub(tmp)

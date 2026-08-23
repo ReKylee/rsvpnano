@@ -139,6 +139,15 @@ namespace SdCard {
             }
         }
 
+        bool probeBufferMatches(const uint8_t* buffer, size_t bytes, uint32_t offset) {
+            for (size_t i = 0; i < bytes; ++i) {
+                const uint32_t value = offset + static_cast<uint32_t>(i);
+                if (buffer[i] != static_cast<uint8_t>((value * 33U) ^ (value >> 3) ^ 0xA5U))
+                    return false;
+            }
+            return true;
+        }
+
         bool removeProbeFile(std::string_view path, const char* tag) {
             const std::string ownedPath{path};
             errno = 0;
@@ -159,8 +168,7 @@ namespace SdCard {
         ESP_LOGD(tag, "write/read probe path=%s bytes=%u", ownedPath.c_str(), static_cast<unsigned int>(bytes));
         Board::Storage::filesystem().remove(ownedPath.c_str());
 
-        static uint8_t writeBuffer[kProbeChunkBytes];
-        static uint8_t readBuffer[kProbeChunkBytes];
+        static uint8_t buffer[kProbeChunkBytes];
 
         {
             // Write the deterministic probe payload.
@@ -176,8 +184,8 @@ namespace SdCard {
             size_t writtenTotal = 0;
             while (writtenTotal < bytes) {
                 const size_t chunk = std::min(kProbeChunkBytes, bytes - writtenTotal);
-                fillProbeBuffer(writeBuffer, chunk, static_cast<uint32_t>(writtenTotal));
-                const size_t written = file.write(writeBuffer, chunk);
+                fillProbeBuffer(buffer, chunk, static_cast<uint32_t>(writtenTotal));
+                const size_t written = file.write(buffer, chunk);
                 if (written != chunk) {
                     ESP_LOGE(tag, "probe short write path=%s offset=%u wanted=%u got=%u", ownedPath.c_str(),
                              static_cast<unsigned int>(writtenTotal), static_cast<unsigned int>(chunk),
@@ -216,9 +224,8 @@ namespace SdCard {
             size_t readTotal = 0;
             while (readTotal < bytes) {
                 const size_t chunk = std::min(kProbeChunkBytes, bytes - readTotal);
-                fillProbeBuffer(writeBuffer, chunk, static_cast<uint32_t>(readTotal));
-                const size_t read = file.read(readBuffer, chunk);
-                if (read != chunk || std::memcmp(readBuffer, writeBuffer, chunk) != 0) {
+                const size_t read = file.read(buffer, chunk);
+                if (read != chunk || !probeBufferMatches(buffer, chunk, static_cast<uint32_t>(readTotal))) {
                     ESP_LOGE(tag, "probe verify failed path=%s offset=%u wanted=%u got=%u", ownedPath.c_str(),
                              static_cast<unsigned int>(readTotal), static_cast<unsigned int>(chunk),
                              static_cast<unsigned int>(read));

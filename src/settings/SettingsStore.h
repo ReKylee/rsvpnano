@@ -12,6 +12,9 @@ namespace fs {
 
 namespace settings {
 
+    inline constexpr char kSettingsNvsNamespace[] = "rsvp_cfg2";
+    inline constexpr char kSettingsNvsKey[] = "settings";
+
     class SettingsStore {
     public:
         ~SettingsStore();
@@ -31,9 +34,8 @@ namespace settings {
             return secrets_;
         }
 
-        SettingsResult<> acceptChanges();
-        SettingsResult<> acceptSecretChanges();
-        SettingsResult<> replace(DeviceSettings candidate, SettingsSource source);
+        void acceptChanges();
+        void acceptSecretChanges();
         void update(uint32_t nowMs);
         SettingsResult<> flush();
         void closeNvs();
@@ -51,9 +53,7 @@ namespace settings {
         Preferences preferences_;
         fs::FS* filesystem_ = nullptr;
         DeviceSettings settings_;
-        DeviceSettings lastAccepted_;
         DeviceSecrets secrets_;
-        DeviceSecrets lastAcceptedSecrets_;
         bool nvsOpen_ = false;
         bool mirrorEnabled_ = false;
         bool dirty_ = false;

@@ -75,10 +75,8 @@ namespace ui::themes {
         return colors.foreground;
     }
 
-    ThemeEntry defaultTheme(const settings::TypographySettings& typography) {
-        ThemeFile definition;
-        definition.typography = typography;
-        return {.id = std::string{kDefaultThemeId}, .definition = std::move(definition), .builtIn = true};
+    ThemeEntry defaultTheme() {
+        return {.id = std::string{kDefaultThemeId}, .definition = {}, .builtIn = true};
     }
 
     bool hasThemeExtension(std::string_view path) {
@@ -98,10 +96,8 @@ namespace ui::themes {
         return id;
     }
 
-    settings::SettingsResult<ThemeEntry> decodeToml(std::string_view text, std::string_view id,
-                                                    const settings::TypographySettings& defaults) {
+    settings::SettingsResult<ThemeEntry> decodeToml(std::string_view text, std::string_view id) {
         ThemeFile candidate;
-        candidate.typography = defaults;
         if (const glz::error_ctx error =
                 glz::read<glz::opts{.format = glz::TOML, .error_on_unknown_keys = false}>(candidate, text))
             return std::unexpected(errorFrom(error, text));
@@ -109,10 +105,6 @@ namespace ui::themes {
             candidate.name = "Unnamed";
         if (candidate.name.size() > settings::rules::kThemeNameMaxLength)
             candidate.name.resize(settings::rules::kThemeNameMaxLength);
-        if (candidate.typography.fontId.empty())
-            candidate.typography.fontId = settings::TypographySettings{}.fontId;
-        if (candidate.typography.fontId.size() > settings::rules::kFontIdMaxLength)
-            candidate.typography.fontId.resize(settings::rules::kFontIdMaxLength);
         return ThemeEntry{.id = std::string{id}, .definition = std::move(candidate), .builtIn = false};
     }
 

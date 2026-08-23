@@ -1,19 +1,20 @@
 #include <unity.h>
 
 #include "standby/ReactionScreensaver.h"
+#include "standby/Screensaver.h"
 
 namespace {
 
-void assertSameFrame(const standby::Frame& left, const standby::Frame& right) {
-    TEST_ASSERT_EQUAL_UINT32(left.generation, right.generation);
-    TEST_ASSERT_EQUAL(left.cells.wordCount, right.cells.wordCount);
-    for (size_t i = 0; i < left.cells.wordCount; ++i) {
-        TEST_ASSERT_EQUAL_HEX32(left.cells.words[i], right.cells.words[i]);
-        TEST_ASSERT_EQUAL_HEX32(left.dimCells.words[i], right.dimCells.words[i]);
-        TEST_ASSERT_EQUAL_HEX32(left.dirtyCells.words[i], right.dirtyCells.words[i]);
-        TEST_ASSERT_EQUAL_HEX32(0, left.cells.words[i] & left.dimCells.words[i]);
+    void assertSameFrame(const standby::Frame& left, const standby::Frame& right) {
+        TEST_ASSERT_EQUAL_UINT32(left.generation, right.generation);
+        TEST_ASSERT_EQUAL(left.cells.size(), right.cells.size());
+        for (size_t i = 0; i < left.cells.size(); ++i) {
+            TEST_ASSERT_EQUAL_HEX32(left.cells[i], right.cells[i]);
+            TEST_ASSERT_EQUAL_HEX32(left.dimCells[i], right.dimCells[i]);
+            TEST_ASSERT_EQUAL_HEX32(left.dirtyCells[i], right.dirtyCells[i]);
+            TEST_ASSERT_EQUAL_HEX32(0, left.cells[i] & left.dimCells[i]);
+        }
     }
-}
 
 } // namespace
 
@@ -40,8 +41,28 @@ void test_reaction_is_deterministic_and_keeps_visual_states_disjoint() {
     assertSameFrame(frame, right.frame());
 }
 
+void test_screensaver_slot_releases_each_selected_animation() {
+    standby::ScreensaverSlot slot;
+    TEST_ASSERT_FALSE(static_cast<bool>(slot));
+
+    for (const standby::Kind kind:
+         {standby::Kind::life, standby::Kind::maze, standby::Kind::reaction, standby::Kind::voronoi}) {
+        slot.select(kind, 32, 16);
+        TEST_ASSERT_TRUE(static_cast<bool>(slot));
+        slot.seed(12345);
+        slot.step();
+        TEST_ASSERT_FALSE(slot.frame().cells.empty());
+        slot.reset();
+        TEST_ASSERT_FALSE(static_cast<bool>(slot));
+    }
+
+    slot.select(standby::Kind::screenOff, 32, 16);
+    TEST_ASSERT_FALSE(static_cast<bool>(slot));
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_reaction_is_deterministic_and_keeps_visual_states_disjoint);
+    RUN_TEST(test_screensaver_slot_releases_each_selected_animation);
     return UNITY_END();
 }

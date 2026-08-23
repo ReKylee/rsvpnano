@@ -8,14 +8,15 @@
 
 #include "board/BoardDisplay.h"
 #include "board/BoardPower.h"
+#include "companion/CompanionApi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "input/Input.h"
+#include "locales/LocaleCatalog.h"
 #include "rss/RssFeeds.h"
 #include "settings/SettingsStore.h"
 #include "storage/StorageManager.h"
 #include "storage/fs/SdDiagnostics.h"
-#include "sync/CompanionSyncManager.h"
 #include "ui/Ui.h"
 #include "ui/screens/ChaptersScreen.h"
 #include "ui/screens/LibraryScreen.h"
@@ -38,6 +39,7 @@ private:
         OtaCheck,
         OtaInstall,
         Book,
+        Typography,
     };
 
     struct JobUpdate {
@@ -46,15 +48,16 @@ private:
         char line1[96] = {};
         char line2[96] = {};
         int progressPercent = -1;
+        bool rebootRequired = false;
     };
 
-    void migrateLegacyStorage();
     void renderScreen(uint32_t nowMs);
     void handleScreenAction(screens::Action action, uint32_t nowMs);
-    void handleInput(const Input::Event& event, uint32_t nowMs);
+    void handleInput(Input::ActionMask actions, uint32_t nowMs);
     void handleTouch(uint32_t nowMs);
     void runRss();
     void runBookOpen(size_t index, uint32_t nowMs);
+    bool requestTypographyRefresh();
     void updateBackgroundJob();
     bool startBackgroundJob(JobKind kind);
     static void backgroundJobEntry(void* context);
@@ -62,7 +65,9 @@ private:
     void enqueueJobUpdate(JobUpdate update, bool mustSucceed = false);
     void showTransientStatus(std::string_view title, std::string_view line1, std::string_view line2,
                              uint32_t durationMs, screens::Screen destination, int progressPercent = -1);
-    void reloadSettings();
+    void applySettings();
+    void loadAppearanceSettings();
+    void reloadUiAssets();
     void enterUsbTransfer(uint32_t nowMs);
     void exitUsbTransfer(screens::Screen destination = screens::Screen::Reader);
     void runOtaCheck(bool install);
@@ -75,9 +80,13 @@ private:
     bool backgroundJobActive() const {
         return jobKind_ != JobKind::None;
     }
+    bool typographyJobActive() const {
+        return jobKind_ == JobKind::Typography;
+    }
 
     ui::Context immediateUi_{Board::Display::gfx()};
     settings::SettingsStore settingsStore_;
+    locales::Catalog localeCatalog_;
     Board::Power::BatteryState battery_;
     screens::ReaderScreen readerScreen_{Board::Display::gfx(), settingsStore_.settings().reading};
     screens::LibraryScreen libraryScreen_;
@@ -86,24 +95,19 @@ private:
     screens::NetworkScreen networkScreen_;
     StorageManager storage_;
     Preferences prefs_;
-    CompanionSyncManager sync_{settingsStore_};
-    UsbMassStorageManager usbTransfer_;
     screens::FocusScreen focusScreen_;
+    CompanionApi companionApi_{settingsStore_,   storage_,       localeCatalog_, immediateUi_, readerScreen_,
+                               interfaceScreen_, networkScreen_, libraryScreen_, focusScreen_};
+    UsbMassStorageManager usbTransfer_;
     screens::StandbyScreen standbyScreen_;
     QueueHandle_t jobQueue_ = nullptr;
     JobKind jobKind_ = JobKind::None;
-    settings::DeviceSettings jobSettings_;
-    settings::DeviceSecrets jobSecrets_;
-    OtaUpdater::Config jobOtaConfig_;
-    RssFeeds::Result jobRssResult_;
-    SdDiagnostics::Inventory jobStorageInventory_;
-    SdDiagnostics::Result jobStorageResult_;
-    OtaUpdater::Result jobOtaResult_;
     size_t jobBookIndex_ = 0;
-    size_t jobLoadedBookIndex_ = 0;
-    std::string jobBookPath_;
-    std::string jobBookName_;
     bool jobBookLoaded_ = false;
+    size_t pendingBookIndex_ = 0;
+    bool bookOpenPending_ = false;
+    bool typographyRefreshPending_ = false;
+    bool typographyOpensBook_ = false;
     screens::Screen screen_ = screens::Screen::Status;
     screens::Screen statusDestination_ = screens::Screen::Reader;
     uint32_t bootMs_ = 0;

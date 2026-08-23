@@ -9,13 +9,17 @@ data class NanoChapter(
 )
 
 @Serializable
+data class NanoBookLanguage(
+    val locale: String,
+    val scripts: List<String> = emptyList(),
+)
+
+@Serializable
 data class NanoBook(
     val id: String,
     val name: String,
     val bytes: Int = 0,
-    val category: String,
     val metadata: NanoBookMetadata,
-    val source: NanoBookSource? = null,
     val reading: NanoReadingProgress? = null,
 ) {
     val displayTitle: String
@@ -27,29 +31,22 @@ data class NanoBookMetadata(
     val title: String,
     val author: String = "",
     val wordCount: Int = 0,
-    val chapterCount: Int = 0,
+    val locale: String = "",
+    val scripts: List<String> = emptyList(),
+    val languages: List<NanoBookLanguage> = emptyList(),
     val chapters: List<NanoChapter> = emptyList(),
-)
-
-@Serializable
-data class NanoBookSource(
-    val size: Long,
-    val fingerprint: Long,
 )
 
 @Serializable
 data class NanoReadingProgress(
     val wordIndex: Int,
-    val percent: Int,
-    val remainingWords: Int,
-    val estimatedMinutes: Int,
-    val currentChapter: NanoCurrentChapter? = null,
+    val languageFonts: List<NanoLanguageFont> = emptyList(),
 )
 
 @Serializable
-data class NanoCurrentChapter(
-    val number: Int,
-    val title: String,
+data class NanoLanguageFont(
+    val locale: String,
+    val fontId: String,
 )
 
 @Serializable
@@ -63,26 +60,14 @@ data class PendingUpload(
 
 @Serializable
 data class NanoInfo(
-    val name: String,
-    val apiVersion: Int,
-    val mode: String? = null,
-    val networkSsid: String? = null,
-    val firmwareVersion: String = "",
-    val otaAsset: String = "",
-)
-
-@Serializable
-data class NanoUploadResponse(
-    val path: String? = null,
-    val id: String? = null,
-    val deleted: Boolean? = null,
-    val wordIndex: Int? = null,
-    val percent: Int? = null,
+    val ssid: String,
+    val firmwareVersion: String,
+    val otaAsset: String,
 )
 
 @Serializable
 data class NanoRssFeeds(
-    val feeds: List<String> = emptyList(),
+    val feeds: List<String>,
 )
 
 @Serializable
@@ -95,12 +80,31 @@ data class NanoFocusTimer(
 
 @Serializable
 data class NanoFocusTimers(
-    val timers: List<NanoFocusTimer> = emptyList(),
+    val timers: List<NanoFocusTimer>,
 )
+
+object NanoFocusTimerRules {
+    const val MAX_TIMERS = 6
+    const val MAX_NAME_BYTES = 14
+    const val MIN_FOCUS_MINUTES = 1
+    const val MAX_FOCUS_MINUTES = 180
+    const val MIN_BREAK_MINUTES = 1
+    const val MAX_BREAK_MINUTES = 60
+    const val MIN_ROUNDS = 1
+    const val MAX_ROUNDS = 12
+
+    fun valid(timer: NanoFocusTimer): Boolean =
+        timer.name.isNotBlank() &&
+            timer.name.encodeToByteArray().size <= MAX_NAME_BYTES &&
+            timer.name.none { it.isISOControl() } &&
+            timer.focusMinutes in MIN_FOCUS_MINUTES..MAX_FOCUS_MINUTES &&
+            timer.breakMinutes in MIN_BREAK_MINUTES..MAX_BREAK_MINUTES &&
+            timer.rounds in MIN_ROUNDS..MAX_ROUNDS
+}
 
 @Serializable
 data class NanoWifiSettings(
-    val passwordSet: Boolean = false,
+    val ssid: String,
 )
 
 @Serializable
@@ -113,19 +117,25 @@ data class NanoWifiUpdate(
 data class NanoFontCatalogItem(
     val id: String,
     val name: String,
-    val files: Map<String, String> = emptyMap(),
+    val locales: List<String> = emptyList(),
+    val scripts: List<String> = emptyList(),
+    val file: String,
+    val shaping: Boolean = false,
 )
 
 @Serializable
 data class NanoFontSummary(
     val id: String,
     val name: String,
-)
-
-@Serializable
-data class NanoFontsResponse(
-    val fonts: List<NanoFontSummary> = emptyList(),
-)
+    val locales: List<String> = emptyList(),
+    val scripts: List<String> = emptyList(),
+    val builtIn: Boolean = false,
+) {
+    fun usableFor(locale: String, requiredScripts: Collection<String>): Boolean =
+        requiredScripts.isEmpty() || requiredScripts.all(scripts::contains) ||
+            (locales.any { locale == it || locale.startsWith("$it-") } &&
+                requiredScripts.any(scripts::contains))
+}
 
 @Serializable
 data class NanoThemeCatalogItem(
@@ -141,20 +151,35 @@ data class NanoThemeSummary(
 )
 
 @Serializable
-data class NanoThemesResponse(
-    val themes: List<NanoThemeSummary> = emptyList(),
+data class NanoLocaleSummary(
+    val id: String,
+    val name: String,
+    val locale: String,
+)
+
+@Serializable
+data class NanoLocaleCatalogItem(
+    val id: String,
+    val name: String,
+    val englishName: String,
+    val version: String,
+    val locale: String,
+    val direction: String,
+    val scripts: List<String> = emptyList(),
+    val translationStatus: String,
+    val file: String,
 )
 
 @Serializable
 data class NanoSettings(
     val reading: Reading = Reading(),
     val `interface`: Interface = Interface(),
-    val network: Network = Network(),
     val updates: Updates = Updates(),
 ) {
     @Serializable
     data class Reading(
         val wpm: Int = 300,
+        val mode: String = NanoSettingsSchema.READING_MODE_RSVP,
         val pauseMode: String = NanoSettingsSchema.PAUSE_MODE_SENTENCE_END,
         val phantomWords: Boolean = true,
         val chapterScrollReversed: Boolean = false,
@@ -190,20 +215,15 @@ data class NanoSettings(
     @Serializable
     data class Interface(
         val brightnessPercent: Int = 70,
-        val language: String = NanoLanguages.DEFAULT,
-        val standbyTimerIndex: Int = NanoSettingsSchema.STANDBY_TIMER_NEVER,
+        val locale: String = NanoLocales.DEFAULT,
+        val standbyTimerIndex: Int = NanoSettingsSchema.STANDBY_TIMER_1_MIN,
         val screensaver: String = NanoSettingsSchema.SCREENSAVER_LIFE,
         val selectedThemeId: String = NanoSettingsSchema.THEME_DEFAULT,
     )
 
     @Serializable
-    data class Network(
-        val wifiSsid: String = "",
-    )
-
-    @Serializable
     data class Updates(
-        val automatic: Boolean = false,
+        val checkOnStartup: Boolean = false,
         val repositoryOwner: String = "",
         val releaseTag: String = "",
     )
@@ -234,6 +254,9 @@ data class NanoSettings(
                 pacing = reading.pacing.copy(punctuationDelayMs = NanoSettingsSchema.snapPacingMs(value)),
             ),
         )
+
+    fun withDefaultPacing(): NanoSettings =
+        copy(reading = reading.copy(pacing = Pacing()))
 
     fun withBrightnessPercent(value: Int): NanoSettings =
         copy(`interface` = `interface`.copy(brightnessPercent = NanoSettingsSchema.coerceBrightnessPercent(value)))
@@ -269,8 +292,8 @@ data class NanoSettings(
     fun withStandbyTimerIndex(value: Int): NanoSettings =
         copy(`interface` = `interface`.copy(standbyTimerIndex = NanoSettingsSchema.coerceStandbyTimerIndex(value)))
 
-    fun withLanguage(value: String): NanoSettings =
-        copy(`interface` = `interface`.copy(language = NanoSettingsSchema.coerceLanguage(value)))
+    fun withLocale(value: String): NanoSettings =
+        copy(`interface` = `interface`.copy(locale = NanoSettingsSchema.coerceLocale(value)))
 
     fun withPhantomWords(value: Boolean): NanoSettings =
         copy(reading = reading.copy(phantomWords = value))
@@ -324,12 +347,14 @@ data class NanoSettings(
     fun withUpdateTag(value: String): NanoSettings =
         copy(updates = updates.copy(releaseTag = value))
 
-    fun withAutomaticUpdateChecks(value: Boolean): NanoSettings =
-        copy(updates = updates.copy(automatic = value))
+    fun withUpdateChecksOnStartup(value: Boolean): NanoSettings =
+        copy(updates = updates.copy(checkOnStartup = value))
 }
 
 object NanoSettingsSchema {
     const val THEME_DEFAULT = "default"
+    const val READING_MODE_RSVP = "rsvp"
+    const val READING_MODE_PAGE = "page"
     const val PAUSE_MODE_SENTENCE_END = "sentenceEnd"
     const val PAUSE_MODE_INSTANT = "instant"
     const val HANDEDNESS_LEFT = "left"
@@ -361,7 +386,7 @@ object NanoSettingsSchema {
     const val STANDBY_TIMER_15_MIN = 3
     const val STANDBY_TIMER_30_MIN = 4
     const val FONT_SIZE_MIN = 0
-    const val FONT_SIZE_MAX = 2
+    const val FONT_SIZE_MAX = 3
     const val TRACKING_MIN = -2
     const val TRACKING_MAX = 3
     const val ANCHOR_PERCENT_MIN = 30
@@ -399,9 +424,8 @@ object NanoSettingsSchema {
     fun coerceStandbyTimerIndex(value: Int): Int =
         value.coerceIn(STANDBY_TIMER_NEVER, STANDBY_TIMER_30_MIN)
 
-    fun coerceLanguage(value: String): String =
-        value.takeIf { candidate -> NanoLanguages.OPTIONS.any { it.first == candidate } }
-            ?: NanoLanguages.DEFAULT
+    fun coerceLocale(value: String): String =
+        value.ifBlank { NanoLocales.DEFAULT }
 
     fun coerceFontSizeIndex(value: Int): Int =
         value.coerceIn(FONT_SIZE_MIN, FONT_SIZE_MAX)

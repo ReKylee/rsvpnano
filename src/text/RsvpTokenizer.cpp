@@ -27,6 +27,26 @@ namespace RsvpText {
                 && UnicodeText::isWordCharacter(previous) && UnicodeText::isWordCharacter(next);
         }
 
+        bool endsCjkPhrase(uint32_t codepoint) {
+            switch (codepoint) {
+            case ',':
+            case ';':
+            case ':':
+            case '!':
+            case '?':
+            case 0x3001U: // IDEOGRAPHIC COMMA
+            case 0x3002U: // IDEOGRAPHIC FULL STOP
+            case 0xFF01U: // FULLWIDTH EXCLAMATION MARK
+            case 0xFF0CU: // FULLWIDTH COMMA
+            case 0xFF1AU: // FULLWIDTH COLON
+            case 0xFF1BU: // FULLWIDTH SEMICOLON
+            case 0xFF1FU: // FULLWIDTH QUESTION MARK
+                return true;
+            default:
+                return false;
+            }
+        }
+
     } // namespace Detail
 
     bool hasReadableText(std::string_view text) {

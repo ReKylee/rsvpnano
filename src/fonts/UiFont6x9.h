@@ -13,7 +13,7 @@
   Glyphs: 479/1296
   BBX Build Mode: 0
 */
-const uint8_t u8g2_font_rsvpnano_ui_6x9_tf[4873] U8G2_FONT_SECTION("u8g2_font_rsvpnano_ui_6x9_tf") =
+inline constexpr uint8_t u8g2_font_rsvpnano_ui_6x9_tf[4873] U8G2_FONT_SECTION("u8g2_font_rsvpnano_ui_6x9_tf") =
   "\337\0\2\2\3\4\3\4\4\6\11\0\376\6\376\6\377\1%\2G\6\320 \5\0\276\3!\7\61\243"
   "\63R\0\42\7\233\256\223\254\0#\15=\236W\246\64T\65T\231\22\0$\14M\232\233W\245\362N"
   "\252\332\21%\17F\236\227Q\263F\31e\24\253\32%\0&\13=\236'\253\30e\234Q\5'\5\31"

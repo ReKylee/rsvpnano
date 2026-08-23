@@ -2,8 +2,8 @@ package com.rsvpnano
 
 import com.rsvpnano.app.PendingDraftService
 import com.rsvpnano.models.PendingUpload
-import com.rsvpnano.persistence.PendingUploadRepository
-import com.rsvpnano.persistence.PendingUploadStore
+import com.rsvpnano.persistence.PendingUploadJsonStore
+import com.rsvpnano.persistence.TextStorage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -11,13 +11,10 @@ class PendingDraftServiceArticleTest {
     @Test
     fun producesBookFileFromPendingUpload() = kotlinx.coroutines.runBlocking {
         val service = PendingDraftService(
-            repository = PendingUploadRepository(
-                store = object : PendingUploadStore {
-                    override suspend fun loadAll(): List<PendingUpload> = emptyList()
-                    override suspend fun saveAll(items: List<PendingUpload>) = Unit
-                    override suspend fun remove(id: String) = Unit
-                },
-            ),
+            store = PendingUploadJsonStore(object : TextStorage {
+                override suspend fun readText(): String? = null
+                override suspend fun writeText(value: String) = Unit
+            }),
         )
 
         val item = PendingUpload(

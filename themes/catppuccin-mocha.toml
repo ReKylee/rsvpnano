@@ -1,14 +1,5 @@
 name = "Catppuccin Mocha"
 
-[typography]
-fontId = "literata"
-fontSizeIndex = 0
-focusHighlight = true
-tracking = 0
-anchor = 30
-guideWidth = 30
-guideGap = 5
-
 [colors]
 background = "#1E1E2E"
 foreground = "#CDD6F4"

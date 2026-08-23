@@ -14,7 +14,7 @@ namespace net {
         if (ssid == nullptr || *ssid == '\0' || timeoutMs == 0)
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         WiFi.persistent(false);
-        WiFi.setAutoReconnect(false);
+        WiFi.setAutoReconnect(true);
         WiFi.mode(WIFI_STA);
         WiFi.begin(ssid, password);
 

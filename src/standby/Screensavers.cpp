@@ -1,5 +1,7 @@
 #include "standby/Screensaver.h"
 
+#include <new>
+
 namespace standby {
 
     void ScreensaverSlot::select(Kind kind, uint16_t columns, uint16_t rows) {
@@ -7,23 +9,32 @@ namespace standby {
 
         switch (kind) {
         case Kind::maze: {
+            auto saver = std::unique_ptr<MazeScreensaver>{new (std::nothrow) MazeScreensaver};
+            if (!saver)
+                return;
+            saver->reset(columns, rows);
+            storage_ = std::move(saver);
             kind_ = Kind::maze;
-            auto& saver = storage_.emplace<MazeScreensaver>();
-            saver.reset(columns, rows);
             break;
         }
 
         case Kind::voronoi: {
+            auto saver = std::unique_ptr<VoronoiScreensaver>{new (std::nothrow) VoronoiScreensaver};
+            if (!saver)
+                return;
+            saver->reset(columns, rows);
+            storage_ = std::move(saver);
             kind_ = Kind::voronoi;
-            auto& saver = storage_.emplace<VoronoiScreensaver>();
-            saver.reset(columns, rows);
             break;
         }
 
         case Kind::reaction: {
+            auto saver = std::unique_ptr<ReactionScreensaver>{new (std::nothrow) ReactionScreensaver};
+            if (!saver)
+                return;
+            saver->reset(columns, rows);
+            storage_ = std::move(saver);
             kind_ = Kind::reaction;
-            auto& saver = storage_.emplace<ReactionScreensaver>();
-            saver.reset(columns, rows);
             break;
         }
 
@@ -34,9 +45,12 @@ namespace standby {
         case Kind::life:
         case Kind::Count:
         default: {
+            auto saver = std::unique_ptr<LifeScreensaver>{new (std::nothrow) LifeScreensaver};
+            if (!saver)
+                return;
+            saver->reset(columns, rows);
+            storage_ = std::move(saver);
             kind_ = Kind::life;
-            auto& saver = storage_.emplace<LifeScreensaver>();
-            saver.reset(columns, rows);
             break;
         }
         }
@@ -54,19 +68,19 @@ namespace standby {
 
         switch (kind_) {
         case Kind::maze:
-            std::get<MazeScreensaver>(storage_).seed(rngSeed);
+            std::get<std::unique_ptr<MazeScreensaver>>(storage_)->seed(rngSeed);
             break;
         case Kind::voronoi:
-            std::get<VoronoiScreensaver>(storage_).seed(rngSeed);
+            std::get<std::unique_ptr<VoronoiScreensaver>>(storage_)->seed(rngSeed);
             break;
         case Kind::reaction:
-            std::get<ReactionScreensaver>(storage_).seed(rngSeed);
+            std::get<std::unique_ptr<ReactionScreensaver>>(storage_)->seed(rngSeed);
             break;
         case Kind::screenOff:
             break;
         case Kind::life:
         default:
-            std::get<LifeScreensaver>(storage_).seed(rngSeed);
+            std::get<std::unique_ptr<LifeScreensaver>>(storage_)->seed(rngSeed);
             break;
         }
     }
@@ -78,19 +92,19 @@ namespace standby {
 
         switch (kind_) {
         case Kind::maze:
-            std::get<MazeScreensaver>(storage_).step();
+            std::get<std::unique_ptr<MazeScreensaver>>(storage_)->step();
             break;
         case Kind::voronoi:
-            std::get<VoronoiScreensaver>(storage_).step();
+            std::get<std::unique_ptr<VoronoiScreensaver>>(storage_)->step();
             break;
         case Kind::reaction:
-            std::get<ReactionScreensaver>(storage_).step();
+            std::get<std::unique_ptr<ReactionScreensaver>>(storage_)->step();
             break;
         case Kind::screenOff:
             break;
         case Kind::life:
         default:
-            std::get<LifeScreensaver>(storage_).step();
+            std::get<std::unique_ptr<LifeScreensaver>>(storage_)->step();
             break;
         }
     }
@@ -102,16 +116,16 @@ namespace standby {
 
         switch (kind_) {
         case Kind::maze:
-            return std::get<MazeScreensaver>(storage_).frame();
+            return std::get<std::unique_ptr<MazeScreensaver>>(storage_)->frame();
         case Kind::voronoi:
-            return std::get<VoronoiScreensaver>(storage_).frame();
+            return std::get<std::unique_ptr<VoronoiScreensaver>>(storage_)->frame();
         case Kind::reaction:
-            return std::get<ReactionScreensaver>(storage_).frame();
+            return std::get<std::unique_ptr<ReactionScreensaver>>(storage_)->frame();
         case Kind::screenOff:
             return {};
         case Kind::life:
         default:
-            return std::get<LifeScreensaver>(storage_).frame();
+            return std::get<std::unique_ptr<LifeScreensaver>>(storage_)->frame();
         }
     }
 

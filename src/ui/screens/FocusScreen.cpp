@@ -10,11 +10,18 @@
 #include "timer/FocusTimerStorage.h"
 
 namespace screens {
-    void FocusScreen::begin(fs::FS* filesystem) {
-        filesystem_ = filesystem;
+    void FocusScreen::begin() {
+        filesystem_ = nullptr;
         timers_ = focus::defaultTimers();
-        writable_ = filesystem_ != nullptr;
-        if (filesystem_ != nullptr) {
+        writable_ = false;
+        orientation_.begin();
+    }
+
+    void FocusScreen::begin(fs::FS& filesystem) {
+        filesystem_ = &filesystem;
+        timers_ = focus::defaultTimers();
+        writable_ = true;
+        {
             auto loaded = focus::load(*filesystem_);
             if (loaded) {
                 timers_ = std::move(*loaded);
@@ -54,6 +61,14 @@ namespace screens {
             break;
         }
         return Action::None;
+    }
+
+    void FocusScreen::setTimers(focus::Timers timers) {
+        timers_ = std::move(timers);
+        editIndex_ = 0;
+        activeIndex_ = 0;
+        creating_ = false;
+        deleteConfirm_ = false;
     }
 
     void FocusScreen::close() {
@@ -361,7 +376,7 @@ namespace screens {
     }
 
     bool FocusScreen::persist(const focus::Timers& timers) {
-        if (!writable_ || filesystem_ == nullptr)
+        if (!writable_ || !filesystem_)
             return false;
         auto saved = focus::save(*filesystem_, timers);
         if (!saved)

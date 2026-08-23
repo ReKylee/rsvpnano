@@ -4,11 +4,20 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "reader/ReadingSession.h"
 #include "settings/SettingsModel.h"
 
 namespace ReadingLoop {
+
+    struct TextParagraph {
+        size_t firstWord = 0;
+        size_t lastWord = 0;
+        std::string text;
+        std::vector<size_t> wordOffsets;
+    };
 
     void begin(ReadingSession& session, uint32_t nowMs);
     void start(ReadingSession& session, uint32_t nowMs);
@@ -25,6 +34,9 @@ namespace ReadingLoop {
 
     std::string_view wordAt(const ReadingSession& session, size_t index);
     size_t wordCount(const ReadingSession& session);
+    std::pair<size_t, size_t> paragraphBoundsAt(const ReadingSession& session, size_t wordIndex);
+    TextParagraph paragraphAt(const ReadingSession& session, size_t wordIndex);
+    settings::ReadingPacing pacingMode(const ReadingSession& session);
     uint32_t currentWordDurationMs(const ReadingSession& session, const settings::ReadingSettings& settings);
     uint32_t elapsedInCurrentWordMs(const ReadingSession& session, uint32_t nowMs);
     bool currentWordEndsSentence(const ReadingSession& session);

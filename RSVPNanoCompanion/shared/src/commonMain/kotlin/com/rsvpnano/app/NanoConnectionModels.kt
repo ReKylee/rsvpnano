@@ -15,7 +15,6 @@ interface NanoWifiConnector {
     fun requestNanoNetwork(
         rememberedNano: RememberedNano? = null,
     ): NanoWifiRequestResult
-    suspend fun <T> withNanoNetwork(block: suspend () -> T): T
 }
 
 data class NanoEndpoint(
@@ -70,7 +69,14 @@ data class NanoWifiSnapshot(
         val identity = currentNano ?: previous.currentNano
         return when {
             isRequesting -> NanoConnectionState.Requesting(identity)
-            isAttached -> NanoConnectionState.WifiAttached(identity)
+            isAttached -> when {
+                previous is NanoConnectionState.CheckingReader &&
+                    previous.transport == NanoConnectionTransport.AccessPoint -> previous
+                previous is NanoConnectionState.ReaderConnected &&
+                    previous.transport == NanoConnectionTransport.AccessPoint -> previous
+                else -> NanoConnectionState.WifiAttached(identity)
+            }
+            previous.transport == NanoConnectionTransport.LocalNetwork -> previous
             else -> NanoConnectionState.Disconnected
         }
     }
@@ -86,6 +92,7 @@ sealed interface NanoWifiRequestResult {
 
 sealed interface NanoWifiEvent {
     data object RequestUnavailable : NanoWifiEvent
+    data object NetworkChanged : NanoWifiEvent
 }
 
 val NanoConnectionState.isConnected: Boolean

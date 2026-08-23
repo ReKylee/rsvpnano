@@ -18,7 +18,7 @@ namespace screens {
             screen = Screen::PacingSettings;
         if (ui.button(grid.next(), ui.text(UiText::Typography)))
             screen = Screen::TypographySettings;
-        if (ui.button(grid.next(), ui.text(UiText::ReaderScreen)))
+        if (ui.button(grid.next(), ui.text(UiText::ReaderLayout)))
             screen = Screen::ReaderSettings;
 
         const int16_t readingRows = static_cast<int16_t>((4 + columns - 1) / columns);

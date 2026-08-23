@@ -4,12 +4,6 @@ import com.rsvpnano.models.PendingUpload
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-/**
- * JSON-backed implementation of the pending-upload store.
- *
- * The storage backend is injected, which keeps the file system, app group, or app sandbox
- * details out of common code.
- */
 class PendingUploadJsonStore(
     private val storage: TextStorage,
     private val json: Json = Json {
@@ -18,21 +12,29 @@ class PendingUploadJsonStore(
         explicitNulls = false
         prettyPrint = false
     },
-) : PendingUploadStore {
-    override suspend fun loadAll(): List<PendingUpload> {
+) {
+    suspend fun loadAll(): List<PendingUpload> {
         val text = storage.readText() ?: return emptyList()
         return runCatching { json.decodeFromString(PendingUploadList.serializer(), text).items }
             .getOrDefault(emptyList())
             .sortedByDescending(PendingUpload::createdAt)
     }
 
-    override suspend fun saveAll(items: List<PendingUpload>) {
-        storage.writeText(json.encodeToString(PendingUploadList.serializer(), PendingUploadList(items.sortedByDescending(PendingUpload::createdAt))))
+    suspend fun save(item: PendingUpload) {
+        val items = loadAll().toMutableList()
+        val index = items.indexOfFirst { it.id == item.id }
+        if (index >= 0) items[index] = item else items.add(item)
+        writeAll(items)
     }
 
-    override suspend fun remove(id: String) {
-        saveAll(loadAll().filterNot { it.id == id })
-    }
+    suspend fun delete(item: PendingUpload) = writeAll(loadAll().filterNot { it.id == item.id })
+
+    private suspend fun writeAll(items: List<PendingUpload>) = storage.writeText(
+        json.encodeToString(
+            PendingUploadList.serializer(),
+            PendingUploadList(items.sortedByDescending(PendingUpload::createdAt)),
+        ),
+    )
 
     @Serializable
     private data class PendingUploadList(

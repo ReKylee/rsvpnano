@@ -1,0 +1,13 @@
+Able 5
+Copyright and design: Joseph Fatula (stormgold)
+Source: https://stormgold.itch.io/able-font
+Version: 2.0
+SHA-256: 69f242d5a53607a384ae40f5a6c9b3a7d3134aa3aaf9744f509b9e507f02f602
+
+You may use this font in your own commercial or non-commercial works. You may
+not sell or distribute the font by itself or in a bundle of fonts. You may
+include the font in software that uses the font, provided that you credit
+Joseph Fatula as the designer of the font.
+
+RSVP Nano uses Able 5 only as an offline source for generated Hebrew UI-font
+subsets embedded in locale-pack software.

@@ -1,0 +1,67 @@
+@rsvp 1
+@title Multilingual Reader Corpus
+@source public-domain multilingual excerpts
+
+@chapter Multilingual Reader Corpus
+
+@chapter English
+@language en
+@direction ltr
+Alice was beginning to get very tired of sitting by her sister on the bank.
+
+@chapter Español
+@language es
+@para
+En un lugar de la Mancha, de cuyo nombre no quiero acordarme.
+
+@chapter Français
+@language fr
+@para
+Il y avait en Westphalie, dans le château de monsieur le baron.
+
+@chapter Deutsch
+@language de
+@para
+Habe nun, ach! Philosophie, Juristerei und Medizin mit heißem Bemühn studiert.
+
+@chapter Română
+@language ro
+@para
+A fost odată ca-n povești, a fost ca niciodată, din rude mari împărătești.
+
+@chapter Polski
+@language pl
+@para
+Litwo! Ojczyzno moja! ty jesteś jak zdrowie.
+
+@chapter Русский
+@language ru
+@para
+12-го августа, ровно в третий день после дня моего рождения, я проснулся рано.
+
+@chapter עברית
+@language he
+@direction rtl
+@para
+שָׁלוֹם רָב שׁוּבֵךְ, צִפּוֹרָה נֶחְמֶדֶת, מֵאַרְצוֹת הַחֹם אֶל חַלּוֹנִי.
+
+@chapter العربية
+@language ar
+@para
+بلغني أيها الملك السعيد، ذو الرأي الرشيد، أن 123 حكاية رويت.
+
+@chapter 日本語
+@language ja
+@direction ltr
+@para
+吾輩は猫である。名前はまだ無い。
+
+@chapter 简体中文
+@language zh-Hans
+@para
+上古之世，人民少而禽兽众，人民不胜禽兽虫蛇。
+
+@chapter Mixed scripts
+@language en
+@para
+English 123 (עברית 45) العربية 67; 日本語と中文; ∀x∈ℝ, x²≥0 and ∫₀¹x²dx=⅓.

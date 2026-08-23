@@ -1,14 +1,5 @@
 name = "Catppuccin Macchiato"
 
-[typography]
-fontId = "literata"
-fontSizeIndex = 0
-focusHighlight = true
-tracking = 0
-anchor = 30
-guideWidth = 30
-guideGap = 5
-
 [colors]
 background = "#24273A"
 foreground = "#CAD3F5"

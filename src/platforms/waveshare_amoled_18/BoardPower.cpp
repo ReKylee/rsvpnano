@@ -120,18 +120,18 @@ namespace Board::Power {
         return status.voltage > 0.0f;
     }
 
-    DiagnosticSnapshot diagnosticSnapshot() {
-        DiagnosticSnapshot snapshot = {};
+    Diagnostics readDiagnostics() {
+        Diagnostics diagnostics = {};
         if (!ensurePmuReady()) {
-            return snapshot;
+            return diagnostics;
         }
 
         const uint16_t status = gPmu.status();
-        snapshot.available = true;
-        snapshot.externalPowerPresent = gPmu.isVbusIn();
-        snapshot.status1 = static_cast<uint8_t>(status >> 8);
-        snapshot.status2 = static_cast<uint8_t>(status & 0xFF);
-        return snapshot;
+        diagnostics.available = true;
+        diagnostics.externalPowerPresent = gPmu.isVbusIn();
+        diagnostics.status1 = static_cast<uint8_t>(status >> 8);
+        diagnostics.status2 = static_cast<uint8_t>(status & 0xFF);
+        return diagnostics;
     }
 
     bool externalPowerPresent() {

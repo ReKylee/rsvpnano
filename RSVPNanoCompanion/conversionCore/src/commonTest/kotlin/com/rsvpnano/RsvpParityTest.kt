@@ -63,6 +63,31 @@ class RsvpParityTest {
     }
 
     @Test
+    fun cjkTextKeepsLogicalSpacingAndCountsReaderPhrases() {
+        val text = "吾輩は猫である。名前はまだ無い。"
+        val file = RsvpConverter.rsvpFile(title = "猫", source = "cat.txt", text = text)
+
+        assertEquals(8, file.wordCount)
+        assertEquals(true, file.data.decodeToString().contains("\n$text\n"))
+    }
+
+    @Test
+    fun verticalXhtmlProducesOneBookLevelWritingModeDirective() {
+        val file = RsvpConverter.rsvpFile(
+            title = "Vertical CJK",
+            source = "vertical.xhtml",
+            text = """<html lang="ja" style="writing-mode: vertical-rl"><body>
+                <h1>縦書き</h1><p>日本語、。</p><p lang="zh-Hans">中文，。</p>
+                </body></html>""",
+        )
+        val lines = file.data.decodeToString().lineSequence().toList()
+        assertEquals(1, lines.count { it == "@writing-mode vertical-rl" })
+        assertEquals(true, lines.contains("@chapter 縦書き"))
+        assertEquals(true, lines.contains("日本語、。"))
+        assertEquals(true, lines.contains("中文，。"))
+    }
+
+    @Test
     fun textToRsvpMatchesReferenceVector() {
         val file = RsvpConverter.rsvpFile(
             title = "Basic Text Vector",

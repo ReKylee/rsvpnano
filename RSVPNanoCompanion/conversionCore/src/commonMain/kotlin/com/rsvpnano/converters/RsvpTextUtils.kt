@@ -80,34 +80,7 @@ internal object RsvpTextUtils {
         return fallback
     }
 
-    fun htmlEvents(markup: String): List<RsvpEvent> {
-        val blockBreak = "\u0000"
-        var text = markup
-        skipTags.forEach { tag ->
-            text = text.replace(Regex("<$tag\\b[\\s\\S]*?</$tag>", RegexOption.IGNORE_CASE), " ")
-        }
-        text = Regex("<h[1-6][^>]*>([\\s\\S]*?)</h[1-6]>", RegexOption.IGNORE_CASE).replace(text) { match ->
-            val heading = match.groupValues[1].replace(Regex("<br\\b[^>]*>", RegexOption.IGNORE_CASE), " ")
-            "$blockBreak@chapter $heading$blockBreak"
-        }
-        text = text.replace(Regex("<br\\b[^>]*>", RegexOption.IGNORE_CASE), blockBreak)
-        text = text.replace(Regex("</(${blockTags.joinToString("|")})\\b[^>]*>", RegexOption.IGNORE_CASE), blockBreak)
-        text = text.replace(Regex("<(${blockTags.joinToString("|")})\\b[^>]*>", RegexOption.IGNORE_CASE), " ")
-        text = text.replace(Regex("<[^>]+>", RegexOption.IGNORE_CASE), " ")
-        text = decodeEntities(text)
-        text = text.replace(Regex("[\\r\\n\\t]+"), " ").replace(blockBreak, "\n")
-
-        return text.lineSequence().map(::cleanedLine).mapNotNull { line ->
-            when {
-                line.isEmpty() -> null
-                line.lowercase().startsWith("@chapter ") -> {
-                    val value = cleanedLine(line.removePrefix("@chapter "))
-                    if (value.isEmpty()) null else RsvpEvent.Chapter(value)
-                }
-                else -> RsvpEvent.Text(line)
-            }
-        }.toList()
-    }
+    fun htmlEvents(markup: String): List<RsvpEvent> = EpubBookConverter.htmlEvents(markup)
 
     fun textEvents(text: String): List<RsvpEvent> {
         val events = mutableListOf<RsvpEvent>()
@@ -151,16 +124,83 @@ internal object RsvpTextUtils {
     fun directiveValue(value: String): String = cleanedLine(value).replace("\n", " ")
 
     fun cleanWordTokens(text: String): List<String> {
-        return cleanedLine(text)
-            .split(Regex("[\\s]+"))
-            .filter { token -> token.isNotEmpty() && token.any(Char::isLetterOrDigit) }
+        return outputTokens(text).filter { token -> token.any(Char::isLetterOrDigit) }
     }
 
     fun outputTokens(text: String): List<String> {
         return cleanedLine(text)
             .split(Regex("[\\s]+"))
             .filter { token -> token.isNotEmpty() }
+            .flatMap(::cjkPhrases)
     }
+
+    fun isCjkToken(token: String): Boolean {
+        var found = false
+        var index = 0
+        while (index < token.length) {
+            val codepoint = codepointAt(token, index)
+            if (isCjkCodepoint(codepoint)) {
+                found = true
+            } else if (codepoint <= 0xFFFF && token[index].isLetterOrDigit()) {
+                return false
+            }
+            index += if (codepoint > 0xFFFF) 2 else 1
+        }
+        return found
+    }
+
+    private fun cjkPhrases(token: String): List<String> {
+        if (!isCjkToken(token)) return listOf(token)
+        val result = mutableListOf<String>()
+        var phraseStart = 0
+        var index = 0
+        var characters = 0
+        var breakBeforeCharacter = false
+        while (index < token.length) {
+            val codepointStart = index
+            val codepoint = codepointAt(token, index)
+            index += if (codepoint > 0xFFFF) 2 else 1
+            if (isCjkCodepoint(codepoint)) {
+                if ((characters >= 2 || breakBeforeCharacter) && codepointStart > phraseStart) {
+                    result += token.substring(phraseStart, codepointStart)
+                    phraseStart = codepointStart
+                    characters = 0
+                    breakBeforeCharacter = false
+                }
+                characters += 1
+            }
+            if (codepoint in CJK_PHRASE_ENDS)
+                breakBeforeCharacter = true
+        }
+        if (phraseStart < token.length)
+            result += token.substring(phraseStart)
+        return result
+    }
+
+    private fun isCjkCodepoint(codepoint: Int): Boolean {
+        return codepoint in 0x3400..0x4DBF || codepoint in 0x4E00..0x9FFF
+            || codepoint in 0xF900..0xFAFF || codepoint in 0x20000..0x323AF
+            || codepoint == 0x3005 || codepoint == 0x303B
+            || codepoint in 0x3040..0x30FF || codepoint in 0x31F0..0x31FF
+            || codepoint in 0xFF66..0xFF9F
+    }
+
+    private fun codepointAt(text: String, index: Int): Int {
+        val first = text[index].code
+        if (first !in 0xD800..0xDBFF || index + 1 >= text.length)
+            return first
+        val second = text[index + 1].code
+        return if (second in 0xDC00..0xDFFF) {
+            0x10000 + ((first - 0xD800) shl 10) + (second - 0xDC00)
+        } else {
+            first
+        }
+    }
+
+    private val CJK_PHRASE_ENDS = setOf(
+        ','.code, ';'.code, ':'.code, '!'.code, '?'.code,
+        0x3001, 0x3002, 0xFF01, 0xFF0C, 0xFF1A, 0xFF1B, 0xFF1F,
+    )
 
     fun chapterTitle(line: String): String? {
         val trimmed = cleanedLine(line)

@@ -5,17 +5,6 @@
 #include <cstdint>
 #include <string_view>
 
-enum class UiLanguage : uint8_t {
-    english = 0,
-    spanish,
-    french,
-    german,
-    romanian,
-    polish,
-    russian,
-    Count,
-};
-
 enum class UiText : uint8_t {
     Resume = 0,
     Chapters,
@@ -33,7 +22,6 @@ enum class UiText : uint8_t {
     LongWords,
     Complexity,
     Punctuation,
-    ResetPacing,
     Night,
     Dark,
     Light,
@@ -75,9 +63,8 @@ enum class UiText : uint8_t {
     Device,
     Focus,
     Reading,
-    ReaderScreen,
+    ReaderLayout,
     NetworkUpdates,
-    Interface,
     ReadingSection,
     SystemSection,
     WordsPerMinute,
@@ -94,11 +81,9 @@ enum class UiText : uint8_t {
     Reaction,
     ScreenOff,
     Life,
-    AdditionalDelaySection,
     FontSection,
     GeometrySection,
     FocusLetter,
-    BehaviorMetricsSection,
     ReaderHand,
     Left,
     Right,
@@ -115,7 +100,6 @@ enum class UiText : uint8_t {
     VisibleWhileReadingSection,
     Battery,
     Progress,
-    ConnectionReleaseSection,
     Network,
     NotSet,
     StartupCheck,
@@ -178,7 +162,6 @@ enum class UiText : uint8_t {
     Sync,
     ChapterShort,
     BookShort,
-    WifiNetworks,
     ScanningNetworks,
     ScanFailed,
     NoNetworksFound,
@@ -194,9 +177,8 @@ enum class UiText : uint8_t {
 
 namespace Localization {
 
-    UiLanguage sanitizeLanguage(uint8_t value);
-    UiLanguage nextLanguage(UiLanguage current);
-    std::string_view languageName(UiLanguage language);
-    std::string_view text(UiLanguage language, UiText key);
+    inline constexpr std::string_view kDefaultLocale = "en";
+
+    std::string_view text(UiText key);
 
 } // namespace Localization

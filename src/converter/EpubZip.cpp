@@ -83,19 +83,11 @@ namespace EpubZip {
                 return nullptr;
             }
 
-            void* buffer = heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            if (buffer == nullptr) {
-                buffer = heap_caps_malloc(bytes, MALLOC_CAP_8BIT);
-            }
-            return buffer;
-        }
-
-        void* allocateInternalBuffer(size_t bytes) {
-            if (bytes == 0) {
-                return nullptr;
-            }
-
-            return heap_caps_malloc(bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+#if defined(BOARD_HAS_PSRAM)
+            return heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#else
+            return heap_caps_malloc(bytes, MALLOC_CAP_8BIT);
+#endif
         }
 
         void freeBuffer(void* buffer) {
@@ -155,9 +147,9 @@ namespace EpubZip {
         template<typename ChunkSink>
         bool readStoredPayload(File& file, const ZipEntry& entry, uint32_t& totalOutputBytes, ChunkSink onChunk,
                                const char* context) {
-            uint8_t* buffer = static_cast<uint8_t*>(allocateInternalBuffer(kReadChunkBytes));
+            uint8_t* buffer = static_cast<uint8_t*>(allocateBuffer(kReadChunkBytes));
             if (buffer == nullptr) {
-                ESP_LOGD("epub-zip", "No internal buffer for stored %s: %s", context, entry.name.c_str());
+                ESP_LOGD("epub-zip", "No work buffer for stored %s: %s", context, entry.name.c_str());
                 return false;
             }
 
@@ -188,12 +180,12 @@ namespace EpubZip {
         template<typename ChunkSink>
         bool inflatePayload(File& file, const ZipEntry& entry, uint32_t& totalOutputBytes, ChunkSink onChunk,
                             const char* context) {
-            uint8_t* inputBuffer = static_cast<uint8_t*>(allocateInternalBuffer(kInflateInputChunkBytes));
-            uint8_t* dictionary = static_cast<uint8_t*>(allocateInternalBuffer(TINFL_LZ_DICT_SIZE));
+            uint8_t* inputBuffer = static_cast<uint8_t*>(allocateBuffer(kInflateInputChunkBytes));
+            uint8_t* dictionary = static_cast<uint8_t*>(allocateBuffer(TINFL_LZ_DICT_SIZE));
             tinfl_decompressor* inflator =
-                static_cast<tinfl_decompressor*>(allocateInternalBuffer(sizeof(tinfl_decompressor)));
+                static_cast<tinfl_decompressor*>(allocateBuffer(sizeof(tinfl_decompressor)));
             if (inputBuffer == nullptr || dictionary == nullptr || inflator == nullptr) {
-                ESP_LOGD("epub-zip", "No internal inflate buffers for %s: %s input=%s dict=%s inflator=%s", context,
+                ESP_LOGD("epub-zip", "No inflate buffers for %s: %s input=%s dict=%s inflator=%s", context,
                          entry.name.c_str(), inputBuffer == nullptr ? "no" : "yes",
                          dictionary == nullptr ? "no" : "yes", inflator == nullptr ? "no" : "yes");
                 freeBuffer(inputBuffer);
@@ -346,6 +338,7 @@ namespace EpubZip {
                                                        std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
                                                        std::string_view fallbackChapterTitle,
                                                        std::string_view bookTitle,
+                                                       std::string_view bookLocale, bool& verticalWritingEmitted,
                                                        const EpubConverter::Options& options, size_t itemIndex,
                                                        size_t itemCount) {
         const ZipEntry* entry = find(name);
@@ -354,7 +347,8 @@ namespace EpubZip {
             return ContentExtractStatus::Failed;
         }
         return extractContentToRsvp(*entry, output, wordCount, maxWords, lastChapterTitle, chapterCount, tocEntries,
-                                    hasToc, fallbackChapterTitle, bookTitle, options, itemIndex, itemCount);
+                                    hasToc, fallbackChapterTitle, bookTitle, bookLocale, verticalWritingEmitted,
+                                    options, itemIndex, itemCount);
     }
 
     void Archive::logArchiveHints(const char* reason) const {
@@ -588,6 +582,7 @@ namespace EpubZip {
                                                        std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
                                                        std::string_view fallbackChapterTitle,
                                                        std::string_view bookTitle,
+                                                       std::string_view bookLocale, bool& verticalWritingEmitted,
                                                        const EpubConverter::Options& options, size_t itemIndex,
                                                        size_t itemCount) {
         ESP_LOGD("epub-zip", "Extract content: %s method=%u flags=0x%04x c=%lu u=%lu", entry.name.c_str(), entry.method,
@@ -608,7 +603,8 @@ namespace EpubZip {
         }
 
         EpubContent::RsvpContentWriter writer(output, wordCount, maxWords, lastChapterTitle, chapterCount, tocEntries,
-                                              hasToc, fallbackChapterTitle, bookTitle);
+                                              hasToc, fallbackChapterTitle, bookTitle, verticalWritingEmitted,
+                                              bookLocale);
         uint32_t totalOutputBytes = 0;
         uint32_t lastProgressBytes = 0;
         ContentExtractStatus result = ContentExtractStatus::Complete;

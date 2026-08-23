@@ -13,6 +13,7 @@
 #include "board/BoardStorage.h"
 #include "board/BoardSystem.h"
 #include "freertos/task.h"
+#include "logging/Logger.h"
 #include "rss/RssFeeds.h"
 #include "settings/NvsSecurity.h"
 #include "storage/index/ReadingProgress.h"
@@ -58,33 +59,47 @@ void App::begin() {
         ESP_LOGE("app", "display init failed");
     }
     immediateUi_.setOrientation(Board::Display::defaultUiOrientation());
-    immediateUi_.setTheme(interfaceScreen_.themes.selected());
+    immediateUi_.setTheme(interfaceScreen_.themes.resolve(settingsStore_.settings().interface.selectedThemeId));
     screens::status(immediateUi_, immediateUi_.text(UiText::Ready));
     if (!Input::begin())
         ESP_LOGE("input", "startup failed");
     immediateUi_.setTouchSource({.surface = Board::Input::touchSurface(), .poll = &Input::pollTouch});
 
     storage_.begin();
-    if (auto result = settingsStore_.begin(storage_.mounted() ? &Board::Storage::filesystem() : nullptr); !result)
+    Logger::startupCheckpoint("storage");
+    fs::FS* filesystem = storage_.mounted() ? &Board::Storage::filesystem() : nullptr;
+    if (auto result = settingsStore_.begin(filesystem); !result)
         ESP_LOGW("settings", "startup warning: %s", result.error().message.c_str());
-    migrateLegacyStorage();
+    Logger::startupCheckpoint("settings");
+    Logger::checkpoint("locale_catalog");
+    localeCatalog_ = filesystem == nullptr
+                       ? locales::Catalog{}
+                       : locales::scanInstalled(*filesystem, static_cast<size_t>(UiText::Count));
+    ESP_LOGI("languages", "catalog ready installed=%u", static_cast<unsigned>(localeCatalog_.size()));
+    Logger::startupCheckpoint("locale_catalog");
     readerScreen_.fonts.loadFromSd();
-    auto& deviceSettings = settingsStore_.settings();
-    interfaceScreen_.begin(immediateUi_, deviceSettings.interface, deviceSettings.reading.typography,
-                           readerScreen_.fonts, &Board::Display::setBrightness);
+    Logger::startupCheckpoint("fonts");
+    Logger::checkpoint("ui_locale");
+    loadAppearanceSettings();
+    Logger::startupCheckpoint("locales");
     Board::Power::updateBattery(battery_, bootMs_, true);
-    readerScreen_.begin(interfaceScreen_.themes.selected());
+    readerScreen_.begin(interfaceScreen_.themes.resolve(settingsStore_.settings().interface.selectedThemeId));
     networkScreen_.begin(settingsStore_);
-    focusScreen_.begin(storage_.mounted() ? &Board::Storage::filesystem() : nullptr);
+    if (storage_.mounted())
+        focusScreen_.begin(Board::Storage::filesystem());
+    else
+        focusScreen_.begin();
     readerScreen_.loadInitialBook(immediateUi_, storage_, prefs_, bootMs_);
+    Logger::startupCheckpoint("book");
     libraryScreen_.invalidate();
+    ESP_LOGI("startup", "ready");
 }
 
 void App::update(uint32_t nowMs) {
-    Input::Event event;
-    while (Input::poll(event)) {
+    Input::ActionMask actions;
+    while (Input::poll(actions)) {
         lastActivityMs_ = nowMs;
-        handleInput(event, nowMs);
+        handleInput(actions, nowMs);
         nowMs = millis();
     }
     while (immediateUi_.pollTouch(nowMs)) {
@@ -94,7 +109,9 @@ void App::update(uint32_t nowMs) {
     }
 
     updateBackgroundJob();
-    if (backgroundJobActive())
+    const bool preparingTypography = typographyJobActive();
+
+    if (backgroundJobActive() && !preparingTypography)
         return;
 
     if (screen_ == screens::Screen::Status) {
@@ -113,9 +130,6 @@ void App::update(uint32_t nowMs) {
         }
     }
 
-    if (!usbTransfer_.active())
-        settingsStore_.update(nowMs);
-
     if (screen_ == screens::Screen::Standby) {
         if (nowMs - standbyEnteredMs_ >= kStandbyPowerOffMs) {
             powerOff(nowMs);
@@ -125,10 +139,18 @@ void App::update(uint32_t nowMs) {
         return;
     }
 
+    if (companionApi_.active()) {
+        settingsStore_.update(nowMs);
+        Board::Power::updateBattery(battery_, nowMs);
+        return;
+    }
+
+    if (!usbTransfer_.active())
+        settingsStore_.update(nowMs);
+
     Board::Power::updateBattery(battery_, nowMs);
-    readerScreen_.update(prefs_, nowMs);
-    if (sync_.active() && sync_.update())
-        reloadSettings();
+    if (!preparingTypography)
+        readerScreen_.update(prefs_, nowMs);
     if (screen_ == screens::Screen::FocusSession) {
         if (focusScreen_.update(nowMs))
             Board::Audio::beep();
@@ -136,7 +158,7 @@ void App::update(uint32_t nowMs) {
     ReadingProgress::save(readerScreen_.session, prefs_, false, nowMs);
 
     renderScreen(nowMs);
-    if (!readerScreen_.session.playing && !sync_.active() && !usbTransfer_.active()
+    if (!preparingTypography && !readerScreen_.session.playing && !companionApi_.active() && !usbTransfer_.active()
         && screen_ != screens::Screen::FocusSession && screen_ != screens::Screen::Status
         && kStandbyMs[settingsStore_.settings().interface.standbyTimerIndex] > 0
         && nowMs - lastActivityMs_ >= kStandbyMs[settingsStore_.settings().interface.standbyTimerIndex]) {
@@ -152,6 +174,10 @@ void App::renderScreen(uint32_t nowMs) {
         screens::status(immediateUi_, immediateUi_.text(UiText::Ready));
         return;
     case screens::Screen::Reader:
+        if (typographyJobActive()) {
+            screens::status(immediateUi_, immediateUi_.text(UiText::FontSection), immediateUi_.text(UiText::Checking));
+            return;
+        }
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         readerScreen_.draw(immediateUi_, storage_, battery_, nowMs);
         immediateUi_.endFrame();
@@ -159,12 +185,12 @@ void App::renderScreen(uint32_t nowMs) {
     case screens::Screen::Library: {
         const auto& items = libraryScreen_.items(storage_, readerScreen_.store, readerScreen_.session);
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        const screens::LibraryResult result = libraryScreen_.draw(immediateUi_, items, nowMs, screen_);
+        const screens::Action result = libraryScreen_.draw(immediateUi_, items, nowMs, screen_);
         immediateUi_.endFrame();
-        if (result.open) {
+        if (result == screens::Action::OpenBook) {
             runBookOpen(libraryScreen_.selectedIndex(), nowMs);
         } else {
-            handleScreenAction(result.action, nowMs);
+            handleScreenAction(result, nowMs);
         }
         return;
     }
@@ -177,11 +203,12 @@ void App::renderScreen(uint32_t nowMs) {
     case screens::Screen::Read:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         {
-            action = screens::read(immediateUi_,
-                                   {ReadingProgress::title(readerScreen_.session, storage_),
-                                    readerScreen_.session.metadata.author,
-                                    ReadingProgress::percent(readerScreen_.session.currentIndex,
-                                                             ReadingLoop::wordCount(readerScreen_.session))},
+            const int bookIndex = storage_.findBook(readerScreen_.session.sourcePath());
+            const BookLibrary::Entry* book = bookIndex < 0 ? nullptr : storage_.book(static_cast<size_t>(bookIndex));
+            action = screens::read(immediateUi_, ReadingProgress::title(readerScreen_.session, storage_),
+                                   book == nullptr ? std::string_view{} : std::string_view{book->author},
+                                   ReadingProgress::percent(readerScreen_.session.state.wordIndex,
+                                                            ReadingLoop::wordCount(readerScreen_.session)),
                                    screen_);
         }
         break;
@@ -200,16 +227,20 @@ void App::renderScreen(uint32_t nowMs) {
         if (screens::readingSettings(immediateUi_, settingsStore_.settings().reading, screen_)) {
             settingsStore_.acceptChanges();
             if (mode != settingsStore_.settings().reading.mode)
-                readerScreen_.refreshTypography();
+                requestTypographyRefresh();
         }
         break;
     }
     case screens::Screen::InterfaceSettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        const std::string locale = settingsStore_.settings().interface.locale;
         if (interfaceScreen_.draw(immediateUi_, settingsStore_.settings().interface, kStandbyMs,
                                   &Board::Display::setBrightness, screen_)) {
             settingsStore_.acceptChanges();
-            readerScreen_.applyTheme(interfaceScreen_.themes.selected());
+            if (locale != settingsStore_.settings().interface.locale)
+                reloadUiAssets();
+            readerScreen_
+                .applyTheme(interfaceScreen_.themes.resolve(settingsStore_.settings().interface.selectedThemeId));
         }
         break;
     }
@@ -221,11 +252,19 @@ void App::renderScreen(uint32_t nowMs) {
     }
     case screens::Screen::TypographySettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        if (screens::typographySettings(immediateUi_, readerScreen_.session.state.bookTypographyOverride,
-                                        interfaceScreen_.themes.selected().definition.typography, readerScreen_.fonts,
+        if (screens::typographySettings(immediateUi_, settingsStore_.settings().reading.typography, readerScreen_.fonts,
                                         screen_)) {
+            settingsStore_.acceptChanges();
+            requestTypographyRefresh();
+        }
+        break;
+    }
+    case screens::Screen::BookFonts: {
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        if (screens::bookFonts(immediateUi_, readerScreen_.session.metadata, readerScreen_.session.state.overrides,
+                               localeCatalog_, readerScreen_.fonts, screen_)) {
             ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
-            readerScreen_.refreshTypography();
+            requestTypographyRefresh();
         }
         break;
     }
@@ -236,7 +275,7 @@ void App::renderScreen(uint32_t nowMs) {
         break;
     case screens::Screen::NetworkSettings:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        networkScreen_.draw(immediateUi_, settingsStore_, screen_);
+        action = networkScreen_.draw(immediateUi_, settingsStore_, screen_);
         break;
     case screens::Screen::WifiScan:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
@@ -253,21 +292,17 @@ void App::renderScreen(uint32_t nowMs) {
         break;
     case screens::Screen::Device:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        action = screens::device(immediateUi_, storage_.mounted(), storage_.bookCount(), settings::nvsEncryptionState(),
-                                 screen_);
+        action = screens::device(immediateUi_, storage_.mounted(), storage_.books().size(),
+                                 settings::nvsEncryptionState(), screen_);
         break;
     case screens::Screen::StorageEncryption:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         action = screens::storageEncryption(immediateUi_, settings::nvsEncryptionState(), screen_);
         break;
     case screens::Screen::Sync:
-        if (sync_.active()) {
-            screens::status(immediateUi_, immediateUi_.text(UiText::Sync), sync_.statusLine1(), sync_.statusLine2());
-            return;
-        }
-        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        action = screens::sync(immediateUi_, screen_);
-        break;
+        screens::status(immediateUi_, immediateUi_.text(UiText::Sync), companionApi_.statusLine1(),
+                        companionApi_.statusLine2());
+        return;
     case screens::Screen::Ota: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         action = screens::ota(immediateUi_, OtaUpdater::currentVersion().data(), screen_);
@@ -300,8 +335,11 @@ void App::renderScreen(uint32_t nowMs) {
 }
 
 void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
+    if (backgroundJobActive() && action != screens::Action::None)
+        return;
     switch (action) {
     case screens::Action::None:
+    case screens::Action::OpenBook:
         return;
     case screens::Action::Resume:
         ReadingLoop::pause(readerScreen_.session);
@@ -312,9 +350,10 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
         powerOff(nowMs);
         return;
     case screens::Action::CompanionSync:
+        screen_ = screens::Screen::Sync;
         immediateUi_.invalidate();
         screens::status(immediateUi_, immediateUi_.text(UiText::CompanionSync), immediateUi_.text(UiText::Connecting));
-        sync_.begin();
+        companionApi_.begin();
         renderScreen(nowMs);
         return;
     case screens::Action::RssRefresh:
@@ -324,11 +363,6 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
         enterUsbTransfer(nowMs);
         return;
     case screens::Action::StorageStatus:
-        jobStorageInventory_ = {
-            .libraryItems = storage_.bookCount(),
-            .fonts = readerScreen_.fonts.families().size() - 1,
-            .themes = interfaceScreen_.themes.themes().size() - 1,
-        };
         screen_ = screens::Screen::Status;
         statusUntilMs_ = 0;
         screens::status(immediateUi_, immediateUi_.text(UiText::Storage), immediateUi_.text(UiText::Checking));
@@ -355,39 +389,39 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
     }
 }
 
-void App::handleInput(const Input::Event& event, uint32_t nowMs) {
+void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
     if (screen_ == screens::Screen::Standby) {
         exitStandby(nowMs);
         return;
     }
     if (backgroundJobActive() || screen_ == screens::Screen::Status)
         return;
-    if (usbTransfer_.active() && Input::hasAction(event.actions, Input::ActionPowerOff)) {
+    if (usbTransfer_.active() && Input::hasAction(actions, Input::ActionPowerOff)) {
         exitUsbTransfer();
         return;
     }
-    if (usbTransfer_.active() && Input::hasAction(event.actions, Input::ActionOpenMenu)) {
+    if (usbTransfer_.active() && Input::hasAction(actions, Input::ActionOpenMenu)) {
         exitUsbTransfer();
         return;
     }
-    if (usbTransfer_.active() && Input::hasAction(event.actions, Input::ActionBack)) {
+    if (usbTransfer_.active() && Input::hasAction(actions, Input::ActionBack)) {
         exitUsbTransfer(screens::Screen::Read);
         return;
     }
-    if (Input::hasAction(event.actions, Input::ActionOpenMenu)) {
+    if (Input::hasAction(actions, Input::ActionOpenMenu)) {
         if (screen_ == screens::Screen::Reader) {
             ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
             ReadingLoop::pause(readerScreen_.session);
             libraryScreen_.invalidate();
             screen_ = screens::Screen::Read;
         } else {
-            if (sync_.active()) {
-                sync_.end();
-                reloadSettings();
+            if (companionApi_.active()) {
+                companionApi_.end();
+            } else {
+                networkScreen_.closeWifi();
             }
             if (screen_ == screens::Screen::FocusSession)
                 focusScreen_.close();
-            networkScreen_.closeWifi();
             ReadingLoop::pause(readerScreen_.session);
             screen_ = screens::Screen::Reader;
         }
@@ -395,25 +429,23 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
         return;
     }
     if (screen_ == screens::Screen::FocusSession
-        && (Input::hasAction(event.actions, Input::ActionBack)
-            || Input::hasAction(event.actions, Input::ActionSelect))) {
+        && (Input::hasAction(actions, Input::ActionBack) || Input::hasAction(actions, Input::ActionSelect))) {
         focusScreen_.close();
         screen_ = screens::Screen::FocusTimers;
         renderScreen(nowMs);
         return;
     }
-    if (Input::hasAction(event.actions, Input::ActionPowerOff)) {
+    if (Input::hasAction(actions, Input::ActionPowerOff)) {
         powerOff(nowMs);
         return;
     }
-    if (Input::hasAction(event.actions, Input::ActionStandby)) {
+    if (Input::hasAction(actions, Input::ActionStandby)) {
         enterStandby(nowMs);
         return;
     }
-    if (Input::hasAction(event.actions, Input::ActionBack)) {
-        if (sync_.active()) {
-            sync_.end();
-            reloadSettings();
+    if (Input::hasAction(actions, Input::ActionBack)) {
+        if (companionApi_.active()) {
+            companionApi_.end();
             screen_ = screens::Screen::Device;
             renderScreen(nowMs);
         } else if (screen_ != screens::Screen::Reader) {
@@ -434,6 +466,8 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
                        || screen_ == screens::Screen::PacingSettings || screen_ == screens::Screen::TypographySettings
                        || screen_ == screens::Screen::ReaderSettings || screen_ == screens::Screen::NetworkSettings) {
                 screen_ = screens::Screen::Settings;
+            } else if (screen_ == screens::Screen::BookFonts) {
+                screen_ = screens::Screen::Read;
             } else if (screen_ == screens::Screen::FocusNameEdit) {
                 screen_ = screens::Screen::FocusEditor;
             } else if (screen_ == screens::Screen::FocusEditor) {
@@ -451,9 +485,8 @@ void App::handleInput(const Input::Event& event, uint32_t nowMs) {
         }
         return;
     }
-    if (Input::hasAction(event.actions, Input::ActionSelect)
-        || Input::hasAction(event.actions, Input::ActionPlayPause)) {
-        if (screen_ == screens::Screen::Reader) {
+    if (Input::hasAction(actions, Input::ActionSelect) || Input::hasAction(actions, Input::ActionPlayPause)) {
+        if (screen_ == screens::Screen::Reader && !typographyJobActive()) {
             readerScreen_.toggle(prefs_, nowMs);
         }
     }
@@ -467,7 +500,7 @@ void App::handleTouch(uint32_t nowMs) {
         exitStandby(nowMs);
         return;
     }
-    if (sync_.active() || usbTransfer_.active() || screen_ == screens::Screen::Status)
+    if (companionApi_.active() || usbTransfer_.active() || backgroundJobActive() || screen_ == screens::Screen::Status)
         return;
     if (screen_ == screens::Screen::Reader) {
         readerScreen_.handleTouch(immediateUi_, nowMs, prefs_, settingsStore_);
@@ -495,33 +528,68 @@ void App::updateBackgroundJob() {
 
         const JobKind completed = jobKind_;
         jobKind_ = JobKind::None;
-        if (completed == JobKind::Book) {
-            if (jobBookLoaded_) {
-                readerScreen_.finishBookOpen(prefs_, jobLoadedBookIndex_, jobBookPath_, millis());
+        vQueueDelete(jobQueue_);
+        jobQueue_ = nullptr;
+        Logger::checkpoint("running");
+        if (completed == JobKind::Typography) {
+            if (bookOpenPending_) {
+                const size_t index = pendingBookIndex_;
+                bookOpenPending_ = false;
+                typographyRefreshPending_ = false;
+                typographyOpensBook_ = false;
+                runBookOpen(index, millis());
+                return;
+            }
+            if (typographyRefreshPending_) {
+                typographyRefreshPending_ = false;
+                requestTypographyRefresh();
+                return;
+            }
+            immediateUi_.invalidate();
+            if (typographyOpensBook_) {
+                typographyOpensBook_ = false;
                 ReadingLoop::pause(readerScreen_.session);
                 screen_ = screens::Screen::Reader;
                 statusUntilMs_ = 0;
-                renderScreen(millis());
+            }
+            renderScreen(millis());
+            return;
+        }
+        if (completed == JobKind::Book) {
+            const int loadedIndex = storage_.findBook(readerScreen_.store.sourcePath());
+            const BookLibrary::Entry* book =
+                storage_.book(jobBookLoaded_ && loadedIndex >= 0 ? static_cast<size_t>(loadedIndex) : jobBookIndex_);
+            const std::string_view bookName = book == nullptr ? std::string_view{} : BookLibrary::displayName(*book);
+            if (jobBookLoaded_) {
+                readerScreen_.finishBookOpen(prefs_, millis());
+                ReadingLoop::pause(readerScreen_.session);
+                typographyOpensBook_ = true;
+                screens::status(immediateUi_, immediateUi_.text(UiText::OpeningBook), bookName, {}, 85);
+                if (!requestTypographyRefresh()) {
+                    typographyOpensBook_ = false;
+                    screen_ = screens::Screen::Reader;
+                    statusUntilMs_ = 0;
+                    renderScreen(millis());
+                }
             } else {
-                showTransientStatus(immediateUi_.text(UiText::BookFailed), jobBookName_,
+                showTransientStatus(immediateUi_.text(UiText::BookFailed), bookName,
                                     immediateUi_.text(UiText::CheckSdCard), 1200, screens::Screen::Library);
             }
             return;
         }
         if (completed == JobKind::Rss) {
             libraryScreen_.invalidate();
-            showTransientStatus("RSS", jobRssResult_.summary, jobRssResult_.detail, 1400, screens::Screen::Reader);
+            showTransientStatus("RSS", update.line1, update.line2, 1400, screens::Screen::Reader);
             return;
         }
         if (completed == JobKind::StorageCheck) {
-            showTransientStatus(immediateUi_.text(UiText::Storage), jobStorageResult_.summary, jobStorageResult_.detail,
-                                1800, screens::Screen::Device);
+            showTransientStatus(immediateUi_.text(UiText::Storage), update.line1, update.line2, 1800,
+                                screens::Screen::Device);
             return;
         }
 
-        const bool reboot = completed == JobKind::OtaInstall && jobOtaResult_.rebootRequired;
-        showTransientStatus("OTA", jobOtaResult_.summary, jobOtaResult_.detail, reboot ? 500 : 1400,
-                            screens::Screen::Reader);
+        const bool reboot = completed == JobKind::OtaInstall && update.rebootRequired;
+        showTransientStatus("OTA", update.line1, update.line2, reboot ? 500 : 1400, screens::Screen::Reader);
         restartAfterStatus_ = reboot;
         return;
     }
@@ -538,6 +606,8 @@ bool App::startBackgroundJob(JobKind kind) {
     jobKind_ = kind;
     if (xTaskCreate(backgroundJobEntry, "background", kJobStackBytes, this, kJobPriority, nullptr) != pdPASS) {
         jobKind_ = JobKind::None;
+        vQueueDelete(jobQueue_);
+        jobQueue_ = nullptr;
         return false;
     }
     return true;
@@ -551,43 +621,86 @@ void App::backgroundJobEntry(void* context) {
 }
 
 void App::runBackgroundJob() {
+    JobUpdate complete;
     switch (jobKind_) {
     case JobKind::Rss: {
+        Logger::checkpoint("rss_update");
         Preferences preferences;
+        RssFeeds::Result result;
         if (!preferences.begin(settings::kStateNvsNamespace)) {
-            jobRssResult_.summary = "RSS failed";
-            jobRssResult_.detail = "Could not open state";
+            result.summary = "RSS failed";
+            result.detail = "Could not open state";
         } else {
-            jobRssResult_ = RssFeeds::check(preferences, jobSettings_, jobSecrets_, &App::renderStorageStatus, this);
+            result = RssFeeds::check(preferences, settingsStore_.settings(), settingsStore_.secrets(),
+                                     &App::renderStorageStatus, this);
             preferences.end();
         }
         storage_.refreshBooks();
+        copyText(complete.line1, result.summary.c_str());
+        copyText(complete.line2, result.detail.c_str());
         break;
     }
-    case JobKind::StorageCheck:
-        jobStorageResult_ = SdDiagnostics::run(storage_.mounted(), jobStorageInventory_);
+    case JobKind::StorageCheck: {
+        Logger::checkpoint("storage_check");
+        const SdDiagnostics::Result result =
+            SdDiagnostics::run(storage_.mounted(), {
+                                                       .libraryItems = storage_.books().size(),
+                                                       .fonts = readerScreen_.fonts.families().size() - 1,
+                                                       .themes = interfaceScreen_.themes.themes().size() - 1,
+                                                   });
+        copyText(complete.line1, result.summary.c_str());
+        copyText(complete.line2, result.detail.c_str());
         break;
-    case JobKind::OtaCheck:
-        jobOtaResult_ = OtaUpdater::checkOnly(jobOtaConfig_, &App::renderStorageStatus, this);
+    }
+    case JobKind::OtaCheck: {
+        Logger::checkpoint("ota_check");
+        const OtaUpdater::Result result =
+            OtaUpdater::checkOnly(settingsStore_.settings(), settingsStore_.secrets(), &App::renderStorageStatus, this);
+        copyText(complete.line1, result.summary.c_str());
+        copyText(complete.line2, result.detail.c_str());
         break;
-    case JobKind::OtaInstall:
-        jobOtaResult_ = OtaUpdater::checkAndInstall(jobOtaConfig_, &App::renderStorageStatus, this);
+    }
+    case JobKind::OtaInstall: {
+        Logger::checkpoint("ota_install");
+        const OtaUpdater::Result result =
+            OtaUpdater::checkAndInstall(settingsStore_.settings(), settingsStore_.secrets(), &App::renderStorageStatus,
+                                        this);
+        copyText(complete.line1, result.summary.c_str());
+        copyText(complete.line2, result.detail.c_str());
+        complete.rebootRequired = result.rebootRequired;
         break;
+    }
     case JobKind::Book: {
-        StorageManager::IndexedBookLoadOptions options;
-        options.loadedPath = &jobBookPath_;
-        options.loadedIndex = &jobLoadedBookIndex_;
-        jobBookLoaded_ =
-            storage_.loadIndexedBook(jobBookIndex_, readerScreen_.store, readerScreen_.session.metadata, options);
+        Logger::checkpoint("book_open");
+        jobBookLoaded_ = storage_.loadIndexedBook(jobBookIndex_, readerScreen_.store, readerScreen_.session.metadata);
         break;
     }
+    case JobKind::Typography:
+        Logger::checkpoint("typography");
+        readerScreen_.refreshTypography(settingsStore_.settings().reading, readerScreen_.session.state.overrides);
+        break;
     case JobKind::None:
         break;
     }
 
-    JobUpdate complete;
     complete.complete = true;
     enqueueJobUpdate(complete, true);
+}
+
+bool App::requestTypographyRefresh() {
+    if (typographyJobActive()) {
+        typographyRefreshPending_ = true;
+        return true;
+    }
+    if (backgroundJobActive())
+        return false;
+
+    if (startBackgroundJob(JobKind::Typography))
+        return true;
+
+    ESP_LOGW("reader", "typography task unavailable; preparing synchronously");
+    readerScreen_.refreshTypography(settingsStore_.settings().reading, readerScreen_.session.state.overrides);
+    return false;
 }
 
 void App::enqueueJobUpdate(JobUpdate update, bool mustSucceed) {
@@ -607,27 +720,33 @@ void App::runRss() {
     screen_ = screens::Screen::Status;
     statusUntilMs_ = 0;
     screens::status(immediateUi_, "RSS", immediateUi_.text(UiText::CheckingFeeds));
-    jobSettings_ = settingsStore_.settings();
-    jobSecrets_ = settingsStore_.secrets();
     if (!startBackgroundJob(JobKind::Rss))
         showTransientStatus("RSS", immediateUi_.text(UiText::CouldNotStart), {}, 1200, screens::Screen::Reader);
 }
 
 void App::runBookOpen(size_t index, uint32_t nowMs) {
-    if (!storage_.mounted() || index >= storage_.bookCount())
+    if (!storage_.mounted() || index >= storage_.books().size())
+        return;
+    const BookLibrary::Entry& book = storage_.books()[index];
+    if (typographyJobActive()) {
+        pendingBookIndex_ = index;
+        bookOpenPending_ = true;
+        screens::status(immediateUi_, immediateUi_.text(UiText::OpeningBook), BookLibrary::displayName(book), {}, 5);
+        screen_ = screens::Screen::Status;
+        statusUntilMs_ = 0;
+        return;
+    }
+    if (backgroundJobActive())
         return;
 
     jobBookIndex_ = index;
-    jobLoadedBookIndex_ = index;
-    jobBookPath_.clear();
-    jobBookName_ = storage_.bookDisplayName(index);
     jobBookLoaded_ = false;
-    screens::status(immediateUi_, immediateUi_.text(UiText::OpeningBook), jobBookName_, {}, 5);
+    screens::status(immediateUi_, immediateUi_.text(UiText::OpeningBook), BookLibrary::displayName(book), {}, 5);
     screen_ = screens::Screen::Status;
     statusUntilMs_ = 0;
     readerScreen_.prepareBookOpen(prefs_, nowMs);
     if (!startBackgroundJob(JobKind::Book))
-        showTransientStatus(immediateUi_.text(UiText::BookFailed), jobBookName_,
+        showTransientStatus(immediateUi_.text(UiText::BookFailed), BookLibrary::displayName(book),
                             immediateUi_.text(UiText::CheckSdCard), 1200, screens::Screen::Library);
 }
 
@@ -652,19 +771,57 @@ void App::enterUsbTransfer(uint32_t nowMs) {
 void App::exitUsbTransfer(screens::Screen destination) {
     usbTransfer_.end();
     storage_.refreshBooks();
+    localeCatalog_ =
+        locales::scanInstalled(Board::Storage::filesystem(), static_cast<size_t>(UiText::Count));
+    readerScreen_.fonts.loadFromSd();
+    applySettings();
     libraryScreen_.invalidate();
     screen_ = destination;
     renderScreen(millis());
 }
 
-void App::reloadSettings() {
-    readerScreen_.fonts.loadFromSd();
-    interfaceScreen_.begin(immediateUi_, settingsStore_.settings().interface,
-                           settingsStore_.settings().reading.typography, readerScreen_.fonts,
-                           &Board::Display::setBrightness);
-    readerScreen_.begin(interfaceScreen_.themes.selected());
+void App::applySettings() {
+    loadAppearanceSettings();
+    readerScreen_.applyTheme(interfaceScreen_.themes.resolve(settingsStore_.settings().interface.selectedThemeId));
+    requestTypographyRefresh();
     networkScreen_.begin(settingsStore_);
     networkScreen_.startupCheckPending = false;
+}
+
+void App::loadAppearanceSettings() {
+    auto& current = settingsStore_.settings();
+    bool corrected = false;
+    immediateUi_.setLanguageCatalog(storage_.mounted() ? &Board::Storage::filesystem() : nullptr, &localeCatalog_,
+                                    &locales::loadUiFont);
+    if (!readerScreen_.fonts.find(current.reading.typography.fontId)) {
+        current.reading.typography.fontId = settings::TypographySettings{}.fontId;
+        corrected = true;
+    }
+    if (current.interface.locale != Localization::kDefaultLocale
+        && !locales::findPackForLocale(localeCatalog_, current.interface.locale)) {
+        current.interface.locale = Localization::kDefaultLocale;
+        corrected = true;
+    }
+
+    reloadUiAssets();
+    corrected |=
+        interfaceScreen_.begin(immediateUi_, current.interface, localeCatalog_, &Board::Display::setBrightness);
+    if (corrected)
+        settingsStore_.acceptChanges();
+}
+
+void App::reloadUiAssets() {
+    locales::UiAssets assets;
+    if (storage_.mounted()) {
+        auto loaded =
+            locales::loadUiAssets(Board::Storage::filesystem(), localeCatalog_,
+                                  settingsStore_.settings().interface.locale, static_cast<size_t>(UiText::Count));
+        if (loaded)
+            assets = std::move(*loaded);
+        else
+            ESP_LOGW("languages", "selected UI pack rejected: %s", loaded.error().c_str());
+    }
+    immediateUi_.setLanguageAssets(std::move(assets));
 }
 
 void App::runOtaCheck(bool install) {
@@ -678,12 +835,16 @@ void App::runOtaCheck(bool install) {
     screen_ = screens::Screen::Status;
     statusUntilMs_ = 0;
     screens::status(immediateUi_, "OTA", immediateUi_.text(UiText::Checking));
-    jobOtaConfig_ = OtaUpdater::config(settingsStore_.settings(), settingsStore_.secrets());
     if (!startBackgroundJob(install ? JobKind::OtaInstall : JobKind::OtaCheck))
         showTransientStatus("OTA", immediateUi_.text(UiText::CouldNotStart), {}, 1200, screens::Screen::Reader);
 }
 
 void App::enterStandby(uint32_t nowMs) {
+    if (companionApi_.active()) {
+        companionApi_.end();
+    } else {
+        networkScreen_.closeWifi();
+    }
     ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
     ReadingLoop::pause(readerScreen_.session);
     if (settingsStore_.settings().interface.screensaver == standby::Kind::screenOff) {
@@ -693,8 +854,9 @@ void App::enterStandby(uint32_t nowMs) {
     }
     Board::Display::wake();
     immediateUi_.invalidate();
-    standbyScreen_.begin(immediateUi_, nowMs, readerScreen_.session.bookIndex, readerScreen_.session.currentIndex,
-                         settingsStore_.settings().interface.screensaver);
+    const int bookIndex = storage_.findBook(readerScreen_.session.sourcePath());
+    standbyScreen_.begin(immediateUi_, nowMs, bookIndex < 0 ? 0 : static_cast<size_t>(bookIndex),
+                         readerScreen_.session.state.wordIndex, settingsStore_.settings().interface.screensaver);
     standbyEnteredMs_ = nowMs;
     screen_ = screens::Screen::Standby;
     renderScreen(nowMs);
@@ -712,9 +874,6 @@ void App::lightSleepFromStandby() {
     ESP_LOGI("app", "screen-off standby; entering light sleep");
     ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
     standbyScreen_.reset();
-    if (sync_.active())
-        sync_.end();
-    networkScreen_.closeWifi();
     if (usbTransfer_.active())
         usbTransfer_.end();
     settingsStore_.flush();
@@ -768,6 +927,8 @@ void App::lightSleepFromStandby() {
 }
 
 void App::powerOff(uint32_t nowMs) {
+    if (companionApi_.active())
+        companionApi_.end();
     if (screen_ == screens::Screen::FocusSession)
         focusScreen_.close();
     ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);

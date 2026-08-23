@@ -1,6 +1,10 @@
 #pragma once
 
 #include <Preferences.h>
+#include <functional>
+#include <optional>
+#include <span>
+#include <utility>
 #include "board/BoardPower.h"
 #include "fonts/AlphaFont.h"
 #include "fonts/FontCatalog.h"
@@ -9,6 +13,7 @@
 #include "settings/SettingsStore.h"
 #include "storage/index/IndexedBookStore.h"
 #include "storage/index/ReadingProgress.h"
+#include "text/BidiText.h"
 #include "ui/Ui.h"
 #include "ui/screens/PageReaderScreen.h"
 
@@ -23,10 +28,12 @@ namespace screens {
         FontCatalog fonts;
         void begin(const ui::themes::Theme& theme);
         void applyTheme(const ui::themes::Theme& theme);
+        void releaseRuntimeCaches();
         void refreshTypography();
+        void refreshTypography(const settings::ReadingSettings& settings, const settings::ReadingOverrides& overrides);
         bool openBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, size_t index, uint32_t nowMs);
         void prepareBookOpen(Preferences& preferences, uint32_t nowMs);
-        void finishBookOpen(Preferences& preferences, size_t loadedIndex, std::string_view loadedPath, uint32_t nowMs);
+        void finishBookOpen(Preferences& preferences, uint32_t nowMs);
         void loadInitialBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, uint32_t nowMs);
         void draw(ui::Context& ui, const StorageManager& storage, const Board::Power::BatteryState& battery,
                   uint32_t nowMs);
@@ -40,12 +47,17 @@ namespace screens {
         void update(Preferences& preferences, uint32_t nowMs);
 
     private:
-        int focusIndex(std::string_view word) const;
-        void drawWord(std::string_view word, int16_t x, int16_t baseline, int focus, ui::Context& ui);
+        int focusOffset(std::string_view word) const;
+        int16_t wordAdvance(std::span<const BidiText::Codepoint> word) const;
+        void drawPhantom(std::string_view value, bool rightToLeft, int16_t edge, bool extendsLeft, int16_t baseline,
+                         bool vertical, ui::Context& ui);
+        void drawWord(std::string_view word, int16_t x, int16_t baseline, int focus, bool vertical, ui::Context& ui);
+        void drawWord(std::span<const BidiText::Codepoint> word, int16_t x, int16_t baseline, size_t wordOffset,
+                      int focus, bool vertical, ui::Context& ui);
         std::string phantomBefore(const ReadingSession& reader, uint8_t sizeIndex) const;
         std::string phantomAfter(const ReadingSession& reader, uint8_t sizeIndex) const;
-        uint32_t frameSignature(std::string_view before, std::string_view word, std::string_view after,
-                                std::string_view overlay, const settings::ReadingSettings& settings) const;
+        uint32_t frameSignature(std::string_view word, bool overlayVisible, bool cjkPacing,
+                                const settings::ReadingSettings& settings) const;
 
         enum class TouchIntent : uint8_t {
             None,
@@ -62,13 +74,29 @@ namespace screens {
         void requestPause(Preferences& preferences, uint32_t nowMs);
         bool shouldFinishPause(uint32_t nowMs) const;
         void finishPause(Preferences& preferences, uint32_t nowMs);
+        size_t fontChoice(size_t wordIndex) const;
+        size_t fontChoice(size_t wordIndex, const settings::ReadingSettings& settings,
+                          const settings::ReadingOverrides& overrides) const;
+        void activateFace(const FontCatalog::Face& face);
+        void refreshTypeface();
+        void prefetchUpcomingFont(uint32_t nowMs);
+        void prefetchNextWord(uint32_t nowMs);
+        FontCatalog::Face pageTypeface(size_t wordIndex);
 
         Arduino_GFX& gfx_;
         mutable ui::fonts::AlphaTextRenderer<640> text_;
         settings::ReadingSettings& settings_;
-        const ui::fonts::AlphaFont* font_ = nullptr;
+        FontCatalog::Face face_;
+        size_t loadedWordIndex_ = SIZE_MAX;
+        size_t loadedFamilyIndex_ = SIZE_MAX;
+        size_t renderedWordIndex_ = SIZE_MAX;
+        size_t prefetchedWordIndex_ = SIZE_MAX;
+        size_t readAheadWordIndex_ = SIZE_MAX;
+        size_t readAheadFamilyIndex_ = SIZE_MAX;
+        size_t readAheadBlockCount_ = 0;
+        uint8_t loadedFontSizeIndex_ = 0xFF;
         uint32_t fontRevision_ = 0;
-        settings::TypographySettings themeTypography_;
+        uint32_t typographyRevision_ = 0;
         settings::TypographySettings typography_;
         uint16_t background_ = 0;
         bool touching_ = false;
@@ -85,6 +113,15 @@ namespace screens {
         bool playLocked_ = false;
         bool pauseAtSentenceEndRequested_ = false;
         PageReader::State pageState_;
+        ReadingLoop::TextParagraph rsvpParagraph_;
+        BidiText::Analysis rsvpBidi_;
+        BidiText::Line rsvpLine_;
+        std::vector<BidiText::Codepoint> rsvpVisual_;
+        std::vector<ui::fonts::PositionedGlyph> rsvpGlyphs_;
+        BidiText::Analysis phantomBidi_;
+        BidiText::Line phantomLine_;
+        std::vector<BidiText::Codepoint> phantomVisual_;
+        std::vector<ui::fonts::PositionedGlyph> phantomGlyphs_;
         bool pagePreview_ = false;
         uint32_t paragraphTickMs_ = 0;
         int32_t paragraphRemainder_ = 0;

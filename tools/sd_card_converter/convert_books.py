@@ -70,6 +70,7 @@ BLOCK_TAGS = {
 HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
 SKIP_TAGS = {"head", "math", "nav", "script", "style", "svg"}
 TRIMMABLE_EDGE_CHARS = "\"'()[]{}<>"
+VERTICAL_WRITING_RE = re.compile(r"(?:-epub-)?writing-mode\s*:\s*vertical-rl", re.IGNORECASE)
 
 UNICODE_ASCII_REPLACEMENTS = str.maketrans(
     {
@@ -141,6 +142,14 @@ def clean_text(text: str) -> str:
 
 def directive_text(text: str) -> str:
     return clean_text(text).replace("\n", " ").replace("\r", " ")
+
+
+def normalize_locale(value: str) -> str:
+    locale = value.strip().replace("_", "-")
+    parts = locale.split("-")
+    return locale if 0 < len(locale) <= 35 and all(
+        0 < len(part) <= 8 and part.isalnum() for part in parts
+    ) else ""
 
 
 def local_name(tag: str) -> str:
@@ -247,6 +256,14 @@ class RsvpWriter:
                 self.lines.append("")
             self.lines.append("@para")
 
+    def add_directive(self, name: str, value: str) -> None:
+        self.flush_line()
+        directive = f"@{name} {directive_text(value)}"
+        if self.word_count == 0:
+            self.lines.insert(self.lines.index(""), directive)
+        else:
+            self.lines.append(directive)
+
     def add_text(self, text: str) -> bool:
         readable_words = list(iter_clean_words(text))
         readable_index = 0
@@ -287,34 +304,57 @@ class RsvpWriter:
 
 
 class HtmlEventsExtractor(HTMLParser):
-    def __init__(self) -> None:
+    def __init__(self, initial_locale: str = "") -> None:
         super().__init__(convert_charrefs=True)
         self.events: list[tuple[str, str]] = []
         self._skip_depth = 0
         self._heading_tag: str | None = None
         self._heading_parts: list[str] = []
         self._text_parts: list[str] = []
+        self._locale = normalize_locale(initial_locale)
+        self._direction = "auto"
+        self._scopes: list[tuple[str, str, str]] = []
+        self.vertical = False
+        self._in_style = False
+        self._vertical_match = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        del attrs
-        tag = tag.lower()
+        tag = tag.rsplit(":", 1)[-1].lower()
+        attributes = {name.lower(): value or "" for name, value in attrs}
+        if VERTICAL_WRITING_RE.search(attributes.get("style", "")):
+            self.vertical = True
+        if tag == "style":
+            self._in_style = True
+            self._vertical_match = 0
         if tag in SKIP_TAGS:
             self._skip_depth += 1
             return
         if self._skip_depth > 0:
             return
-        if tag in HEADING_TAGS:
-            self._flush_text()
-            self._heading_tag = tag
-            self._heading_parts = []
-            return
         if tag == "br":
             self._flush_text()
+            return
+        if tag in BLOCK_TAGS or tag in HEADING_TAGS:
+            self._flush_text()
+
+        previous_locale = self._locale
+        previous_direction = self._direction
+        locale = normalize_locale(attributes.get("xml:lang") or attributes.get("lang", ""))
+        direction = attributes.get("dir", "").strip().lower()
+        self._change_language(locale or self._locale)
+        self._change_direction(direction if direction in {"auto", "ltr", "rtl"} else self._direction)
+        self._scopes.append((tag, previous_locale, previous_direction))
+
+        if tag in HEADING_TAGS:
+            self._heading_tag = tag
+            self._heading_parts = []
 
     def handle_endtag(self, tag: str) -> None:
-        tag = tag.lower()
+        tag = tag.rsplit(":", 1)[-1].lower()
         if tag in SKIP_TAGS and self._skip_depth > 0:
             self._skip_depth -= 1
+            if tag == "style":
+                self._in_style = False
             return
         if self._skip_depth > 0:
             return
@@ -324,11 +364,30 @@ class HtmlEventsExtractor(HTMLParser):
                 self.events.append(("chapter", title))
             self._heading_tag = None
             self._heading_parts = []
-            return
-        if tag in BLOCK_TAGS:
+        elif tag in BLOCK_TAGS:
             self._flush_text()
 
+        for index in range(len(self._scopes) - 1, -1, -1):
+            scope_tag, locale, direction = self._scopes[index]
+            if scope_tag != tag:
+                continue
+            del self._scopes[index:]
+            self._change_language(locale)
+            self._change_direction(direction)
+            break
+
     def handle_data(self, data: str) -> None:
+        if self._in_style and not self.vertical:
+            pattern = "writing-mode:vertical-rl"
+            for char in data:
+                if char.isspace():
+                    continue
+                char = char.lower()
+                self._vertical_match = self._vertical_match + 1 if char == pattern[self._vertical_match] else int(char == pattern[0])
+                if self._vertical_match == len(pattern):
+                    self.vertical = True
+                    break
+            return
         if self._skip_depth > 0:
             return
         if self._heading_tag is not None:
@@ -346,12 +405,26 @@ class HtmlEventsExtractor(HTMLParser):
         if text:
             self.events.append(("text", text))
 
+    def _change_language(self, locale: str) -> None:
+        if locale == self._locale:
+            return
+        self._flush_text()
+        self._locale = locale
+        self.events.append(("language", locale))
 
-def html_events(markup: str) -> list[tuple[str, str]]:
-    parser = HtmlEventsExtractor()
+    def _change_direction(self, direction: str) -> None:
+        if direction == self._direction:
+            return
+        self._flush_text()
+        self._direction = direction
+        self.events.append(("direction", direction))
+
+
+def html_events(markup: str, initial_locale: str = "") -> list[tuple[str, str]]:
+    parser = HtmlEventsExtractor(initial_locale)
     parser.feed(markup)
     parser.close()
-    return parser.events
+    return ([('writing-mode', 'vertical-rl')] if parser.vertical else []) + parser.events
 
 
 def text_events(text: str) -> list[tuple[str, str]]:
@@ -394,11 +467,12 @@ def container_rootfile(epub: zipfile.ZipFile) -> str:
 
 def parse_package(
     epub: zipfile.ZipFile, opf_path: str
-) -> tuple[str, str, list[str], dict[str, list[tuple[str, str]]]]:
+) -> tuple[str, str, str, list[str], dict[str, list[tuple[str, str]]]]:
     package_xml = read_zip_text(epub, opf_path)
     root = ET.fromstring(package_xml)
     title = first_child_text(root, "title")
     author = first_child_text(root, "creator")
+    language = normalize_locale(first_child_text(root, "language"))
 
     manifest: dict[str, tuple[str, str]] = {}
     nav_paths: list[str] = []
@@ -435,7 +509,7 @@ def parse_package(
         raise ValueError("EPUB spine does not contain readable XHTML/HTML documents")
 
     package_version = root.attrib.get("version", "")
-    return title, author, spine_paths, toc_titles_by_path(epub, title, package_version, nav_paths, ncx_paths)
+    return title, author, language, spine_paths, toc_titles_by_path(epub, title, package_version, nav_paths, ncx_paths)
 
 
 def toc_titles_by_path(
@@ -592,11 +666,22 @@ def epub_events_and_metadata(path: Path) -> tuple[str, str, list[tuple[str, str]
         if any(normalize_zip_path(name).lower() == "meta-inf/encryption.xml" for name in epub.namelist()):
             raise ValueError("This EPUB could not be converted locally")
         opf_path = container_rootfile(epub)
-        title, author, spine_paths, toc_titles = parse_package(epub, opf_path)
+        title, author, language, spine_paths, toc_titles = parse_package(epub, opf_path)
+        vertical = any(
+            name.lower().endswith(".css") and VERTICAL_WRITING_RE.search(read_zip_text(epub, name))
+            for name in epub.namelist()
+        )
+        if language:
+            events.append(("language", language))
 
         for index, spine_path in enumerate(spine_paths, start=1):
             toc_entries = toc_titles.get(normalize_zip_path(spine_path).lower(), [])
-            chapter_events = html_events(with_toc_anchor_chapters(read_zip_text(epub, spine_path), toc_entries))
+            chapter_events = html_events(
+                with_toc_anchor_chapters(read_zip_text(epub, spine_path), toc_entries),
+                language,
+            )
+            vertical = vertical or any(kind == "writing-mode" for kind, _ in chapter_events)
+            chapter_events = [event for event in chapter_events if event[0] != "writing-mode"]
             if not any(kind == "text" for kind, _ in chapter_events):
                 continue
             toc_labels = [label for label, _fragment in toc_entries]
@@ -608,6 +693,9 @@ def epub_events_and_metadata(path: Path) -> tuple[str, str, list[tuple[str, str]
             elif not any(kind == "chapter" for kind, _ in chapter_events):
                 chapter_events.insert(0, ("chapter", fallback_chapter_title(spine_path, index)))
             events.extend(chapter_events)
+
+        if vertical:
+            events.insert(0, ("writing-mode", "vertical-rl"))
 
     return title or path.stem, author, events
 
@@ -809,6 +897,9 @@ def convert_one(path: Path, force: bool, max_words: int) -> tuple[str, str]:
     for kind, value in events:
         if kind == "chapter":
             writer.add_chapter(value)
+            continue
+        if kind in {"language", "direction", "writing-mode"}:
+            writer.add_directive(kind, value)
             continue
         writer.begin_paragraph()
         if not writer.add_text(value):

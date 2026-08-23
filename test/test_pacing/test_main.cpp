@@ -2,6 +2,7 @@
 #include <vector>
 
 #include "reader/ReadingLoop.h"
+#include "text/RsvpTokenizer.h"
 #include "text/UnicodeText.h"
 
 static settings::ReadingSettings testSettings;
@@ -241,8 +242,9 @@ void test_hungarian_double_acute_vowel_affects_syllable_bonus(void) {
 }
 
 void test_sami_custom_letter_counts_as_readable(void) {
-    TEST_ASSERT_EQUAL(200u, duration(300, "\xC5\xA7"
-                                               "ahti",
+    TEST_ASSERT_EQUAL(200u, duration(300,
+                                     "\xC5\xA7"
+                                     "ahti",
                                      "ja"));
 }
 
@@ -253,6 +255,49 @@ void test_unicode_classification_covers_supported_scripts(void) {
     TEST_ASSERT_TRUE(UnicodeText::isLetter(0x0167));
     TEST_ASSERT_EQUAL_HEX32(0x0451, UnicodeText::toLowercase(0x0401));
     TEST_ASSERT_TRUE(UnicodeText::isVowel(0x0451));
+    TEST_ASSERT_TRUE(UnicodeText::isLetter(0x65E5));
+    TEST_ASSERT_TRUE(UnicodeText::isLetter(0x3042));
+    TEST_ASSERT_TRUE(UnicodeText::isLetter(0x05D0));
+    TEST_ASSERT_TRUE(UnicodeText::isLetter(0x0627));
+    TEST_ASSERT_FALSE(UnicodeText::isLetter(0x060C));
+    TEST_ASSERT_FALSE(UnicodeText::isLetter(0x064E));
+    TEST_ASSERT_EQUAL_HEX32(UnicodeText::ScriptHan, UnicodeText::scriptMask(0x65E5));
+    TEST_ASSERT_EQUAL_HEX32(UnicodeText::CapabilityBidi | UnicodeText::CapabilityShaping,
+                            UnicodeText::capabilityMask(0x0627));
+    TEST_ASSERT_EQUAL_HEX32(UnicodeText::CapabilityMathSymbols, UnicodeText::capabilityMask(0x2211));
+    TEST_ASSERT_TRUE(UnicodeText::isUppercaseLetter(0x10400));
+    TEST_ASSERT_TRUE(UnicodeText::isLowercaseLetter(0x10428));
+    TEST_ASSERT_TRUE(UnicodeText::isDigit(0x0966));
+}
+
+void test_cjk_phrases_use_characters_per_minute(void) {
+    ReadingSession r = makeReader(300, {"吾輩", "猫"});
+    testSettings.pacing.punctuationDelayMs = 0;
+    TEST_ASSERT_EQUAL(settings::ReadingPacing::cjkPhrase, ReadingLoop::pacingMode(r));
+    TEST_ASSERT_EQUAL(400u, ReadingLoop::currentWordDurationMs(r, testSettings));
+
+    r.state.overrides.pacing = settings::ReadingPacing::words;
+    TEST_ASSERT_EQUAL(settings::ReadingPacing::words, ReadingLoop::pacingMode(r));
+    TEST_ASSERT_EQUAL(200u, ReadingLoop::currentWordDurationMs(r, testSettings));
+}
+
+void test_cjk_tokenizer_emits_small_punctuation_aware_phrases(void) {
+    std::vector<std::string> tokens;
+    size_t count = 0;
+    TEST_ASSERT_TRUE(RsvpText::appendLineWords(
+        "吾輩は猫である。名前はまだ無い。",
+        [&](const std::string& token) {
+            tokens.push_back(token);
+            ++count;
+            return true;
+        },
+        count, nullptr));
+
+    const std::vector<std::string> expected = {"吾輩", "は猫", "であ", "る。", "名前", "はま", "だ無", "い。"};
+    TEST_ASSERT_TRUE(tokens == expected);
+
+    ReadingSession r = makeReader(300, std::move(tokens));
+    TEST_ASSERT_EQUAL_STRING("吾輩は猫である。名前はまだ無い。", ReadingLoop::paragraphAt(r, 0).text.c_str());
 }
 
 void test_very_long_word_extra_tier(void) {
@@ -320,50 +365,50 @@ void test_length_delay_quartered(void) {
 void test_seek_to_sets_index_and_word(void) {
     ReadingSession r = makeReader(300, {"zero", "one", "two", "three", "four"});
     ReadingLoop::seekTo(r, 2);
-    TEST_ASSERT_EQUAL(2u, r.currentIndex);
+    TEST_ASSERT_EQUAL(2u, r.state.wordIndex);
     TEST_ASSERT_EQUAL_STRING("two", r.currentWord.c_str());
 }
 
 void test_seek_to_clamps_at_end(void) {
     ReadingSession r = makeReader(300, {"a", "b", "c"});
     ReadingLoop::seekTo(r, 99);
-    TEST_ASSERT_EQUAL(2u, r.currentIndex);
+    TEST_ASSERT_EQUAL(2u, r.state.wordIndex);
     TEST_ASSERT_EQUAL_STRING("c", r.currentWord.c_str());
 }
 
 void test_scrub_forward(void) {
     ReadingSession r = makeReader(300, {"zero", "one", "two", "three", "four"});
     ReadingLoop::seekTo(r, 1);
-    ReadingLoop::seekRelative(r, r.currentIndex, 3);
-    TEST_ASSERT_EQUAL(4u, r.currentIndex);
+    ReadingLoop::seekRelative(r, r.state.wordIndex, 3);
+    TEST_ASSERT_EQUAL(4u, r.state.wordIndex);
 }
 
 void test_scrub_backward(void) {
     ReadingSession r = makeReader(300, {"zero", "one", "two", "three", "four"});
     ReadingLoop::seekTo(r, 3);
-    ReadingLoop::seekRelative(r, r.currentIndex, -2);
-    TEST_ASSERT_EQUAL(1u, r.currentIndex);
+    ReadingLoop::seekRelative(r, r.state.wordIndex, -2);
+    TEST_ASSERT_EQUAL(1u, r.state.wordIndex);
 }
 
 void test_scrub_clamped_at_start(void) {
     ReadingSession r = makeReader(300, {"a", "b", "c"});
     ReadingLoop::seekTo(r, 1);
-    ReadingLoop::seekRelative(r, r.currentIndex, -99);
-    TEST_ASSERT_EQUAL(0u, r.currentIndex);
+    ReadingLoop::seekRelative(r, r.state.wordIndex, -99);
+    TEST_ASSERT_EQUAL(0u, r.state.wordIndex);
 }
 
 void test_scrub_clamped_at_end(void) {
     ReadingSession r = makeReader(300, {"a", "b", "c"});
     ReadingLoop::seekTo(r, 1);
-    ReadingLoop::seekRelative(r, r.currentIndex, 99);
-    TEST_ASSERT_EQUAL(2u, r.currentIndex);
+    ReadingLoop::seekRelative(r, r.state.wordIndex, 99);
+    TEST_ASSERT_EQUAL(2u, r.state.wordIndex);
 }
 
 void test_seek_relative_via_base_index(void) {
     ReadingSession r = makeReader(300, {"a", "b", "c", "d", "e"});
     // seekRelative from base=0 +3 → index 3
     ReadingLoop::seekRelative(r, 0, 3);
-    TEST_ASSERT_EQUAL(3u, r.currentIndex);
+    TEST_ASSERT_EQUAL(3u, r.state.wordIndex);
     TEST_ASSERT_EQUAL_STRING("d", r.currentWord.c_str());
 }
 
@@ -372,18 +417,18 @@ void test_seek_paragraph_moves_between_sections(void) {
     r.metadata.paragraphStarts = {0, 2, 5};
     ReadingLoop::seekTo(r, 3);
     TEST_ASSERT_TRUE(ReadingLoop::seekParagraph(r, 1));
-    TEST_ASSERT_EQUAL(5u, r.currentIndex);
+    TEST_ASSERT_EQUAL(5u, r.state.wordIndex);
     TEST_ASSERT_TRUE(ReadingLoop::seekParagraph(r, -1));
-    TEST_ASSERT_EQUAL(2u, r.currentIndex);
+    TEST_ASSERT_EQUAL(2u, r.state.wordIndex);
 }
 
 void test_seek_paragraph_clamps_at_book_edges(void) {
     ReadingSession r = makeReader(300, {"zero", "one", "two", "three"});
     r.metadata.paragraphStarts = {0, 2};
     TEST_ASSERT_FALSE(ReadingLoop::seekParagraph(r, -1));
-    TEST_ASSERT_EQUAL(0u, r.currentIndex);
+    TEST_ASSERT_EQUAL(0u, r.state.wordIndex);
     TEST_ASSERT_TRUE(ReadingLoop::seekParagraph(r, 99));
-    TEST_ASSERT_EQUAL(2u, r.currentIndex);
+    TEST_ASSERT_EQUAL(2u, r.state.wordIndex);
     TEST_ASSERT_FALSE(ReadingLoop::seekParagraph(r, 1));
 }
 
@@ -391,7 +436,7 @@ void test_rewind_sentence_moves_to_current_sentence_start(void) {
     ReadingSession r = makeReader(300, {"One", "two.", "Three", "four", "five.", "Six"});
     ReadingLoop::seekTo(r, 3);
     ReadingLoop::rewindSentence(r);
-    TEST_ASSERT_EQUAL(2u, r.currentIndex);
+    TEST_ASSERT_EQUAL(2u, r.state.wordIndex);
     TEST_ASSERT_EQUAL_STRING("Three", r.currentWord.c_str());
 }
 
@@ -399,7 +444,7 @@ void test_rewind_sentence_at_sentence_start_moves_to_previous_sentence(void) {
     ReadingSession r = makeReader(300, {"One", "two.", "Three", "four", "five.", "Six"});
     ReadingLoop::seekTo(r, 2);
     ReadingLoop::rewindSentence(r);
-    TEST_ASSERT_EQUAL(0u, r.currentIndex);
+    TEST_ASSERT_EQUAL(0u, r.state.wordIndex);
     TEST_ASSERT_EQUAL_STRING("One", r.currentWord.c_str());
 }
 
@@ -407,7 +452,7 @@ void test_rewind_sentence_clamps_at_book_start(void) {
     ReadingSession r = makeReader(300, {"One", "two.", "Three"});
     ReadingLoop::seekTo(r, 0);
     ReadingLoop::rewindSentence(r);
-    TEST_ASSERT_EQUAL(0u, r.currentIndex);
+    TEST_ASSERT_EQUAL(0u, r.state.wordIndex);
     TEST_ASSERT_EQUAL_STRING("One", r.currentWord.c_str());
 }
 
@@ -415,7 +460,7 @@ void test_rewind_sentence_ignores_abbreviation_periods(void) {
     ReadingSession r = makeReader(300, {"Mr.", "Smith", "arrived.", "Then", "left."});
     ReadingLoop::seekTo(r, 4);
     ReadingLoop::rewindSentence(r);
-    TEST_ASSERT_EQUAL(3u, r.currentIndex);
+    TEST_ASSERT_EQUAL(3u, r.state.wordIndex);
     TEST_ASSERT_EQUAL_STRING("Then", r.currentWord.c_str());
 }
 
@@ -438,6 +483,8 @@ int main(void) {
     UNITY_BEGIN();
 
     RUN_TEST(test_wpm_base_interval);
+    RUN_TEST(test_cjk_phrases_use_characters_per_minute);
+    RUN_TEST(test_cjk_tokenizer_emits_small_punctuation_aware_phrases);
     RUN_TEST(test_wpm_clamped_low);
     RUN_TEST(test_wpm_clamped_high);
     RUN_TEST(test_adjust_wpm_steps_by_25);

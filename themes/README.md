@@ -8,15 +8,6 @@ Theme files are plain text:
 ```toml
 name = "Catppuccin Mocha"
 
-[typography]
-fontId = "literata"
-fontSizeIndex = 0
-focusHighlight = true
-tracking = 0
-anchor = 30
-guideWidth = 30
-guideGap = 5
-
 [colors]
 background = "#1E1E2E"
 foreground = "#CDD6F4"
@@ -37,6 +28,5 @@ progressTrack = "#313244"
 ```
 
 Colors are quoted `#RRGGBB` values; without quotes, `#` starts a TOML comment. Missing fields keep
-the built-in defaults and unknown fields are ignored. `fontId` is a font catalog family ID;
-unavailable fonts fall back through the device font catalog, normally to the embedded `literata`
-font. Theme files do not use a schema version.
+the built-in defaults and unknown fields are ignored. Typography is configured independently in
+device settings and per-book language font choices. Theme files do not use a schema version.

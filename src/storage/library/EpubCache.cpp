@@ -19,7 +19,7 @@ namespace EpubCache {
 
         using namespace StoragePaths;
 
-        void logHeapSnapshot(const char* label) {
+        void logHeap(const char* label) {
             ESP_LOGD("heap", "%s free8=%lu free_spiram=%lu largest8=%lu largest_spiram=%lu",
                      label == nullptr ? "" : label,
                      static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
@@ -112,7 +112,7 @@ namespace EpubCache {
 
         ESP_LOGD("storage", "Preparing EPUB conversion: source=%s output=%s size=%lu bytes", epubPath.c_str(),
                  rsvpPath.c_str(), static_cast<unsigned long>(epubBytes));
-        logHeapSnapshot("before EPUB conversion");
+        logHeap("before EPUB conversion");
         report("Preparing book", displayNameForPath(epubPath).c_str(), "Converting EPUB", 0);
 
         uint32_t elapsedMs = 0;
@@ -131,11 +131,11 @@ namespace EpubCache {
                 ESP_LOGE("storage", "EPUB conversion failed after %lu ms: %s", static_cast<unsigned long>(elapsedMs),
                          epubPath.c_str());
                 report("Preparing book", "EPUB conversion failed", "Check serial monitor", 100);
-                logHeapSnapshot("after EPUB conversion");
+                logHeap("after EPUB conversion");
                 return std::unexpected(converted.error());
             }
         }
-        logHeapSnapshot("after EPUB conversion");
+        logHeap("after EPUB conversion");
 
         if (!StorageFiles::fileExistsWithBytes(rsvpPath.c_str())) {
             ESP_LOGE("storage", "EPUB conversion failed after %lu ms: %s", static_cast<unsigned long>(elapsedMs),

@@ -1,5 +1,6 @@
 package com.rsvpnano
 
+import com.rsvpnano.models.NanoSettings
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -34,7 +35,7 @@ class NanoSettingsUpdateHelpersTest {
             .withPacingLongWordMs(626)
             .withPacingComplexWordMs(-20)
             .withBrightnessPercent(101)
-            .withFontSizeIndex(-1)
+            .withFontSizeIndex(9)
             .withTracking(10)
             .withAnchorPercent(12)
             .withGuideWidth(19)
@@ -44,11 +45,22 @@ class NanoSettingsUpdateHelpersTest {
         assertEquals(600, updated.reading.pacing.longWordDelayMs)
         assertEquals(0, updated.reading.pacing.complexWordDelayMs)
         assertEquals(100, updated.`interface`.brightnessPercent)
-        assertEquals(0, updated.reading.typography.fontSizeIndex)
+        assertEquals(3, updated.reading.typography.fontSizeIndex)
         assertEquals(3, updated.reading.typography.tracking)
         assertEquals(30, updated.reading.typography.anchor)
         assertEquals(20, updated.reading.typography.guideWidth)
         assertEquals(8, updated.reading.typography.guideGap)
+    }
+
+    @Test
+    fun pacingResetRestoresReaderDefaults() {
+        val reset = sampleSettings()
+            .withPacingLongWordMs(0)
+            .withPacingComplexWordMs(600)
+            .withPacingPunctuationMs(50)
+            .withDefaultPacing()
+
+        assertEquals(NanoSettings.Pacing(), reset.reading.pacing)
     }
 
     @Test
@@ -61,7 +73,7 @@ class NanoSettingsUpdateHelpersTest {
             .withBatteryLabel("timeRemaining")
             .withThemeId("night")
             .withPhantomWords(true)
-            .withFontSizeIndex(2)
+            .withFontSizeIndex(3)
 
         assertNotSame(original, updated)
         assertEquals(10, original.`interface`.brightnessPercent)
@@ -71,7 +83,7 @@ class NanoSettingsUpdateHelpersTest {
         assertEquals("timeRemaining", updated.reading.batteryLabel)
         assertEquals("night", updated.`interface`.selectedThemeId)
         assertTrue(updated.reading.phantomWords)
-        assertEquals(2, updated.reading.typography.fontSizeIndex)
+        assertEquals(3, updated.reading.typography.fontSizeIndex)
     }
 
     @Test

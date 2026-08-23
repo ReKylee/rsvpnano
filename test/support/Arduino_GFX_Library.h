@@ -11,6 +11,22 @@ public:
     explicit Arduino_GFX(int16_t width = 320, int16_t height = 172) : width_(width), height_(height) {}
     virtual ~Arduino_GFX() = default;
 
+    virtual bool begin(int32_t = -1) {
+        return true;
+    }
+    virtual void writePixelPreclipped(int16_t, int16_t, uint16_t) {
+        ++writes;
+    }
+    virtual void writeFastHLine(int16_t x, int16_t y, int16_t width, uint16_t color) {
+        drawFastHLine(x, y, width, color);
+    }
+    virtual void writeFastVLine(int16_t x, int16_t y, int16_t height, uint16_t color) {
+        drawFastVLine(x, y, height, color);
+    }
+    virtual void writeFillRectPreclipped(int16_t x, int16_t y, int16_t width, int16_t height, uint16_t color) {
+        fillRect(x, y, width, height, color);
+    }
+
     virtual int16_t width() const {
         return width_;
     }
@@ -80,6 +96,20 @@ public:
         cursorX = x;
         cursorY = y;
     }
+    virtual void getTextBounds(const char* text, int16_t x, int16_t y, int16_t* x1, int16_t* y1, uint16_t* width,
+                               uint16_t* height) {
+        size_t codepoints = 0;
+        for (const auto* byte = reinterpret_cast<const unsigned char*>(text); *byte != 0; ++byte)
+            codepoints += (*byte & 0xC0U) != 0x80U;
+        *x1 = x;
+        *y1 = y;
+        *width = static_cast<uint16_t>(codepoints * 6 * lastTextSize);
+        *height = static_cast<uint16_t>(9 * lastTextSize);
+    }
+    virtual void draw16bitRGBBitmap(int16_t, int16_t, uint16_t*, int16_t, int16_t) {
+        ++writes;
+        ++bitmapWrites;
+    }
     virtual size_t write(uint8_t) {
         ++writes;
         ++textWrites;
@@ -91,6 +121,7 @@ public:
 
     int writes = 0;
     int textWrites = 0;
+    int bitmapWrites = 0;
     int transparentTextColors = 0;
     int opaqueTextColors = 0;
     uint8_t lastTextSize = 0;

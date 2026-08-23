@@ -7,14 +7,14 @@
 #include <string>
 #include <utility>
 
+#include "hash/Fnv1a.h"
 #include "settings/SettingsRules.h"
 #include "storage/fs/StoragePaths.h"
+#include "text/LocaleTag.h"
 
 namespace settings {
     namespace {
 
-        constexpr char kNamespace[] = "rsvp_cfg2";
-        constexpr char kSettingsKey[] = "settings";
         constexpr char kFileHashKey[] = "file_hash";
         constexpr char kSecretsKey[] = "secrets";
         constexpr uint32_t kPersistenceDelayMs = 1500;
@@ -70,12 +70,8 @@ namespace settings {
             return content;
         }
 
-        uint32_t hash(std::string_view content) {
-            uint32_t value = 2166136261UL;
-            for (const char character: content) {
-                value ^= static_cast<uint8_t>(character);
-                value *= 16777619UL;
-            }
+        uint32_t storedHash(std::string_view content) {
+            const uint32_t value = Fnv1a::hash(content);
             return value == 0 ? 1 : value;
         }
 
@@ -92,7 +88,11 @@ namespace settings {
             if (value.interface.selectedThemeId.empty())
                 value.interface.selectedThemeId = "default";
             truncate(value.interface.selectedThemeId, rules::kThemeIdMaxLength);
-            truncate(value.network.wifiSsid, rules::kWifiSsidMaxLength);
+            if (auto locale = LocaleTag::normalize(value.interface.locale))
+                value.interface.locale = std::move(*locale);
+            else
+                value.interface.locale = "en";
+            truncate(value.network.ssid, rules::kWifiSsidMaxLength);
             truncate(value.updates.repositoryOwner, rules::kRepositoryOwnerMaxLength);
             truncate(value.updates.releaseTag, rules::kReleaseTagMaxLength);
         }
@@ -115,7 +115,7 @@ namespace settings {
 
     SettingsResult<> SettingsStore::reopenNvsAndPersist() {
         closeNvs();
-        nvsOpen_ = preferences_.begin(kNamespace, false);
+        nvsOpen_ = preferences_.begin(kSettingsNvsNamespace, false);
         if (!nvsOpen_)
             return std::unexpected(error(SettingsErrorCategory::Io, SettingsSource::Nvs,
                                          "could not reopen settings NVS namespace"));
@@ -127,7 +127,7 @@ namespace settings {
     SettingsResult<> SettingsStore::begin(fs::FS* filesystem) {
         if (nvsOpen_)
             preferences_.end();
-        nvsOpen_ = preferences_.begin(kNamespace, false);
+        nvsOpen_ = preferences_.begin(kSettingsNvsNamespace, false);
         if (!nvsOpen_)
             return std::unexpected(error(SettingsErrorCategory::Io, SettingsSource::Nvs,
                                          "could not open settings NVS namespace"));
@@ -135,7 +135,7 @@ namespace settings {
         filesystem_ = filesystem;
         mirrorEnabled_ = filesystem != nullptr;
 
-        auto nvsContent = readBlob(preferences_, kSettingsKey, kMaxSettingsBytes, SettingsSource::Nvs);
+        auto nvsContent = readBlob(preferences_, kSettingsNvsKey, kMaxSettingsBytes, SettingsSource::Nvs);
         auto nvsSettings = nvsContent.and_then([](const std::string& content) {
             return codec::decodeToml(content, SettingsSource::Nvs);
         });
@@ -155,7 +155,7 @@ namespace settings {
         });
 
         const uint32_t savedHash = preferences_.getUInt(kFileHashKey, 0);
-        const bool fileWasEdited = fileContent && (savedHash == 0 || hash(*fileContent) != savedHash);
+        const bool fileWasEdited = fileContent && (savedHash == 0 || storedHash(*fileContent) != savedHash);
         const bool invalidFile = fileContent && !fileSettings;
 
         const bool hasNvsSettings = nvsSettings.has_value();
@@ -173,12 +173,10 @@ namespace settings {
         }
 
         sanitize(settings_);
-        lastAccepted_ = settings_;
 
         if (nvsSecrets)
             secrets_ = std::move(*nvsSecrets);
         sanitize(secrets_);
-        lastAcceptedSecrets_ = secrets_;
 
         mirrorEnabled_ = filesystem && !invalidFile;
         auto canonical = codec::encodeToml(settings_, SettingsSource::Nvs);
@@ -200,33 +198,16 @@ namespace settings {
         return {};
     }
 
-    SettingsResult<> SettingsStore::acceptChanges() {
+    void SettingsStore::acceptChanges() {
         sanitize(settings_);
-        if (settings_ == lastAccepted_)
-            return {};
-        lastAccepted_ = settings_;
         dirty_ = true;
         dirtyAtMs_ = millis();
-        return {};
     }
 
-    SettingsResult<> SettingsStore::acceptSecretChanges() {
+    void SettingsStore::acceptSecretChanges() {
         sanitize(secrets_);
-        if (secrets_ == lastAcceptedSecrets_)
-            return {};
-        lastAcceptedSecrets_ = secrets_;
         secretsDirty_ = true;
         dirtyAtMs_ = millis();
-        return {};
-    }
-
-    SettingsResult<> SettingsStore::replace(DeviceSettings candidate, SettingsSource /*source*/) {
-        sanitize(candidate);
-        settings_ = std::move(candidate);
-        lastAccepted_ = settings_;
-        dirty_ = true;
-        dirtyAtMs_ = millis();
-        return {};
     }
 
     void SettingsStore::update(uint32_t nowMs) {
@@ -237,13 +218,13 @@ namespace settings {
     }
 
     SettingsResult<> SettingsStore::writeSettings(std::string_view canonicalToml) {
-        if (auto result = writeBlob(preferences_, kSettingsKey, canonicalToml, SettingsSource::Nvs); !result)
+        if (auto result = writeBlob(preferences_, kSettingsNvsKey, canonicalToml, SettingsSource::Nvs); !result)
             return result;
         if (!filesystem_ || !mirrorEnabled_)
             return {};
         if (auto result = writeFile(canonicalToml); !result)
             return result;
-        if (preferences_.putUInt(kFileHashKey, hash(canonicalToml)) == 0)
+        if (preferences_.putUInt(kFileHashKey, storedHash(canonicalToml)) == 0)
             return std::unexpected(error(SettingsErrorCategory::Io, SettingsSource::Nvs,
                                          "settings file hash write failed", kFileHashKey));
         return {};

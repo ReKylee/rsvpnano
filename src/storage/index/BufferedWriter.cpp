@@ -6,10 +6,6 @@ BufferedWriter::BufferedWriter(File& file, size_t capacity) : file_(file) {
     buffer_.reserve(capacity);
 }
 
-BufferedWriter::~BufferedWriter() {
-    flush();
-}
-
 std::expected<void, std::error_code> BufferedWriter::write(const void* data, size_t len) {
     if (failed_)
         return std::unexpected(std::make_error_code(std::errc::io_error));
@@ -25,9 +21,8 @@ std::expected<void, std::error_code> BufferedWriter::write(const void* data, siz
     }
 
     if (buffer_.size() + len > capacity) {
-        if (!flush()) {
-            return std::unexpected(std::make_error_code(std::errc::io_error));
-        }
+        if (auto flushed = flush(); !flushed)
+            return flushed;
         if (len >= capacity) {
             if (file_.write(bytes, len) != len) {
                 failed_ = true;

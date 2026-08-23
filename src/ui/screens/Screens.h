@@ -1,7 +1,9 @@
 #pragma once
 
 #include <Arduino.h>
+#include <FS.h>
 #include <array>
+#include <functional>
 #include <optional>
 #include <span>
 #include <string>
@@ -9,6 +11,7 @@
 #include "book/BookMetadata.h"
 #include "display/ThemeStore.h"
 #include "fonts/FontCatalog.h"
+#include "locales/LocaleCatalog.h"
 #include "reader/ReadingLoop.h"
 #include "settings/NvsSecurity.h"
 #include "settings/SettingsModel.h"
@@ -18,10 +21,6 @@
 #include "timer/FocusSession.h"
 #include "timer/FocusTimers.h"
 #include "ui/Ui.h"
-
-namespace fs {
-    class FS;
-}
 
 namespace screens {
 
@@ -34,6 +33,7 @@ namespace screens {
         InterfaceSettings,
         PacingSettings,
         TypographySettings,
+        BookFonts,
         ReaderSettings,
         NetworkSettings,
         WifiScan,
@@ -55,6 +55,7 @@ namespace screens {
 
     enum class Action : uint8_t {
         None,
+        OpenBook,
         Resume,
         PowerOff,
         CompanionSync,
@@ -66,39 +67,32 @@ namespace screens {
         OtaInstall,
     };
 
-    struct ReadModel {
-        std::string title;
-        std::string author;
-        uint8_t progress = 0;
-    };
-
-    Action read(ui::Context& ui, const ReadModel& model, Screen& screen);
+    Action read(ui::Context& ui, std::string_view title, std::string_view author, uint8_t progress, Screen& screen);
     Action settings(ui::Context& ui, Screen& screen);
     bool readingSettings(ui::Context& ui, settings::ReadingSettings& settings, Screen& screen);
     class InterfaceScreen {
     public:
         ThemeStore themes;
 
-        void begin(ui::Context& ui, settings::InterfaceSettings& settings,
-                   const settings::TypographySettings& typographyDefaults, const FontCatalog& fonts,
+        bool begin(ui::Context& ui, settings::InterfaceSettings& settings, const locales::Catalog& languages,
                    void (*setBrightness)(uint8_t));
         bool draw(ui::Context& ui, settings::InterfaceSettings& settings, std::span<const uint32_t> standbyDurations,
                   void (*setBrightness)(uint8_t), Screen& screen);
+
+    private:
+        const locales::Catalog* languages_ = nullptr;
     };
     bool pacingSettings(ui::Context& ui, settings::PacingSettings& settings, Screen& screen);
-    bool typographySettings(ui::Context& ui, std::optional<settings::TypographySettings>& bookOverride,
-                            const settings::TypographySettings& inherited, FontCatalog& fonts, Screen& screen);
+    bool typographySettings(ui::Context& ui, settings::TypographySettings& config, FontCatalog& fonts, Screen& screen);
+    bool bookFonts(ui::Context& ui, const BookMetadata& metadata, settings::ReadingOverrides& overrides,
+                   const locales::Catalog& localeCatalog, FontCatalog& fonts, Screen& screen);
     bool readerSettings(ui::Context& ui, settings::ReadingSettings& settings, Screen& screen);
     class NetworkScreen {
     public:
-        std::string ssid;
-        std::string owner;
-        std::string tag;
         bool startupCheckPending = false;
-        bool ssidStored = false;
 
         void begin(settings::SettingsStore& store);
-        void draw(ui::Context& ui, settings::SettingsStore& store, Screen& screen);
+        Action draw(ui::Context& ui, settings::SettingsStore& store, Screen& screen);
         void openWifiScan();
         void closeWifi();
         void drawWifiScan(ui::Context& ui, settings::SettingsStore& store, Screen& screen);
@@ -124,10 +118,11 @@ namespace screens {
             Tag,
         };
 
-        void saveNetwork(settings::SettingsStore& store);
+        void saveNetwork(settings::SettingsStore& store, std::string_view ssid);
 
         std::array<WifiNetwork, 8> networks_;
         size_t networkCount_ = 0;
+        size_t selectedNetworkIndex_ = networks_.size();
         std::string password_;
         std::string editValue_;
         ui::KeyboardState keyboard_;
@@ -138,13 +133,17 @@ namespace screens {
     Action device(ui::Context& ui, bool storageReady, size_t bookCount, settings::NvsEncryptionState encryptionState,
                   Screen& screen);
     Action storageEncryption(ui::Context& ui, settings::NvsEncryptionState encryptionState, Screen& screen);
-    Action sync(ui::Context& ui, Screen& screen);
     Action ota(ui::Context& ui, std::string_view firmwareVersion, Screen& screen);
     class FocusScreen {
     public:
-        void begin(fs::FS* filesystem);
+        void begin();
+        void begin(fs::FS& filesystem);
         bool update(uint32_t nowMs);
         Action draw(ui::Context& ui, uint32_t nowMs, Screen& screen);
+        void setTimers(focus::Timers timers);
+        const focus::Timers& timers() const {
+            return timers_;
+        }
         void close();
 
     private:

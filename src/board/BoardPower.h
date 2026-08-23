@@ -10,7 +10,7 @@ namespace Board::Power {
         uint8_t percent = 0;
     };
 
-    struct DiagnosticSnapshot {
+    struct Diagnostics {
         bool available = false;
         bool externalPowerPresent = false;
         uint8_t status1 = 0;
@@ -27,7 +27,7 @@ namespace Board::Power {
     void begin();
     bool enableAudioPowerIfAvailable();
     bool readBatteryStatus(BatteryStatus& status);
-    DiagnosticSnapshot diagnosticSnapshot();
+    Diagnostics readDiagnostics();
     bool externalPowerPresent();
     bool powerOff();
     bool powerButtonHeld();

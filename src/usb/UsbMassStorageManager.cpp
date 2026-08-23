@@ -108,6 +108,10 @@ bool UsbMassStorageManager::active() const {
     return active_;
 }
 
+bool UsbMassStorageManager::ejected() const {
+    return ejected_;
+}
+
 uint64_t UsbMassStorageManager::cardSizeBytes() const {
     return static_cast<uint64_t>(blockCount_) * blockSize_;
 }

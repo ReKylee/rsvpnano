@@ -8,6 +8,7 @@ import com.fleeksoft.ksoup.nodes.TextNode
 import com.fleeksoft.ksoup.parser.Parser
 
 internal object EpubBookConverter {
+    private val verticalWriting = Regex("(?:-epub-)?writing-mode\\s*:\\s*vertical-rl", RegexOption.IGNORE_CASE)
     private val blockTags = setOf(
         "address", "article", "aside", "blockquote", "body", "br", "dd", "div", "dl", "dt",
         "figcaption", "figure", "footer", "header", "hr", "li", "main", "ol", "p", "pre",
@@ -36,11 +37,13 @@ internal object EpubBookConverter {
         }
 
         val events = mutableListOf<RsvpEvent>()
+        var hasVerticalWriting = packageInfo.verticalWriting
         paths.forEachIndexed { index, spinePath ->
             val chapterData = normalizedEntries[EpubUtils.normalizeZipPath(spinePath).lowercase()] ?: return@forEachIndexed
             val rawMarkup = RsvpTextUtils.decodeText(chapterData) ?: return@forEachIndexed
             val tocEntries = packageInfo.tocTitlesByPath[EpubUtils.normalizeZipPath(spinePath).lowercase()].orEmpty()
-            val chapterEvents = htmlEvents(rawMarkup, tocEntries).toMutableList()
+            val chapterEvents = htmlEvents(rawMarkup, tocEntries, packageInfo.locale).toMutableList()
+            hasVerticalWriting = chapterEvents.removeAll { it == RsvpEvent.VerticalWriting } || hasVerticalWriting
             if (tocEntries.isNotEmpty()) {
                 chapterEvents.applyTocTitles(tocEntries.map { it.title }, packageInfo.title)
             } else if (packageInfo.tocTitlesByPath.isNotEmpty()) {
@@ -55,7 +58,11 @@ internal object EpubBookConverter {
             }
         }
 
-        if (events.isEmpty()) {
+        if (hasVerticalWriting) {
+            events.add(0, RsvpEvent.VerticalWriting)
+        }
+
+        if (events.none { it is RsvpEvent.Text }) {
             throw RsvpConversionError.unsupportedEpub
         }
 
@@ -120,8 +127,14 @@ internal object EpubBookConverter {
         return EpubPackage(
             title = title,
             author = metadata?.firstTextByLocalName("creator").orEmpty(),
+            locale = metadata?.firstTextByLocalName("language").orEmpty(),
             spinePaths = spinePaths,
             manifestContentPaths = manifestContentPaths,
+            verticalWriting = manifest.values.asSequence()
+                .filter { it.mediaType.equals("text/css", ignoreCase = true) }
+                .mapNotNull { entries[EpubUtils.normalizeZipPath(it.path).lowercase()] }
+                .mapNotNull(RsvpTextUtils::decodeText)
+                .any(verticalWriting::containsMatchIn),
             tocTitlesByPath = tocTitlesByPath(
                 entries = entries,
                 bookTitle = title,
@@ -231,24 +244,55 @@ internal object EpubBookConverter {
             loweredPath.endsWith(".htm")
     }
 
-    private fun htmlEvents(markup: String, tocEntries: List<EpubTocEntry>): List<RsvpEvent> {
+    private fun htmlEvents(markup: String, tocEntries: List<EpubTocEntry>, packageLocale: String): List<RsvpEvent> {
         val document = parseHtml(markup)
         val events = mutableListOf<RsvpEvent>()
+        if (document.allElements().any { element ->
+                verticalWriting.containsMatchIn(element.attr("style")) ||
+                    element.localName() == "style" && verticalWriting.containsMatchIn(element.html())
+            }
+        ) events += RsvpEvent.VerticalWriting
         val paragraph = mutableListOf<String>()
         val emittedFragments = mutableSetOf<String>()
+        var paragraphStart = true
+        var locale = normalizedLocale(
+            document.allElements().firstOrNull { it.localName() == "html" }?.language().orEmpty()
+                .ifEmpty { packageLocale }
+        )
+        var direction = "auto"
 
         fun flushText() {
             val text = RsvpTextUtils.cleanedLine(paragraph.joinToString(" "))
             paragraph.clear()
             if (text.isNotEmpty()) {
-                events += RsvpEvent.Text(text)
+                events += RsvpEvent.Text(text, paragraphStart)
+                paragraphStart = false
             }
+        }
+
+        fun endParagraph() {
+            flushText()
+            paragraphStart = true
+        }
+
+        fun changeLanguage(next: String) {
+            if (next == locale) return
+            flushText()
+            locale = next
+            events += RsvpEvent.Language(locale)
+        }
+
+        fun changeDirection(next: String) {
+            if (next == direction) return
+            flushText()
+            direction = next
+            events += RsvpEvent.Direction(direction)
         }
 
         fun emitChapter(title: String) {
             val cleaned = RsvpTextUtils.cleanedLine(title)
             if (cleaned.isNotEmpty()) {
-                flushText()
+                endParagraph()
                 events += RsvpEvent.Chapter(cleaned)
             }
         }
@@ -281,14 +325,23 @@ internal object EpubBookConverter {
                         return
                     }
                     if (tag == "br") {
-                        flushText()
+                        endParagraph()
                         return
                     }
 
                     val isBlock = tag in blockTags
                     if (isBlock) {
-                        flushText()
+                        endParagraph()
                     }
+
+                    val previousLocale = locale
+                    val previousDirection = direction
+                    val scopedLocale = normalizedLocale(node.language()).ifEmpty { locale }
+                    val scopedDirection = node.attr("dir").trim().lowercase()
+                        .takeIf { it == "auto" || it == "ltr" || it == "rtl" }
+                        ?: direction
+                    changeLanguage(scopedLocale)
+                    changeDirection(scopedDirection)
 
                     val tocEntry = tocEntryFor(node)
                     if (tocEntry != null) {
@@ -300,20 +353,25 @@ internal object EpubBookConverter {
                         if (tocEntry == null) {
                             emitChapter(node.text())
                         }
+                        changeLanguage(previousLocale)
+                        changeDirection(previousDirection)
                         return
                     }
 
                     node.childNodes().forEach(::visit)
                     if (isBlock) {
-                        flushText()
+                        endParagraph()
                     }
+                    changeLanguage(previousLocale)
+                    changeDirection(previousDirection)
                 }
                 else -> node.childNodes().forEach(::visit)
             }
         }
 
+        if (locale.isNotEmpty()) events += RsvpEvent.Language(locale)
         visit(document.body())
-        flushText()
+        endParagraph()
         return events
     }
 
@@ -340,8 +398,10 @@ internal object EpubBookConverter {
     private data class EpubPackage(
         val title: String,
         val author: String,
+        val locale: String,
         val spinePaths: List<String>,
         val manifestContentPaths: List<String>,
+        val verticalWriting: Boolean,
         val tocTitlesByPath: Map<String, List<EpubTocEntry>>,
     )
 
@@ -458,4 +518,17 @@ internal object EpubBookConverter {
     private fun normalizedChapterTitle(value: String): String {
         return RsvpTextUtils.cleanedLine(value).lowercase()
     }
+
+    fun htmlEvents(markup: String): List<RsvpEvent> = htmlEvents(markup, emptyList(), "")
+
+    private fun normalizedLocale(value: String): String {
+        val locale = value.trim().replace('_', '-')
+        return locale.takeIf {
+            it.isNotEmpty() && it.length <= 35 && it.split('-').all { part ->
+                part.isNotEmpty() && part.length <= 8 && part.all(Char::isLetterOrDigit)
+            }
+        }.orEmpty()
+    }
+
+    private fun Element.language(): String = attr("xml:lang").ifBlank { attr("lang") }
 }

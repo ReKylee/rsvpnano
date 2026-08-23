@@ -1,22 +1,23 @@
 package com.rsvpnano.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,6 +39,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
+internal const val INLINE_DIVIDER = "  │  "
+
 @Composable
 fun DropdownRow(
     label: String,
@@ -50,29 +53,38 @@ fun DropdownRow(
     var expanded by remember { mutableStateOf(false) }
     val selectedLabel = options.firstOrNull { it.first == selected }?.second ?: selected
 
-    SettingControl(label = label, description = description) {
-        Box {
-            OutlinedButton(
-                onClick = { expanded = true },
-                enabled = enabled && options.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(text = selectedLabel.ifEmpty { "Not available" }, modifier = Modifier.weight(1f))
-                Icon(imageVector = Icons.Outlined.ArrowDropDown, contentDescription = null)
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled && options.isNotEmpty()) { expanded = true }
+                .padding(vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = label, style = MaterialTheme.typography.labelLarge)
+                if (description != null) SettingsDescription(description)
+                Text(
+                    text = selectedLabel.ifEmpty { "Not available" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-            ) {
-                options.forEach { (value, title) ->
-                    DropdownMenuItem(
-                        text = { Text(text = title) },
-                        onClick = {
-                            expanded = false
-                            onSelected(value)
-                        },
-                    )
-                }
+            Icon(imageVector = Icons.Outlined.ArrowDropDown, contentDescription = null)
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            options.forEach { (value, title) ->
+                DropdownMenuItem(
+                    text = { Text(text = title) },
+                    onClick = {
+                        expanded = false
+                        onSelected(value)
+                    },
+                )
             }
         }
     }
@@ -106,6 +118,31 @@ fun SegmentedChoiceRow(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ChoiceChipRow(
+    label: String,
+    selected: String,
+    options: List<Pair<String, String>>,
+    onSelected: (String) -> Unit,
+    description: String? = null,
+) {
+    SettingControl(label = label, description = description) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            options.forEach { (value, title) ->
+                FilterChip(
+                    selected = value == selected,
+                    onClick = { onSelected(value) },
+                    label = { Text(title) },
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun SliderRow(
     label: String,
@@ -114,8 +151,10 @@ fun SliderRow(
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int,
     snapValue: (Float) -> Float = { it },
+    onValueChange: ((Float) -> Unit)? = null,
     onValueChangeFinished: (Float) -> Unit,
     description: String? = null,
+    prominentHeader: Boolean = false,
 ) {
     var sliderValue by remember(value) { mutableStateOf(snapValue(value)) }
     Column(
@@ -130,16 +169,33 @@ fun SliderRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = label, style = MaterialTheme.typography.labelLarge)
+                Text(
+                    text = label,
+                    style = if (prominentHeader) {
+                        MaterialTheme.typography.titleMedium
+                    } else {
+                        MaterialTheme.typography.labelLarge
+                    },
+                )
                 if (description != null) {
                     SettingsDescription(description)
                 }
             }
-            Text(text = valueLabel(sliderValue), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = valueLabel(sliderValue),
+                style = if (prominentHeader) {
+                    MaterialTheme.typography.titleMedium
+                } else {
+                    MaterialTheme.typography.bodyMedium
+                },
+            )
         }
         Slider(
             value = sliderValue.coerceIn(valueRange.start, valueRange.endInclusive),
-            onValueChange = { sliderValue = snapValue(it).coerceIn(valueRange.start, valueRange.endInclusive) },
+            onValueChange = {
+                sliderValue = snapValue(it).coerceIn(valueRange.start, valueRange.endInclusive)
+                onValueChange?.invoke(sliderValue)
+            },
             valueRange = valueRange,
             steps = steps,
             onValueChangeFinished = { onValueChangeFinished(sliderValue) },
@@ -188,12 +244,13 @@ fun SettingsStatusRow(
             .fillMaxWidth()
             .padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 2.dp),
         )
         Column(
             modifier = Modifier.weight(1f),
@@ -202,23 +259,11 @@ fun SettingsStatusRow(
             Text(text = title, style = MaterialTheme.typography.labelLarge)
             SettingsDescription(body)
         }
-        action?.invoke()
-    }
-}
-
-@Composable
-fun EmptyCard(text: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier
-                .heightIn(min = 64.dp)
-                .padding(16.dp),
-            style = MaterialTheme.typography.bodyMedium,
-        )
+        if (action != null) {
+            Box(modifier = Modifier.align(Alignment.CenterVertically)) {
+                action()
+            }
+        }
     }
 }
 
@@ -241,13 +286,14 @@ fun PullRefreshBox(
 fun DestructiveIconButton(
     contentDescription: String,
     onClick: () -> Unit,
+    enabled: Boolean = true,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
         shape = MaterialTheme.shapes.small,
     ) {
-        IconButton(onClick = onClick) {
+        IconButton(onClick = onClick, enabled = enabled) {
             Icon(imageVector = Icons.Outlined.Delete, contentDescription = contentDescription)
         }
     }

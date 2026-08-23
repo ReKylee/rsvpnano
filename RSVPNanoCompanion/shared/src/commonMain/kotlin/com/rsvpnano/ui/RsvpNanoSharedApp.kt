@@ -1,22 +1,30 @@
 package com.rsvpnano.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.outlined.Wifi
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FabPosition
@@ -24,18 +32,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,15 +52,20 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import com.rsvpnano.app.CompanionNotice
+import com.rsvpnano.app.NanoConnectionTransport
 import com.rsvpnano.app.NanoEndpoint
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.needsArticleFetch
@@ -61,7 +75,7 @@ import io.github.vinceglb.filekit.dialogs.FileKitType
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
 import kotlinx.coroutines.launch
 
-enum class CompanionTab(val label: String, val icon: ImageVector) {
+internal enum class CompanionScreen(val label: String, val icon: ImageVector) {
     Library("Library", Icons.AutoMirrored.Outlined.LibraryBooks),
     Settings("Settings", Icons.Outlined.Settings),
 }
@@ -76,15 +90,32 @@ fun RsvpNanoSharedApp(
     onFirmwareNotificationsChange: (Boolean) -> Unit,
     onGrantPermissions: () -> Unit,
 ) {
-    val colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
-    MaterialTheme(colorScheme = colorScheme) {
+    RsvpNanoTheme {
         val snackbarHostState = remember { SnackbarHostState() }
         val snackbarNotices = remember { mutableStateMapOf<String, CompanionNotice>() }
         val scope = rememberCoroutineScope()
-        var selectedTab by remember { mutableStateOf(CompanionTab.Library) }
-        var showAddPicker by remember { mutableStateOf(false) }
-        var showArticleDialog by remember { mutableStateOf(false) }
-        var showRssDialog by remember { mutableStateOf(false) }
+        var selectedScreenName by rememberSaveable { mutableStateOf(CompanionScreen.Library.name) }
+        val selectedScreen = CompanionScreen.valueOf(selectedScreenName)
+        var selectedBookId by rememberSaveable { mutableStateOf<String?>(null) }
+        val selectedBook = selectedBookId?.let { id -> uiState.books.firstOrNull { it.id == id } }
+        var settingsDestinationName by rememberSaveable { mutableStateOf<String?>(null) }
+        val settingsDestination = settingsDestinationName?.let(SettingsDestination::valueOf)
+        var showAddPicker by rememberSaveable { mutableStateOf(false) }
+        var showArticleDialog by rememberSaveable { mutableStateOf(false) }
+        var showRssDialog by rememberSaveable { mutableStateOf(false) }
+        var showConnectionDialog by rememberSaveable { mutableStateOf(false) }
+        var showHelpDialog by rememberSaveable { mutableStateOf(false) }
+        LaunchedEffect(uiState.isConnected, uiState.canRememberCurrentNano, uiState.nanoSsid) {
+            if (uiState.isConnected && uiState.canRememberCurrentNano) {
+                val result = snackbarHostState.showSnackbar(
+                    message = "Remember ${uiState.nanoSsid ?: "this Nano"} for quicker reconnects?",
+                    actionLabel = "Remember",
+                    withDismissAction = true,
+                    duration = SnackbarDuration.Long,
+                )
+                if (result == SnackbarResult.ActionPerformed) presenter.rememberCurrentNano()
+            }
+        }
         val filePicker = rememberFilePickerLauncher(
             type = FileKitType.File(extensions = listOf("epub", "txt", "html", "htm", "rsvp")),
         ) { file ->
@@ -112,6 +143,15 @@ fun RsvpNanoSharedApp(
                 }
             }
         }
+        val localePackPicker = rememberFilePickerLauncher(
+            type = FileKitType.File(extensions = listOf("zip")),
+        ) { file ->
+            if (file != null) {
+                scope.launch {
+                    presenter.installLocalePackFile(file.name, file.readBytes())
+                }
+            }
+        }
 
         LaunchedEffect(uiState.notice) {
             if (uiState.notice.showTransient) {
@@ -120,34 +160,148 @@ fun RsvpNanoSharedApp(
             }
         }
 
-        LaunchedEffect(selectedTab) {
-            if (selectedTab == CompanionTab.Settings && uiState.themeCatalog.isEmpty()) {
-                presenter.refreshThemeCatalog()
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val wide = maxWidth >= 840.dp
+            val activeSettingsDestination = if (wide) {
+                settingsDestination ?: SettingsDestination.Device
+            } else {
+                settingsDestination
             }
-            if (selectedTab == CompanionTab.Settings && uiState.fontCatalog.isEmpty()) {
-                presenter.refreshFontCatalog()
-            }
-        }
-
-        Scaffold(
-            topBar = {
-                Column {
-                    TopAppBar(
-                        title = { Text(text = "RSVP Nano") },
-                        actions = {
-                            IconButton(onClick = presenter::showHelpNotice) {
-                                Icon(imageVector = Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help")
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.background,
-                        ),
-                    )
-                    SharedConnectionBar(
-                        uiState = uiState,
-                        onRememberCurrentNano = presenter::rememberCurrentNano,
-                    )
+            LaunchedEffect(uiState.isConnected, selectedScreen, selectedBookId) {
+                if (!uiState.isConnected || selectedScreen != CompanionScreen.Library) return@LaunchedEffect
+                if (selectedBookId == null) {
+                    presenter.refreshLibrary()
+                } else {
+                    if (uiState.settings == null) presenter.refreshSettings()
+                    if (uiState.availableFonts.isEmpty()) presenter.refreshFonts()
                 }
+            }
+            LaunchedEffect(uiState.isConnected, selectedScreen, activeSettingsDestination) {
+                if (!uiState.isConnected || selectedScreen != CompanionScreen.Settings) return@LaunchedEffect
+                when (activeSettingsDestination) {
+                    null -> presenter.refreshSettings()
+                    SettingsDestination.Device -> {
+                        presenter.refreshSettings()
+                        presenter.refreshWifiSettings()
+                    }
+                    SettingsDestination.Reading,
+                    SettingsDestination.Display,
+                    -> presenter.refreshSettings()
+                    SettingsDestination.Typography -> {
+                        presenter.refreshSettings()
+                        presenter.refreshFonts()
+                    }
+                    SettingsDestination.FocusTimers -> presenter.refreshFocusTimers()
+                    SettingsDestination.Themes -> {
+                        presenter.refreshSettings()
+                        presenter.refreshThemes()
+                    }
+                    SettingsDestination.Locales -> {
+                        presenter.refreshSettings()
+                        presenter.refreshLocales()
+                    }
+                    SettingsDestination.Fonts -> {
+                        presenter.refreshSettings()
+                        presenter.refreshFonts()
+                    }
+                    SettingsDestination.About -> Unit
+                }
+            }
+            LaunchedEffect(uiState.settings, selectedScreen, activeSettingsDestination) {
+                if (uiState.settings == null || selectedScreen != CompanionScreen.Settings) return@LaunchedEffect
+                when (activeSettingsDestination) {
+                    SettingsDestination.Themes -> if (uiState.themeCatalog.isEmpty()) presenter.refreshThemeCatalog()
+                    SettingsDestination.Locales -> if (uiState.localeCatalog.isEmpty()) presenter.refreshLocaleCatalog()
+                    SettingsDestination.Fonts -> if (uiState.fontCatalog.isEmpty()) presenter.refreshFontCatalog()
+                    else -> Unit
+                }
+            }
+            LaunchedEffect(uiState.isConnected, showRssDialog) {
+                if (uiState.isConnected && showRssDialog) presenter.refreshRssFeeds()
+            }
+            val openBook = selectedBook.takeIf { selectedScreen == CompanionScreen.Library }
+            val viewingBook = openBook != null
+            val navigateBack = {
+                if (viewingBook) {
+                    selectedBookId = null
+                } else {
+                    val (screen, destination) = previousScreen(selectedScreen, settingsDestination, wide)
+                    selectedScreenName = screen.name
+                    settingsDestinationName = destination?.name
+                }
+            }
+            NavigationBackHandler(
+                state = rememberNavigationEventState(NavigationEventInfo.None),
+                isBackEnabled = viewingBook || selectedScreen == CompanionScreen.Settings,
+                onBackCompleted = navigateBack,
+            )
+            Row(modifier = Modifier.fillMaxSize()) {
+                if (wide) {
+                    NavigationRail {
+                        CompanionScreen.entries.forEach { screen ->
+                            NavigationRailItem(
+                                selected = selectedScreen == screen,
+                                onClick = { selectedScreenName = screen.name },
+                                icon = { Icon(imageVector = screen.icon, contentDescription = null) },
+                                label = { Text(screen.label) },
+                            )
+                        }
+                    }
+                }
+                Scaffold(
+                    modifier = Modifier.weight(1f),
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = if (!wide && selectedScreen == CompanionScreen.Settings) {
+                                    settingsDestination?.label ?: "Settings"
+                                } else if (openBook != null) {
+                                    openBook.displayTitle
+                                } else {
+                                    selectedScreen.label
+                                },
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            ConnectionButton(
+                                uiState = uiState,
+                                onConnect = onConnect,
+                                onOpenControls = { showConnectionDialog = true },
+                            )
+                        }
+                    },
+                    navigationIcon = {
+                        if (viewingBook || (!wide && selectedScreen == CompanionScreen.Settings)) {
+                            IconButton(onClick = navigateBack) {
+                                Icon(
+                                    Icons.AutoMirrored.Outlined.ArrowBack,
+                                    contentDescription = when {
+                                        viewingBook -> "Back to library"
+                                        settingsDestination != null -> "Back to settings"
+                                        else -> "Back to library"
+                                    },
+                                )
+                            }
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { showHelpDialog = true }) {
+                            Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help")
+                        }
+                        if (!wide && selectedScreen == CompanionScreen.Library && !viewingBook) {
+                            IconButton(onClick = { selectedScreenName = CompanionScreen.Settings.name }) {
+                                Icon(Icons.Outlined.Settings, contentDescription = "Settings")
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                )
             },
             snackbarHost = {
                 val bookJob = uiState.bookJob
@@ -167,57 +321,64 @@ fun RsvpNanoSharedApp(
                 }
             },
             floatingActionButton = {
-                ExtendedFloatingActionButton(
-                    onClick = onConnect,
-                    icon = { Icon(imageVector = Icons.Outlined.Wifi, contentDescription = null) },
-                    text = { Text(if (uiState.isConnected) "Reconnect" else "Connect") },
-                )
-            },
-            floatingActionButtonPosition = FabPosition.End,
-            bottomBar = {
-                NavigationBar {
-                    CompanionTab.entries.forEach { tab ->
-                        NavigationBarItem(
-                            selected = selectedTab == tab,
-                            onClick = { selectedTab = tab },
-                            icon = { Icon(imageVector = tab.icon, contentDescription = null) },
-                            label = { Text(text = tab.label) },
-                        )
-                    }
+                if (selectedScreen == CompanionScreen.Library && !viewingBook) {
+                    ExtendedFloatingActionButton(
+                        onClick = { showAddPicker = true },
+                        icon = { Icon(Icons.Outlined.Add, contentDescription = null) },
+                        text = { Text("Add content") },
+                    )
                 }
             },
+            floatingActionButtonPosition = FabPosition.End,
         ) { contentPadding ->
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(contentPadding)
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                contentAlignment = Alignment.TopCenter,
             ) {
-                when (selectedTab) {
-                    CompanionTab.Library -> LibraryTab(
-                        uiState = uiState,
-                        onRefresh = presenter::refresh,
-                        needsArticleFetch = PendingUpload::needsArticleFetch,
-                        onEditDraft = {
-                            presenter.editDraft(it)
-                            showArticleDialog = true
-                        },
-                        onDeleteDraft = presenter::deleteDraft,
-                        onSyncArticles = presenter::syncSavedArticles,
-                        onDeleteBook = presenter::deleteDeviceBook,
-                        onSetBookPosition = presenter::setBookPosition,
-                        onShowUpload = { showAddPicker = true },
-                    )
+                Box(modifier = Modifier.fillMaxSize().widthIn(max = 840.dp)) {
+                    if (openBook != null) {
+                        BookDetailScreen(
+                            book = openBook,
+                            availableFonts = uiState.availableFonts,
+                            globalFontId = uiState.settings?.reading?.typography?.fontId.orEmpty(),
+                            wpm = uiState.settings?.reading?.wpm ?: 300,
+                            onSetPosition = { presenter.setBookPosition(openBook, it) },
+                            onSetLanguageFonts = { presenter.setBookLanguageFonts(openBook, it) },
+                        )
+                    } else {
+                        when (selectedScreen) {
+                            CompanionScreen.Library -> LibraryScreen(
+                                uiState = uiState,
+                                onRefresh = presenter::refreshLibrary,
+                                needsArticleFetch = PendingUpload::needsArticleFetch,
+                                onEditDraft = {
+                                    presenter.editDraft(it)
+                                    showArticleDialog = true
+                                },
+                                onDeleteDraft = presenter::deleteDraft,
+                                onSyncArticles = presenter::syncSavedArticles,
+                                onOpenBook = { selectedBookId = it.id },
+                                onDeleteBook = presenter::deleteDeviceBook,
+                                onAddContent = { showAddPicker = true },
+                            )
 
-                    CompanionTab.Settings -> SettingsTab(
-                        uiState = uiState,
-                        presenter = presenter,
-                        onFirmwareNotificationsChange = onFirmwareNotificationsChange,
-                        hasPermissions = hasPermissions,
-                        onGrantPermissions = onGrantPermissions,
-                        onUploadTheme = { themePicker.launch() },
-                        onUploadFont = { fontPicker.launch() },
-                    )
+                            CompanionScreen.Settings -> SettingsScreen(
+                                uiState = uiState,
+                                presenter = presenter,
+                                onFirmwareNotificationsChange = onFirmwareNotificationsChange,
+                                hasPermissions = hasPermissions,
+                                onGrantPermissions = onGrantPermissions,
+                                onUploadTheme = { themePicker.launch() },
+                                onUploadFont = { fontPicker.launch() },
+                                onUploadLocalePack = { localePackPicker.launch() },
+                                destination = activeSettingsDestination,
+                                onDestinationSelected = { settingsDestinationName = it.name },
+                            )
+                        }
+                    }
                 }
             }
 
@@ -278,62 +439,136 @@ fun RsvpNanoSharedApp(
                     onDeleteFeed = presenter::deleteRssFeed,
                 )
             }
+
+            if (showConnectionDialog) {
+                ConnectionDialog(
+                    uiState = uiState,
+                    onDismiss = { showConnectionDialog = false },
+                    onReconnect = {
+                        showConnectionDialog = false
+                        onConnect()
+                    },
+                    onRememberCurrentNano = presenter::rememberCurrentNano,
+                )
+            }
+
+            if (showHelpDialog) {
+                val help = when (selectedScreen) {
+                    CompanionScreen.Library -> if (viewingBook) {
+                        "Book details" to "Review metadata, choose language fonts, or set a new reading position by chapter or percentage."
+                    } else {
+                        "Library" to "Add books, saved articles, or RSS feeds here. Connect to sync them with your reader."
+                    }
+                    CompanionScreen.Settings -> activeSettingsDestination
+                        ?.let { it.label to it.help }
+                        ?: ("Settings" to SETTINGS_INDEX_HELP)
+                }
+                HelpDialog(
+                    title = help.first,
+                    body = help.second,
+                    onDismiss = { showHelpDialog = false },
+                )
+            }
+        }
+            }
         }
     }
 }
 
+internal fun previousScreen(
+    screen: CompanionScreen,
+    settingsDestination: SettingsDestination?,
+    wide: Boolean,
+): Pair<CompanionScreen, SettingsDestination?> =
+    if (!wide && screen == CompanionScreen.Settings && settingsDestination != null) {
+        CompanionScreen.Settings to null
+    } else {
+        CompanionScreen.Library to settingsDestination
+    }
+
 @Composable
-private fun SharedConnectionBar(
+private fun ConnectionButton(
     uiState: CompanionUiState,
+    onConnect: () -> Unit,
+    onOpenControls: () -> Unit,
+) {
+    val busy = uiState.isCheckingReader || uiState.isRequestingNanoNetwork
+    TextButton(
+        onClick = if (uiState.isConnected) onOpenControls else onConnect,
+        enabled = !busy,
+    ) {
+        if (busy) {
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+        } else if (uiState.isConnected) {
+            ConnectionDot()
+        } else {
+            Icon(Icons.Outlined.Wifi, contentDescription = null)
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = when {
+                busy -> "Connecting"
+                uiState.isConnected -> uiState.currentNano?.ssid ?: "Nano"
+                else -> "Connect"
+            },
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun ConnectionDot() {
+    Box(
+        Modifier
+            .size(8.dp)
+            .clip(CircleShape)
+            .background(Color(0xFF3C8C69)),
+    )
+}
+
+@Composable
+private fun ConnectionDialog(
+    uiState: CompanionUiState,
+    onDismiss: () -> Unit,
+    onReconnect: () -> Unit,
     onRememberCurrentNano: () -> Unit,
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = if (uiState.isConnected) Icons.Outlined.CheckCircle else Icons.Outlined.Wifi,
-                    contentDescription = null,
-                )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
+        title = { Text(uiState.currentNano?.ssid ?: "RSVP Nano") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Connected", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    text = uiState.status,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium,
+                    when (uiState.connectionState.transport) {
+                        NanoConnectionTransport.LocalNetwork -> "Using the local network"
+                        NanoConnectionTransport.AccessPoint -> "Using the Nano's direct Wi-Fi"
+                        null -> uiState.baseUrl
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (uiState.isCheckingReader || uiState.isRefreshing) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                }
-            }
-            if (uiState.canRememberCurrentNano) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Remember ${uiState.nanoSsid} for direct connection when regular Wi-Fi is unavailable?",
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                if (uiState.canRememberCurrentNano) {
                     TextButton(onClick = onRememberCurrentNano) {
-                        Text("Remember")
+                        Text("Remember this Nano")
                     }
                 }
             }
-        }
-    }
+        },
+        confirmButton = { TextButton(onClick = onReconnect) { Text("Reconnect") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+@Composable
+private fun HelpDialog(title: String, body: String, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = null) },
+        title = { Text("$title help") },
+        text = { Text(body) },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Got it") } },
+    )
 }
 
 @Composable

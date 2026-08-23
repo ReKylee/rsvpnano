@@ -71,6 +71,12 @@ adb -s PHONE_LAN_IP:5555 install -r RSVPNanoCompanion/androidApp/build/outputs/a
 The app permits cleartext HTTP because the reader exposes its companion API only on the local
 network or its direct Wi-Fi network while Companion Sync is open.
 
+Connecting performs one identity request to `/api/v2/device`. Library and settings resources load
+when their screens need them, and a failed resource request does not discard an otherwise healthy
+reader connection. On Android, direct-network requests use sockets bound to the selected Nano
+network; the app does not switch the process-wide network used by catalog downloads and article
+fetching.
+
 ## Share Target
 
 The Android share target accepts:
@@ -88,5 +94,5 @@ articles.
 The app can list/upload/delete books, read and save device settings, read/save/clear Wi-Fi
 settings, add local RSS feeds, sync RSS feeds, save article drafts, fetch URL-only article drafts,
 sync saved articles, and set a book's saved resume location when indexed metadata is available.
-Device API sync uses the shared `NanoClient`/controller services and should stay thin in the Compose
+Device operations use the shared `NanoApi`/controller services and should stay thin in the Compose
 layer.

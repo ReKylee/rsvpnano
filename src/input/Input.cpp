@@ -131,7 +131,7 @@ namespace Input {
             }
         }
 
-        bool pollControlsEvent(ActionMask shortActions, ActionMask longActions, uint32_t nowMs, Event& event) {
+        bool pollControlsEvent(ActionMask shortActions, ActionMask longActions, uint32_t nowMs, ActionMask& event) {
             updateControls(shortActions, longActions, nowMs);
 
             if (anyAction(gControls.stableShortActions, gControls.stableLongActions)
@@ -143,8 +143,7 @@ namespace Input {
                     gControls.activeLongActions = ActionNone;
                     return false;
                 }
-                event = {};
-                event.actions = actions;
+                event = actions;
                 gControls.activeShortActions = ActionNone;
                 gControls.activeLongActions = ActionNone;
                 return true;
@@ -158,8 +157,7 @@ namespace Input {
                     gControls.activeLongActions = ActionNone;
                     return false;
                 }
-                event = {};
-                event.actions = actions;
+                event = actions;
                 gControls.activeShortActions = ActionNone;
                 gControls.activeLongActions = ActionNone;
                 return true;
@@ -215,7 +213,7 @@ namespace Input {
                 const uint32_t nowMs = millis();
                 if (deadlineReached(nowMs, nextControlsMs)) {
                     const PressActions actions = Board::Input::currentActions();
-                    Event event;
+                    ActionMask event = ActionNone;
                     if (pollControlsEvent(actions.shortPress, actions.longPress, nowMs, event))
                         enqueueLatest(gEventQueue, event);
                     nextControlsMs = nowMs + kControlsPollMs;
@@ -309,7 +307,7 @@ namespace Input {
         gTouchTiming = Board::Input::touchTiming();
         const PressActions actions = Board::Input::currentActions();
         resetControls(actions.shortPress, actions.longPress, millis());
-        gEventQueue = xQueueCreate(kEventQueueLength, sizeof(Event));
+        gEventQueue = xQueueCreate(kEventQueueLength, sizeof(ActionMask));
         gTouchQueue = xQueueCreate(kTouchQueueLength, sizeof(TouchSample));
         if (gEventQueue == nullptr || gTouchQueue == nullptr) {
             ESP_LOGE("input", "queue allocation failed event=%u touch=%u", gEventQueue != nullptr ? 1U : 0U,
@@ -362,12 +360,12 @@ namespace Input {
         gPaused.store(false);
     }
 
-    bool poll(Event& event) {
-        event = {};
+    bool poll(ActionMask& actions) {
+        actions = ActionNone;
         if (gEventQueue == nullptr) {
             return false;
         }
-        return xQueueReceive(gEventQueue, &event, 0) == pdTRUE;
+        return xQueueReceive(gEventQueue, &actions, 0) == pdTRUE;
     }
 
     ui::TouchSampleResult pollTouch(ui::TouchContact& contact) {

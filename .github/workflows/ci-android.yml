@@ -5,6 +5,7 @@ env:
 
 on:
   push:
+    branches: [main]
     paths:
       - 'build.gradle.kts'
       - 'settings.gradle.kts'

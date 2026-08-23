@@ -24,6 +24,7 @@ class ArticleFetchClient(
     private val httpClient: HttpClient,
     private val maxFetchedBytes: Int = 900_000,
     private val maxTextCharacters: Int = 250_000,
+    private val userAgent: String? = "Mozilla/5.0 RSVP Nano Companion",
 ) {
     suspend fun fetch(title: String, source: String): SharedArticle {
         val normalizedSource = source.trim()
@@ -32,7 +33,7 @@ class ArticleFetchClient(
         }
 
         val response = httpClient.get(normalizedSource) {
-            header(HttpHeaders.UserAgent, "Mozilla/5.0 RSVP Nano Companion")
+            userAgent?.let { header(HttpHeaders.UserAgent, it) }
         }
         if (!response.status.isSuccess()) {
             throw NanoClientError("Article fetch failed with HTTP ${response.status.value}")

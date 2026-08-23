@@ -544,6 +544,7 @@ private fun ConnectionDialog(
                     when (uiState.connectionState.transport) {
                         NanoConnectionTransport.LocalNetwork -> "Using the local network"
                         NanoConnectionTransport.AccessPoint -> "Using the Nano's direct Wi-Fi"
+                        NanoConnectionTransport.Usb -> "Using USB"
                         null -> uiState.baseUrl
                     },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

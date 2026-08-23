@@ -32,16 +32,16 @@ internal object RsvpTextUtils {
             return data.copyOfRange(3, data.size).decodeUtf8()
         }
         if (data.size >= 2 && data[0] == 0xFF.toByte() && data[1] == 0xFE.toByte()) {
-            return PlatformTextDecoder.decode(data.copyOfRange(2, data.size), "utf-16le")
+            return RsvpTextDecoder.decode(data.copyOfRange(2, data.size), "utf-16le")
         }
         if (data.size >= 2 && data[0] == 0xFE.toByte() && data[1] == 0xFF.toByte()) {
-            return PlatformTextDecoder.decode(data.copyOfRange(2, data.size), "utf-16be")
+            return RsvpTextDecoder.decode(data.copyOfRange(2, data.size), "utf-16be")
         }
 
         val initialEncoding = detectUtf16WithoutBom(data) ?: "utf-8"
         val decoded = data.decodeOrNull(initialEncoding)
-            ?: PlatformTextDecoder.decode(data, "windows-1252")
-            ?: PlatformTextDecoder.decode(data, "ISO-8859-1")
+            ?: RsvpTextDecoder.decode(data, "windows-1252")
+            ?: RsvpTextDecoder.decode(data, "ISO-8859-1")
             ?: return null
 
         val declared = sniffDeclaredEncoding(decoded)
@@ -340,7 +340,7 @@ internal object RsvpTextUtils {
 
     private fun ByteArray.decodeOrNull(charsetName: String): String? {
         return try {
-            if (charsetName == "utf-8") decodeUtf8() else PlatformTextDecoder.decode(this, charsetName)
+            if (charsetName == "utf-8") decodeUtf8() else RsvpTextDecoder.decode(this, charsetName)
         } catch (_: Exception) {
             null
         }

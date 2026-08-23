@@ -58,6 +58,7 @@ sealed interface NanoConnectionState {
 enum class NanoConnectionTransport {
     LocalNetwork,
     AccessPoint,
+    Usb,
 }
 
 data class NanoWifiSnapshot(
@@ -76,7 +77,8 @@ data class NanoWifiSnapshot(
                     previous.transport == NanoConnectionTransport.AccessPoint -> previous
                 else -> NanoConnectionState.WifiAttached(identity)
             }
-            previous.transport == NanoConnectionTransport.LocalNetwork -> previous
+            previous.transport == NanoConnectionTransport.LocalNetwork ||
+                previous.transport == NanoConnectionTransport.Usb -> previous
             else -> NanoConnectionState.Disconnected
         }
     }

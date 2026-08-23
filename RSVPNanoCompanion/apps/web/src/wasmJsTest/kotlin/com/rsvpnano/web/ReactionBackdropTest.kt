@@ -22,8 +22,9 @@ class ReactionBackdropTest {
     }
 
     @Test
-    fun reactionCellsCoverThePanelWithoutStretching() {
-        assertEquals(20f, reactionCellSize(width = 520f, height = 240f, columns = 26, rows = 18))
-        assertEquals(20f, reactionCellSize(width = 260f, height = 360f, columns = 26, rows = 18))
+    fun reactionGridTracksThePanelShape() {
+        assertEquals(30 to 60, reactionGridDimensions(width = 300, height = 600))
+        assertEquals(60 to 30, reactionGridDimensions(width = 600, height = 300))
+        assertEquals(30 to 30, reactionGridDimensions(width = 0, height = 0))
     }
 }

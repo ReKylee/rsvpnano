@@ -8,31 +8,36 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.layout.onSizeChanged
 import kotlinx.coroutines.delay
-import kotlin.math.max
+import kotlin.math.ceil
+import kotlin.math.min
 
-private const val ReactionColumns = 42
-private const val ReactionRows = 30
+private const val ReactionShortAxisCells = 30
 private const val ReactionStateCount = 12
 
 @Composable
 internal fun ReactionBackdrop(modifier: Modifier = Modifier) {
-    val cells = remember { seededReactionCells(ReactionColumns * ReactionRows) }
-    val next = remember { IntArray(cells.size) }
+    var grid by remember { mutableStateOf(ReactionShortAxisCells to ReactionShortAxisCells) }
+    val (columns, rows) = grid
+    val cells = remember(columns, rows) { seededReactionCells(columns * rows) }
+    val next = remember(columns, rows) { IntArray(cells.size) }
     val statePaths = remember { Array(4) { Path() } }
     var generation by remember { mutableIntStateOf(0) }
     val reducedMotion = remember { prefersReducedMotion() }
 
-    LaunchedEffect(reducedMotion) {
+    LaunchedEffect(reducedMotion, columns, rows) {
         if (!reducedMotion) {
             while (true) {
                 delay(140)
-                stepReaction(cells, next, ReactionColumns, ReactionRows)
+                stepReaction(cells, next, columns, rows)
                 generation++
             }
         }
@@ -40,18 +45,23 @@ internal fun ReactionBackdrop(modifier: Modifier = Modifier) {
 
     val bright = MaterialTheme.colorScheme.tertiary
     val dim = MaterialTheme.colorScheme.primary
-    Canvas(modifier) {
+    Canvas(
+        modifier.onSizeChanged { size ->
+            val resized = reactionGridDimensions(size.width, size.height)
+            if (resized != grid) grid = resized
+        }.clipToBounds(),
+    ) {
         @Suppress("UNUSED_EXPRESSION")
         generation
         statePaths.forEach(Path::reset)
-        val cellSize = reactionCellSize(size.width, size.height, ReactionColumns, ReactionRows)
-        val originX = (size.width - cellSize * ReactionColumns) / 2f
-        val originY = (size.height - cellSize * ReactionRows) / 2f
+        val cellSize = min(size.width / columns, size.height / rows)
+        val originX = (size.width - cellSize * columns) / 2f
+        val originY = (size.height - cellSize * rows) / 2f
         val inset = cellSize * 0.14f
         cells.forEachIndexed { index, state ->
             if (state !in 1..4) return@forEachIndexed
-            val x = index % ReactionColumns
-            val y = index / ReactionColumns
+            val x = index % columns
+            val y = index / columns
             val left = originX + x * cellSize + inset
             val top = originY + y * cellSize + inset
             statePaths[state - 1].addRect(
@@ -67,8 +77,14 @@ internal fun ReactionBackdrop(modifier: Modifier = Modifier) {
     }
 }
 
-internal fun reactionCellSize(width: Float, height: Float, columns: Int, rows: Int): Float =
-    max(width / columns, height / rows)
+internal fun reactionGridDimensions(width: Int, height: Int): Pair<Int, Int> {
+    if (width <= 0 || height <= 0) return ReactionShortAxisCells to ReactionShortAxisCells
+    return if (width <= height) {
+        ReactionShortAxisCells to ceil(ReactionShortAxisCells * height.toDouble() / width).toInt()
+    } else {
+        ceil(ReactionShortAxisCells * width.toDouble() / height).toInt() to ReactionShortAxisCells
+    }
+}
 
 internal fun seededReactionCells(size: Int): IntArray {
     var seed = 0x52_53_56_50

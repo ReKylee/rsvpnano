@@ -208,8 +208,6 @@ std::expected<std::reference_wrapper<const FontCatalog::Family>, std::string> Fo
                     });
                 })
                 .and_then([&]() -> std::expected<void, std::string> {
-                    if (StorageFiles::fileExists(finalPath.c_str()))
-                        return std::unexpected("Font family already exists");
                     return StorageFiles::replaceFileAtomic(Board::Storage::filesystem(), finalPath.c_str(),
                                                            staged.c_str(), (finalPath + ".bak").c_str())
                         .transform_error([&](std::error_code) {

@@ -84,7 +84,7 @@ std::expected<std::reference_wrapper<const ui::themes::Theme>, std::string> Them
             return std::string{"Theme folder could not be created"};
         })
         .and_then([&]() -> std::expected<ui::themes::Theme, std::string> {
-            if (StorageFiles::fileExists(final.c_str()))
+            if (find(id) != nullptr)
                 return std::unexpected("Theme already exists");
             return StorageFiles::readTextFile(Board::Storage::filesystem(), staged.c_str(), kMaximumFileBytes)
                 .transform_error([](std::error_code) {

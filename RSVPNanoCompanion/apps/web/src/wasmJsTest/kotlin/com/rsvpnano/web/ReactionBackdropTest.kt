@@ -2,6 +2,7 @@ package com.rsvpnano.web
 
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -18,5 +19,11 @@ class ReactionBackdropTest {
         assertContentEquals(first, second)
         assertFalse(first.contentEquals(before))
         assertTrue(first.all { it in 0 until 12 })
+    }
+
+    @Test
+    fun reactionCellsCoverThePanelWithoutStretching() {
+        assertEquals(20f, reactionCellSize(width = 520f, height = 240f, columns = 26, rows = 18))
+        assertEquals(20f, reactionCellSize(width = 260f, height = 360f, columns = 26, rows = 18))
     }
 }

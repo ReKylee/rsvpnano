@@ -29,6 +29,10 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.rsvpnano.companion.firmware-update</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
@@ -38,7 +42,7 @@
 	</dict>
 	<key>NSBonjourServices</key>
 	<array>
-		<string>_http._tcp</string>
+		<string>_rsvpnano._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>RSVP Nano uses the local network to connect to your reader while sync mode is open.</string>
@@ -47,6 +51,10 @@
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

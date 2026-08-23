@@ -2,7 +2,7 @@
 
 RSVP Nano is an open-source ESP32-S3 reading device that shows text one word at a time using RSVP, Rapid Serial Visual Presentation. It is designed for small screens, SD card libraries, fast reading, and a simple browser-first workflow for converting and uploading books.
 
-This README is written for the current release, `v0.0.8`.
+This README tracks the current main branch and the `preview-v0.0.9` preview.
 
 ## What You Need
 
@@ -58,10 +58,9 @@ option instead; it uses the alternate GPIO42 backlight profile.
 For Waveshare Touch AMOLED 1.8 boards, choose the V1 option for SH8601 display / FT3168 touch
 hardware. Choose the V2 Test option only for newer CO5300 display / CST816 touch hardware.
 
-The hosted flasher installs the latest published GitHub Release. For `v0.0.8`, that means the
-release build includes the firmware, SD card, RSS, companion sync, USB transfer, quick settings,
-browser flasher, menu, input, battery, display, multi-board, compact timer, and one-handed reader
-control work described below.
+The hosted flasher installs the latest published GitHub Release. Preview builds add the current
+multi-board firmware, durable SD progress, OTA tag pinning, and companion app progress editing work
+described below.
 
 Make sure your USB cable is a data cable.
 
@@ -81,7 +80,7 @@ Create these folders on the card:
 /config
 ```
 
-Books go in `/books/books`. Articles go in `/books/articles`. Older libraries with files directly inside `/books` are still read for compatibility, but the split folders are the recommended layout for `v0.0.8`.
+Books go in `/books/books`. Articles go in `/books/articles`. Older libraries with files directly inside `/books` are still read for compatibility, but the split folders are the recommended layout.
 
 If the device cannot see the SD card, the most common causes are:
 
@@ -123,7 +122,7 @@ Use this layout:
 /books/articles/my-article.rsvp
 ```
 
-On first open, the firmware may create `.ridx` and `.rdat` sidecar files next to a book. These are the SD-backed word index and normalized word data used for long books. Leave them on the card; they are rebuilt automatically if the source book changes.
+On first open, the firmware may create `.ridx` and `.rdat` sidecar files next to a book. These are the SD-backed word index and normalized word data used for long books. It also writes a hidden `.rstate.toml` book-state file for durable reading progress and per-book preferences. Leave these files on the card; cache files are rebuilt automatically if the source book changes, and stale state is ignored.
 
 Large books now load through the same indexed reading path as smaller books, with progress messages while indexes and time estimates are prepared. If a book cannot be prepared, the device should return to the menu with a readable reason instead of silently failing.
 
@@ -166,7 +165,7 @@ a native companion app installed.
 ### Option 4: Native Companion Apps
 
 The iOS and Android companion apps support companion sync, article drafts, share/import flows, RSS
-feed management, device settings, and library progress.
+feed management, device settings, library progress, and setting a book's saved resume location.
 
 Public app distribution is not set up yet. The iOS app can be installed from a Mac with Xcode, and
 the Android app can be built and installed with Android Studio or the Android SDK.
@@ -186,7 +185,17 @@ You can set Wi-Fi credentials from:
 - The web companion `Settings` page.
 - The native companion app settings page.
 - The on-device Wi-Fi settings page.
-- Advanced users can still use `/config/ota.conf`.
+
+User preferences are mirrored to `/config/settings.toml` on the SD card. Wi-Fi passwords are deliberately excluded
+from that file and remain in device storage; configure or change them through one of the settings interfaces above.
+The settings document is versionless: missing fields receive current defaults, unknown fields are discarded, and a
+successful load rewrites both the SD mirror and NVS blob into the current canonical TOML shape. See
+[`docs/configuration.md`](docs/configuration.md) for the file formats and recovery behavior.
+Hardware-backed NVS encryption is optional under `Device -> Storage encryption`. Enabling it permanently reserves one
+per-device eFuse key block and cannot be undone. The firmware keeps the current public settings and Wi-Fi password in
+RAM while NVS is erased and reinitialized, then writes both into encrypted NVS before restarting. Encryption protects
+NVS against raw flash access; without Secure Boot it does not prevent unauthorized firmware from accessing settings
+while running on the device.
 
 RSS feeds are managed from the web companion or the native app, then checked from the device with
 `Articles -> Update RSS`. New articles are saved into `/books/articles`.
@@ -205,8 +214,9 @@ RSS support in `v0.0.8` includes:
 Some feeds still block embedded clients, require JavaScript, return very large pages, or publish summaries instead of full articles. Those are feed or website limitations rather than SD card problems.
 
 OTA updates use GitHub Releases. Open `Settings -> Firmware update` on the device after Wi-Fi is configured.
-By default the updater follows the latest release; advanced `/config/ota.conf` setups can set
-`github_tag` to pin checks to one release tag.
+By default the updater follows the latest release; the device settings can set an OTA tag to pin checks to one
+release. Preview/fork channels can use
+`owner/repo@tag`, for example `ReKylee/rsvpnano@preview-v0.0.9`.
 
 ## Device Controls
 
@@ -238,6 +248,7 @@ reader screens, subtle handles at the top and bottom edges hint that those menus
 - Swipe down while paused: decrease WPM.
 - Tap the bottom-right footer label: switch between progress, chapter time remaining, book time remaining, and battery display modes.
 - Tap the top-right battery label: switch between percentage, time remaining, and voltage.
+- Hold the battery area: show or hide the battery icon. The setting is also available in the web and native companions.
 
 Pause behavior is configurable. In `Settings -> Word pacing`, choose whether reader shortcuts pause instantly or at the end of the sentence.
 
@@ -253,7 +264,7 @@ Sync
 ```
 
 `Brightness` cycles through the brightness presets. `Theme` cycles Dark, Light, Night, and Yellow.
-`Focus Timer` opens the orientation-based timer. `Sync` opens a second menu:
+`Focus Timer` opens the user-defined hourglass timers. `Sync` opens a second menu:
 
 ```text
 Wi-Fi Sync
@@ -306,9 +317,10 @@ Settings are grouped by how people actually use the device.
 - Left/right handed layout.
 - Reader controls layout, including an option to put rewind in the top-right corner.
 - Language.
-- Screen saver: Life, Maze, Voronoi, or Screen off.
+- Screen saver: Life, Maze, Voronoi, Reaction, or Screen off.
 - Standby timer.
 - Footer and battery label behavior.
+- Battery icon visibility.
 - Optional battery, chapter, and book percentage labels while actively reading.
 - Menu repeat speed.
 
@@ -391,16 +403,20 @@ RSS checks can continue in the background, while installable firmware updates st
 
 ### Focus Timer
 
-The Focus Timer uses the device orientation to guide work and break blocks.
+The Focus Timer provides up to six custom Pomodoro routines. Each routine has its own name,
+focus duration, break duration, and round count. The defaults are stored in
+`/config/focus.toml` on the SD card, where they can also be edited as TOML. Timer names are limited
+to 14 UTF-8 bytes (14 ASCII characters) so they fit above the hourglass.
 
 1. Swipe up from the bottom edge.
 2. Choose `Focus Timer`.
-3. Choose a timer category.
-4. Place or flip the device as prompted.
-5. Follow the on-screen timer.
-6. Use Back or `PWR` where available to exit the timer page.
+3. Tap a timer to start it, hold it to edit, or use Add to create one.
+4. Stand the device on either short end to begin focusing.
+5. When a phase finishes, flip it 180 degrees to start the next phase.
+6. Lay the device flat to pause, then return it to the same end to resume.
+7. Use Exit or Back to return to the timer list.
 
-Touch-and-hold during an active timer cancels the current timer block.
+The standard fallback routine is Pomodoro: 25 minutes of focus, 5 minutes of break, for four rounds.
 
 ### SD Card Check
 
@@ -422,6 +438,7 @@ The native companion apps are working locally, but public distribution is not se
 Current app features include:
 
 - Library view for books and articles.
+- Exact book progress and saved-location editing when the reader has indexed the book.
 - Article drafts, editing, preview, and sync.
 - Share/import flows.
 - Fetch article title and text where available.
@@ -500,7 +517,7 @@ Open the Xcode project from that folder when installing the app locally.
 To export browser-flasher and OTA firmware assets for a release:
 
 ```bash
-python3 tools/export_web_firmware.py --version v0.0.8
+python3 tools/export_web_firmware.py --version preview-v0.0.9
 ```
 
 That writes:
@@ -530,6 +547,16 @@ web/firmware/manifest-esp32-s3-touch-amoled-2.41.json
 ```
 
 ## Project Status
+
+`preview-v0.0.9` adds the current multi-board firmware base plus companion and storage polish:
+
+- Adds durable `.rstate.toml` book state next to each book for reading progress and per-book typography.
+- Keeps active progress in RAM and writes book state at book switches and other lifecycle boundaries.
+- Exposes opaque book IDs, source identity, word counts, exact saved positions, and chapters through
+  the companion API.
+- Lets the native companion app set a saved book location by chapter, slider, or exact word number.
+- Adds OTA release-tag pinning, including fork preview tags in `owner/repo@tag` form.
+- Uses board-specific full-image asset names for the LCD 3.49 browser flasher builds.
 
 `v0.0.8` focuses on reader touch ergonomics and more resilient RSS downloads:
 
@@ -579,4 +606,4 @@ The next areas of work are:
 
 MIT. See [LICENSE](LICENSE).
 
-The embedded OpenDyslexic and Atkinson Hyperlegible typeface assets are derived from the upstream projects and are included under the SIL Open Font License. See [third_party/opendyslexic/OFL.txt](third_party/opendyslexic/OFL.txt) and [third_party/atkinson-hyperlegible/OFL.txt](third_party/atkinson-hyperlegible/OFL.txt).
+The bundled fonts include their upstream license files beside the corresponding catalog assets under [`fonts/`](fonts/).

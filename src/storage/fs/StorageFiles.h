@@ -1,16 +1,24 @@
 #pragma once
 
-#include <Arduino.h>
+#include <expected>
+#include <string>
+#include <string_view>
+#include <system_error>
+
+namespace fs {
+    class FS;
+}
 
 namespace StorageFiles {
 
-    void logError(const char* tag, const char* operation, const String& path, int error);
-    void
-    logError(const char* tag, const char* operation, const String& sourcePath, const String& targetPath, int error);
-
     bool directoryExists(const char* path);
-    bool fileExists(const String& path);
-    bool fileExistsWithBytes(const String& path);
-    bool ensureDirectory(const char* path, const char* tag = "storage");
+    bool fileExists(const char* path);
+    bool fileExistsWithBytes(const char* path);
+    std::expected<void, std::error_code> ensureDirectory(const char* path);
+    std::expected<std::string, std::error_code> readTextFile(fs::FS& filesystem, const char* path, size_t maximum);
+    std::expected<void, std::error_code> writeFileAtomic(fs::FS& filesystem, const char* path, const char* tempPath,
+                                                         const char* backupPath, std::string_view content);
+    std::expected<void, std::error_code> replaceFileAtomic(fs::FS& filesystem, const char* path, const char* tempPath,
+                                                           const char* backupPath);
 
 } // namespace StorageFiles

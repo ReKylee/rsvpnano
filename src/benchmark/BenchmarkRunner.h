@@ -2,6 +2,6 @@
 
 namespace Benchmark {
 
-void run();
+    void run();
 
-}  // namespace Benchmark
+} // namespace Benchmark

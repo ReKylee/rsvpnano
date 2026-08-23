@@ -1,6 +1,9 @@
 #pragma once
 
-#include <Arduino.h>
+#include <expected>
+#include <string>
+#include <string_view>
+#include <system_error>
 
 #ifndef RSVP_MAX_BOOK_WORDS
 #define RSVP_MAX_BOOK_WORDS 0
@@ -24,10 +27,11 @@ public:
         size_t maxExtractBytes;
         size_t maxContentBytes;
         ProgressCallback progressCallback;
-        String progressTitle;
-        String progressLabel;
+        std::string progressTitle;
+        std::string progressLabel;
     };
 
-    static bool convertIfNeeded(const String& epubPath, const String& rsvpPath, const Options& options = Options());
-    static bool isCurrentCache(const String& rsvpPath);
+    static std::expected<void, std::error_code> convertIfNeeded(std::string_view epubPath, std::string_view rsvpPath,
+                                                                const Options& options = Options());
+    static bool isCurrentCache(std::string_view rsvpPath);
 };

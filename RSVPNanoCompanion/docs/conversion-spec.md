@@ -167,6 +167,12 @@ Kotlin implementation should use shared ZIP and DOM parsing through `:conversion
 possible. The resulting `.rsvp` output should still match the reference test cases unless a runtime
 limitation is documented.
 
+The firmware converter streams EPUB content to keep memory use bounded. It currently accepts UTF-8
+EPUB package and XHTML content; UTF-16, Windows-1252, and Latin-1 transcoding remain limited to the
+companion conversion runtimes. Streaming also means the firmware cannot retroactively discard an
+entire generated title or contents document after parsing it; it still suppresses navigation
+subtrees and non-content chapter headings while parsing.
+
 ## Parity Requirements
 
 - New converter behavior requires a reference test case.

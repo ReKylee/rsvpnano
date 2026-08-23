@@ -1,15 +1,16 @@
 #pragma once
 
 #include <Arduino.h>
+#include <Arduino_GFX_Library.h>
 
-#include "board/BoardTypes.h"
+#include "ui/Touch.h"
 
 namespace Board::Display {
 
     bool begin();
-    void holdBacklightOffForDeepSleep();
-    Board::UiOrientation defaultUiOrientation();
-    Board::UiOrientation rotatedUiOrientation();
+    Arduino_GFX& gfx();
+    ui::Orientation defaultUiOrientation();
+    ui::Orientation rotatedUiOrientation();
     uint16_t nativeWidth();
     uint16_t nativeHeight();
     size_t txChunkBytes();

@@ -1,0 +1,28 @@
+name = "Tokyo Night"
+
+[typography]
+fontId = "literata"
+fontSizeIndex = 0
+focusHighlight = true
+tracking = 0
+anchor = 30
+guideWidth = 30
+guideGap = 5
+
+[colors]
+background = "#1A1B26"
+foreground = "#C0CAF5"
+muted = "#9AA5CE"
+subtle = "#565F89"
+accent = "#F7768E"
+accentBar = "#7AA2F7"
+breakAccent = "#7DCFFF"
+onAccent = "#1A1B26"
+surface = "#16161E"
+surfaceMuted = "#292E42"
+surfaceActive = "#3B4261"
+outline = "#565F89"
+guide = "#737AA2"
+guideFocus = "#F7768E"
+phantom = "#565F89"
+progressTrack = "#292E42"

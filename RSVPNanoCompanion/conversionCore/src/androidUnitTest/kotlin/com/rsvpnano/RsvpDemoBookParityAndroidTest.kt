@@ -20,7 +20,7 @@ class RsvpDemoBookParityAndroidTest {
 
     private fun demoBookFile(name: String): File {
         val candidates = generateSequence(File("").absoluteFile) { it.parentFile }
-            .map { File(it, "docs/demo-books/$name") }
+            .map { File(it, "RSVPNanoCompanion/testdata/localization/$name") }
             .toList()
         return candidates.firstOrNull { it.isFile }
             ?: error("Demo book not found. Checked: ${candidates.joinToString { it.path }}")

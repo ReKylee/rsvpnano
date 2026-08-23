@@ -1,884 +1,1016 @@
 #include "reader/ReadingLoop.h"
+#include "storage/index/IndexedBookStore.h"
 
 #include <algorithm>
-#include <utility>
+#include <string_view>
 
-#include "text/LatinText.h"
+#include "text/UnicodeText.h"
+#include "text/Utf8Text.h"
 
 namespace {
 
-constexpr const char *kDemoWords[] = {
-    "This",        "is",         "the",         "minimal",     "RSVP",
-    "demo",        "reader",     "running",     "on",          "the",
-    "Waveshare",   "AMOLED",     "board.",
+    constexpr const char* kDemoWords[] = {
+        "This",
+        "is",
+        "the",
+        "minimal",
+        "RSVP",
+        "demo",
+        "reader",
+        "running",
+        "on",
+        "the",
+        "Waveshare",
+        "AMOLED",
+        "board.",
 
-    "Rapid",       "Serial",     "Visual",      "Presentation,", "or",
-    "RSVP,",       "is",         "a",           "reading",     "technique",
-    "that",        "displays",   "text",        "one",         "word",
-    "at",          "a",          "time",        "in",          "a",
-    "fixed",       "position",   "on",          "the",         "screen.",
-    "Instead",     "of",         "moving",      "your",        "eyes",
-    "across",      "lines",      "and",         "paragraphs,", "you",
-    "keep",        "your",       "gaze",        "locked",      "on",
-    "a",           "single",     "point",       "while",       "words",
-    "flash",       "in",         "sequence.",   "This",        "eliminates",
-    "saccades,",   "the",        "small",       "rapid",       "eye",
-    "movements",   "that",       "consume",     "a",           "surprising",
-    "amount",      "of",         "time",        "during",      "traditional",
-    "reading.",
+        "Rapid",
+        "Serial",
+        "Visual",
+        "Presentation,",
+        "or",
+        "RSVP,",
+        "is",
+        "a",
+        "reading",
+        "technique",
+        "that",
+        "displays",
+        "text",
+        "one",
+        "word",
+        "at",
+        "a",
+        "time",
+        "in",
+        "a",
+        "fixed",
+        "position",
+        "on",
+        "the",
+        "screen.",
+        "Instead",
+        "of",
+        "moving",
+        "your",
+        "eyes",
+        "across",
+        "lines",
+        "and",
+        "paragraphs,",
+        "you",
+        "keep",
+        "your",
+        "gaze",
+        "locked",
+        "on",
+        "a",
+        "single",
+        "point",
+        "while",
+        "words",
+        "flash",
+        "in",
+        "sequence.",
+        "This",
+        "eliminates",
+        "saccades,",
+        "the",
+        "small",
+        "rapid",
+        "eye",
+        "movements",
+        "that",
+        "consume",
+        "a",
+        "surprising",
+        "amount",
+        "of",
+        "time",
+        "during",
+        "traditional",
+        "reading.",
 
-    "The",         "concept",    "emerged",     "from",        "cognitive",
-    "psychology",  "research",   "in",          "the",         "1970s,",
-    "when",        "scientists", "began",       "studying",    "how",
-    "quickly",     "the",        "human",       "brain",       "could",
-    "process",     "written",    "language.",   "They",        "discovered",
-    "that",        "much",       "of",          "the",         "time",
-    "spent",       "reading",    "is",          "not",         "actually",
-    "spent",       "understanding", "words",    "but",         "rather",
-    "physically",  "relocating", "the",         "eyes",        "from",
-    "one",         "word",       "to",          "the",         "next.",
-    "By",          "removing",   "that",        "mechanical",  "overhead,",
-    "readers",     "could",      "absorb",      "text",        "significantly",
-    "faster",      "without",    "losing",      "comprehension.",
+        "The",
+        "concept",
+        "emerged",
+        "from",
+        "cognitive",
+        "psychology",
+        "research",
+        "in",
+        "the",
+        "1970s,",
+        "when",
+        "scientists",
+        "began",
+        "studying",
+        "how",
+        "quickly",
+        "the",
+        "human",
+        "brain",
+        "could",
+        "process",
+        "written",
+        "language.",
+        "They",
+        "discovered",
+        "that",
+        "much",
+        "of",
+        "the",
+        "time",
+        "spent",
+        "reading",
+        "is",
+        "not",
+        "actually",
+        "spent",
+        "understanding",
+        "words",
+        "but",
+        "rather",
+        "physically",
+        "relocating",
+        "the",
+        "eyes",
+        "from",
+        "one",
+        "word",
+        "to",
+        "the",
+        "next.",
+        "By",
+        "removing",
+        "that",
+        "mechanical",
+        "overhead,",
+        "readers",
+        "could",
+        "absorb",
+        "text",
+        "significantly",
+        "faster",
+        "without",
+        "losing",
+        "comprehension.",
 
-    "A",           "key",        "element",     "of",          "modern",
-    "RSVP",        "readers",    "is",          "the",         "Optimal",
-    "Recognition", "Point,",     "or",          "ORP.",        "Every",
-    "word",        "has",        "a",           "specific",    "letter",
-    "that",        "your",       "brain",       "naturally",   "fixates",
-    "on",          "first.",     "For",         "short",       "words",
-    "it",          "tends",      "to",          "be",          "near",
-    "the",         "beginning,", "for",         "longer",      "words",
-    "it",          "shifts",     "slightly",    "toward",      "the",
-    "center.",     "By",         "aligning",    "this",        "letter",
-    "at",          "a",          "fixed",       "position",    "on",
-    "screen,",     "and",        "highlighting", "it,",        "the",
-    "reader",      "can",        "recognize",   "each",        "word",
-    "faster",      "because",    "the",         "eye",         "does",
-    "not",         "need",       "to",          "search",      "for",
-    "where",       "to",         "focus.",
+        "A",
+        "key",
+        "element",
+        "of",
+        "modern",
+        "RSVP",
+        "readers",
+        "is",
+        "the",
+        "Optimal",
+        "Recognition",
+        "Point,",
+        "or",
+        "ORP.",
+        "Every",
+        "word",
+        "has",
+        "a",
+        "specific",
+        "letter",
+        "that",
+        "your",
+        "brain",
+        "naturally",
+        "fixates",
+        "on",
+        "first.",
+        "For",
+        "short",
+        "words",
+        "it",
+        "tends",
+        "to",
+        "be",
+        "near",
+        "the",
+        "beginning,",
+        "for",
+        "longer",
+        "words",
+        "it",
+        "shifts",
+        "slightly",
+        "toward",
+        "the",
+        "center.",
+        "By",
+        "aligning",
+        "this",
+        "letter",
+        "at",
+        "a",
+        "fixed",
+        "position",
+        "on",
+        "screen,",
+        "and",
+        "highlighting",
+        "it,",
+        "the",
+        "reader",
+        "can",
+        "recognize",
+        "each",
+        "word",
+        "faster",
+        "because",
+        "the",
+        "eye",
+        "does",
+        "not",
+        "need",
+        "to",
+        "search",
+        "for",
+        "where",
+        "to",
+        "focus.",
 
-    "The",         "speed",      "is",          "measured",    "in",
-    "words",       "per",        "minute,",     "or",          "WPM.",
-    "Average",     "silent",     "reading",     "speed",       "is",
-    "around",      "200",        "to",          "250",         "WPM.",
-    "With",        "RSVP,",      "many",        "people",      "comfortably",
-    "reach",       "300",        "to",          "500",         "WPM",
-    "after",       "a",          "short",       "adjustment",  "period.",
-    "Some",        "experienced", "users",      "push",        "beyond",
-    "600",         "WPM,",       "though",      "comprehension", "can",
-    "start",       "to",         "decline",     "at",          "very",
-    "high",        "speeds",     "depending",   "on",          "the",
-    "complexity",  "of",         "the",         "material.",
+        "The",
+        "speed",
+        "is",
+        "measured",
+        "in",
+        "words",
+        "per",
+        "minute,",
+        "or",
+        "WPM.",
+        "Average",
+        "silent",
+        "reading",
+        "speed",
+        "is",
+        "around",
+        "200",
+        "to",
+        "250",
+        "WPM.",
+        "With",
+        "RSVP,",
+        "many",
+        "people",
+        "comfortably",
+        "reach",
+        "300",
+        "to",
+        "500",
+        "WPM",
+        "after",
+        "a",
+        "short",
+        "adjustment",
+        "period.",
+        "Some",
+        "experienced",
+        "users",
+        "push",
+        "beyond",
+        "600",
+        "WPM,",
+        "though",
+        "comprehension",
+        "can",
+        "start",
+        "to",
+        "decline",
+        "at",
+        "very",
+        "high",
+        "speeds",
+        "depending",
+        "on",
+        "the",
+        "complexity",
+        "of",
+        "the",
+        "material.",
 
-    "Timing",      "is",         "also",        "adaptive.",   "Longer",
-    "words",       "stay",       "on",          "screen",      "slightly",
-    "longer",      "because",    "they",        "take",        "more",
-    "time",        "to",         "process.",    "Words",       "followed",
-    "by",          "punctuation", "like",       "commas,",     "periods,",
-    "or",          "question",   "marks",       "receive",     "an",
-    "extra",       "pause",      "to",          "let",         "the",
-    "brain",       "register",   "the",         "end",         "of",
-    "a",           "phrase",     "or",          "sentence.",   "This",
-    "mimics",      "the",        "natural",     "rhythm",      "of",
-    "reading,",    "and",        "prevents",    "the",         "experience",
-    "from",        "feeling",    "robotic.",
+        "Timing",
+        "is",
+        "also",
+        "adaptive.",
+        "Longer",
+        "words",
+        "stay",
+        "on",
+        "screen",
+        "slightly",
+        "longer",
+        "because",
+        "they",
+        "take",
+        "more",
+        "time",
+        "to",
+        "process.",
+        "Words",
+        "followed",
+        "by",
+        "punctuation",
+        "like",
+        "commas,",
+        "periods,",
+        "or",
+        "question",
+        "marks",
+        "receive",
+        "an",
+        "extra",
+        "pause",
+        "to",
+        "let",
+        "the",
+        "brain",
+        "register",
+        "the",
+        "end",
+        "of",
+        "a",
+        "phrase",
+        "or",
+        "sentence.",
+        "This",
+        "mimics",
+        "the",
+        "natural",
+        "rhythm",
+        "of",
+        "reading,",
+        "and",
+        "prevents",
+        "the",
+        "experience",
+        "from",
+        "feeling",
+        "robotic.",
 
-    "RSVP",        "is",         "particularly", "effective",  "on",
-    "mobile",      "devices",    "where",       "screen",      "space",
-    "is",          "limited.",   "A",           "single",      "word",
-    "at",          "a",          "time",        "needs",       "almost",
-    "no",          "horizontal", "space,",      "making",      "it",
-    "ideal",       "for",        "phones.",     "There",       "is",
-    "no",          "scrolling,", "no",          "page",        "turning,",
-    "and",         "no",         "distraction", "from",        "surrounding",
-    "text.",       "You",        "simply",      "hold,",       "read,",
-    "and",         "let",        "the",         "words",       "come",
-    "to",          "you.",
-};
+        "RSVP",
+        "is",
+        "particularly",
+        "effective",
+        "on",
+        "mobile",
+        "devices",
+        "where",
+        "screen",
+        "space",
+        "is",
+        "limited.",
+        "A",
+        "single",
+        "word",
+        "at",
+        "a",
+        "time",
+        "needs",
+        "almost",
+        "no",
+        "horizontal",
+        "space,",
+        "making",
+        "it",
+        "ideal",
+        "for",
+        "phones.",
+        "There",
+        "is",
+        "no",
+        "scrolling,",
+        "no",
+        "page",
+        "turning,",
+        "and",
+        "no",
+        "distraction",
+        "from",
+        "surrounding",
+        "text.",
+        "You",
+        "simply",
+        "hold,",
+        "read,",
+        "and",
+        "let",
+        "the",
+        "words",
+        "come",
+        "to",
+        "you.",
+    };
 
-constexpr size_t kDemoWordCount = sizeof(kDemoWords) / sizeof(kDemoWords[0]);
-constexpr uint16_t kMinWpm = 10;
-constexpr uint16_t kLowWpmMax = 100;
-constexpr uint16_t kLowWpmStep = 10;
-constexpr uint16_t kMaxWpm = 1000;
-constexpr uint16_t kHighWpmStep = 25;
-constexpr uint8_t kLongWordAfterChars = 6;
-constexpr uint8_t kLongWordPercentPerChar = 6;
-constexpr uint8_t kVeryLongWordAfterChars = 10;
-constexpr uint8_t kVeryLongWordPercentPerChar = 9;
-constexpr uint8_t kUltraLongWordAfterChars = 14;
-constexpr uint8_t kUltraLongWordPercentPerChar = 12;
-constexpr uint8_t kLongWordMaxPercent = 170;
-constexpr uint8_t kCompoundJoinerPercent = 14;
-constexpr uint8_t kLongCompoundWordPercent = 18;
-constexpr uint8_t kTechnicalConnectorPercent = 8;
-constexpr uint8_t kSyllableBonusAfterCount = 2;
-constexpr uint8_t kSyllableBonusPercentPerGroup = 10;
-constexpr uint8_t kSyllableBonusMaxPercent = 50;
-constexpr uint8_t kAllCapsComplexityPercent = 14;
-constexpr uint8_t kMixedTokenComplexityPercent = 22;
-constexpr uint8_t kNumericTokenComplexityPercent = 10;
-constexpr uint8_t kDenseConnectorComplexityPercent = 12;
-constexpr uint8_t kComplexWordMaxPercent = 85;
-constexpr uint8_t kCommaPausePercent = 45;
-constexpr uint8_t kDashPausePercent = 60;
-constexpr uint8_t kClausePausePercent = 80;
-constexpr uint8_t kEllipsisPausePercent = 110;
-constexpr uint8_t kSentencePausePercent = 135;
-constexpr uint8_t kStrongSentencePausePercent = 150;
-constexpr uint8_t kMaxCatchUpWords = 4;
-constexpr uint16_t kMaxPacingDelayMs = 600;
+    constexpr size_t kDemoWordCount = sizeof(kDemoWords) / sizeof(kDemoWords[0]);
+    constexpr uint16_t kLowWpmMax = 100;
+    constexpr uint16_t kLowWpmStep = 10;
+    constexpr uint16_t kHighWpmStep = 25;
+    constexpr uint8_t kLongWordAfterChars = 6;
+    constexpr uint8_t kLongWordPercentPerChar = 6;
+    constexpr uint8_t kVeryLongWordAfterChars = 10;
+    constexpr uint8_t kVeryLongWordPercentPerChar = 9;
+    constexpr uint8_t kUltraLongWordAfterChars = 14;
+    constexpr uint8_t kUltraLongWordPercentPerChar = 12;
+    constexpr uint8_t kLongWordMaxPercent = 170;
+    constexpr uint8_t kCompoundJoinerPercent = 14;
+    constexpr uint8_t kLongCompoundWordPercent = 18;
+    constexpr uint8_t kTechnicalConnectorPercent = 8;
+    constexpr uint8_t kSyllableBonusAfterCount = 2;
+    constexpr uint8_t kSyllableBonusPercentPerGroup = 10;
+    constexpr uint8_t kSyllableBonusMaxPercent = 50;
+    constexpr uint8_t kAllCapsComplexityPercent = 14;
+    constexpr uint8_t kMixedTokenComplexityPercent = 22;
+    constexpr uint8_t kNumericTokenComplexityPercent = 10;
+    constexpr uint8_t kDenseConnectorComplexityPercent = 12;
+    constexpr uint8_t kComplexWordMaxPercent = 85;
+    constexpr uint8_t kCommaPausePercent = 45;
+    constexpr uint8_t kDashPausePercent = 60;
+    constexpr uint8_t kClausePausePercent = 80;
+    constexpr uint8_t kEllipsisPausePercent = 110;
+    constexpr uint8_t kSentencePausePercent = 135;
+    constexpr uint8_t kStrongSentencePausePercent = 150;
+    constexpr uint8_t kMaxCatchUpWords = 4;
 
-bool isWordCharacter(char c) {
-  return LatinText::isWordCharacter(static_cast<uint8_t>(c));
-}
-
-bool isLetterCharacter(char c) {
-  return LatinText::isLetter(static_cast<uint8_t>(c));
-}
-
-bool isDigitCharacter(char c) {
-  return LatinText::isDigit(static_cast<uint8_t>(c));
-}
-
-bool isLowercaseLetter(char c) {
-  return LatinText::isLowercaseLetter(static_cast<uint8_t>(c));
-}
-
-bool isUppercaseLetter(char c) {
-  return LatinText::isUppercaseLetter(static_cast<uint8_t>(c));
-}
-
-bool isVowelCharacter(char c) {
-  return LatinText::isVowel(static_cast<uint8_t>(c));
-}
-
-bool isSegmentSeparator(char c) {
-  switch (c) {
-    case '-':
-    case '/':
-    case '_':
-      return true;
-    default:
-      return false;
-  }
-}
-
-bool isTechnicalConnector(char c) {
-  switch (c) {
-    case '-':
-    case '/':
-    case '_':
-    case '.':
-    case '+':
-    case '\\':
-      return true;
-    default:
-      return false;
-  }
-}
-
-bool isIgnoredTrailingChar(char c) {
-  switch (c) {
-    case '"':
-    case '\'':
-    case ')':
-    case ']':
-    case '}':
-      return true;
-    default:
-      return false;
-  }
-}
-
-int letterCharacterCount(const String &word) {
-  int count = 0;
-  for (size_t i = 0; i < word.length(); ++i) {
-    if (isLetterCharacter(word[i])) {
-      ++count;
+    template<typename Predicate>
+    int codepointCount(std::string_view text, Predicate predicate) {
+        int count = 0;
+        uint32_t codepoint = 0;
+        while (Utf8Text::next(text, codepoint)) {
+            if (predicate(codepoint))
+                ++count;
+        }
+        return count;
     }
-  }
-  return count;
-}
 
-int digitCharacterCount(const String &word) {
-  int count = 0;
-  for (size_t i = 0; i < word.length(); ++i) {
-    if (isDigitCharacter(word[i])) {
-      ++count;
-    }
-  }
-  return count;
-}
-
-int uppercaseLetterCount(const String &word) {
-  int count = 0;
-  for (size_t i = 0; i < word.length(); ++i) {
-    if (isUppercaseLetter(word[i])) {
-      ++count;
-    }
-  }
-  return count;
-}
-
-int readableCharacterCount(const String &word) {
-  int count = 0;
-  for (size_t i = 0; i < word.length(); ++i) {
-    if (isWordCharacter(word[i])) {
-      ++count;
-    }
-  }
-  return count;
-}
-
-int approximateSyllableGroupCount(const String &word) {
-  int groups = 0;
-  int letterCount = 0;
-  bool previousWasVowel = false;
-  String lettersOnly;
-  lettersOnly.reserve(word.length());
-
-  for (size_t i = 0; i < word.length(); ++i) {
-    const char c = word[i];
-    if (!isLetterCharacter(c)) {
-      previousWasVowel = false;
-      continue;
+    bool isSegmentSeparator(uint32_t codepoint) {
+        switch (codepoint) {
+        case '-':
+        case '/':
+        case '_':
+            return true;
+        default:
+            return false;
+        }
     }
 
-    ++letterCount;
-    const char lowered = static_cast<char>(LatinText::toLowercaseByte(static_cast<uint8_t>(c)));
-    lettersOnly += lowered;
-
-    const bool vowel = LatinText::isVowel(static_cast<uint8_t>(lowered));
-    if (vowel && !previousWasVowel) {
-      ++groups;
+    bool isTechnicalConnector(uint32_t codepoint) {
+        switch (codepoint) {
+        case '-':
+        case '/':
+        case '_':
+        case '.':
+        case '+':
+        case '\\':
+            return true;
+        default:
+            return false;
+        }
     }
-    previousWasVowel = vowel;
-  }
 
-  if (groups > 1 && letterCount > 3 && lettersOnly.endsWith("e") && !lettersOnly.endsWith("le") &&
-      !lettersOnly.endsWith("ye")) {
-    --groups;
-  }
-
-  if (groups == 0 && letterCount > 0) {
-    groups = 1;
-  }
-
-  return groups;
-}
-
-int compoundJoinerCount(const String &word) {
-  int count = 0;
-  for (size_t i = 1; i + 1 < word.length(); ++i) {
-    if (!isSegmentSeparator(word[i])) {
-      continue;
+    bool isIgnoredTrailingChar(char c) {
+        switch (c) {
+        case '"':
+        case '\'':
+        case ')':
+        case ']':
+        case '}':
+            return true;
+        default:
+            return false;
+        }
     }
-    if (!isWordCharacter(word[i - 1]) || !isWordCharacter(word[i + 1])) {
-      continue;
+
+    int approximateSyllableGroupCount(std::string_view word) {
+        int groups = 0;
+        int letterCount = 0;
+        bool previousWasVowel = false;
+        uint32_t previousLetter = 0;
+        uint32_t lastLetter = 0;
+
+        uint32_t codepoint = 0;
+        while (Utf8Text::next(word, codepoint)) {
+            if (!UnicodeText::isLetter(codepoint)) {
+                previousWasVowel = false;
+                continue;
+            }
+
+            ++letterCount;
+            const uint32_t lowered = UnicodeText::toLowercase(codepoint);
+            previousLetter = lastLetter;
+            lastLetter = lowered;
+
+            const bool vowel = UnicodeText::isVowel(lowered);
+            if (vowel && !previousWasVowel) {
+                ++groups;
+            }
+            previousWasVowel = vowel;
+        }
+
+        if (groups > 1 && letterCount > 3 && lastLetter == 'e' && previousLetter != 'l' && previousLetter != 'y') {
+            --groups;
+        }
+
+        if (groups == 0 && letterCount > 0) {
+            groups = 1;
+        }
+
+        return groups;
     }
-    ++count;
-  }
-  return count;
-}
 
-int technicalConnectorCount(const String &word) {
-  int count = 0;
-  for (size_t i = 1; i + 1 < word.length(); ++i) {
-    if (!isTechnicalConnector(word[i])) {
-      continue;
+    template<typename Predicate>
+    int connectorCount(std::string_view word, Predicate predicate) {
+        int count = 0;
+        uint32_t previous = 0;
+        uint32_t current = 0;
+        if (!Utf8Text::next(word, previous) || !Utf8Text::next(word, current))
+            return 0;
+
+        uint32_t next = 0;
+        while (Utf8Text::next(word, next)) {
+            if (predicate(current) && UnicodeText::isWordCharacter(previous) && UnicodeText::isWordCharacter(next)) {
+                ++count;
+            }
+            previous = current;
+            current = next;
+        }
+        return count;
     }
-    if (!isWordCharacter(word[i - 1]) || !isWordCharacter(word[i + 1])) {
-      continue;
+
+    int lastMeaningfulCharIndex(std::string_view word) {
+        for (int i = static_cast<int>(word.length()) - 1; i >= 0; --i) {
+            if (!isIgnoredTrailingChar(word[static_cast<size_t>(i)])) {
+                return i;
+            }
+        }
+        return -1;
     }
-    ++count;
-  }
-  return count;
-}
 
-int lastMeaningfulCharIndex(const String &word) {
-  for (int i = static_cast<int>(word.length()) - 1; i >= 0; --i) {
-    if (!isIgnoredTrailingChar(word[static_cast<size_t>(i)])) {
-      return i;
+    char trailingRhythmChar(std::string_view word) {
+        const int index = lastMeaningfulCharIndex(word);
+        if (index >= 0) {
+            return word[static_cast<size_t>(index)];
+        }
+        return '\0';
     }
-  }
-  return -1;
-}
 
-char trailingRhythmChar(const String &word) {
-  const int index = lastMeaningfulCharIndex(word);
-  if (index >= 0) {
-    return word[static_cast<size_t>(index)];
-  }
-  return '\0';
-}
-
-int trailingRepeatedCharCount(const String &word, char target) {
-  int count = 0;
-  for (int i = lastMeaningfulCharIndex(word); i >= 0; --i) {
-    const char c = word[static_cast<size_t>(i)];
-    if (c != target) {
-      break;
+    int trailingRepeatedCharCount(std::string_view word, char target) {
+        int count = 0;
+        for (int i = lastMeaningfulCharIndex(word); i >= 0; --i) {
+            const char c = word[static_cast<size_t>(i)];
+            if (c != target) {
+                break;
+            }
+            ++count;
+        }
+        return count;
     }
-    ++count;
-  }
-  return count;
-}
 
-bool endsWithEllipsis(const String &word) {
-  return trailingRepeatedCharCount(word, '.') >= 3;
-}
-
-bool startsWithLowercaseLetter(const String &word) {
-  for (size_t i = 0; i < word.length(); ++i) {
-    if (isLowercaseLetter(word[i])) {
-      return true;
+    bool endsWithEllipsis(std::string_view word) {
+        return trailingRepeatedCharCount(word, '.') >= 3;
     }
-    if (isLetterCharacter(word[i])) {
-      return false;
-    }
-  }
-  return false;
-}
 
-bool isDottedInitialism(const String &word) {
-  const int end = lastMeaningfulCharIndex(word);
-  if (end <= 0) {
-    return false;
-  }
-
-  int letterCount = 0;
-  bool expectLetter = true;
-  for (int i = 0; i <= end; ++i) {
-    const char c = word[static_cast<size_t>(i)];
-    if (expectLetter) {
-      if (!isLetterCharacter(c)) {
+    bool startsWithLowercaseLetter(std::string_view word) {
+        uint32_t codepoint = 0;
+        while (Utf8Text::next(word, codepoint)) {
+            if (UnicodeText::isLowercaseLetter(codepoint)) {
+                return true;
+            }
+            if (UnicodeText::isLetter(codepoint)) {
+                return false;
+            }
+        }
         return false;
-      }
-      ++letterCount;
-      expectLetter = false;
-    } else if (c == '.') {
-      expectLetter = true;
-    } else {
-      return false;
-    }
-  }
-
-  return expectLetter && letterCount >= 2;
-}
-
-bool looksLikeAbbreviation(const String &word, bool nextWordStartsLowercase) {
-  String lowered = word;
-  lowered.toLowerCase();
-
-  constexpr const char *kKnownAbbreviations[] = {
-      "mr.",  "mrs.",  "ms.",   "dr.",   "prof.", "sr.",   "jr.",  "st.",
-      "vs.",  "etc.",  "e.g.",  "i.e.",  "cf.",   "no.",   "fig.", "eq.",
-      "inc.", "ltd.",  "co.",   "dept.", "mt.",   "ft.",
-  };
-
-  for (const char *abbreviation : kKnownAbbreviations) {
-    if (lowered == abbreviation) {
-      return true;
-    }
-  }
-
-  if (!lowered.endsWith(".")) {
-    return false;
-  }
-
-  if (isDottedInitialism(word)) {
-    return true;
-  }
-
-  if (readableCharacterCount(lowered) <= 2) {
-    return true;
-  }
-
-  if (nextWordStartsLowercase && readableCharacterCount(lowered) <= 4) {
-    return true;
-  }
-
-  return false;
-}
-
-uint16_t clampPacingDelayMs(uint16_t delayMs) {
-  if (delayMs > kMaxPacingDelayMs) {
-    return kMaxPacingDelayMs;
-  }
-  return delayMs;
-}
-
-uint8_t clampScalePercent(uint8_t percent) {
-  if (percent < 25) {
-    return 25;
-  }
-  return percent;
-}
-
-uint16_t scaledPercent(uint16_t basePercent, uint8_t scalePercent) {
-  return static_cast<uint16_t>((static_cast<uint32_t>(basePercent) *
-                                static_cast<uint32_t>(clampScalePercent(scalePercent))) /
-                               100UL);
-}
-
-uint32_t scaledDelayMs(uint16_t bonusPercent, uint16_t delayMs) {
-  return (static_cast<uint32_t>(bonusPercent) *
-          static_cast<uint32_t>(clampPacingDelayMs(delayMs))) /
-         100UL;
-}
-
-uint16_t lengthBonusPercentForWord(const String &word) {
-  const int readableLength = readableCharacterCount(word);
-  if (readableLength == 0) {
-    return 0;
-  }
-
-  uint16_t bonusPercent = 0;
-  if (readableLength > kLongWordAfterChars) {
-    const int extraChars = readableLength - kLongWordAfterChars;
-    bonusPercent +=
-        static_cast<uint16_t>(extraChars * static_cast<int>(kLongWordPercentPerChar));
-  }
-
-  if (readableLength > kVeryLongWordAfterChars) {
-    const int extraChars = readableLength - kVeryLongWordAfterChars;
-    bonusPercent +=
-        static_cast<uint16_t>(extraChars * static_cast<int>(kVeryLongWordPercentPerChar));
-  }
-
-  if (readableLength > kUltraLongWordAfterChars) {
-    const int extraChars = readableLength - kUltraLongWordAfterChars;
-    bonusPercent +=
-        static_cast<uint16_t>(extraChars * static_cast<int>(kUltraLongWordPercentPerChar));
-  }
-
-  const int joinerCount = compoundJoinerCount(word);
-  if (joinerCount > 0) {
-    bonusPercent +=
-        static_cast<uint16_t>(joinerCount * static_cast<int>(kCompoundJoinerPercent));
-    if (readableLength >= kVeryLongWordAfterChars) {
-      bonusPercent += kLongCompoundWordPercent;
-    }
-  }
-
-  const int techConnectorCount = technicalConnectorCount(word);
-  if (techConnectorCount > joinerCount) {
-    bonusPercent += static_cast<uint16_t>((techConnectorCount - joinerCount) *
-                                          static_cast<int>(kTechnicalConnectorPercent));
-  }
-
-  return std::min<uint16_t>(kLongWordMaxPercent, bonusPercent);
-}
-
-uint16_t complexityBonusPercentForWord(const String &word) {
-  uint16_t bonusPercent = 0;
-  const int syllableGroups = approximateSyllableGroupCount(word);
-  if (syllableGroups > kSyllableBonusAfterCount) {
-    const int extraGroups = syllableGroups - kSyllableBonusAfterCount;
-    bonusPercent += static_cast<uint16_t>(std::min(
-        static_cast<int>(kSyllableBonusMaxPercent),
-        extraGroups * static_cast<int>(kSyllableBonusPercentPerGroup)));
-  }
-
-  const int letterCount = letterCharacterCount(word);
-  const int digitCount = digitCharacterCount(word);
-  const int uppercaseCount = uppercaseLetterCount(word);
-  if (letterCount > 0 && digitCount > 0) {
-    bonusPercent += kMixedTokenComplexityPercent;
-  } else if (digitCount >= 3) {
-    bonusPercent += kNumericTokenComplexityPercent;
-  }
-
-  if (uppercaseCount >= 2 && uppercaseCount == letterCount) {
-    bonusPercent += kAllCapsComplexityPercent;
-  }
-
-  const int techConnectorCount = technicalConnectorCount(word);
-  if (techConnectorCount >= 2) {
-    bonusPercent += static_cast<uint16_t>((techConnectorCount - 1) *
-                                          static_cast<int>(kDenseConnectorComplexityPercent));
-  }
-
-  return std::min<uint16_t>(kComplexWordMaxPercent, bonusPercent);
-}
-
-uint16_t punctuationPausePercentForWord(const String &word, bool nextWordStartsLowercase) {
-  if (endsWithEllipsis(word)) {
-    return kEllipsisPausePercent;
-  }
-
-  switch (trailingRhythmChar(word)) {
-    case ',':
-      return kCommaPausePercent;
-    case '-':
-      return kDashPausePercent;
-    case ';':
-    case ':':
-      return kClausePausePercent;
-    case '.':
-      if (!looksLikeAbbreviation(word, nextWordStartsLowercase)) {
-        return kSentencePausePercent;
-      }
-      return 0;
-    case '!':
-    case '?':
-      return kStrongSentencePausePercent;
-    default:
-      return 0;
-  }
-}
-
-uint32_t pacingBonusMsForWord(const String &word, bool nextWordStartsLowercase,
-                              const ReadingLoop::PacingConfig &config) {
-  if (word.isEmpty()) {
-    return 0;
-  }
-
-  uint32_t totalBonusMs = 0;
-  totalBonusMs += scaledDelayMs(
-      scaledPercent(lengthBonusPercentForWord(word), config.longWordScalePercent),
-      config.longWordDelayMs);
-  totalBonusMs += scaledDelayMs(
-      scaledPercent(complexityBonusPercentForWord(word), config.complexWordScalePercent),
-      config.complexWordDelayMs);
-  totalBonusMs +=
-      scaledDelayMs(scaledPercent(punctuationPausePercentForWord(word, nextWordStartsLowercase),
-                                  config.punctuationScalePercent),
-                    config.punctuationDelayMs);
-  return totalBonusMs;
-}
-
-uint32_t durationForWord(const String &word, bool nextWordStartsLowercase, uint32_t baseIntervalMs,
-                         const ReadingLoop::PacingConfig &config) {
-  if (baseIntervalMs == 0) {
-    return 0;
-  }
-  return baseIntervalMs + pacingBonusMsForWord(word, nextWordStartsLowercase, config);
-}
-
-}  // namespace
-
-void ReadingLoop::begin(uint32_t nowMs) {
-  currentIndex_ = 0;
-  lastAdvanceMs_ = nowMs;
-  setCurrentWordFromIndex();
-}
-
-void ReadingLoop::setWords(std::vector<String> words, uint32_t nowMs) {
-  wordSource_ = nullptr;
-  loadedWords_ = std::move(words);
-  currentIndex_ = 0;
-  lastAdvanceMs_ = nowMs;
-  setCurrentWordFromIndex();
-}
-
-void ReadingLoop::setWordSource(BookWordSource *source, uint32_t nowMs) {
-  loadedWords_.clear();
-  wordSource_ = source;
-  currentIndex_ = 0;
-  lastAdvanceMs_ = nowMs;
-  setCurrentWordFromIndex();
-}
-
-void ReadingLoop::clearLoadedBook(uint32_t nowMs) {
-  wordSource_ = nullptr;
-  loadedWords_.clear();
-  currentIndex_ = 0;
-  lastAdvanceMs_ = nowMs;
-  setCurrentWordFromIndex();
-}
-
-void ReadingLoop::start(uint32_t nowMs) { lastAdvanceMs_ = nowMs; }
-
-bool ReadingLoop::update(uint32_t nowMs, bool allowCatchUp) {
-  bool changed = false;
-  const uint8_t maxCatchUpWords = allowCatchUp ? kMaxCatchUpWords : 1;
-
-  for (uint8_t catchUp = 0; catchUp < maxCatchUpWords; ++catchUp) {
-    const uint32_t durationMs = currentWordDurationMs();
-    if (durationMs == 0 || nowMs - lastAdvanceMs_ < durationMs) {
-      break;
     }
 
-    lastAdvanceMs_ += durationMs;
-    if (!advance(1)) {
-      break;
+    bool isDottedInitialism(std::string_view word) {
+        const int end = lastMeaningfulCharIndex(word);
+        if (end <= 0) {
+            return false;
+        }
+
+        int letterCount = 0;
+        bool expectLetter = true;
+        std::string_view text = word.substr(0, static_cast<size_t>(end + 1));
+        uint32_t codepoint = 0;
+        while (Utf8Text::next(text, codepoint)) {
+            if (expectLetter) {
+                if (!UnicodeText::isLetter(codepoint)) {
+                    return false;
+                }
+                ++letterCount;
+                expectLetter = false;
+            } else if (codepoint == '.') {
+                expectLetter = true;
+            } else {
+                return false;
+            }
+        }
+
+        return expectLetter && letterCount >= 2;
     }
-    changed = true;
-  }
 
-  return changed;
-}
+    bool looksLikeAbbreviation(std::string_view word, bool nextWordStartsLowercase) {
+        std::string lowered;
+        lowered.reserve(word.size());
+        uint32_t codepoint = 0;
+        while (Utf8Text::next(word, codepoint))
+            Utf8Text::append(lowered, UnicodeText::toLowercase(codepoint));
 
-const String &ReadingLoop::currentWord() const { return currentWord_; }
+        constexpr const char* kKnownAbbreviations[] = {
+            "mr.",  "mrs.", "ms.", "dr.",  "prof.", "sr.",  "jr.",  "st.", "vs.",   "etc.", "e.g.",
+            "i.e.", "cf.",  "no.", "fig.", "eq.",   "inc.", "ltd.", "co.", "dept.", "mt.",  "ft.",
+        };
 
-size_t ReadingLoop::currentIndex() const { return currentIndex_; }
+        if (std::ranges::any_of(kKnownAbbreviations, [&lowered](const char* abbreviation) {
+                return lowered == abbreviation;
+            }))
+            return true;
 
-uint16_t ReadingLoop::wpm() const { return wpm_; }
+        if (!lowered.ends_with(".")) {
+            return false;
+        }
 
-uint32_t ReadingLoop::wordIntervalMs() const { return 60000UL / wpm_; }
+        if (isDottedInitialism(word)) {
+            return true;
+        }
 
-uint32_t ReadingLoop::currentWordDurationMs() const {
-  bool nextWordStartsLowercase = false;
-  const size_t nextIndex = currentIndex_ + 1;
-  if (nextIndex < wordCount()) {
-    nextWordStartsLowercase = startsWithLowercaseLetter(wordAt(nextIndex));
-  } else if (!usingLoadedBook() && nextIndex < kDemoWordCount) {
-    nextWordStartsLowercase = startsWithLowercaseLetter(String(kDemoWords[nextIndex]));
-  }
+        if (codepointCount(lowered, UnicodeText::isWordCharacter) <= 2) {
+            return true;
+        }
 
-  return durationForWord(currentWord_, nextWordStartsLowercase, wordIntervalMs(), pacingConfig_);
-}
+        if (nextWordStartsLowercase && codepointCount(lowered, UnicodeText::isWordCharacter) <= 4) {
+            return true;
+        }
 
-uint32_t ReadingLoop::wordPacingBonusMsAt(size_t index) const {
-  const size_t count = wordCount();
-  if (count == 0 || index >= count) {
-    return 0;
-  }
-
-  const String word = wordAt(index);
-  const bool nextLowercase = nextWordStartsLowercaseAt(index);
-  return pacingBonusMsForWord(word, nextLowercase, pacingConfig_);
-}
-
-uint32_t ReadingLoop::elapsedInCurrentWordMs(uint32_t nowMs) const {
-  if (nowMs <= lastAdvanceMs_) {
-    return 0;
-  }
-  return nowMs - lastAdvanceMs_;
-}
-
-bool ReadingLoop::currentWordEndsSentence() const {
-  return wordEndsSentenceAt(currentIndex_);
-}
-
-bool ReadingLoop::atEnd() const {
-  const size_t count = wordCount();
-  return count == 0 || currentIndex_ + 1 >= count;
-}
-
-void ReadingLoop::scrub(int steps) {
-  seekRelative(currentIndex_, steps);
-}
-
-void ReadingLoop::seekTo(size_t wordIndex) {
-  const size_t count = wordCount();
-  if (count == 0) {
-    currentWord_ = "";
-    return;
-  }
-
-  if (wordIndex >= count) {
-    wordIndex = count - 1;
-  }
-
-  currentIndex_ = wordIndex;
-  setCurrentWordFromIndex();
-}
-
-void ReadingLoop::seekRelative(size_t baseIndex, int steps) {
-  const size_t count = wordCount();
-  if (count == 0) {
-    return;
-  }
-
-  if (baseIndex >= count) {
-    baseIndex = count - 1;
-  }
-
-  int nextIndex = static_cast<int>(baseIndex) + steps;
-  if (usingLoadedBook()) {
-    if (nextIndex < 0) {
-      nextIndex = 0;
+        return false;
     }
-    if (nextIndex >= static_cast<int>(count)) {
-      nextIndex = static_cast<int>(count) - 1;
+
+    uint32_t scaledDelayMs(uint16_t bonusPercent, uint16_t delayMs) {
+        return (static_cast<uint32_t>(bonusPercent) * delayMs) / 100UL;
     }
-  } else {
-    nextIndex %= static_cast<int>(count);
-    if (nextIndex < 0) {
-      nextIndex += static_cast<int>(count);
+
+    uint16_t lengthBonusPercentForWord(std::string_view word) {
+        const int readableLength = codepointCount(word, UnicodeText::isWordCharacter);
+        if (readableLength == 0) {
+            return 0;
+        }
+
+        uint16_t bonusPercent = 0;
+        if (readableLength > kLongWordAfterChars) {
+            const int extraChars = readableLength - kLongWordAfterChars;
+            bonusPercent += static_cast<uint16_t>(extraChars * static_cast<int>(kLongWordPercentPerChar));
+        }
+
+        if (readableLength > kVeryLongWordAfterChars) {
+            const int extraChars = readableLength - kVeryLongWordAfterChars;
+            bonusPercent += static_cast<uint16_t>(extraChars * static_cast<int>(kVeryLongWordPercentPerChar));
+        }
+
+        if (readableLength > kUltraLongWordAfterChars) {
+            const int extraChars = readableLength - kUltraLongWordAfterChars;
+            bonusPercent += static_cast<uint16_t>(extraChars * static_cast<int>(kUltraLongWordPercentPerChar));
+        }
+
+        const int joinerCount = connectorCount(word, isSegmentSeparator);
+        if (joinerCount > 0) {
+            bonusPercent += static_cast<uint16_t>(joinerCount * static_cast<int>(kCompoundJoinerPercent));
+            if (readableLength >= kVeryLongWordAfterChars) {
+                bonusPercent += kLongCompoundWordPercent;
+            }
+        }
+
+        const int techConnectorCount = connectorCount(word, isTechnicalConnector);
+        if (techConnectorCount > joinerCount) {
+            bonusPercent += static_cast<uint16_t>((techConnectorCount - joinerCount)
+                                                  * static_cast<int>(kTechnicalConnectorPercent));
+        }
+
+        return std::min<uint16_t>(kLongWordMaxPercent, bonusPercent);
     }
-  }
 
-  currentIndex_ = static_cast<size_t>(nextIndex);
-  setCurrentWordFromIndex();
-}
+    uint16_t complexityBonusPercentForWord(std::string_view word) {
+        uint16_t bonusPercent = 0;
+        const int syllableGroups = approximateSyllableGroupCount(word);
+        if (syllableGroups > kSyllableBonusAfterCount) {
+            const int extraGroups = syllableGroups - kSyllableBonusAfterCount;
+            bonusPercent +=
+                static_cast<uint16_t>(std::min(static_cast<int>(kSyllableBonusMaxPercent),
+                                               extraGroups * static_cast<int>(kSyllableBonusPercentPerGroup)));
+        }
 
-void ReadingLoop::rewindSentence() {
-  const size_t count = wordCount();
-  if (count == 0) {
-    return;
-  }
+        const int letterCount = codepointCount(word, UnicodeText::isLetter);
+        const int digitCount = codepointCount(word, UnicodeText::isDigit);
+        const int uppercaseCount = codepointCount(word, UnicodeText::isUppercaseLetter);
+        if (letterCount > 0 && digitCount > 0) {
+            bonusPercent += kMixedTokenComplexityPercent;
+        } else if (digitCount >= 3) {
+            bonusPercent += kNumericTokenComplexityPercent;
+        }
 
-  const size_t currentSentenceStart = sentenceStartAtOrBefore(currentIndex_);
-  if (currentSentenceStart == currentIndex_ && currentIndex_ > 0) {
-    seekTo(sentenceStartAtOrBefore(currentIndex_ - 1));
-    return;
-  }
+        if (uppercaseCount >= 2 && uppercaseCount == letterCount) {
+            bonusPercent += kAllCapsComplexityPercent;
+        }
 
-  seekTo(currentSentenceStart);
-}
+        const int techConnectorCount = connectorCount(word, isTechnicalConnector);
+        if (techConnectorCount >= 2) {
+            bonusPercent +=
+                static_cast<uint16_t>((techConnectorCount - 1) * static_cast<int>(kDenseConnectorComplexityPercent));
+        }
 
-void ReadingLoop::adjustWpm(int delta) {
-  if (delta == 0) {
-    return;
-  }
-
-  int nextWpm = static_cast<int>(wpm_);
-  if (delta > 0) {
-    nextWpm += nextWpm < static_cast<int>(kLowWpmMax) ? kLowWpmStep : kHighWpmStep;
-    if (nextWpm > static_cast<int>(kLowWpmMax) &&
-        wpm_ < static_cast<uint16_t>(kLowWpmMax)) {
-      nextWpm = kLowWpmMax;
+        return std::min<uint16_t>(kComplexWordMaxPercent, bonusPercent);
     }
-  } else {
-    nextWpm -= nextWpm <= static_cast<int>(kLowWpmMax) ? kLowWpmStep : kHighWpmStep;
-    if (nextWpm < static_cast<int>(kLowWpmMax) &&
-        wpm_ > static_cast<uint16_t>(kLowWpmMax)) {
-      nextWpm = kLowWpmMax;
+
+    uint16_t punctuationPausePercentForWord(std::string_view word, bool nextWordStartsLowercase) {
+        if (endsWithEllipsis(word)) {
+            return kEllipsisPausePercent;
+        }
+
+        switch (trailingRhythmChar(word)) {
+        case ',':
+            return kCommaPausePercent;
+        case '-':
+            return kDashPausePercent;
+        case ';':
+        case ':':
+            return kClausePausePercent;
+        case '.':
+            if (!looksLikeAbbreviation(word, nextWordStartsLowercase)) {
+                return kSentencePausePercent;
+            }
+            return 0;
+        case '!':
+        case '?':
+            return kStrongSentencePausePercent;
+        default:
+            return 0;
+        }
     }
-  }
-  if (nextWpm < static_cast<int>(kMinWpm)) {
-    nextWpm = kMinWpm;
-  }
-  if (nextWpm > static_cast<int>(kMaxWpm)) {
-    nextWpm = kMaxWpm;
-  }
-  wpm_ = static_cast<uint16_t>(nextWpm);
-}
 
-void ReadingLoop::setWpm(uint16_t wpm) {
-  if (wpm < kMinWpm) {
-    wpm = kMinWpm;
-  }
-  if (wpm > kMaxWpm) {
-    wpm = kMaxWpm;
-  }
-  wpm_ = wpm;
-}
+    uint32_t pacingBonusMsForWord(std::string_view word, bool nextWordStartsLowercase,
+                                  const settings::PacingSettings& pacing) {
+        if (word.empty()) {
+            return 0;
+        }
 
-void ReadingLoop::setPacingConfig(const PacingConfig &config) {
-  pacingConfig_.longWordDelayMs = clampPacingDelayMs(config.longWordDelayMs);
-  pacingConfig_.complexWordDelayMs = clampPacingDelayMs(config.complexWordDelayMs);
-  pacingConfig_.punctuationDelayMs = clampPacingDelayMs(config.punctuationDelayMs);
-  pacingConfig_.longWordScalePercent = clampScalePercent(config.longWordScalePercent);
-  pacingConfig_.complexWordScalePercent = clampScalePercent(config.complexWordScalePercent);
-  pacingConfig_.punctuationScalePercent = clampScalePercent(config.punctuationScalePercent);
-}
-
-const ReadingLoop::PacingConfig &ReadingLoop::pacingConfig() const { return pacingConfig_; }
-
-bool ReadingLoop::advance(size_t steps) {
-  const size_t count = wordCount();
-  if (count == 0) {
-    currentWord_ = "";
-    return false;
-  }
-
-  const size_t previousIndex = currentIndex_;
-  if (usingLoadedBook()) {
-    const size_t maxIndex = count - 1;
-    if (currentIndex_ < maxIndex) {
-      const size_t remaining = maxIndex - currentIndex_;
-      currentIndex_ += (steps < remaining) ? steps : remaining;
+        uint32_t totalBonusMs = 0;
+        totalBonusMs += scaledDelayMs(lengthBonusPercentForWord(word), pacing.longWordDelayMs);
+        totalBonusMs += scaledDelayMs(complexityBonusPercentForWord(word), pacing.complexWordDelayMs);
+        totalBonusMs +=
+            scaledDelayMs(punctuationPausePercentForWord(word, nextWordStartsLowercase), pacing.punctuationDelayMs);
+        return totalBonusMs;
     }
-  } else {
-    currentIndex_ = (currentIndex_ + steps) % count;
-  }
 
-  if (currentIndex_ == previousIndex) {
-    return false;
-  }
-
-  setCurrentWordFromIndex();
-  return true;
-}
-
-void ReadingLoop::setCurrentWordFromIndex() {
-  if (wordCount() == 0) {
-    currentWord_ = "";
-    return;
-  }
-
-  if (wordSource_ != nullptr) {
-    wordSource_->prefetchAround(currentIndex_);
-  }
-  currentWord_ = wordAt(currentIndex_);
-}
-
-size_t ReadingLoop::wordCount() const {
-  if (wordSource_ != nullptr) {
-    return wordSource_->wordCount();
-  }
-  if (!loadedWords_.empty()) {
-    return loadedWords_.size();
-  }
-  return kDemoWordCount;
-}
-
-String ReadingLoop::wordAt(size_t index) const {
-  if (wordSource_ != nullptr) {
-    return wordSource_->wordAt(index);
-  }
-  if (!loadedWords_.empty()) {
-    return loadedWords_[index];
-  }
-  return String(kDemoWords[index]);
-}
-
-bool ReadingLoop::usingLoadedBook() const {
-  return wordSource_ != nullptr || !loadedWords_.empty();
-}
-
-bool ReadingLoop::nextWordStartsLowercaseAt(size_t wordIndex) const {
-  const size_t nextIndex = wordIndex + 1;
-  if (nextIndex >= wordCount()) {
-    return false;
-  }
-
-  return startsWithLowercaseLetter(wordAt(nextIndex));
-}
-
-bool ReadingLoop::wordEndsSentenceAt(size_t wordIndex) const {
-  if (wordIndex >= wordCount()) {
-    return false;
-  }
-
-  const String word = wordAt(wordIndex);
-  if (word.isEmpty()) {
-    return false;
-  }
-
-  switch (trailingRhythmChar(word)) {
-    case '!':
-    case '?':
-      return true;
-    case '.':
-      return !looksLikeAbbreviation(word, nextWordStartsLowercaseAt(wordIndex));
-    default:
-      return false;
-  }
-}
-
-size_t ReadingLoop::sentenceStartAtOrBefore(size_t wordIndex) const {
-  const size_t count = wordCount();
-  if (count == 0) {
-    return 0;
-  }
-
-  if (wordIndex >= count) {
-    wordIndex = count - 1;
-  }
-
-  while (wordIndex > 0) {
-    if (wordEndsSentenceAt(wordIndex - 1)) {
-      break;
+    uint32_t durationForWord(std::string_view word, bool nextWordStartsLowercase, uint32_t baseIntervalMs,
+                             const settings::PacingSettings& pacing) {
+        if (baseIntervalMs == 0) {
+            return 0;
+        }
+        return baseIntervalMs + pacingBonusMsForWord(word, nextWordStartsLowercase, pacing);
     }
-    --wordIndex;
-  }
 
-  return wordIndex;
-}
+} // namespace
+
+namespace ReadingLoop {
+    namespace {
+
+        bool usingLoadedBook(const ReadingSession& session) {
+            return session.bookStore != nullptr || !session.words.empty();
+        }
+
+        bool nextWordStartsLowercaseAt(const ReadingSession& session, size_t wordIndex) {
+            const size_t nextIndex = wordIndex + 1;
+            return nextIndex < wordCount(session) && startsWithLowercaseLetter(wordAt(session, nextIndex));
+        }
+
+        bool wordEndsSentenceAt(const ReadingSession& session, size_t wordIndex) {
+            if (wordIndex >= wordCount(session))
+                return false;
+
+            const std::string word{wordAt(session, wordIndex)};
+            if (word.empty())
+                return false;
+
+            switch (trailingRhythmChar(word)) {
+            case '!':
+            case '?':
+                return true;
+            case '.':
+                return !looksLikeAbbreviation(word, nextWordStartsLowercaseAt(session, wordIndex));
+            default:
+                return false;
+            }
+        }
+
+        size_t sentenceStartAtOrBefore(const ReadingSession& session, size_t wordIndex) {
+            const size_t count = wordCount(session);
+            if (count == 0)
+                return 0;
+
+            wordIndex = std::min(wordIndex, count - 1);
+            while (wordIndex > 0 && !wordEndsSentenceAt(session, wordIndex - 1))
+                --wordIndex;
+            return wordIndex;
+        }
+
+        void setCurrentWordFromIndex(ReadingSession& session) {
+            if (wordCount(session) == 0) {
+                session.currentWord.clear();
+                return;
+            }
+
+            if (session.bookStore != nullptr)
+                session.bookStore->prefetchAround(session.currentIndex);
+            session.currentWord = wordAt(session, session.currentIndex);
+        }
+
+        bool advance(ReadingSession& session, size_t steps) {
+            const size_t count = wordCount(session);
+            if (count == 0) {
+                session.currentWord.clear();
+                return false;
+            }
+
+            const size_t previousIndex = session.currentIndex;
+            if (usingLoadedBook(session)) {
+                const size_t maxIndex = count - 1;
+                if (session.currentIndex < maxIndex)
+                    session.currentIndex += std::min(steps, maxIndex - session.currentIndex);
+            } else {
+                session.currentIndex = (session.currentIndex + steps) % count;
+            }
+
+            if (session.currentIndex == previousIndex)
+                return false;
+            setCurrentWordFromIndex(session);
+            return true;
+        }
+
+    } // namespace
+
+    void begin(ReadingSession& session, uint32_t nowMs) {
+        session.playing = false;
+        session.currentIndex = 0;
+        session.lastAdvanceMs = nowMs;
+        setCurrentWordFromIndex(session);
+    }
+
+    void setWords(ReadingSession& session, std::span<const std::string> words, uint32_t nowMs) {
+        session.currentIndex = 0;
+        session.lastAdvanceMs = nowMs;
+        session.words = words;
+        session.bookStore = nullptr;
+        session.playing = false;
+        setCurrentWordFromIndex(session);
+    }
+
+    void setBookStore(ReadingSession& session, const IndexedBookStore& store, uint32_t nowMs) {
+        session.currentIndex = 0;
+        session.lastAdvanceMs = nowMs;
+        session.words = {};
+        session.bookStore = &store;
+        session.playing = false;
+        setCurrentWordFromIndex(session);
+    }
+
+    void start(ReadingSession& session, uint32_t nowMs) {
+        session.lastAdvanceMs = nowMs;
+        session.playing = true;
+    }
+
+    void pause(ReadingSession& session) {
+        session.playing = false;
+    }
+
+    bool update(ReadingSession& session, const settings::ReadingSettings& settings, uint32_t nowMs, bool allowCatchUp) {
+        bool changed = false;
+        const uint8_t maxCatchUpWords = allowCatchUp ? kMaxCatchUpWords : 1;
+        for (uint8_t catchUp = 0; catchUp < maxCatchUpWords; ++catchUp) {
+            const uint32_t durationMs = currentWordDurationMs(session, settings);
+            if (durationMs == 0 || nowMs - session.lastAdvanceMs < durationMs)
+                break;
+            session.lastAdvanceMs += durationMs;
+            if (!advance(session, 1))
+                break;
+            changed = true;
+        }
+        return changed;
+    }
+
+    uint32_t currentWordDurationMs(const ReadingSession& session, const settings::ReadingSettings& settings) {
+        const size_t nextIndex = session.currentIndex + 1;
+        const bool nextWordStartsLowercase =
+            nextIndex < wordCount(session) && startsWithLowercaseLetter(wordAt(session, nextIndex));
+
+        return durationForWord(session.currentWord, nextWordStartsLowercase, 60000UL / settings.wpm, settings.pacing);
+    }
+
+    uint32_t elapsedInCurrentWordMs(const ReadingSession& session, uint32_t nowMs) {
+        return nowMs <= session.lastAdvanceMs ? 0 : nowMs - session.lastAdvanceMs;
+    }
+
+    bool currentWordEndsSentence(const ReadingSession& session) {
+        return wordEndsSentenceAt(session, session.currentIndex);
+    }
+
+    bool atEnd(const ReadingSession& session) {
+        const size_t count = wordCount(session);
+        return count == 0 || session.currentIndex + 1 >= count;
+    }
+
+    void seekTo(ReadingSession& session, size_t wordIndex) {
+        const size_t count = wordCount(session);
+        if (count == 0) {
+            session.currentWord.clear();
+            return;
+        }
+        session.currentIndex = std::min(wordIndex, count - 1);
+        setCurrentWordFromIndex(session);
+    }
+
+    void seekRelative(ReadingSession& session, size_t baseIndex, int steps) {
+        const size_t count = wordCount(session);
+        if (count == 0)
+            return;
+
+        baseIndex = std::min(baseIndex, count - 1);
+        int nextIndex = static_cast<int>(baseIndex) + steps;
+        if (usingLoadedBook(session)) {
+            nextIndex = std::clamp(nextIndex, 0, static_cast<int>(count) - 1);
+        } else {
+            nextIndex %= static_cast<int>(count);
+            if (nextIndex < 0)
+                nextIndex += static_cast<int>(count);
+        }
+        session.currentIndex = static_cast<size_t>(nextIndex);
+        setCurrentWordFromIndex(session);
+    }
+
+    bool seekParagraph(ReadingSession& session, int steps) {
+        const auto& paragraphStarts = session.metadata.paragraphStarts;
+        if (paragraphStarts.empty() || steps == 0)
+            return false;
+        const auto next = std::ranges::upper_bound(paragraphStarts, session.currentIndex);
+        const size_t current =
+            next == paragraphStarts.begin() ? 0 : static_cast<size_t>(next - paragraphStarts.begin() - 1);
+        const int64_t target = std::clamp<int64_t>(static_cast<int64_t>(current) + steps, 0,
+                                                   static_cast<int64_t>(paragraphStarts.size() - 1));
+        if (target == static_cast<int64_t>(current))
+            return false;
+        const size_t wordIndex = paragraphStarts[static_cast<size_t>(target)];
+        seekTo(session, wordIndex);
+        return true;
+    }
+
+    void rewindSentence(ReadingSession& session) {
+        if (wordCount(session) == 0)
+            return;
+
+        const size_t currentSentenceStart = sentenceStartAtOrBefore(session, session.currentIndex);
+        if (currentSentenceStart == session.currentIndex && session.currentIndex > 0) {
+            seekTo(session, sentenceStartAtOrBefore(session, session.currentIndex - 1));
+            return;
+        }
+        seekTo(session, currentSentenceStart);
+    }
+
+    void adjustWpm(settings::ReadingSettings& settings, int delta) {
+        if (delta == 0)
+            return;
+
+        int nextWpm = settings.wpm;
+        if (delta > 0) {
+            nextWpm += nextWpm < kLowWpmMax ? kLowWpmStep : kHighWpmStep;
+            if (nextWpm > kLowWpmMax && settings.wpm < kLowWpmMax)
+                nextWpm = kLowWpmMax;
+        } else {
+            nextWpm -= nextWpm <= kLowWpmMax ? kLowWpmStep : kHighWpmStep;
+            if (nextWpm < kLowWpmMax && settings.wpm > kLowWpmMax)
+                nextWpm = kLowWpmMax;
+        }
+        settings.wpm = nextWpm;
+    }
+
+    size_t wordCount(const ReadingSession& session) {
+        if (session.bookStore != nullptr)
+            return session.bookStore->wordCount();
+        if (!session.words.empty())
+            return session.words.size();
+        return kDemoWordCount;
+    }
+
+    std::string_view wordAt(const ReadingSession& session, size_t index) {
+        if (session.bookStore != nullptr)
+            return session.bookStore->wordAt(index);
+        if (!session.words.empty())
+            return session.words[index];
+        return kDemoWords[index];
+    }
+
+} // namespace ReadingLoop

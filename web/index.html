@@ -9,6 +9,7 @@
       src="https://unpkg.com/esp-web-tools@10.1.0/dist/web/install-button.js?module"
     ></script>
     <script type="module" src="./library.js"></script>
+    <script type="module" src="./themes.js"></script>
     <script type="module" src="./components/install-firmware.js"></script>
     <style>
       :root {
@@ -761,6 +762,37 @@
         font-size: 0.86rem;
       }
 
+      .theme-select {
+        min-width: min(100%, 260px);
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--panel);
+        color: var(--ink);
+        font: 700 0.9rem/1 ui-sans-serif, system-ui, sans-serif;
+      }
+
+      .theme-setup-grid {
+        display: grid;
+        gap: 14px;
+        margin-top: 16px;
+      }
+
+      .theme-setup-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .theme-setup-row span {
+        min-width: 104px;
+        color: var(--muted);
+        font-size: 0.86rem;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
       .library-empty {
         margin-top: 20px;
         padding: 26px 20px;
@@ -971,6 +1003,48 @@
                   files such as <code>.rsvp.tmp</code>, <code>.rsvp.converting</code>, and
                   <code>.rsvp.failed</code>.
                 </p>
+              </div>
+            </div>
+          </div>
+          <div class="section-body-inner">
+            <div class="meta-card">
+              <span>Theme Setup</span>
+              <strong>Install theme files into <code>/themes</code></strong>
+              <p class="meta-card-copy">
+                Choose the SD card root once. The browser will create <code>/themes</code> and write
+                selected <code>.toml</code> files there.
+              </p>
+              <div class="theme-setup-grid">
+                <div class="theme-setup-row">
+                  <span>SD card</span>
+                  <button class="tool-button tool-button-primary" id="theme-root-button" type="button">
+                    Choose SD Root
+                  </button>
+                </div>
+                <div class="theme-setup-row">
+                  <span>Bundled</span>
+                  <button class="tool-button" id="theme-night-button" type="button">
+                    Install Night
+                  </button>
+                </div>
+                <div class="theme-setup-row">
+                  <span>Online</span>
+                  <select class="theme-select" id="theme-online-select" aria-label="Online theme"></select>
+                  <button class="tool-button" id="theme-online-button" type="button">
+                    Install Selected
+                  </button>
+                </div>
+                <div class="theme-setup-row">
+                  <span>Local</span>
+                  <button class="tool-button" id="theme-upload-button" type="button">
+                    Upload .toml
+                  </button>
+                  <input id="theme-upload-input" type="file" accept=".toml" hidden />
+                </div>
+              </div>
+              <div class="workspace-status" id="theme-status" data-tone="info">
+                <strong id="theme-root-label">No SD root selected</strong>
+                Pick the SD card root to install themes into <code>/themes</code>.
               </div>
             </div>
           </div>

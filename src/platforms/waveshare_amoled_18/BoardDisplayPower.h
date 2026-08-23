@@ -2,6 +2,6 @@
 
 namespace WaveshareAmoled18::DisplayPower {
 
-void releaseHardware();
+    void releaseHardware();
 
-}  // namespace WaveshareAmoled18::DisplayPower
+} // namespace WaveshareAmoled18::DisplayPower

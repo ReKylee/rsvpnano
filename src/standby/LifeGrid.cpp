@@ -3,109 +3,199 @@
 #include <algorithm>
 
 namespace standby {
-namespace {
 
-void clearRect(std::vector<uint32_t> &cells, uint16_t columns, uint16_t rows, int x, int y,
-               int width, int height) {
-  const int xEnd = std::min(static_cast<int>(columns), x + width);
-  const int yEnd = std::min(static_cast<int>(rows), y + height);
-  for (int cy = std::max(0, y); cy < yEnd; ++cy) {
-    for (int cx = std::max(0, x); cx < xEnd; ++cx) {
-      setCellAt(cells, columns, rows, cx, cy, false);
+    void IncrementalLifeGrid::reset(uint16_t columns, uint16_t rows) {
+        columns_ = std::min<uint16_t>(columns, kMaxStandbyColumns);
+        rows_ = std::min<uint16_t>(rows, kMaxStandbyRows);
+        cellCount_ = static_cast<size_t>(columns_) * rows_;
+        wordCount_ = packedWordCount(cellCount_);
+        clear();
     }
-  }
-}
 
-void stampPattern(std::vector<uint32_t> &cells, uint16_t columns, uint16_t rows,
-                  const LifePoint *points, size_t pointCount, int originX, int originY) {
-  for (size_t i = 0; i < pointCount; ++i) {
-    setCellAt(cells, columns, rows, originX + points[i].x, originY + points[i].y, true);
-  }
-}
+    void IncrementalLifeGrid::clear() {
+        std::ranges::fill_n(cells_.begin(), cellCount_, uint8_t{0});
+        clearPackedGrid(active_, wordCount_);
+        clearPackedGrid(nextActive_, wordCount_);
+        clearPackedGrid(dirtyCells_, wordCount_);
+        clearPackedGrid(liveCells_, wordCount_);
+        liveCount_ = 0;
+        changeCount_ = 0;
+        fullRedraw_ = true;
+    }
 
-}  // namespace
-
-uint32_t advanceRng(uint32_t &rng) {
-  rng = (rng * 1664525UL) + 1013904223UL;
-  return rng;
-}
-
-size_t packedWordCount(size_t cellCount) { return (cellCount + 31U) / 32U; }
-
-bool cellAlive(const std::vector<uint32_t> &cells, size_t index) {
-  const size_t word = index / 32U;
-  if (word >= cells.size()) {
-    return false;
-  }
-  return (cells[word] & (1UL << (index % 32U))) != 0;
-}
-
-void setCell(std::vector<uint32_t> &cells, size_t index, bool alive) {
-  const size_t word = index / 32U;
-  if (word >= cells.size()) {
-    return;
-  }
-  const uint32_t mask = 1UL << (index % 32U);
-  if (alive) {
-    cells[word] |= mask;
-  } else {
-    cells[word] &= ~mask;
-  }
-}
-
-void setCellAt(std::vector<uint32_t> &cells, uint16_t columns, uint16_t rows, int x, int y,
-               bool alive) {
-  if (x < 0 || y < 0 || x >= static_cast<int>(columns) || y >= static_cast<int>(rows)) {
-    return;
-  }
-  setCell(cells, static_cast<size_t>(y) * columns + static_cast<size_t>(x), alive);
-}
-
-void clearAndStampPattern(std::vector<uint32_t> &cells, uint16_t columns, uint16_t rows,
-                          const LifePoint *points, size_t pointCount, int originX, int originY,
-                          int width, int height) {
-  if (originX < 0 || originY < 0 || originX + width > static_cast<int>(columns) ||
-      originY + height > static_cast<int>(rows)) {
-    return;
-  }
-  constexpr int kPatternMargin = 5;
-  clearRect(cells, columns, rows, originX - kPatternMargin, originY - kPatternMargin,
-            width + kPatternMargin * 2, height + kPatternMargin * 2);
-  stampPattern(cells, columns, rows, points, pointCount, originX, originY);
-}
-
-size_t lifeStep(const std::vector<uint32_t> &cur, std::vector<uint32_t> &next, uint16_t columns,
-                uint16_t rows) {
-  const size_t cellCount = static_cast<size_t>(columns) * static_cast<size_t>(rows);
-  next.assign(packedWordCount(cellCount), 0);
-
-  size_t aliveCount = 0;
-  for (uint16_t y = 0; y < rows; ++y) {
-    for (uint16_t x = 0; x < columns; ++x) {
-      uint8_t neighbours = 0;
-      for (int8_t dy = -1; dy <= 1; ++dy) {
-        for (int8_t dx = -1; dx <= 1; ++dx) {
-          if (dx == 0 && dy == 0) {
-            continue;
-          }
-          const uint16_t nx =
-              static_cast<uint16_t>((static_cast<int>(x) + dx + columns) % columns);
-          const uint16_t ny = static_cast<uint16_t>((static_cast<int>(y) + dy + rows) % rows);
-          neighbours +=
-              cellAlive(cur, static_cast<size_t>(ny) * columns + nx) ? 1 : 0;
+    void IncrementalLifeGrid::setAliveAt(int x, int y, bool isAlive) {
+        if (columns_ == 0 || rows_ == 0) {
+            return;
         }
-      }
-
-      const size_t index = static_cast<size_t>(y) * columns + x;
-      const bool alive = cellAlive(cur, index);
-      const bool nextAlive = alive ? (neighbours == 2 || neighbours == 3) : (neighbours == 3);
-      setCell(next, index, nextAlive);
-      if (nextAlive) {
-        ++aliveCount;
-      }
+        const size_t cellIndex = wrappedIndex(x, y);
+        if (alive(cellIndex) == isAlive) {
+            return;
+        }
+        setAliveBit(cellIndex, isAlive);
+        markActive(cellIndex);
     }
-  }
-  return aliveCount;
-}
 
-}  // namespace standby
+    void IncrementalLifeGrid::stampPattern(const LifePoint* points, size_t pointCount, int originX, int originY) {
+        if (points == nullptr) {
+            return;
+        }
+        for (size_t i = 0; i < pointCount; ++i) {
+            setAliveAt(originX + points[i].x, originY + points[i].y, true);
+        }
+    }
+
+    void IncrementalLifeGrid::finishSeed() {
+        rebuildNeighborCounts();
+        rebuildLiveCells();
+        clearPackedGrid(dirtyCells_, wordCount_);
+        std::ranges::fill_n(active_.begin(), wordCount_, 0xFFFFFFFFUL);
+        fullRedraw_ = true;
+    }
+
+    size_t IncrementalLifeGrid::step() {
+        if (cellCount_ == 0) {
+            return 0;
+        }
+
+        clearPackedGrid(dirtyCells_, wordCount_);
+        clearPackedGrid(nextActive_, wordCount_);
+        changeCount_ = 0;
+
+        for (size_t cellIndex = 0; cellIndex < cellCount_; ++cellIndex) {
+            if (!cellAlive(viewOf(active_, wordCount_), cellIndex)) {
+                continue;
+            }
+            const bool wasAlive = alive(cellIndex);
+            const uint8_t neighbors = neighborCount(cellIndex);
+            const bool shouldLive = neighbors == 3 || (wasAlive && neighbors == 2);
+            if (shouldLive == wasAlive) {
+                continue;
+            }
+
+            setAliveBit(cellIndex, shouldLive);
+            markDirty(cellIndex);
+            if (changeCount_ < changes_.size()) {
+                changes_[changeCount_++] = static_cast<uint16_t>(cellIndex);
+            }
+        }
+
+        for (size_t i = 0; i < changeCount_; ++i) {
+            const size_t changed = changes_[i];
+            const int x = static_cast<int>(changed % columns_);
+            const int y = static_cast<int>(changed / columns_);
+            const int8_t delta = alive(changed) ? 1 : -1;
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    const size_t affected = wrappedIndex(x + dx, y + dy);
+                    markActive(affected);
+                    if (dx != 0 || dy != 0) {
+                        addNeighborDelta(affected, delta);
+                    }
+                }
+            }
+        }
+
+        active_ = nextActive_;
+        rebuildLiveCells();
+        return liveCount_;
+    }
+
+    size_t IncrementalLifeGrid::index(uint16_t x, uint16_t y) const {
+        return static_cast<size_t>(y) * columns_ + x;
+    }
+
+    size_t IncrementalLifeGrid::wrappedIndex(int x, int y) const {
+        if (columns_ == 0 || rows_ == 0) {
+            return 0;
+        }
+        while (x < 0) {
+            x += columns_;
+        }
+        while (y < 0) {
+            y += rows_;
+        }
+        x %= columns_;
+        y %= rows_;
+        return index(static_cast<uint16_t>(x), static_cast<uint16_t>(y));
+    }
+
+    bool IncrementalLifeGrid::alive(size_t cellIndex) const {
+        return cellIndex < cellCount_ && (cells_[cellIndex] & kAliveMask) != 0;
+    }
+
+    uint8_t IncrementalLifeGrid::neighborCount(size_t cellIndex) const {
+        return cellIndex < cellCount_ ? static_cast<uint8_t>(cells_[cellIndex] & kNeighborMask) : 0;
+    }
+
+    void IncrementalLifeGrid::setAliveBit(size_t cellIndex, bool isAlive) {
+        if (cellIndex >= cellCount_) {
+            return;
+        }
+        const bool wasAlive = alive(cellIndex);
+        if (wasAlive == isAlive) {
+            return;
+        }
+        if (isAlive) {
+            cells_[cellIndex] |= kAliveMask;
+            ++liveCount_;
+        } else {
+            cells_[cellIndex] &= static_cast<uint8_t>(~kAliveMask);
+            if (liveCount_ > 0) {
+                --liveCount_;
+            }
+        }
+    }
+
+    void IncrementalLifeGrid::addNeighborDelta(size_t cellIndex, int8_t delta) {
+        if (cellIndex >= cellCount_) {
+            return;
+        }
+        const int value = static_cast<int>(neighborCount(cellIndex)) + delta;
+        const uint8_t clamped = static_cast<uint8_t>(std::clamp(value, 0, 8));
+        cells_[cellIndex] = static_cast<uint8_t>((cells_[cellIndex] & kAliveMask) | clamped);
+    }
+
+    void IncrementalLifeGrid::markActive(size_t cellIndex) {
+        if (cellIndex < cellCount_) {
+            setCell(nextActive_, cellIndex, true);
+        }
+    }
+
+    void IncrementalLifeGrid::markDirty(size_t cellIndex) {
+        if (cellIndex < cellCount_) {
+            setCell(dirtyCells_, cellIndex, true);
+        }
+    }
+
+    void IncrementalLifeGrid::rebuildNeighborCounts() {
+        for (size_t i = 0; i < cellCount_; ++i) {
+            cells_[i] &= kAliveMask;
+        }
+        for (uint16_t y = 0; y < rows_; ++y) {
+            for (uint16_t x = 0; x < columns_; ++x) {
+                const size_t cellIndex = index(x, y);
+                if (!alive(cellIndex)) {
+                    continue;
+                }
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        if (dx == 0 && dy == 0) {
+                            continue;
+                        }
+                        addNeighborDelta(wrappedIndex(static_cast<int>(x) + dx, static_cast<int>(y) + dy), 1);
+                    }
+                }
+            }
+        }
+    }
+
+    void IncrementalLifeGrid::rebuildLiveCells() {
+        clearPackedGrid(liveCells_, wordCount_);
+        for (size_t i = 0; i < cellCount_; ++i) {
+            if (alive(i)) {
+                setCell(liveCells_, i, true);
+            }
+        }
+    }
+
+} // namespace standby

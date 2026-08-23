@@ -1,0 +1,28 @@
+name = "Solarized Dark"
+
+[typography]
+fontId = "literata"
+fontSizeIndex = 0
+focusHighlight = true
+tracking = 0
+anchor = 30
+guideWidth = 30
+guideGap = 5
+
+[colors]
+background = "#002B36"
+foreground = "#FDF6E3"
+muted = "#93A1A1"
+subtle = "#839496"
+accent = "#DC322F"
+accentBar = "#268BD2"
+breakAccent = "#2AA198"
+onAccent = "#002B36"
+surface = "#073642"
+surfaceMuted = "#0B3F4A"
+surfaceActive = "#134B56"
+outline = "#586E75"
+guide = "#657B83"
+guideFocus = "#DC322F"
+phantom = "#586E75"
+progressTrack = "#073642"

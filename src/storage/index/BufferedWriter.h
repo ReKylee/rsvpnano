@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 #include <FS.h>
+#include <expected>
+#include <system_error>
 #include <vector>
 
 class BufferedWriter {
@@ -11,9 +13,9 @@ public:
     explicit BufferedWriter(File& file, size_t capacity = kDefaultCapacity);
     ~BufferedWriter();
 
-    bool write(const void* data, size_t len);
-    bool flush();
-    bool seek(uint32_t position);
+    std::expected<void, std::error_code> write(const void* data, size_t len);
+    std::expected<void, std::error_code> flush();
+    std::expected<void, std::error_code> seek(uint32_t position);
     void discard();
 
 private:

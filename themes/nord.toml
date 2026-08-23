@@ -1,0 +1,28 @@
+name = "Nord"
+
+[typography]
+fontId = "literata"
+fontSizeIndex = 0
+focusHighlight = true
+tracking = 0
+anchor = 30
+guideWidth = 30
+guideGap = 5
+
+[colors]
+background = "#2E3440"
+foreground = "#ECEFF4"
+muted = "#D8DEE9"
+subtle = "#81A1C1"
+accent = "#BF616A"
+accentBar = "#88C0D0"
+breakAccent = "#88C0D0"
+onAccent = "#2E3440"
+surface = "#3B4252"
+surfaceMuted = "#434C5E"
+surfaceActive = "#4C566A"
+outline = "#81A1C1"
+guide = "#5E81AC"
+guideFocus = "#BF616A"
+phantom = "#81A1C1"
+progressTrack = "#434C5E"

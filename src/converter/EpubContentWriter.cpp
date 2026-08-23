@@ -1,11 +1,11 @@
 #include "converter/EpubContentWriter.h"
 
 #include <algorithm>
-#include <array>
+#include <utility>
 
 #include "text/AsciiText.h"
-#include "text/LatinText.h"
 #include "text/RsvpTokenizer.h"
+#include "text/TextNormalizer.h"
 
 namespace EpubContent {
     namespace {
@@ -15,13 +15,9 @@ namespace EpubContent {
         constexpr size_t kOutputWrapWidth = 96;
         constexpr size_t kBufferedTextFlushThreshold = 220;
 
-        struct NamedEntity {
-            const char* name;
-            uint8_t value;
-        };
-
         struct TagInfo {
-            String name;
+            std::string name;
+            std::string anchor;
             bool closing = false;
             bool selfClosing = false;
         };
@@ -35,257 +31,14 @@ namespace EpubContent {
             delay(0);
         }
 
-        char entityCodepointByte(uint32_t codepoint) {
-            uint8_t storedByte = 0;
-            if (LatinText::storageByteForCodepoint(codepoint, storedByte)) {
-                return static_cast<char>(storedByte);
-            }
-            return ' ';
+        std::string decodedEntityText(std::string_view entity) {
+            std::string decoded;
+            return RsvpText::decodeMarkupEntity(entity, decoded) ? decoded : " ";
         }
 
-        char entityPunctuationChar(uint32_t codepoint) {
-            if (codepoint >= 0xFF01 && codepoint <= 0xFF5E) {
-                return static_cast<char>(codepoint - 0xFEE0);
-            }
-
-            switch (codepoint) {
-            case 0x00A0:
-                return ' ';
-            case 0x00AB:
-            case 0x00BB:
-            case 0x201C:
-            case 0x201D:
-            case 0x201E:
-            case 0x201F:
-            case 0x2033:
-            case 0x2036:
-            case 0x300C:
-            case 0x300D:
-            case 0x300E:
-            case 0x300F:
-                return '"';
-            case 0x2018:
-            case 0x2019:
-            case 0x201A:
-            case 0x201B:
-            case 0x2032:
-            case 0x2035:
-            case 0x2039:
-            case 0x203A:
-                return '\'';
-            case 0x2010:
-            case 0x2011:
-            case 0x2012:
-            case 0x2013:
-            case 0x2014:
-            case 0x2015:
-            case 0x2043:
-            case 0x2212:
-                return '-';
-            case 0x2022:
-            case 0x00B7:
-            case 0x2219:
-                return '*';
-            case 0x2026:
-                return '.';
-            case 0x207D:
-            case 0x208D:
-            case 0x2768:
-            case 0x276A:
-                return '(';
-            case 0x207E:
-            case 0x208E:
-            case 0x2769:
-            case 0x276B:
-                return ')';
-            case 0x2045:
-            case 0x2308:
-            case 0x230A:
-            case 0x3010:
-            case 0x3014:
-            case 0x3016:
-            case 0x3018:
-            case 0x301A:
-                return '[';
-            case 0x2046:
-            case 0x2309:
-            case 0x230B:
-            case 0x3011:
-            case 0x3015:
-            case 0x3017:
-            case 0x3019:
-            case 0x301B:
-                return ']';
-            case 0x2774:
-            case 0x2776:
-                return '{';
-            case 0x2775:
-            case 0x2777:
-                return '}';
-            case 0x2329:
-            case 0x27E8:
-            case 0x3008:
-            case 0x300A:
-                return '<';
-            case 0x232A:
-            case 0x27E9:
-            case 0x3009:
-            case 0x300B:
-                return '>';
-            case 0xFF0C:
-                return ',';
-            case 0xFF0E:
-                return '.';
-            case 0xFF1A:
-                return ':';
-            case 0xFF1B:
-                return ';';
-            case 0xFF01:
-                return '!';
-            case 0xFF1F:
-                return '?';
-            default:
-                return '\0';
-            }
-        }
-
-        bool parseNumericEntityCodepoint(const String& entity, uint32_t& value) {
-            if (!entity.startsWith("#")) {
-                return false;
-            }
-
-            value = 0;
-            int start = 1;
-            int base = 10;
-            if (entity.length() > 2 && (entity[1] == 'x' || entity[1] == 'X')) {
-                start = 2;
-                base = 16;
-            }
-            if (static_cast<size_t>(start) >= entity.length()) {
-                return false;
-            }
-
-            for (size_t i = start; i < entity.length(); ++i) {
-                const int digit = base == 16 ? AsciiText::hexValue(entity[i])
-                                             : (AsciiText::isDigit(entity[i]) ? entity[i] - '0' : -1);
-                if (digit < 0 || digit >= base) {
-                    return false;
-                }
-                value = value * base + static_cast<uint32_t>(digit);
-            }
-
-            return true;
-        }
-
-        bool isSentenceDashCodepoint(uint32_t codepoint) {
-            return codepoint == 0x2012 || codepoint == 0x2013 || codepoint == 0x2014 || codepoint == 0x2015;
-        }
-
-        char decodedEntityChar(const String& entity) {
-            const auto findEntity = [&](const NamedEntity* entries, size_t count) -> char {
-                const NamedEntity* end = entries + count;
-                const NamedEntity* found = std::find_if(entries, end, [&](const NamedEntity& entry) {
-                    return entity == entry.name;
-                });
-                return found == end ? '\0' : static_cast<char>(found->value);
-            };
-
-            static constexpr std::array<NamedEntity, 33> kNamedEntities = {{
-                {"amp", '&'},    {"lt", '<'},      {"gt", '>'},     {"quot", '"'},   {"apos", '\''},   {"nbsp", ' '},
-                {"iexcl", 0x16}, {"iquest", 0x17}, {"ldquo", '"'},  {"rdquo", '"'},  {"bdquo", '"'},   {"lsquo", '\''},
-                {"rsquo", '\''}, {"sbquo", '\''},  {"laquo", '"'},  {"raquo", '"'},  {"lsaquo", '\''}, {"rsaquo", '\''},
-                {"lpar", '('},   {"rpar", ')'},    {"lbrack", '['}, {"rbrack", ']'}, {"lcub", '{'},    {"rcub", '}'},
-                {"ndash", '-'},  {"mdash", '-'},   {"hyphen", '-'}, {"minus", '-'},  {"hellip", '.'},  {"middot", '*'},
-                {"bull", '*'},   {"times", 'x'},   {"divide", '/'},
-            }};
-            const char namedEntity = findEntity(kNamedEntities.data(), kNamedEntities.size());
-            if (namedEntity != '\0') {
-                return namedEntity;
-            }
-
-            static constexpr std::array<NamedEntity, 62> kLatin1Entities = {{
-                {"Agrave", 0xC0}, {"Aacute", 0xC1}, {"Acirc", 0xC2},  {"Atilde", 0xC3}, {"Auml", 0xC4},
-                {"Aring", 0xC5},  {"AElig", 0xC6},  {"Ccedil", 0xC7}, {"Egrave", 0xC8}, {"Eacute", 0xC9},
-                {"Ecirc", 0xCA},  {"Euml", 0xCB},   {"Igrave", 0xCC}, {"Iacute", 0xCD}, {"Icirc", 0xCE},
-                {"Iuml", 0xCF},   {"ETH", 0xD0},    {"Ntilde", 0xD1}, {"Ograve", 0xD2}, {"Oacute", 0xD3},
-                {"Ocirc", 0xD4},  {"Otilde", 0xD5}, {"Ouml", 0xD6},   {"Oslash", 0xD8}, {"Ugrave", 0xD9},
-                {"Uacute", 0xDA}, {"Ucirc", 0xDB},  {"Uuml", 0xDC},   {"Yacute", 0xDD}, {"THORN", 0xDE},
-                {"szlig", 0xDF},  {"agrave", 0xE0}, {"aacute", 0xE1}, {"acirc", 0xE2},  {"atilde", 0xE3},
-                {"auml", 0xE4},   {"aring", 0xE5},  {"aelig", 0xE6},  {"ccedil", 0xE7}, {"egrave", 0xE8},
-                {"eacute", 0xE9}, {"ecirc", 0xEA},  {"euml", 0xEB},   {"igrave", 0xEC}, {"iacute", 0xED},
-                {"icirc", 0xEE},  {"iuml", 0xEF},   {"eth", 0xF0},    {"ntilde", 0xF1}, {"ograve", 0xF2},
-                {"oacute", 0xF3}, {"ocirc", 0xF4},  {"otilde", 0xF5}, {"ouml", 0xF6},   {"oslash", 0xF8},
-                {"ugrave", 0xF9}, {"uacute", 0xFA}, {"ucirc", 0xFB},  {"uuml", 0xFC},   {"yacute", 0xFD},
-                {"thorn", 0xFE},  {"yuml", 0xFF},
-            }};
-            const char latin1Entity = findEntity(kLatin1Entities.data(), kLatin1Entities.size());
-            if (latin1Entity != '\0') {
-                return latin1Entity;
-            }
-
-            static constexpr std::array<NamedEntity, 58> kCustomEntities = {{
-                {"Dcaron", 0x01}, {"dcaron", 0x02},       {"Ecaron", 0x03}, {"ecaron", 0x04},
-                {"Ncaron", 0x05}, {"ncaron", 0x06},       {"Rcaron", 0x07}, {"rcaron", 0x08},
-                {"Tcaron", 0x0E}, {"tcaron", 0x0F},       {"Uring", 0x10},  {"uring", 0x11},
-                {"Odblac", 0x12}, {"odblac", 0x13},       {"Udblac", 0x14}, {"udblac", 0x15},
-                {"OElig", 0x80},  {"oelig", 0x81},        {"Scaron", 0x86}, {"scaron", 0x87},
-                {"Zcaron", 0x88}, {"zcaron", 0x89},       {"Amacr", 0xA1},  {"amacr", 0xA2},
-                {"Emacr", 0xA3},  {"emacr", 0xA4},        {"Gcedil", 0xA5}, {"Gcommaaccent", 0xA5},
-                {"gcedil", 0xA6}, {"gcommaaccent", 0xA6}, {"Imacr", 0xA7},  {"imacr", 0xA8},
-                {"Kcedil", 0xA9}, {"Kcommaaccent", 0xA9}, {"kcedil", 0xAA}, {"kcommaaccent", 0xAA},
-                {"Lcedil", 0xAB}, {"Lcommaaccent", 0xAB}, {"lcedil", 0xAC}, {"lcommaaccent", 0xAC},
-                {"Ncedil", 0xAE}, {"Ncommaaccent", 0xAE}, {"ncedil", 0xAF}, {"ncommaaccent", 0xAF},
-                {"Edot", 0xB0},   {"edot", 0xB1},         {"Iogon", 0xB6},  {"iogon", 0xB7},
-                {"Uogon", 0xB8},  {"uogon", 0xB9},        {"Umacr", 0xBA},  {"umacr", 0xBB},
-                {"Dstrok", 0xBC}, {"dstrok", 0xBD},       {"ENG", 0xBE},    {"eng", 0xBF},
-                {"Tstrok", 0xD7}, {"tstrok", 0xF7},
-            }};
-            const char customEntity = findEntity(kCustomEntities.data(), kCustomEntities.size());
-            if (customEntity != '\0') {
-                return customEntity;
-            }
-
-            uint32_t value = 0;
-            if (parseNumericEntityCodepoint(entity, value)) {
-                const char mapped = entityCodepointByte(value);
-                if (mapped != ' ') {
-                    return mapped;
-                }
-                const char punctuation = entityPunctuationChar(value);
-                if (punctuation != '\0') {
-                    return punctuation;
-                }
-            }
-
-            return ' ';
-        }
-
-        String decodedEntityText(const String& entity) {
-            if (entity == "ndash" || entity == "mdash") {
-                return " - ";
-            }
-            if (entity == "hellip") {
-                return "...";
-            }
-
-            uint32_t value = 0;
-            if (parseNumericEntityCodepoint(entity, value)) {
-                if (isSentenceDashCodepoint(value)) {
-                    return " - ";
-                }
-                if (value == 0x2026) {
-                    return "...";
-                }
-            }
-
-            String decoded;
-            decoded += decodedEntityChar(entity);
-            return decoded;
-        }
-
-        void appendNormalizedChar(String& target, char c) {
+        void appendNormalizedChar(std::string& target, char c) {
             if (AsciiText::isWhitespace(c)) {
-                if (!target.isEmpty() && target[target.length() - 1] != ' ') {
+                if (!target.empty() && target.back() != ' ') {
                     target += ' ';
                 }
                 return;
@@ -294,48 +47,48 @@ namespace EpubContent {
             target += c;
         }
 
-        bool hasReadableOrRhythmText(const String& token) {
-            if (RsvpText::isRhythmToken(token)) {
-                return true;
+        std::string tagAttributeValue(std::string_view tag, std::string_view name) {
+            size_t position = 0;
+            while ((position = tag.find(name, position)) != std::string_view::npos) {
+                const bool boundaryBefore = position == 0 || AsciiText::isWhitespace(tag[position - 1])
+                                         || tag[position - 1] == '<' || tag[position - 1] == '/';
+                size_t afterName = position + name.length();
+                const bool boundaryAfter =
+                    afterName >= tag.length() || AsciiText::isWhitespace(tag[afterName]) || tag[afterName] == '=';
+                if (!boundaryBefore || !boundaryAfter) {
+                    position = afterName;
+                    continue;
+                }
+                while (afterName < tag.length() && AsciiText::isWhitespace(tag[afterName])) {
+                    ++afterName;
+                }
+                if (afterName >= tag.length() || tag[afterName] != '=') {
+                    position = afterName;
+                    continue;
+                }
+                do {
+                    ++afterName;
+                } while (afterName < tag.length() && AsciiText::isWhitespace(tag[afterName]));
+                if (afterName >= tag.length()) {
+                    return {};
+                }
+
+                const char quote = tag[afterName];
+                if (quote == '"' || quote == '\'') {
+                    const size_t end = tag.find(quote, afterName + 1);
+                    return end == std::string_view::npos ? std::string{}
+                                                         : std::string{tag.substr(afterName + 1, end - afterName - 1)};
+                }
+                size_t end = afterName;
+                while (end < tag.length() && !AsciiText::isWhitespace(tag[end]) && tag[end] != '>') {
+                    ++end;
+                }
+                return std::string{tag.substr(afterName, end - afterName)};
             }
-            const char* text = token.c_str();
-            return std::any_of(text, text + token.length(), [](char c) {
-                return RsvpText::isReadableTokenChar(c);
-            });
+            return {};
         }
 
-        bool flushWordAlignedPrefix(File& output, String& line, size_t& wordCount, size_t maxWords) {
-            line.trim();
-            if (line.isEmpty()) {
-                line = "";
-                return true;
-            }
-
-            int split = static_cast<int>(line.length()) - 1;
-            while (split >= 0 && !AsciiText::isWhitespace(line[split])) {
-                --split;
-            }
-
-            if (split < 0) {
-                return true;
-            }
-
-            String prefix = line.substring(0, split);
-            String remainder = line.substring(split + 1);
-            prefix.trim();
-            remainder.trim();
-
-            if (prefix.isEmpty()) {
-                line = remainder;
-                return true;
-            }
-
-            const bool keepGoing = writeBodyLine(output, prefix, wordCount, maxWords);
-            line = remainder;
-            return keepGoing;
-        }
-
-        TagInfo parseTagInfo(const String& tag) {
+        TagInfo parseTagInfo(std::string_view tag) {
             TagInfo info;
 
             size_t position = 1;
@@ -355,8 +108,13 @@ namespace EpubContent {
                 ++position;
             }
 
-            info.name = tag.substring(start, position);
-            info.name.toLowerCase();
+            info.name = tag.substr(start, position - start);
+            std::ranges::transform(info.name, info.name.begin(), AsciiText::toLower);
+            info.anchor = tagAttributeValue(tag, "id");
+            if (info.anchor.empty()) {
+                info.anchor = tagAttributeValue(tag, "name");
+            }
+            info.anchor = std::string{AsciiText::trim(info.anchor)};
 
             for (int i = static_cast<int>(tag.length()) - 1; i >= 0; --i) {
                 if (AsciiText::isWhitespace(tag[i]) || tag[i] == '>') {
@@ -369,67 +127,41 @@ namespace EpubContent {
             return info;
         }
 
-        bool isSkipTag(const String& name) {
-            static constexpr std::array<const char*, 6> kSkippedTags = {{
-                "head",
-                "script",
-                "style",
-                "svg",
-                "math",
-                "nav",
-            }};
-            return std::any_of(kSkippedTags.begin(), kSkippedTags.end(), [&](const char* tag) {
-                return name == tag;
-            });
+        bool isSkipTag(std::string_view name) {
+            static constexpr std::string_view kSkippedTags[] = {
+                "head", "script", "style", "svg", "math", "nav",
+            };
+            return std::ranges::find(kSkippedTags, name) != std::ranges::end(kSkippedTags);
         }
 
-        bool isHeadingTag(const String& name) {
+        bool isHeadingTag(std::string_view name) {
             return name.length() == 2 && name[0] == 'h' && name[1] >= '1' && name[1] <= '6';
         }
 
-        bool isBlockTag(const String& name) {
-            static constexpr std::array<const char*, 11> kBlockTags = {{
-                "p",
-                "div",
-                "section",
-                "article",
-                "blockquote",
-                "li",
-                "tr",
-                "br",
-                "hr",
-                "dd",
-                "dt",
-            }};
-            return std::any_of(kBlockTags.begin(), kBlockTags.end(), [&](const char* tag) {
-                return name == tag;
-            });
+        bool isBlockTag(std::string_view name) {
+            static constexpr std::string_view kBlockTags[] = {
+                "address",    "article", "aside",  "blockquote", "body",  "br", "dd",    "div", "dl", "dt",
+                "figcaption", "figure",  "footer", "header",     "hr",    "li", "main",  "ol",  "p",  "pre",
+                "section",    "table",   "tbody",  "td",         "tfoot", "th", "thead", "tr",  "ul",
+            };
+            return std::ranges::find(kBlockTags, name) != std::ranges::end(kBlockTags);
         }
 
-        bool writeChapterMarker(File& output, const String& title, String& lastChapterTitle) {
-            String cleaned = RsvpText::normalizeDisplayText(title);
-            cleaned.trim();
-            if (cleaned.isEmpty() || cleaned == lastChapterTitle) {
-                return true;
-            }
-
-            output.print("@chapter ");
-            output.println(cleaned);
-            lastChapterTitle = cleaned;
-            return true;
+        std::string normalizedLabel(std::string_view value) {
+            return RsvpText::readableKey(value);
         }
 
     } // namespace
 
-    String plainTextFromXmlFragment(const String& fragment) {
-        String text;
+    std::string plainTextFromXmlFragment(std::string_view fragment) {
+        std::string text;
         text.reserve(std::min<size_t>(fragment.length(), 160));
 
         for (size_t i = 0; i < fragment.length(); ++i) {
             const char c = fragment[i];
             if (c == '<') {
-                const int tagEnd = fragment.indexOf('>', i + 1);
-                if (tagEnd < 0) {
+                const size_t tagEnd = fragment.find('>', i + 1);
+                if (tagEnd == std::string_view::npos) {
                     break;
                 }
                 i = tagEnd;
@@ -438,11 +170,10 @@ namespace EpubContent {
             }
 
             if (c == '&') {
-                const int entityEnd = fragment.indexOf(';', i + 1);
-                const int entityLength = entityEnd - static_cast<int>(i) - 1;
-                if (entityEnd > 0 && entityLength >= 0 && entityLength <= static_cast<int>(kMaxEntityChars)) {
-                    const String decoded = decodedEntityText(fragment.substring(i + 1, entityEnd));
-                    std::for_each(decoded.c_str(), decoded.c_str() + decoded.length(), [&](char decodedChar) {
+                const size_t entityEnd = fragment.find(';', i + 1);
+                if (entityEnd != std::string_view::npos && entityEnd - i - 1 <= kMaxEntityChars) {
+                    const std::string decoded = decodedEntityText(fragment.substr(i + 1, entityEnd - i - 1));
+                    std::ranges::for_each(decoded, [&](char decodedChar) {
                         appendNormalizedChar(text, decodedChar);
                     });
                     i = entityEnd;
@@ -453,27 +184,26 @@ namespace EpubContent {
             appendNormalizedChar(text, c);
         }
 
-        text.trim();
         return RsvpText::normalizeDisplayText(text);
     }
 
-    bool writeBodyLine(File& output, const String& line, size_t& wordCount, size_t maxWords) {
-        const String normalizedLine = RsvpText::normalizeDisplayText(line);
-        String outputLine;
+    bool writeBodyLine(File& output, std::string_view line, size_t& wordCount, size_t maxWords) {
+        const std::string normalizedLine = RsvpText::normalizeDisplayText(line);
+        std::string outputLine;
 
         auto flushOutputLine = [&]() {
-            if (outputLine.isEmpty()) {
+            if (outputLine.empty()) {
                 return;
             }
-            if (outputLine.startsWith("@")) {
+            if (outputLine.starts_with('@')) {
                 output.print('@');
             }
-            output.println(outputLine);
-            outputLine = "";
+            output.println(outputLine.c_str());
+            outputLine.clear();
         };
 
-        auto consumeRsvpToken = [&](const String& value) {
-            if (value.isEmpty() || !hasReadableOrRhythmText(value)) {
+        auto consumeRsvpToken = [&](const std::string& value) {
+            if (value.empty()) {
                 return true;
             }
 
@@ -481,11 +211,13 @@ namespace EpubContent {
                 flushOutputLine();
             }
 
-            if (!outputLine.isEmpty()) {
+            if (!outputLine.empty()) {
                 outputLine += ' ';
             }
             outputLine += value;
-            ++wordCount;
+            if (RsvpText::hasReadableText(value)) {
+                ++wordCount;
+            }
             return true;
         };
 
@@ -496,15 +228,28 @@ namespace EpubContent {
         return keepGoing;
     }
 
-    RsvpContentWriter::RsvpContentWriter(File& output, size_t& wordCount, size_t maxWords, String& lastChapterTitle) :
+    RsvpContentWriter::RsvpContentWriter(File& output, size_t& wordCount, size_t maxWords,
+                                         std::string& lastChapterTitle, size_t& chapterCount,
+                                         std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
+                                         std::string_view fallbackChapterTitle, std::string_view bookTitle) :
             output_(output),
             wordCount_(wordCount),
             maxWords_(maxWords),
-            lastChapterTitle_(lastChapterTitle) {
+            lastChapterTitle_(lastChapterTitle),
+            chapterCount_(chapterCount),
+            tocEntries_(tocEntries),
+            hasToc_(hasToc),
+            fallbackChapterTitle_(fallbackChapterTitle),
+            bookTitle_(bookTitle) {
         line_.reserve(160);
         heading_.reserve(80);
         tag_.reserve(96);
         entity_.reserve(16);
+
+        if (tocEntries_.size() == 1) {
+            writeChapter(tocEntries_.front().title);
+            nextTocEntry_ = 1;
+        }
     }
 
     bool RsvpContentWriter::write(const uint8_t* data, size_t length) {
@@ -522,25 +267,126 @@ namespace EpubContent {
 
     bool RsvpContentWriter::finish() {
         mode_ = Mode::Text;
-        return flushLine();
+        if (!flushLine()) {
+            return false;
+        }
+        return tocEntries_.empty() || emitTocEntriesThrough(tocEntries_.size() - 1);
     }
 
     bool RsvpContentWriter::reachedWordLimit() const {
         return reachedWordLimit_;
     }
 
-    bool RsvpContentWriter::flushLine() {
-        line_.trim();
-        if (line_.isEmpty()) {
+    void RsvpContentWriter::beginParagraph() {
+        if (paragraphOpen_) {
+            return;
+        }
+        if (!documentChapterWritten_ && !hasToc_ && !fallbackChapterTitle_.empty()) {
+            writeChapter(fallbackChapterTitle_);
+        }
+        if (wordCount_ > 0) {
+            output_.println();
+            output_.println("@para");
+        }
+        paragraphOpen_ = true;
+    }
+
+    bool RsvpContentWriter::flushLine(bool endParagraph) {
+        line_ = std::string{AsciiText::trim(line_)};
+        if (line_.empty()) {
+            if (endParagraph) {
+                paragraphOpen_ = false;
+            }
             return true;
         }
 
+        beginParagraph();
         const bool keepGoing = writeBodyLine(output_, line_, wordCount_, maxWords_);
-        line_ = "";
+        line_.clear();
+        if (endParagraph) {
+            paragraphOpen_ = false;
+        }
         if (!keepGoing) {
             reachedWordLimit_ = true;
         }
         return keepGoing;
+    }
+
+    bool RsvpContentWriter::flushWordAlignedPrefix() {
+        line_ = std::string{AsciiText::trim(line_)};
+        int split = static_cast<int>(line_.length()) - 1;
+        while (split >= 0 && !AsciiText::isWhitespace(line_[split])) {
+            --split;
+        }
+        if (split < 0) {
+            return true;
+        }
+
+        std::string prefix{AsciiText::trim(std::string_view{line_}.substr(0, split))};
+        std::string remainder{AsciiText::trim(std::string_view{line_}.substr(split + 1))};
+        if (prefix.empty()) {
+            line_ = remainder;
+            return true;
+        }
+
+        line_ = prefix;
+        const bool keepGoing = flushLine(false);
+        line_ = remainder;
+        return keepGoing;
+    }
+
+    bool RsvpContentWriter::writeChapter(std::string_view title) {
+        const std::string cleaned{AsciiText::trim(RsvpText::normalizeDisplayText(title))};
+        if (cleaned.empty() || cleaned == lastChapterTitle_) {
+            return true;
+        }
+        if (wordCount_ > 0 || !lastChapterTitle_.empty()) {
+            output_.println();
+        }
+        output_.print("@chapter ");
+        output_.println(cleaned.c_str());
+        lastChapterTitle_ = cleaned;
+        ++chapterCount_;
+        documentChapterWritten_ = true;
+        paragraphOpen_ = false;
+        return true;
+    }
+
+    bool RsvpContentWriter::emitTocEntriesThrough(size_t index) {
+        if (nextTocEntry_ > index || nextTocEntry_ >= tocEntries_.size()) {
+            return true;
+        }
+        if (!flushLine()) {
+            return false;
+        }
+        while (nextTocEntry_ <= index && nextTocEntry_ < tocEntries_.size()) {
+            if (!writeChapter(tocEntries_[nextTocEntry_].title)) {
+                return false;
+            }
+            ++nextTocEntry_;
+        }
+        return true;
+    }
+
+    int RsvpContentWriter::matchingTocEntry(std::string_view anchor) const {
+        if (anchor.empty()) {
+            return -1;
+        }
+        for (size_t i = nextTocEntry_; i < tocEntries_.size(); ++i) {
+            if (!tocEntries_[i].fragment.empty() && tocEntries_[i].fragment == anchor) {
+                return static_cast<int>(i);
+            }
+        }
+        return -1;
+    }
+
+    bool RsvpContentWriter::suppressHeading(std::string_view heading) const {
+        if (!hasToc_) {
+            return false;
+        }
+        const std::string normalized = normalizedLabel(heading);
+        return normalized == "contents" || normalized == "tableofcontents"
+            || (!bookTitle_.empty() && normalized == normalizedLabel(bookTitle_));
     }
 
     void RsvpContentWriter::appendToActiveText(char c) {
@@ -559,7 +405,7 @@ namespace EpubContent {
 
         appendToActiveText(c);
         if (!inHeading_ && line_.length() > kBufferedTextFlushThreshold) {
-            return flushWordAlignedPrefix(output_, line_, wordCount_, maxWords_);
+            return flushWordAlignedPrefix();
         }
 
         return true;
@@ -576,7 +422,7 @@ namespace EpubContent {
             if (skipDepth_ > 0) {
                 return true;
             }
-            entity_ = "";
+            entity_.clear();
             mode_ = Mode::Entity;
             return true;
         }
@@ -584,16 +430,17 @@ namespace EpubContent {
         return processDecodedText(c);
     }
 
-    bool RsvpContentWriter::processTag(const String& tag) {
+    bool RsvpContentWriter::processTag(std::string_view tag) {
         const TagInfo tagInfo = parseTagInfo(tag);
 
-        if (tagInfo.name.isEmpty() || tag.startsWith("<!") || tag.startsWith("<?")) {
+        if (tagInfo.name.empty() || tag.starts_with("<!") || tag.starts_with("<?")) {
             return true;
         }
 
         const bool skipTag = isSkipTag(tagInfo.name);
 
-        // Skip ignored tag subtrees without letting their text reach the output buffer.
+        // Skip ignored tag subtrees without letting their text reach the output
+        // buffer.
         {
             if (skipDepth_ > 0) {
                 if (!tagInfo.closing && skipTag && !tagInfo.selfClosing) {
@@ -613,22 +460,31 @@ namespace EpubContent {
             }
         }
 
+        const int tocEntry = tagInfo.closing ? -1 : matchingTocEntry(tagInfo.anchor);
+        if (tocEntry >= 0 && !emitTocEntriesThrough(static_cast<size_t>(tocEntry))) {
+            return false;
+        }
+
         // Headings become RSVP chapter markers instead of body words.
         {
             if (isHeadingTag(tagInfo.name)) {
                 if (tagInfo.closing) {
                     inHeading_ = false;
-                    const String cleanedHeading = plainTextFromXmlFragment(heading_);
-                    if (!writeChapterMarker(output_, cleanedHeading, lastChapterTitle_)) {
+                    const std::string cleanedHeading = plainTextFromXmlFragment(heading_);
+                    if (tocEntries_.empty() && !suppressHeading(cleanedHeading) && !writeChapter(cleanedHeading)) {
                         return false;
                     }
-                    heading_ = "";
+                    heading_.clear();
                 } else if (!tagInfo.selfClosing) {
                     if (!flushLine()) {
                         return false;
                     }
+                    if (!tocEntries_.empty() && tocEntry < 0 && nextTocEntry_ < tocEntries_.size()
+                        && !emitTocEntriesThrough(nextTocEntry_)) {
+                        return false;
+                    }
                     inHeading_ = true;
-                    heading_ = "";
+                    heading_.clear();
                 }
                 return true;
             }
@@ -651,8 +507,8 @@ namespace EpubContent {
     bool RsvpContentWriter::processEntityChar(char c) {
         if (c == ';') {
             mode_ = Mode::Text;
-            const String decoded = decodedEntityText(entity_);
-            const bool processed = std::all_of(decoded.c_str(), decoded.c_str() + decoded.length(), [&](char decodedChar) {
+            const std::string decoded = decodedEntityText(entity_);
+            const bool processed = std::ranges::all_of(decoded, [&](char decodedChar) {
                 return processDecodedText(decodedChar);
             });
             if (!processed) {
@@ -681,11 +537,11 @@ namespace EpubContent {
     bool RsvpContentWriter::processCommentChar(char c) {
         commentTail_ += c;
         if (commentTail_.length() > 3) {
-            commentTail_.remove(0, commentTail_.length() - 3);
+            commentTail_.erase(0, commentTail_.length() - 3);
         }
 
         if (commentTail_ == "-->") {
-            commentTail_ = "";
+            commentTail_.clear();
             mode_ = Mode::Text;
         }
 
@@ -703,19 +559,19 @@ namespace EpubContent {
         case Mode::Tag:
             tag_ += c;
             if (tag_ == "<!--") {
-                tag_ = "";
-                commentTail_ = "";
+                tag_.clear();
+                commentTail_.clear();
                 mode_ = Mode::Comment;
                 return true;
             }
             if (tag_.length() > kMaxTagChars) {
-                tag_ = "";
+                tag_.clear();
                 mode_ = Mode::Text;
                 return processDecodedText(' ');
             }
             if (c == '>') {
-                const String completedTag = tag_;
-                tag_ = "";
+                const std::string completedTag = std::move(tag_);
+                tag_.clear();
                 mode_ = Mode::Text;
                 return processTag(completedTag);
             }

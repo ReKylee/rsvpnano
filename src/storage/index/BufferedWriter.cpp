@@ -10,56 +10,59 @@ BufferedWriter::~BufferedWriter() {
     flush();
 }
 
-bool BufferedWriter::write(const void* data, size_t len) {
-    if (failed_) {
-        return false;
-    }
+std::expected<void, std::error_code> BufferedWriter::write(const void* data, size_t len) {
+    if (failed_)
+        return std::unexpected(std::make_error_code(std::errc::io_error));
 
     const uint8_t* bytes = static_cast<const uint8_t*>(data);
     const size_t capacity = buffer_.capacity();
     if (capacity == 0) {
         if (file_.write(bytes, len) != len) {
             failed_ = true;
+            return std::unexpected(std::make_error_code(std::errc::io_error));
         }
-        return !failed_;
+        return {};
     }
 
     if (buffer_.size() + len > capacity) {
         if (!flush()) {
-            return false;
+            return std::unexpected(std::make_error_code(std::errc::io_error));
         }
         if (len >= capacity) {
             if (file_.write(bytes, len) != len) {
                 failed_ = true;
+                return std::unexpected(std::make_error_code(std::errc::io_error));
             }
-            return !failed_;
+            return {};
         }
     }
 
     const size_t offset = buffer_.size();
     buffer_.resize(offset + len);
     std::memcpy(buffer_.data() + offset, bytes, len);
-    return true;
+    return {};
 }
 
-bool BufferedWriter::flush() {
-    if (failed_) {
-        return false;
-    }
-    if (buffer_.empty()) {
-        return true;
-    }
+std::expected<void, std::error_code> BufferedWriter::flush() {
+    if (failed_)
+        return std::unexpected(std::make_error_code(std::errc::io_error));
+    if (buffer_.empty())
+        return {};
     const bool ok = file_.write(buffer_.data(), buffer_.size()) == buffer_.size();
     buffer_.clear();
     if (!ok) {
         failed_ = true;
-        return false;
+        return std::unexpected(std::make_error_code(std::errc::io_error));
     }
-    return ok;
+    return {};
 }
 
-bool BufferedWriter::seek(uint32_t position) {
-    return flush() && file_.seek(position);
+std::expected<void, std::error_code> BufferedWriter::seek(uint32_t position) {
+    if (auto flushed = flush(); !flushed)
+        return flushed;
+    if (!file_.seek(position))
+        return std::unexpected(std::make_error_code(std::errc::io_error));
+    return {};
 }
 
 void BufferedWriter::discard() {

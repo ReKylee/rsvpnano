@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024"><defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="68%">
+      <stop offset="0%" stop-color="#1e1848" />
+      <stop offset="60%" stop-color="#0d0b28" />
+      <stop offset="100%" stop-color="#050410" />
+    </radialGradient>
+    <linearGradient id="zone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
+      <stop offset="35%" stop-color="#ffffff" stop-opacity="0.055" />
+      <stop offset="65%" stop-color="#ffffff" stop-opacity="0.055" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+    <radialGradient id="vignette" cx="50%" cy="50%" r="70%">
+      <stop offset="55%" stop-color="#000000" stop-opacity="0" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.45" />
+    </radialGradient>
+  </defs>
+
+  
+  <rect width="1024" height="1024" rx="220" ry="220" fill="url(#bg)" />
+  <rect width="1024" height="1024" rx="220" ry="220" fill="url(#vignette)" />
+
+  
+  </svg>

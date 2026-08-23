@@ -7,41 +7,42 @@
 
 namespace Board::Imu {
 
-namespace {
+    namespace {
 
-Board::UiOrientation gUiOrientation = WaveshareAmoled206::DisplayWiring::kDefaultUiOrientation;
+        TwoWire& imuWire() {
+            return Wire;
+        }
 
-TwoWire &imuWire() { return Wire; }
+    } // namespace
 
-}  // namespace
+    bool available() {
+        return true;
+    }
 
-bool available() { return true; }
+    const char* wireName() {
+        return "Wire";
+    }
 
-const char *wireName() { return "Wire"; }
+    uint8_t address() {
+        return WaveshareAmoled206::ImuWiring::kAddress;
+    }
 
-uint8_t address() { return WaveshareAmoled206::ImuWiring::kAddress; }
+    bool probeAddress(uint8_t candidateAddress) {
+        return BoardDrivers::Qmi8658::probeAddress(imuWire(), candidateAddress);
+    }
 
-Board::UiOrientation uiOrientation() { return gUiOrientation; }
+    bool readRegister(uint8_t deviceAddress, uint8_t reg, uint8_t& value) {
+        return BoardDrivers::Qmi8658::readRegister(imuWire(), deviceAddress, reg, value,
+                                                   WaveshareAmoled206::ImuWiring::kReleaseBusBeforeRead);
+    }
 
-void setUiOrientation(Board::UiOrientation orientation) { gUiOrientation = orientation; }
+    bool writeRegister(uint8_t deviceAddress, uint8_t reg, uint8_t value) {
+        return BoardDrivers::Qmi8658::writeRegister(imuWire(), deviceAddress, reg, value);
+    }
 
-bool probeAddress(uint8_t candidateAddress) {
-  return BoardDrivers::Qmi8658::probeAddress(imuWire(), candidateAddress);
-}
+    bool readRegisters(uint8_t deviceAddress, uint8_t startReg, uint8_t* buffer, size_t len) {
+        return BoardDrivers::Qmi8658::readRegisters(imuWire(), deviceAddress, startReg, buffer, len,
+                                                    WaveshareAmoled206::ImuWiring::kReleaseBusBeforeRead);
+    }
 
-bool readRegister(uint8_t deviceAddress, uint8_t reg, uint8_t &value) {
-  return BoardDrivers::Qmi8658::readRegister(
-      imuWire(), deviceAddress, reg, value, WaveshareAmoled206::ImuWiring::kReleaseBusBeforeRead);
-}
-
-bool writeRegister(uint8_t deviceAddress, uint8_t reg, uint8_t value) {
-  return BoardDrivers::Qmi8658::writeRegister(imuWire(), deviceAddress, reg, value);
-}
-
-bool readRegisters(uint8_t deviceAddress, uint8_t startReg, uint8_t *buffer, size_t len) {
-  return BoardDrivers::Qmi8658::readRegisters(
-      imuWire(), deviceAddress, startReg, buffer, len,
-      WaveshareAmoled206::ImuWiring::kReleaseBusBeforeRead);
-}
-
-}  // namespace Board::Imu
+} // namespace Board::Imu

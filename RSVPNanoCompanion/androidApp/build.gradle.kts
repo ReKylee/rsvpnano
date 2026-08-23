@@ -16,8 +16,8 @@ android {
 
     defaultConfig {
         applicationId = "com.rsvpnano.android"
-        minSdk = 24
-        targetSdk = 34
+        minSdk = 34
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1"
     }
@@ -38,12 +38,7 @@ dependencies {
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.activity.compose)
-    implementation(libs.androidx.compose.foundation)
-    implementation(libs.androidx.compose.material)
-    implementation(libs.androidx.compose.material.icons.extended)
-    implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.lifecycle.viewmodel.compose)

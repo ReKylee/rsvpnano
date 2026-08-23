@@ -41,7 +41,6 @@ jobs:
             CHANNEL="$GITHUB_REF_NAME"
           fi
 
-          SHORT_SHA="$(git rev-parse --short HEAD)"
           BUILD_SHA="$(git rev-parse HEAD)"
 
           if ! echo "$CHANNEL" | grep -Eq '^preview-[A-Za-z0-9._-]+$'; then
@@ -49,18 +48,27 @@ jobs:
             exit 1
           fi
 
-          VERSION="${CHANNEL}-${SHORT_SHA}"
-
           echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
-          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           echo "commit_sha=${BUILD_SHA}" >> "$GITHUB_OUTPUT"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "RSVP_FIRMWARE_TAG=${CHANNEL}" >> "$GITHUB_ENV"
 
           if [ -n "$LABEL" ]; then
             echo "title=${LABEL}" >> "$GITHUB_OUTPUT"
           else
             echo "title=Preview ${CHANNEL}" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Move preview tag to this commit
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          RELEASE_TAG: ${{ steps.preview.outputs.channel }}
+          BUILD_SHA: ${{ steps.preview.outputs.commit_sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git tag -f "$RELEASE_TAG" "$BUILD_SHA"
+          git push origin "refs/tags/${RELEASE_TAG}" --force
 
       - name: Install PlatformIO
         run: pip install platformio
@@ -81,29 +89,30 @@ jobs:
 
       - name: Export firmware assets
         shell: bash
-        run: python3 "${{ steps.exporter.outputs.path }}" --version "${{ steps.preview.outputs.version }}"
+        run: python3 "${{ steps.exporter.outputs.path }}"
 
       - name: Find firmware assets
         id: assets
         shell: bash
         run: |
-          LCD349_FULL_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-lcd-3.49.bin' -not -path './.git/*' -print -quit)"
-          LCD349_OTA_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin' -not -path './.git/*' -print -quit)"
-          LCD349_REV2_FULL_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin' -not -path './.git/*' -print -quit)"
-          LCD349_REV2_OTA_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin' -not -path './.git/*' -print -quit)"
-          AMOLED18_FULL_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-amoled-1.8.bin' -not -path './.git/*' -print -quit)"
-          AMOLED18_OTA_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin' -not -path './.git/*' -print -quit)"
-          AMOLED18_V2_FULL_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin' -not -path './.git/*' -print -quit)"
-          AMOLED18_V2_OTA_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin' -not -path './.git/*' -print -quit)"
-          AMOLED206_FULL_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-amoled-2.06.bin' -not -path './.git/*' -print -quit)"
-          AMOLED206_OTA_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-amoled-2.06-ota.bin' -not -path './.git/*' -print -quit)"
-          AMOLED216_FULL_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-amoled-2.16.bin' -not -path './.git/*' -print -quit)"
-          AMOLED216_OTA_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin' -not -path './.git/*' -print -quit)"
-          AMOLED241_FULL_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-amoled-2.41.bin' -not -path './.git/*' -print -quit)"
-          AMOLED241_OTA_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin' -not -path './.git/*' -print -quit)"
+          FW_DIR="web/firmware"
+          LCD349_FULL_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-lcd-3.49.bin"
+          LCD349_OTA_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin"
+          LCD349_REV2_FULL_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin"
+          LCD349_REV2_OTA_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin"
+          AMOLED18_FULL_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-1.8.bin"
+          AMOLED18_OTA_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin"
+          AMOLED18_V2_FULL_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin"
+          AMOLED18_V2_OTA_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin"
+          AMOLED206_FULL_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-2.06.bin"
+          AMOLED206_OTA_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-2.06-ota.bin"
+          AMOLED216_FULL_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-2.16.bin"
+          AMOLED216_OTA_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin"
+          AMOLED241_FULL_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-2.41.bin"
+          AMOLED241_OTA_BIN="$FW_DIR/rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin"
 
-          if [ -z "$LCD349_FULL_BIN" ] || [ -z "$LCD349_OTA_BIN" ] || [ -z "$LCD349_REV2_FULL_BIN" ] || [ -z "$LCD349_REV2_OTA_BIN" ] || [ -z "$AMOLED18_FULL_BIN" ] || [ -z "$AMOLED18_OTA_BIN" ] || [ -z "$AMOLED18_V2_FULL_BIN" ] || [ -z "$AMOLED18_V2_OTA_BIN" ] || [ -z "$AMOLED206_FULL_BIN" ] || [ -z "$AMOLED206_OTA_BIN" ] || [ -z "$AMOLED216_FULL_BIN" ] || [ -z "$AMOLED216_OTA_BIN" ] || [ -z "$AMOLED241_FULL_BIN" ] || [ -z "$AMOLED241_OTA_BIN" ]; then
-            echo "::error::Could not find firmware assets."
+          if [ ! -f "$LCD349_FULL_BIN" ] || [ ! -f "$LCD349_OTA_BIN" ] || [ ! -f "$LCD349_REV2_FULL_BIN" ] || [ ! -f "$LCD349_REV2_OTA_BIN" ] || [ ! -f "$AMOLED18_FULL_BIN" ] || [ ! -f "$AMOLED18_OTA_BIN" ] || [ ! -f "$AMOLED18_V2_FULL_BIN" ] || [ ! -f "$AMOLED18_V2_OTA_BIN" ] || [ ! -f "$AMOLED206_FULL_BIN" ] || [ ! -f "$AMOLED206_OTA_BIN" ] || [ ! -f "$AMOLED216_FULL_BIN" ] || [ ! -f "$AMOLED216_OTA_BIN" ] || [ ! -f "$AMOLED241_FULL_BIN" ] || [ ! -f "$AMOLED241_OTA_BIN" ]; then
+            echo "::error::Could not find firmware assets in $FW_DIR."
             echo "LCD349_FULL_BIN=$LCD349_FULL_BIN"
             echo "LCD349_OTA_BIN=$LCD349_OTA_BIN"
             echo "LCD349_REV2_FULL_BIN=$LCD349_REV2_FULL_BIN"
@@ -158,8 +167,6 @@ jobs:
 
           Tag/channel: `${{ steps.preview.outputs.channel }}`
           Commit: `${{ steps.preview.outputs.commit_sha }}`
-          Build version: `${{ steps.preview.outputs.version }}`
-
           Assets:
           - `rsvp-nano-esp32-s3-touch-lcd-3.49.bin` is the full browser-flasher image for fresh installs on the Touch LCD 3.49.
           - `rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin` is the Touch LCD 3.49 OTA binary.
@@ -176,18 +183,6 @@ jobs:
           - `rsvp-nano-esp32-s3-touch-amoled-2.41.bin` is the full browser-flasher image for Touch AMOLED 2.41 boards.
           - `rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin` is the Touch AMOLED 2.41 OTA binary.
           NOTES
-
-      - name: Move preview tag to this commit
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          RELEASE_TAG: ${{ steps.preview.outputs.channel }}
-          BUILD_SHA: ${{ steps.preview.outputs.commit_sha }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git tag -f "$RELEASE_TAG" "$BUILD_SHA"
-          git push origin "refs/tags/${RELEASE_TAG}" --force
 
       - name: Publish or update preview release
         env:
@@ -210,17 +205,10 @@ jobs:
           AMOLED241_FULL_BIN: ${{ steps.assets.outputs.amoled241_full }}
           AMOLED241_OTA_BIN: ${{ steps.assets.outputs.amoled241_ota }}
         run: |
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG" \
-              --title "$RELEASE_TITLE" \
-              --notes-file release-notes.md \
-              --target "$BUILD_SHA" \
-              --prerelease
-          else
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" \
               --title "$RELEASE_TITLE" \
               --notes-file release-notes.md \
-              --target "$BUILD_SHA" \
               --prerelease
           fi
 
@@ -240,3 +228,9 @@ jobs:
             "$AMOLED241_FULL_BIN" \
             "$AMOLED241_OTA_BIN" \
             --clobber
+
+          gh release edit "$RELEASE_TAG" \
+            --title "$RELEASE_TITLE" \
+            --notes-file release-notes.md \
+            --target "$BUILD_SHA" \
+            --prerelease

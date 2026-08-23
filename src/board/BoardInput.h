@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 #include "input/Input.h"
+#include "ui/Touch.h"
 
 namespace Board::Input {
 
@@ -10,11 +11,11 @@ namespace Board::Input {
     void end();
     void cancel();
     ::Input::ControlTiming controlTiming();
-    ::Input::ControlMask currentControls();
-    ::Input::TouchSurface touchSurface();
     ::Input::TouchTiming touchTiming();
+    ::Input::PressActions currentActions();
+    ui::TouchSurface touchSurface();
     bool beginTouch();
     bool touchReady();
-    bool readTouch(::Input::TouchContact& contact);
+    bool readTouch(ui::TouchContact& contact);
 
 } // namespace Board::Input

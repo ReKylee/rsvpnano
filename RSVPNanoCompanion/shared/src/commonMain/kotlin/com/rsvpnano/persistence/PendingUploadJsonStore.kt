@@ -11,7 +11,7 @@ import kotlinx.serialization.json.Json
  * details out of common code.
  */
 class PendingUploadJsonStore(
-    private val storage: PendingUploadStorage,
+    private val storage: TextStorage,
     private val json: Json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
@@ -28,12 +28,6 @@ class PendingUploadJsonStore(
 
     override suspend fun saveAll(items: List<PendingUpload>) {
         storage.writeText(json.encodeToString(PendingUploadList.serializer(), PendingUploadList(items.sortedByDescending(PendingUpload::createdAt))))
-    }
-
-    override suspend fun add(item: PendingUpload) {
-        val next = loadAll().toMutableList()
-        next.add(0, item)
-        saveAll(next)
     }
 
     override suspend fun remove(id: String) {

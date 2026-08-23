@@ -1,8 +1,10 @@
 #include "storage/index/IndexedBookStore.h"
+#include <esp_log.h>
 
-#include "board/BoardStorage.h"
 #include <algorithm>
 #include <limits>
+#include <utility>
+#include "board/BoardStorage.h"
 
 using StoreHeader = IndexedBookStore::Header;
 using StoreWordRecord = IndexedBookStore::WordRecord;
@@ -53,7 +55,7 @@ namespace {
 
 } // namespace
 
-bool IndexedBookStore::open(const String& indexPath, const String& dataPath, const Header& header) {
+bool IndexedBookStore::open(const char* indexPath, const char* dataPath, const Header& header) {
     File nextIndexFile = Board::Storage::filesystem().open(indexPath, FILE_READ);
     if (!nextIndexFile || nextIndexFile.isDirectory()) {
         if (nextIndexFile) {
@@ -72,7 +74,7 @@ bool IndexedBookStore::open(const String& indexPath, const String& dataPath, con
     }
 
     if (!validateLayout(header, nextIndexFile.size(), nextDataFile.size())) {
-        Serial.printf("[storage-index] invalid store layout index=%s data=%s\n", indexPath.c_str(), dataPath.c_str());
+        ESP_LOGW("storage-index", "invalid store layout index=%s data=%s", indexPath, dataPath);
         nextIndexFile.close();
         nextDataFile.close();
         return false;
@@ -85,8 +87,9 @@ bool IndexedBookStore::open(const String& indexPath, const String& dataPath, con
     indexFile_ = nextIndexFile;
     dataFile_ = nextDataFile;
     cachedStart_ = static_cast<size_t>(-1);
-    cachedCount_ = 0;
-    cachedWords_.clear();
+    cachedDataStart_ = 0;
+    cachedRecords_.clear();
+    cachedData_.clear();
     return true;
 }
 
@@ -100,9 +103,10 @@ void IndexedBookStore::close() {
     indexPath_ = "";
     dataPath_ = "";
     header_ = Header();
-    cachedWords_.clear();
+    cachedRecords_.clear();
+    cachedData_.clear();
     cachedStart_ = static_cast<size_t>(-1);
-    cachedCount_ = 0;
+    cachedDataStart_ = 0;
 }
 
 bool IndexedBookStore::isOpen() const {
@@ -113,27 +117,31 @@ size_t IndexedBookStore::wordCount() const {
     return isOpen() ? static_cast<size_t>(header_.wordCount) : 0;
 }
 
-String IndexedBookStore::wordAt(size_t index) const {
+std::string_view IndexedBookStore::wordAt(size_t index) const {
     if (!isOpen() || index >= wordCount()) {
-        return "";
+        return {};
     }
 
-    if (cachedStart_ == static_cast<size_t>(-1) || index < cachedStart_ || index >= cachedStart_ + cachedCount_) {
-        if (!loadWordWindow(index)) {
-            return "";
-        }
-    }
+    if (!hasCachedWord(index) && !loadWordWindow(index))
+        return {};
 
-    return cachedWords_[index - cachedStart_];
+    const WordRecord& record = cachedRecords_[index - cachedStart_];
+    const size_t offset = record.offset - cachedDataStart_;
+    return {cachedData_.data() + offset, record.length};
 }
 
 void IndexedBookStore::prefetchAround(size_t index) const {
     if (!isOpen() || index >= wordCount()) {
         return;
     }
-    if (cachedStart_ == static_cast<size_t>(-1) || index < cachedStart_ || index >= cachedStart_ + cachedCount_) {
+    if (!hasCachedWord(index)) {
         (void) loadWordWindow(index);
     }
+}
+
+bool IndexedBookStore::hasCachedWord(size_t index) const {
+    return cachedStart_ != static_cast<size_t>(-1) && index >= cachedStart_
+        && index - cachedStart_ < cachedRecords_.size();
 }
 
 bool IndexedBookStore::readRecords(size_t startIndex, size_t count, std::vector<WordRecord>& records) const {
@@ -175,7 +183,8 @@ bool IndexedBookStore::loadWordWindow(size_t index) const {
         return false;
     }
 
-    const size_t start = (index / kWordCacheSize) * kWordCacheSize;
+    const size_t lookbehind = kWordCacheSize / 4;
+    const size_t start = index > lookbehind ? index - lookbehind : 0;
     const size_t count = std::min(kWordCacheSize, wordCount() - start);
     std::vector<WordRecord> records;
     if (!readRecords(start, count, records) || records.empty()) {
@@ -205,26 +214,17 @@ bool IndexedBookStore::loadWordWindow(size_t index) const {
         }
     }
 
-    // Rebuild cached words from record offsets inside the data window.
-    cachedWords_.clear();
-    cachedWords_.reserve(records.size());
-    for (const WordRecord& record: records) {
+    const bool recordsValid = std::ranges::all_of(records, [&](const WordRecord& record) {
         uint32_t recordEnd = 0;
-        if (record.offset < dataStart || !checkedAdd(record.offset, record.length, recordEnd) || recordEnd > dataEnd) {
-            cachedWords_.clear();
-            return false;
-        }
+        return record.offset >= dataStart && checkedAdd(record.offset, record.length, recordEnd)
+            && recordEnd <= dataEnd;
+    });
+    if (!recordsValid)
+        return false;
 
-        const size_t localOffset = record.offset - dataStart;
-        String word;
-        word.reserve(record.length);
-        for (uint16_t i = 0; i < record.length; ++i) {
-            word += buffer[localOffset + i];
-        }
-        cachedWords_.push_back(word);
-    }
-
+    cachedRecords_ = std::move(records);
+    cachedData_ = std::move(buffer);
     cachedStart_ = start;
-    cachedCount_ = cachedWords_.size();
-    return cachedCount_ > 0;
+    cachedDataStart_ = dataStart;
+    return !cachedRecords_.empty();
 }

@@ -1,0 +1,18 @@
+import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import test from "node:test";
+
+test("theme catalog references checked-in TOML files", () => {
+  const catalog = JSON.parse(readFileSync("themes/index.json", "utf8"));
+  assert.ok(catalog.length >= 10);
+
+  for (const theme of catalog) {
+    assert.match(theme.id, /^[a-z0-9-]+$/);
+    assert.match(theme.file, /^[a-z0-9-]+\.toml$/);
+    assert.ok(existsSync(`themes/${theme.file}`), theme.file);
+  }
+
+  const installer = readFileSync("web/themes.js", "utf8");
+  assert.doesNotMatch(installer, /\.rtheme/);
+  assert.match(installer, /filename\.endsWith\("\.toml"\)/);
+});

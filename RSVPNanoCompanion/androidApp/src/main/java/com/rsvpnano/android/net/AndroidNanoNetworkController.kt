@@ -3,15 +3,16 @@ package com.rsvpnano.android.net
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
-import android.net.MacAddress
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.net.nsd.NsdManager
+import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiNetworkSpecifier
-import android.os.Build
 import android.os.PatternMatcher
 import com.rsvpnano.app.NanoWifiConnector
+import com.rsvpnano.app.NanoEndpoint
 import com.rsvpnano.app.NanoWifiEvent
 import com.rsvpnano.app.NanoWifiIdentity
 import com.rsvpnano.app.NanoWifiRequestResult
@@ -22,12 +23,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 
 class AndroidNanoNetworkController(
     context: Context,
 ) : NanoWifiConnector {
     private val appContext = context.applicationContext
     private val connectivityManager = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    private val nsdManager = appContext.getSystemService(Context.NSD_SERVICE) as NsdManager
     private val _snapshot = MutableStateFlow(NanoWifiSnapshot())
     private val _events = MutableSharedFlow<NanoWifiEvent>(extraBufferCapacity = 4)
     override val snapshot: StateFlow<NanoWifiSnapshot> = _snapshot
@@ -69,7 +74,7 @@ class AndroidNanoNetworkController(
     override fun stop() {
         monitorCallback?.let { runCatching { connectivityManager.unregisterNetworkCallback(it) } }
         monitorCallback = null
-        cancelNanoRequest()
+        releaseRequestedNanoNetwork()
     }
 
     override fun requestNanoNetwork(
@@ -78,9 +83,6 @@ class AndroidNanoNetworkController(
         val current = snapshot.value
         if (current.isAttached) return NanoWifiRequestResult.AlreadyAttached
         if (requestCallback != null) return NanoWifiRequestResult.AlreadyRequesting
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            return NanoWifiRequestResult.Unsupported
-        }
         if (!hasRequiredPermissions()) {
             return NanoWifiRequestResult.MissingPermissions
         }
@@ -106,7 +108,6 @@ class AndroidNanoNetworkController(
         val specifier = WifiNetworkSpecifier.Builder().apply {
             if (rememberedNano != null) {
                 setSsid(rememberedNano.ssid)
-                rememberedNano.bssid?.toMacAddressOrNull()?.let(::setBssid)
             } else {
                 setSsidPattern(PatternMatcher(NanoWifiIdentity.SSID_PREFIX, PatternMatcher.PATTERN_PREFIX))
             }
@@ -171,14 +172,14 @@ class AndroidNanoNetworkController(
         _events.tryEmit(event)
     }
 
-    override fun cancelNanoRequest() {
+    private fun cancelNanoRequest() {
         requestCallback?.let { runCatching { connectivityManager.unregisterNetworkCallback(it) } }
         requestCallback = null
         requestedNetwork = null
         _snapshot.update { it.copy(isRequesting = false) }
     }
 
-    override fun releaseRequestedNanoNetwork() {
+    private fun releaseRequestedNanoNetwork() {
         val networkToRelease = requestedNetwork
         cancelNanoRequest()
         _snapshot.update {
@@ -214,11 +215,7 @@ class AndroidNanoNetworkController(
 
     override suspend fun <T> withNanoNetwork(block: suspend () -> T): T {
         val network = currentNetwork ?: return block()
-        val previous = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            connectivityManager.boundNetworkForProcess
-        } else {
-            null
-        }
+        val previous = connectivityManager.boundNetworkForProcess
         return try {
             connectivityManager.bindProcessToNetwork(network)
             block()
@@ -227,15 +224,104 @@ class AndroidNanoNetworkController(
         }
     }
 
-    override fun hasRequiredPermissions(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            appContext.checkSelfPermission(android.Manifest.permission.NEARBY_WIFI_DEVICES) ==
-                PackageManager.PERMISSION_GRANTED
-        } else {
-            appContext.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED
+    fun hasRequiredPermissions(): Boolean {
+        return appContext.checkSelfPermission(android.Manifest.permission.NEARBY_WIFI_DEVICES) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
+    override suspend fun discoverNanos(): List<NanoEndpoint> {
+        val endpoints = linkedMapOf<String, NanoEndpoint>()
+        withTimeoutOrNull(DISCOVERY_TIMEOUT_MS) {
+            suspendCancellableCoroutine<Unit> { continuation ->
+                val callbacks = mutableMapOf<String, NsdManager.ServiceInfoCallback>()
+                var discoveryStarted = false
+                var completed = false
+                lateinit var listener: NsdManager.DiscoveryListener
+
+                fun unregisterService(name: String) {
+                    callbacks.remove(name)?.let { callback ->
+                        runCatching { nsdManager.unregisterServiceInfoCallback(callback) }
+                    }
+                }
+
+                fun cleanup() {
+                    if (discoveryStarted) {
+                        discoveryStarted = false
+                        runCatching { nsdManager.stopServiceDiscovery(listener) }
+                    }
+                    val registeredCallbacks = callbacks.values.toList()
+                    callbacks.clear()
+                    registeredCallbacks.forEach { callback ->
+                        runCatching { nsdManager.unregisterServiceInfoCallback(callback) }
+                    }
+                }
+
+                fun finish() {
+                    if (completed) return
+                    completed = true
+                    cleanup()
+                    if (continuation.isActive) continuation.resume(Unit)
+                }
+
+                listener = object : NsdManager.DiscoveryListener {
+                    override fun onDiscoveryStarted(serviceType: String) {
+                        discoveryStarted = true
+                        if (!continuation.isActive) cleanup()
+                    }
+
+                    override fun onServiceFound(service: NsdServiceInfo) {
+                        val name = service.serviceName
+                        if (name in callbacks || name in endpoints) return
+                        val callback = object : NsdManager.ServiceInfoCallback {
+                            override fun onServiceInfoCallbackRegistrationFailed(errorCode: Int) {
+                                callbacks.remove(name)
+                            }
+
+                            override fun onServiceUpdated(serviceInfo: NsdServiceInfo) {
+                                val host = serviceInfo.hostAddresses
+                                    .firstOrNull { it.address.size == 4 }
+                                    ?.hostAddress
+                                    ?: serviceInfo.hostAddresses.firstOrNull()?.hostAddress
+                                    ?: return
+                                val address = if (':' in host) "[${host.replace("%", "%25")}]" else host
+                                val port = serviceInfo.port.takeIf { it != 80 }?.let { ":$it" }.orEmpty()
+                                endpoints[name] = NanoEndpoint(
+                                    baseUrl = "http://$address$port",
+                                    nano = RememberedNano(name),
+                                )
+                                unregisterService(name)
+                            }
+
+                            override fun onServiceLost() {
+                                endpoints.remove(name)
+                                unregisterService(name)
+                            }
+
+                            override fun onServiceInfoCallbackUnregistered() = Unit
+                        }
+                        callbacks[name] = callback
+                        runCatching {
+                            nsdManager.registerServiceInfoCallback(service, appContext.mainExecutor, callback)
+                        }.onFailure {
+                            callbacks.remove(name)
+                        }
+                    }
+
+                    override fun onServiceLost(service: NsdServiceInfo) {
+                        endpoints.remove(service.serviceName)
+                        unregisterService(service.serviceName)
+                    }
+
+                    override fun onDiscoveryStopped(serviceType: String) = finish()
+                    override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) = finish()
+                    override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) = Unit
+                }
+
+                continuation.invokeOnCancellation { cleanup() }
+                nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
+            }
         }
+        return endpoints.values.toList()
     }
 
     private fun updateFromNetwork(network: Network, source: NetworkEventSource) {
@@ -265,13 +351,12 @@ class AndroidNanoNetworkController(
     ) {
         if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return
         val ssid = capabilities.nanoSsidOrNull()
-        val bssid = capabilities.nanoBssidOrNull()
         val wasNano = currentNetwork == network && snapshot.value.isAttached
         val isNano = NanoWifiIdentity.isNanoSsid(ssid) || source == NetworkEventSource.Request || wasNano
         if (!isNano && currentNetwork != network) return
 
         currentNetwork = network
-        val identity = NanoWifiIdentity.rememberedNanoOrNull(ssid, bssid) ?: snapshot.value.currentNano
+        val identity = NanoWifiIdentity.rememberedNanoOrNull(ssid) ?: snapshot.value.currentNano
         _snapshot.value = NanoWifiSnapshot(
             currentNano = identity,
             isAttached = isNano,
@@ -290,28 +375,18 @@ class AndroidNanoNetworkController(
         return wifiInfoOrNull()?.ssid?.cleanSsid()
     }
 
-    private fun NetworkCapabilities.nanoBssidOrNull(): String? {
-        return wifiInfoOrNull()?.bssid?.takeIf { it.isNotBlank() && it != "02:00:00:00:00:00" }
-    }
-
     private fun NetworkCapabilities.wifiInfoOrNull(): WifiInfo? {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            transportInfo as? WifiInfo
-        } else {
-            null
-        }
+        return transportInfo as? WifiInfo
     }
 
     private fun String.cleanSsid(): String? {
         return NanoWifiIdentity.cleanSsid(this)
     }
 
-    private fun String.toMacAddressOrNull(): MacAddress? {
-        return runCatching { MacAddress.fromString(this) }.getOrNull()
-    }
-
     companion object {
+        private const val DISCOVERY_TIMEOUT_MS = 2_500L
         private const val REQUEST_TIMEOUT_MS = 6_000
+        private const val SERVICE_TYPE = "_rsvpnano._tcp."
     }
 
     private enum class NetworkEventSource {

@@ -16,10 +16,10 @@ object NanoWifiIdentity {
         return clean.startsWith(SSID_PREFIX) || clean.startsWith(LEGACY_SSID_PREFIX)
     }
 
-    fun rememberedNanoOrNull(ssid: String?, bssid: String? = null): RememberedNano? {
+    fun rememberedNanoOrNull(ssid: String?): RememberedNano? {
         val clean = cleanSsid(ssid) ?: return null
         if (!isNanoSsid(clean)) return null
-        return RememberedNano(ssid = clean, bssid = bssid?.takeIf { it.isNotBlank() })
+        return RememberedNano(ssid = clean)
     }
 
     private const val UNKNOWN_SSID = "<unknown ssid>"

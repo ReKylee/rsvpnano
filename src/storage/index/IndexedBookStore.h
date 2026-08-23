@@ -3,11 +3,11 @@
 #include <Arduino.h>
 #include <FS.h>
 #include <cstdint>
+#include <string>
+#include <string_view>
 #include <vector>
 
-#include "reader/BookWordSource.h"
-
-class IndexedBookStore : public BookWordSource {
+class IndexedBookStore {
 public:
     struct Header {
         uint32_t magic = 0;
@@ -37,27 +37,21 @@ public:
     };
 
     static constexpr uint32_t kMagic = 0x58444952UL; // RIDX
-    static constexpr uint32_t kVersion = 5;
+    static constexpr uint32_t kVersion = 6;
     static constexpr size_t kWordCacheSize = 256;
 
     IndexedBookStore() = default;
     IndexedBookStore(const IndexedBookStore&) = delete;
     IndexedBookStore& operator=(const IndexedBookStore&) = delete;
 
-    bool open(const String& indexPath, const String& dataPath, const Header& header);
+    bool open(const char* indexPath, const char* dataPath, const Header& header);
     void close();
     bool isOpen() const;
 
-    size_t wordCount() const override;
-    String wordAt(size_t index) const override;
-    void prefetchAround(size_t index) const override;
+    size_t wordCount() const;
+    std::string_view wordAt(size_t index) const;
+    void prefetchAround(size_t index) const;
 
-    const String& indexPath() const {
-        return indexPath_;
-    }
-    const String& dataPath() const {
-        return dataPath_;
-    }
     uint32_t sourceSize() const {
         return isOpen() ? header_.sourceSize : 0;
     }
@@ -67,14 +61,16 @@ public:
 
 private:
     bool loadWordWindow(size_t index) const;
+    bool hasCachedWord(size_t index) const;
     bool readRecords(size_t startIndex, size_t count, std::vector<WordRecord>& records) const;
 
-    String indexPath_;
-    String dataPath_;
+    std::string indexPath_;
+    std::string dataPath_;
     Header header_;
     mutable File indexFile_;
     mutable File dataFile_;
-    mutable std::vector<String> cachedWords_;
+    mutable std::vector<WordRecord> cachedRecords_;
+    mutable std::vector<char> cachedData_;
     mutable size_t cachedStart_ = static_cast<size_t>(-1);
-    mutable size_t cachedCount_ = 0;
+    mutable uint32_t cachedDataStart_ = 0;
 };

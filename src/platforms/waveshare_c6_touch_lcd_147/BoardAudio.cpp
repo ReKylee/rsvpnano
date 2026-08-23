@@ -2,10 +2,16 @@
 
 namespace Board::Audio {
 
-bool begin() { return false; }
+    bool begin() {
+        return false;
+    }
 
-bool beep() { return false; }
+    bool beep() {
+        return false;
+    }
 
-bool available() { return false; }
+    bool available() {
+        return false;
+    }
 
-}  // namespace Board::Audio
+} // namespace Board::Audio

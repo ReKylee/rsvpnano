@@ -14,8 +14,8 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.outlined.Wifi
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -26,7 +26,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
@@ -53,9 +52,9 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rsvpnano.app.CompanionNotice
-import com.rsvpnano.models.NanoBook
-import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.app.NanoEndpoint
 import com.rsvpnano.models.PendingUpload
+import com.rsvpnano.models.needsArticleFetch
 import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.readBytes
 import io.github.vinceglb.filekit.dialogs.FileKitType
@@ -71,36 +70,11 @@ enum class CompanionTab(val label: String, val icon: ImageVector) {
 @Composable
 fun RsvpNanoSharedApp(
     uiState: CompanionUiState,
+    presenter: CompanionPresenter,
     hasPermissions: Boolean,
-    onRefresh: () -> Unit,
     onConnect: () -> Unit,
-    onShowHelp: () -> Unit,
-    onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
-    onAddressChange: (String) -> Unit,
-    onConnectDefault: () -> Unit,
-    onWifiSsidChange: (String) -> Unit,
-    onWifiPasswordChange: (String) -> Unit,
-    onSaveWifi: () -> Unit,
-    onClearWifi: () -> Unit,
-    onForgetRememberedNano: () -> Unit,
+    onFirmwareNotificationsChange: (Boolean) -> Unit,
     onGrantPermissions: () -> Unit,
-    needsArticleFetch: (PendingUpload) -> Boolean,
-    onEditDraft: (PendingUpload) -> Unit,
-    onCancelDraftEdit: () -> Unit,
-    onDraftTitleChange: (String) -> Unit,
-    onDraftSourceChange: (String) -> Unit,
-    onDraftBodyChange: (String) -> Unit,
-    onSaveTextDraft: () -> Unit,
-    onSaveLinkDraft: () -> Unit,
-    onDeleteDraft: (PendingUpload) -> Unit,
-    onSyncArticles: () -> Unit,
-    onDeleteBook: (NanoBook) -> Unit,
-    onSetBookPosition: (NanoBook, Int) -> Unit,
-    onPickBook: (displayName: String, data: ByteArray) -> Unit,
-    onRssFeedChange: (String) -> Unit,
-    onAddRssFeed: () -> Unit,
-    onRefreshRssFeeds: () -> Unit,
-    onDeleteFeed: (String) -> Unit,
 ) {
     val colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
     MaterialTheme(colorScheme = colorScheme) {
@@ -116,7 +90,25 @@ fun RsvpNanoSharedApp(
         ) { file ->
             if (file != null) {
                 scope.launch {
-                    onPickBook(file.name, file.readBytes())
+                    presenter.uploadSelectedFile(file.name, file.readBytes())
+                }
+            }
+        }
+        val themePicker = rememberFilePickerLauncher(
+            type = FileKitType.File(extensions = listOf("toml")),
+        ) { file ->
+            if (file != null) {
+                scope.launch {
+                    presenter.uploadThemeFile(file.name, file.readBytes())
+                }
+            }
+        }
+        val fontPicker = rememberFilePickerLauncher(
+            type = FileKitType.File(extensions = listOf("rfont4")),
+        ) { file ->
+            if (file != null) {
+                scope.launch {
+                    presenter.uploadFontFile(file.name, file.readBytes())
                 }
             }
         }
@@ -128,13 +120,22 @@ fun RsvpNanoSharedApp(
             }
         }
 
+        LaunchedEffect(selectedTab) {
+            if (selectedTab == CompanionTab.Settings && uiState.themeCatalog.isEmpty()) {
+                presenter.refreshThemeCatalog()
+            }
+            if (selectedTab == CompanionTab.Settings && uiState.fontCatalog.isEmpty()) {
+                presenter.refreshFontCatalog()
+            }
+        }
+
         Scaffold(
             topBar = {
                 Column {
                     TopAppBar(
                         title = { Text(text = "RSVP Nano") },
                         actions = {
-                            IconButton(onClick = onShowHelp) {
+                            IconButton(onClick = presenter::showHelpNotice) {
                                 Icon(imageVector = Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help")
                             }
                         },
@@ -144,8 +145,7 @@ fun RsvpNanoSharedApp(
                     )
                     SharedConnectionBar(
                         uiState = uiState,
-                        onAddressChange = onAddressChange,
-                        onConnect = onConnect,
+                        onRememberCurrentNano = presenter::rememberCurrentNano,
                     )
                 }
             },
@@ -196,32 +196,27 @@ fun RsvpNanoSharedApp(
                 when (selectedTab) {
                     CompanionTab.Library -> LibraryTab(
                         uiState = uiState,
-                        onRefresh = onRefresh,
-                        needsArticleFetch = needsArticleFetch,
+                        onRefresh = presenter::refresh,
+                        needsArticleFetch = PendingUpload::needsArticleFetch,
                         onEditDraft = {
-                            onEditDraft(it)
+                            presenter.editDraft(it)
                             showArticleDialog = true
                         },
-                        onDeleteDraft = onDeleteDraft,
-                        onSyncArticles = onSyncArticles,
-                        onDeleteBook = onDeleteBook,
-                        onSetBookPosition = onSetBookPosition,
+                        onDeleteDraft = presenter::deleteDraft,
+                        onSyncArticles = presenter::syncSavedArticles,
+                        onDeleteBook = presenter::deleteDeviceBook,
+                        onSetBookPosition = presenter::setBookPosition,
                         onShowUpload = { showAddPicker = true },
                     )
 
                     CompanionTab.Settings -> SettingsTab(
                         uiState = uiState,
-                        onRefresh = onRefresh,
-                        onUpdateSettings = onUpdateSettings,
-                        onAddressChange = onAddressChange,
-                        onConnectDefault = onConnectDefault,
-                        onWifiSsidChange = onWifiSsidChange,
-                        onWifiPasswordChange = onWifiPasswordChange,
-                        onSaveWifi = onSaveWifi,
-                        onClearWifi = onClearWifi,
-                        onForgetRememberedNano = onForgetRememberedNano,
+                        presenter = presenter,
+                        onFirmwareNotificationsChange = onFirmwareNotificationsChange,
                         hasPermissions = hasPermissions,
                         onGrantPermissions = onGrantPermissions,
+                        onUploadTheme = { themePicker.launch() },
+                        onUploadFont = { fontPicker.launch() },
                     )
                 }
             }
@@ -244,23 +239,31 @@ fun RsvpNanoSharedApp(
                 )
             }
 
+            if (uiState.discoveredNanos.isNotEmpty()) {
+                NanoPickerDialog(
+                    nanos = uiState.discoveredNanos,
+                    onSelect = presenter::selectDiscoveredNano,
+                    onDismiss = presenter::cancelNanoSelection,
+                )
+            }
+
             if (showArticleDialog) {
                 AddArticleDialog(
                     uiState = uiState,
                     onDismiss = {
                         showArticleDialog = false
-                        onCancelDraftEdit()
+                        presenter.cancelDraftEdit()
                     },
-                    onTitleChange = onDraftTitleChange,
-                    onSourceChange = onDraftSourceChange,
-                    onBodyChange = onDraftBodyChange,
+                    onTitleChange = presenter::setDraftTitle,
+                    onSourceChange = presenter::setDraftSourceUrl,
+                    onBodyChange = presenter::setDraftBody,
                     onSaveText = {
                         showArticleDialog = false
-                        onSaveTextDraft()
+                        presenter.saveTextDraft()
                     },
                     onSaveLink = {
                         showArticleDialog = false
-                        onSaveLinkDraft()
+                        presenter.saveLinkDraft()
                     },
                 )
             }
@@ -269,10 +272,10 @@ fun RsvpNanoSharedApp(
                 RssFeedsDialog(
                     uiState = uiState,
                     onDismiss = { showRssDialog = false },
-                    onFeedChange = onRssFeedChange,
-                    onAddFeed = onAddRssFeed,
-                    onRefreshFeeds = onRefreshRssFeeds,
-                    onDeleteFeed = onDeleteFeed,
+                    onFeedChange = presenter::setRssFeedDraft,
+                    onAddFeed = presenter::addRssFeed,
+                    onRefreshFeeds = presenter::refreshRssFeeds,
+                    onDeleteFeed = presenter::deleteRssFeed,
                 )
             }
         }
@@ -282,8 +285,7 @@ fun RsvpNanoSharedApp(
 @Composable
 private fun SharedConnectionBar(
     uiState: CompanionUiState,
-    onAddressChange: (String) -> Unit,
-    onConnect: () -> Unit,
+    onRememberCurrentNano: () -> Unit,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -314,22 +316,54 @@ private fun SharedConnectionBar(
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                 }
             }
-            if (uiState.showAddressEntry) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = uiState.address,
-                        onValueChange = onAddressChange,
+            if (uiState.canRememberCurrentNano) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Remember ${uiState.nanoSsid} for direct connection when regular Wi-Fi is unavailable?",
                         modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        label = { Text("Reader address") },
+                        style = MaterialTheme.typography.bodySmall,
                     )
-                    Button(onClick = onConnect) {
-                        Text("Check")
+                    TextButton(onClick = onRememberCurrentNano) {
+                        Text("Remember")
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun NanoPickerDialog(
+    nanos: List<NanoEndpoint>,
+    onSelect: (NanoEndpoint) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Choose a Nano") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                nanos.forEach { endpoint ->
+                    TextButton(
+                        onClick = { onSelect(endpoint) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(endpoint.nano.ssid, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+    )
 }
 
 @Composable

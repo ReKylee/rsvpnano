@@ -1,0 +1,38 @@
+[
+  {
+    "id": "andika",
+    "name": "Andika",
+    "files": {
+      "large": "Andika/large.rfont4",
+      "medium": "Andika/medium.rfont4",
+      "small": "Andika/small.rfont4"
+    }
+  },
+  {
+    "id": "atkinson-hyperlegible",
+    "name": "Atkinson Hyperlegible",
+    "files": {
+      "large": "Atkinson Hyperlegible/large.rfont4",
+      "medium": "Atkinson Hyperlegible/medium.rfont4",
+      "small": "Atkinson Hyperlegible/small.rfont4"
+    }
+  },
+  {
+    "id": "courier-prime",
+    "name": "Courier Prime",
+    "files": {
+      "large": "Courier Prime/large.rfont4",
+      "medium": "Courier Prime/medium.rfont4",
+      "small": "Courier Prime/small.rfont4"
+    }
+  },
+  {
+    "id": "opendyslexic",
+    "name": "OpenDyslexic",
+    "files": {
+      "large": "OpenDyslexic/large.rfont4",
+      "medium": "OpenDyslexic/medium.rfont4",
+      "small": "OpenDyslexic/small.rfont4"
+    }
+  }
+]

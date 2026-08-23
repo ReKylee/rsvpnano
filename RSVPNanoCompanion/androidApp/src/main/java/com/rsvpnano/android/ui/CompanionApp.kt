@@ -1,10 +1,12 @@
 package com.rsvpnano.android.ui
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -21,7 +23,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rsvpnano.android.net.AndroidNanoNetworkController
-import com.rsvpnano.app.RsvpSharedApp
+import com.rsvpnano.android.FirmwareUpdateJobService
 import com.rsvpnano.ui.RsvpNanoSharedApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,7 +35,6 @@ private enum class PermissionFallback {
 
 @Composable
 fun CompanionApp(
-    sharedApp: RsvpSharedApp,
     shareIntent: Intent? = null,
     onShareIntentHandled: () -> Unit = {},
 ) {
@@ -42,11 +43,12 @@ fun CompanionApp(
     val nanoNetworkController = remember(context) { AndroidNanoNetworkController(context.applicationContext) }
     val viewModel: CompanionViewModel = viewModel(
         factory = CompanionViewModel.Factory(
-            sharedApp = sharedApp,
+            appFilesDir = context.filesDir,
             nanoNetworkController = nanoNetworkController,
         )
     )
-    val uiState by viewModel.uiState.collectAsState()
+    val presenter = viewModel.presenter
+    val uiState by presenter.uiState.collectAsState()
     var permissionRequestAttempted by remember { mutableStateOf(false) }
     var permissionBlockedFallback by remember { mutableStateOf(PermissionFallback.WifiSettings) }
 
@@ -55,30 +57,47 @@ fun CompanionApp(
     ) { permissionGranted ->
         val granted = permissionGranted || nanoNetworkController.hasRequiredPermissions()
         if (granted) {
-            viewModel.connectNanoScan()
+            presenter.connectNanoScan()
         } else {
             val permission = nanoWifiPermission()
             val canAskAgain = context.findActivity()?.shouldShowRequestPermissionRationale(permission) == true
             if (canAskAgain) {
-                viewModel.scanPermissionDenied()
+                presenter.scanPermissionDenied()
             } else if (permissionBlockedFallback == PermissionFallback.AppSettings) {
-                viewModel.wifiPermissionsBlocked()
+                presenter.wifiPermissionsBlocked()
                 context.openAppSettings()
             } else {
-                viewModel.scanPermissionDenied()
+                presenter.scanPermissionDenied()
                 context.openWifiSettings()
             }
+        }
+    }
+    val firmwareNotificationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        presenter.setFirmwareNotificationsEnabled(granted)
+    }
+
+    fun setFirmwareNotifications(enabled: Boolean) {
+        if (!enabled) {
+            presenter.setFirmwareNotificationsEnabled(false)
+            return
+        }
+        if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            presenter.setFirmwareNotificationsEnabled(true)
+        } else {
+            firmwareNotificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
     fun connectNanoFromApp(openWifiSettingsOnBlocked: Boolean) {
         if (nanoNetworkController.hasRequiredPermissions()) {
-            viewModel.connectNanoScan()
+            presenter.connectNanoScan()
         } else {
             val permission = nanoWifiPermission()
             val canAskAgain = !permissionRequestAttempted ||
                 context.findActivity()?.shouldShowRequestPermissionRationale(permission) == true
-            viewModel.requestWifiPermissions()
+            presenter.requestWifiPermissions()
             if (canAskAgain) {
                 permissionRequestAttempted = true
                 permissionBlockedFallback = if (openWifiSettingsOnBlocked) {
@@ -88,10 +107,10 @@ fun CompanionApp(
                 }
                 nanoWifiPermissionLauncher.launch(permission)
             } else if (openWifiSettingsOnBlocked) {
-                viewModel.scanPermissionDenied()
+                presenter.scanPermissionDenied()
                 context.openWifiSettings()
             } else {
-                viewModel.wifiPermissionsBlocked()
+                presenter.wifiPermissionsBlocked()
                 context.openAppSettings()
             }
         }
@@ -101,7 +120,7 @@ fun CompanionApp(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 nanoNetworkController.refreshSnapshot()
-                viewModel.recheckConnectionAfterResume()
+                presenter.recheckConnectionAfterResume()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -115,12 +134,12 @@ fun CompanionApp(
         } else {
             val callback = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
-                    viewModel.fetchPendingArticlesWhenOnline()
+                    presenter.fetchPendingArticlesWhenOnline()
                 }
 
                 override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
                     if (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
-                        viewModel.fetchPendingArticlesWhenOnline()
+                        presenter.fetchPendingArticlesWhenOnline()
                     }
                 }
             }
@@ -133,42 +152,30 @@ fun CompanionApp(
         val intent = shareIntent ?: return@LaunchedEffect
         val imports = withContext(Dispatchers.IO) { context.sharedImportsFrom(intent) }
         if (imports.isNotEmpty() || intent.isAndroidShareIntent()) {
-            viewModel.saveSharedImports(imports)
+            presenter.saveSharedImports(imports)
         }
         onShareIntentHandled()
     }
 
+    LaunchedEffect(uiState.firmwareNotificationsEnabled) {
+        val canNotify =
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        val enabled = uiState.firmwareNotificationsEnabled && canNotify
+        if (uiState.firmwareNotificationsEnabled && !canNotify) {
+            presenter.setFirmwareNotificationsEnabled(false)
+        }
+        FirmwareUpdateJobService.configure(context, enabled)
+        if (enabled) {
+            FirmwareUpdateJobService.checkNow(context)
+        }
+    }
+
     RsvpNanoSharedApp(
         uiState = uiState,
+        presenter = presenter,
         hasPermissions = nanoNetworkController.hasRequiredPermissions(),
-        onRefresh = viewModel::refresh,
         onConnect = { connectNanoFromApp(openWifiSettingsOnBlocked = true) },
-        onShowHelp = { viewModel.showHelpNotice() },
-        onUpdateSettings = viewModel::updateSettings,
-        onAddressChange = viewModel::setAddress,
-        onConnectDefault = viewModel::connectDefault,
-        onWifiSsidChange = viewModel::setWifiSsidDraft,
-        onWifiPasswordChange = viewModel::setWifiPasswordDraft,
-        onSaveWifi = viewModel::saveWifiSettings,
-        onClearWifi = viewModel::clearWifiSettings,
-        onForgetRememberedNano = viewModel::forgetRememberedNano,
+        onFirmwareNotificationsChange = ::setFirmwareNotifications,
         onGrantPermissions = { connectNanoFromApp(openWifiSettingsOnBlocked = false) },
-        needsArticleFetch = viewModel::needsArticleFetch,
-        onEditDraft = viewModel::editDraft,
-        onCancelDraftEdit = viewModel::cancelDraftEdit,
-        onDraftTitleChange = viewModel::setDraftTitle,
-        onDraftSourceChange = viewModel::setDraftSourceUrl,
-        onDraftBodyChange = viewModel::setDraftBody,
-        onSaveTextDraft = viewModel::saveTextDraft,
-        onSaveLinkDraft = viewModel::saveLinkDraft,
-        onDeleteDraft = viewModel::deleteDraft,
-        onSyncArticles = viewModel::syncSavedArticles,
-        onDeleteBook = viewModel::deleteDeviceBook,
-        onSetBookPosition = viewModel::setBookPosition,
-        onPickBook = viewModel::uploadSelectedFile,
-        onRssFeedChange = viewModel::setRssFeedDraft,
-        onAddRssFeed = viewModel::addRssFeed,
-        onRefreshRssFeeds = viewModel::refreshRssFeeds,
-        onDeleteFeed = viewModel::deleteRssFeed,
     )
 }

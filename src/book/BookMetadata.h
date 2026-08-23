@@ -1,25 +1,32 @@
 #pragma once
 
-#include <Arduino.h>
+#include <algorithm>
+#include <cstddef>
+#include <string>
 #include <vector>
 
 struct ChapterMarker {
-  String title;
-  size_t wordIndex = 0;
+    std::string title;
+    size_t wordIndex = 0;
 };
 
 struct BookMetadata {
-  String title;
-  String author;
-  size_t wordCount = 0;
-  std::vector<ChapterMarker> chapters;
-  std::vector<size_t> paragraphStarts;
+    std::string title;
+    std::string author;
+    size_t wordCount = 0;
+    std::vector<ChapterMarker> chapters;
+    std::vector<size_t> paragraphStarts;
 
-  void clear() {
-    title = "";
-    author = "";
-    wordCount = 0;
-    chapters.clear();
-    paragraphStarts.clear();
-  }
+    const ChapterMarker* chapterAt(size_t wordIndex) const {
+        const auto next = std::ranges::upper_bound(chapters, wordIndex, {}, &ChapterMarker::wordIndex);
+        return next == chapters.begin() ? nullptr : &*std::prev(next);
+    }
+
+    void clear() {
+        title.clear();
+        author.clear();
+        wordCount = 0;
+        chapters.clear();
+        paragraphStarts.clear();
+    }
 };

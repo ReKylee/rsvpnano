@@ -1,413 +1,381 @@
 #include "input/Input.h"
 
 #include <algorithm>
+#include <atomic>
+#include <esp_log.h>
 
-#include "board/BoardImu.h"
 #include "board/BoardInput.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
 
 namespace Input {
-namespace {
+    namespace {
 
-struct ControlsState {
-  bool initialized = false;
-  ControlMask stableControls = InputNone;
-  ControlMask candidateControls = InputNone;
-  ControlMask activeControls = InputNone;
-  bool releasedEvent = false;
-  uint32_t candidateSinceMs = 0;
-  uint32_t pressStartedMs = 0;
-  uint32_t lastPressDurationMs = 0;
-};
+        constexpr uint32_t kControlsPollMs = 5;
+        constexpr UBaseType_t kSamplerPriority = 2;
+        constexpr uint32_t kSamplerStackBytes = 4096;
+        constexpr UBaseType_t kEventQueueLength = 8;
+        constexpr UBaseType_t kTouchQueueLength = 32;
 
-struct TouchState {
-  Board::UiOrientation orientation = Board::UiOrientation::Portrait;
-  bool initialized = false;
-  bool active = false;
-  uint8_t emptySamples = 0;
-  uint8_t consecutiveReadFailures = 0;
-  uint32_t startedAtMs = 0;
-  uint32_t lastPollMs = 0;
-  uint32_t backoffUntilMs = 0;
-  uint32_t ignoreEventsUntilMs = 0;
-  uint16_t startX = 0;
-  uint16_t startY = 0;
-  uint16_t lastX = 0;
-  uint16_t lastY = 0;
-};
+        struct ControlsState {
+            bool initialized = false;
+            ActionMask stableShortActions = ActionNone;
+            ActionMask stableLongActions = ActionNone;
+            ActionMask candidateShortActions = ActionNone;
+            ActionMask candidateLongActions = ActionNone;
+            ActionMask activeShortActions = ActionNone;
+            ActionMask activeLongActions = ActionNone;
+            bool releasedEvent = false;
+            uint32_t candidateSinceMs = 0;
+            uint32_t pressStartedMs = 0;
+            uint32_t lastPressDurationMs = 0;
+        };
 
-struct TouchMotion {
-  uint16_t dx = 0;
-  uint16_t dy = 0;
-  uint32_t durationMs = 0;
-};
+        ControlsState gControls;
+        ControlTiming gControlTiming;
+        TouchTiming gTouchTiming;
+        QueueHandle_t gEventQueue = nullptr;
+        QueueHandle_t gTouchQueue = nullptr;
+        TaskHandle_t gSamplerTask = nullptr;
+        std::atomic_bool gPaused = false;
+        std::atomic_bool gPauseAcknowledged = false;
+        bool gTouchInitialized = false;
+        bool gTouchActive = false;
+        bool gTouchProbeFailureLogged = false;
+        bool gTouchReadFailureLogged = false;
+        uint8_t gTouchReleaseSamples = 0;
+        uint8_t gTouchReadFailures = 0;
+        uint32_t gTouchBackoffUntilMs = 0;
+        uint32_t gTouchIgnoreUntilMs = 0;
 
-ControlsState gControls;
-ControlTiming gControlTiming;
-TouchSurface gTouchSurface;
-TouchTiming gTouchTiming;
-TouchState gTouch;
+        struct TouchSample {
+            ui::TouchContact contact;
+            ui::TouchSampleResult result = ui::TouchSampleResult::None;
+        };
 
-void resetControls(ControlMask controls, uint32_t nowMs) {
-  gControls.initialized = true;
-  gControls.stableControls = controls;
-  gControls.candidateControls = controls;
-  gControls.activeControls = InputNone;
-  gControls.releasedEvent = false;
-  gControls.candidateSinceMs = nowMs;
-  gControls.pressStartedMs = controls == InputNone ? 0 : nowMs;
-  gControls.lastPressDurationMs = 0;
-}
-
-void updateControls(ControlMask controls, uint32_t nowMs) {
-  if (!gControls.initialized) {
-    resetControls(controls, nowMs);
-    return;
-  }
-
-  gControls.releasedEvent = false;
-
-  {
-    // Debounce the raw bitmask before changing the stable pressed controls.
-    if (controls != gControls.candidateControls) {
-      gControls.candidateControls = controls;
-      gControls.candidateSinceMs = nowMs;
-    }
-
-    if (gControls.candidateControls == gControls.stableControls) {
-      return;
-    }
-
-    if (nowMs - gControls.candidateSinceMs < gControlTiming.debounceMs) {
-      return;
-    }
-  }
-
-  const ControlMask previousControls = gControls.stableControls;
-  gControls.stableControls = gControls.candidateControls;
-
-  {
-    // Track the gesture lifetime for whichever controls became active together.
-    if (previousControls == InputNone && gControls.stableControls != InputNone) {
-      gControls.activeControls = gControls.stableControls;
-      gControls.pressStartedMs = nowMs;
-      gControls.lastPressDurationMs = 0;
-      return;
-    }
-
-    if (previousControls != InputNone && gControls.stableControls == InputNone) {
-      gControls.releasedEvent = true;
-      gControls.lastPressDurationMs = nowMs - gControls.pressStartedMs;
-      return;
-    }
-
-    if (previousControls != gControls.stableControls) {
-      gControls.activeControls = gControls.stableControls;
-      gControls.pressStartedMs = nowMs;
-      gControls.lastPressDurationMs = 0;
-    }
-  }
-}
-
-bool pollControlsEvent(ControlMask controls, uint32_t nowMs, Event &event) {
-  updateControls(controls, nowMs);
-
-  if (gControls.stableControls != InputNone && gControls.activeControls != InputNone &&
-      nowMs - gControls.pressStartedMs >= gControlTiming.longPressMs) {
-    event = {gControls.activeControls, Gesture::LongPressed};
-    gControls.activeControls = InputNone;
-    return true;
-  }
-
-  if (gControls.releasedEvent && gControls.activeControls != InputNone &&
-      gControls.lastPressDurationMs <= gControlTiming.shortPressMaxMs) {
-    event = {gControls.activeControls, Gesture::ShortPressed};
-    gControls.activeControls = InputNone;
-    return true;
-  }
-
-  if (gControls.releasedEvent) {
-    gControls.activeControls = InputNone;
-  }
-  return false;
-}
-
-void resetTouchState() {
-  gTouch.active = false;
-  gTouch.emptySamples = 0;
-  gTouch.startedAtMs = 0;
-  gTouch.startX = 0;
-  gTouch.startY = 0;
-  gTouch.lastX = 0;
-  gTouch.lastY = 0;
-}
-
-constexpr uint8_t orientationQuarterTurns(Board::UiOrientation orientation) {
-  switch (orientation) {
-    case Board::UiOrientation::Landscape:
-      return 1;
-    case Board::UiOrientation::LandscapeFlipped:
-      return 3;
-    case Board::UiOrientation::PortraitFlipped:
-      return 2;
-    case Board::UiOrientation::Portrait:
-    default:
-      return 0;
-  }
-}
-
-TouchContact mapTouchContact(TouchContact contact) {
-  const uint8_t quarterTurns = orientationQuarterTurns(gTouch.orientation);
-  constexpr uint16_t kMin = 0;
-  const uint16_t rawMaxX = std::max(gTouchSurface.width, uint16_t{1}) - 1;
-  const uint16_t rawMaxY = std::max(gTouchSurface.height, uint16_t{1}) - 1;
-  const uint16_t rawX = std::clamp(contact.x, kMin, rawMaxX);
-  const uint16_t rawY = std::clamp(contact.y, kMin, rawMaxY);
-  uint16_t x = rawX;
-  uint16_t y = rawY;
-
-  switch (quarterTurns) {
-    case 1:
-      x = rawMaxY - rawY;
-      y = rawX;
-      break;
-    case 2:
-      x = rawMaxX - rawX;
-      y = rawMaxY - rawY;
-      break;
-    case 3:
-      x = rawY;
-      y = rawMaxX - rawX;
-      break;
-    default:
-      break;
-  }
-
-  return {true, x, y};
-}
-
-TouchMotion touchMotion(uint32_t nowMs) {
-  const auto delta = [](uint16_t left, uint16_t right) {
-    uint16_t high = std::max(left, right);
-    high -= std::min(left, right);
-    return high;
-  };
-
-  return {delta(gTouch.lastX, gTouch.startX), delta(gTouch.lastY, gTouch.startY),
-          nowMs - gTouch.startedAtMs};
-}
-
-bool matchesReleaseGesture(Gesture gesture, TouchMotion motion) {
-  switch (gesture) {
-    case Gesture::Tapped:
-      return motion.durationMs <= gTouchTiming.tapMaxDurationMs &&
-             motion.dx <= gTouchTiming.tapMoveTolerancePx &&
-             motion.dy <= gTouchTiming.tapMoveTolerancePx;
-
-    case Gesture::TopEdgeSwiped:
-      return gTouch.startY <= gTouchTiming.edgeSizePx && gTouch.lastY > gTouch.startY &&
-             gTouch.lastY - gTouch.startY >= gTouchTiming.swipeMinDistancePx;
-
-    case Gesture::BottomEdgeSwiped:
-    {
-      const uint16_t logicalHeight = []() {
-        switch (gTouch.orientation) {
-          case Board::UiOrientation::Landscape:
-          case Board::UiOrientation::LandscapeFlipped:
-            return gTouchSurface.width;
-          case Board::UiOrientation::Portrait:
-          case Board::UiOrientation::PortraitFlipped:
-          default:
-            return gTouchSurface.height;
+        bool anyAction(ActionMask shortActions, ActionMask longActions) {
+            return shortActions != ActionNone || longActions != ActionNone;
         }
-      }();
-      return logicalHeight > gTouchTiming.edgeSizePx &&
-             gTouch.startY >= logicalHeight - gTouchTiming.edgeSizePx &&
-             gTouch.lastY < gTouch.startY &&
-             gTouch.startY - gTouch.lastY >= gTouchTiming.swipeMinDistancePx;
+
+        void resetControls(ActionMask shortActions, ActionMask longActions, uint32_t nowMs) {
+            gControls.initialized = true;
+            gControls.stableShortActions = shortActions;
+            gControls.stableLongActions = longActions;
+            gControls.candidateShortActions = shortActions;
+            gControls.candidateLongActions = longActions;
+            gControls.activeShortActions = ActionNone;
+            gControls.activeLongActions = ActionNone;
+            gControls.releasedEvent = false;
+            gControls.candidateSinceMs = nowMs;
+            gControls.pressStartedMs = anyAction(shortActions, longActions) ? nowMs : 0;
+            gControls.lastPressDurationMs = 0;
+        }
+
+        void updateControls(ActionMask shortActions, ActionMask longActions, uint32_t nowMs) {
+            if (!gControls.initialized) {
+                resetControls(shortActions, longActions, nowMs);
+                return;
+            }
+
+            gControls.releasedEvent = false;
+
+            {
+                // Debounce the raw bitmask before changing the stable pressed controls.
+                if (shortActions != gControls.candidateShortActions || longActions != gControls.candidateLongActions) {
+                    gControls.candidateShortActions = shortActions;
+                    gControls.candidateLongActions = longActions;
+                    gControls.candidateSinceMs = nowMs;
+                }
+
+                if (gControls.candidateShortActions == gControls.stableShortActions
+                    && gControls.candidateLongActions == gControls.stableLongActions) {
+                    return;
+                }
+
+                if (nowMs - gControls.candidateSinceMs < gControlTiming.debounceMs) {
+                    return;
+                }
+            }
+
+            const ActionMask previousShortActions = gControls.stableShortActions;
+            const ActionMask previousLongActions = gControls.stableLongActions;
+            gControls.stableShortActions = gControls.candidateShortActions;
+            gControls.stableLongActions = gControls.candidateLongActions;
+
+            {
+                // Track the gesture lifetime for whichever controls became active together.
+                if (!anyAction(previousShortActions, previousLongActions)
+                    && anyAction(gControls.stableShortActions, gControls.stableLongActions)) {
+                    gControls.activeShortActions = gControls.stableShortActions;
+                    gControls.activeLongActions = gControls.stableLongActions;
+                    gControls.pressStartedMs = nowMs;
+                    gControls.lastPressDurationMs = 0;
+                    return;
+                }
+
+                if (anyAction(previousShortActions, previousLongActions)
+                    && !anyAction(gControls.stableShortActions, gControls.stableLongActions)) {
+                    gControls.releasedEvent = true;
+                    gControls.lastPressDurationMs = nowMs - gControls.pressStartedMs;
+                    return;
+                }
+
+                if (previousShortActions != gControls.stableShortActions
+                    || previousLongActions != gControls.stableLongActions) {
+                    gControls.activeShortActions = gControls.stableShortActions;
+                    gControls.activeLongActions = gControls.stableLongActions;
+                    gControls.pressStartedMs = nowMs;
+                    gControls.lastPressDurationMs = 0;
+                }
+            }
+        }
+
+        bool pollControlsEvent(ActionMask shortActions, ActionMask longActions, uint32_t nowMs, Event& event) {
+            updateControls(shortActions, longActions, nowMs);
+
+            if (anyAction(gControls.stableShortActions, gControls.stableLongActions)
+                && anyAction(gControls.activeShortActions, gControls.activeLongActions)
+                && nowMs - gControls.pressStartedMs >= gControlTiming.longPressMs) {
+                const ActionMask actions = gControls.activeLongActions;
+                if (actions == ActionNone) {
+                    gControls.activeShortActions = ActionNone;
+                    gControls.activeLongActions = ActionNone;
+                    return false;
+                }
+                event = {};
+                event.actions = actions;
+                gControls.activeShortActions = ActionNone;
+                gControls.activeLongActions = ActionNone;
+                return true;
+            }
+
+            if (gControls.releasedEvent && anyAction(gControls.activeShortActions, gControls.activeLongActions)
+                && gControls.lastPressDurationMs <= gControlTiming.shortPressMaxMs) {
+                const ActionMask actions = gControls.activeShortActions;
+                if (actions == ActionNone) {
+                    gControls.activeShortActions = ActionNone;
+                    gControls.activeLongActions = ActionNone;
+                    return false;
+                }
+                event = {};
+                event.actions = actions;
+                gControls.activeShortActions = ActionNone;
+                gControls.activeLongActions = ActionNone;
+                return true;
+            }
+
+            if (gControls.releasedEvent) {
+                gControls.activeShortActions = ActionNone;
+                gControls.activeLongActions = ActionNone;
+            }
+            return false;
+        }
+
+        template<typename T>
+        void enqueueLatest(QueueHandle_t queue, const T& value) {
+            if (xQueueSend(queue, &value, 0) == pdTRUE)
+                return;
+            T discarded;
+            xQueueReceive(queue, &discarded, 0);
+            xQueueSend(queue, &value, 0);
+        }
+
+        bool deadlineReached(uint32_t nowMs, uint32_t deadlineMs) {
+            return static_cast<int32_t>(nowMs - deadlineMs) >= 0;
+        }
+
+        void sampleInputs(void*) {
+            ESP_LOGI("input", "sampler started task=%s core=%d", pcTaskGetName(nullptr), xPortGetCoreID());
+            uint32_t nextControlsMs = millis();
+            uint32_t nextTouchMs = nextControlsMs;
+            gTouchBackoffUntilMs = nextTouchMs;
+
+            while (true) {
+                if (gPaused.load()) {
+                    gPauseAcknowledged.store(true);
+                    vTaskDelay(pdMS_TO_TICKS(1));
+                    continue;
+                }
+                if (gPauseAcknowledged.exchange(false)) {
+                    const PressActions actions = Board::Input::currentActions();
+                    const uint32_t resumedAtMs = millis();
+                    resetControls(actions.shortPress, actions.longPress, resumedAtMs);
+                    gTouchInitialized = false;
+                    gTouchActive = false;
+                    gTouchReleaseSamples = 0;
+                    gTouchReadFailures = 0;
+                    gTouchBackoffUntilMs = resumedAtMs;
+                    xQueueReset(gTouchQueue);
+                    TouchSample reset;
+                    reset.result = ui::TouchSampleResult::Reset;
+                    enqueueLatest(gTouchQueue, reset);
+                }
+
+                const uint32_t nowMs = millis();
+                if (deadlineReached(nowMs, nextControlsMs)) {
+                    const PressActions actions = Board::Input::currentActions();
+                    Event event;
+                    if (pollControlsEvent(actions.shortPress, actions.longPress, nowMs, event))
+                        enqueueLatest(gEventQueue, event);
+                    nextControlsMs = nowMs + kControlsPollMs;
+                }
+
+                if (!gTouchInitialized && deadlineReached(nowMs, gTouchBackoffUntilMs)) {
+                    gTouchInitialized = Board::Input::beginTouch();
+                    gTouchReadFailures = 0;
+                    if (gTouchInitialized) {
+                        ESP_LOGI("input", "touch controller ready%s", gTouchProbeFailureLogged ? " after retry" : "");
+                        gTouchProbeFailureLogged = false;
+                        gTouchIgnoreUntilMs = nowMs + gTouchTiming.recoveryEventIgnoreMs;
+                    } else {
+                        if (!gTouchProbeFailureLogged)
+                            ESP_LOGW("input", "touch controller probe failed; retrying");
+                        gTouchProbeFailureLogged = true;
+                        gTouchBackoffUntilMs = nowMs + gTouchTiming.recoveryRetryMs;
+                    }
+                }
+
+                if (gTouchInitialized && deadlineReached(nowMs, nextTouchMs)) {
+                    const uint32_t readyIntervalMs = std::max<uint32_t>(1, gTouchTiming.readyPollIntervalMs);
+                    const uint32_t packetIntervalMs = std::max<uint32_t>(1, gTouchTiming.pollIntervalMs);
+                    nextTouchMs = nowMs + readyIntervalMs;
+                    if (gTouchActive || Board::Input::touchReady()) {
+                        nextTouchMs = nowMs + packetIntervalMs;
+                        TouchSample sample;
+                        sample.contact.sampledAtMs = nowMs;
+                        if (Board::Input::readTouch(sample.contact)) {
+                            if (gTouchReadFailureLogged)
+                                ESP_LOGI("input", "touch packet reads recovered");
+                            gTouchReadFailureLogged = false;
+                            gTouchReadFailures = 0;
+                            bool emitContact = true;
+                            if (sample.contact.touched) {
+                                gTouchActive = true;
+                                gTouchReleaseSamples = 0;
+                            } else if (gTouchActive
+                                       && ++gTouchReleaseSamples
+                                              < std::max<uint8_t>(1, gTouchTiming.releaseConfirmSamples)) {
+                                emitContact = false;
+                            } else {
+                                gTouchActive = false;
+                                gTouchReleaseSamples = 0;
+                            }
+                            if (!gTouchActive)
+                                nextTouchMs = nowMs + readyIntervalMs;
+                            if (emitContact && deadlineReached(nowMs, gTouchIgnoreUntilMs)) {
+                                sample.result = ui::TouchSampleResult::Contact;
+                                enqueueLatest(gTouchQueue, sample);
+                            }
+                        } else if (++gTouchReadFailures >= gTouchTiming.maxConsecutiveReadFailures) {
+                            if (!gTouchReadFailureLogged)
+                                ESP_LOGW("input", "touch reset after %u packet read failures",
+                                         static_cast<unsigned>(gTouchReadFailures));
+                            gTouchReadFailureLogged = true;
+                            gTouchInitialized = false;
+                            gTouchActive = false;
+                            gTouchReleaseSamples = 0;
+                            gTouchBackoffUntilMs = nowMs + gTouchTiming.recoveryRetryMs;
+                            sample.result = ui::TouchSampleResult::Reset;
+                            enqueueLatest(gTouchQueue, sample);
+                        } else if (!gTouchActive) {
+                            nextTouchMs = nowMs + gTouchTiming.failureBackoffMs;
+                        }
+                    }
+                }
+
+                vTaskDelay(pdMS_TO_TICKS(1));
+            }
+        }
+
+    } // namespace
+
+    bool begin() {
+        gControls.initialized = false;
+        gPaused.store(false);
+        gPauseAcknowledged.store(false);
+        gTouchInitialized = false;
+        gTouchActive = false;
+        gTouchProbeFailureLogged = false;
+        gTouchReadFailureLogged = false;
+        gTouchReleaseSamples = 0;
+        gTouchReadFailures = 0;
+        if (!Board::Input::begin()) {
+            ESP_LOGE("input", "board input initialization failed");
+            return false;
+        }
+
+        gControlTiming = Board::Input::controlTiming();
+        gTouchTiming = Board::Input::touchTiming();
+        const PressActions actions = Board::Input::currentActions();
+        resetControls(actions.shortPress, actions.longPress, millis());
+        gEventQueue = xQueueCreate(kEventQueueLength, sizeof(Event));
+        gTouchQueue = xQueueCreate(kTouchQueueLength, sizeof(TouchSample));
+        if (gEventQueue == nullptr || gTouchQueue == nullptr) {
+            ESP_LOGE("input", "queue allocation failed event=%u touch=%u", gEventQueue != nullptr ? 1U : 0U,
+                     gTouchQueue != nullptr ? 1U : 0U);
+            end();
+            return false;
+        }
+        if (xTaskCreate(sampleInputs, "input", kSamplerStackBytes, nullptr, kSamplerPriority, &gSamplerTask)
+            != pdPASS) {
+            ESP_LOGE("input", "sampler task allocation failed");
+            end();
+            return false;
+        }
+        return true;
     }
 
-    default:
-      return false;
-  }
-}
-
-Gesture touchReleaseGesture(uint32_t nowMs) {
-  const TouchMotion motion = touchMotion(nowMs);
-  if (matchesReleaseGesture(Gesture::Tapped, motion)) {
-    return Gesture::Tapped;
-  }
-  if (matchesReleaseGesture(Gesture::TopEdgeSwiped, motion)) {
-    return Gesture::TopEdgeSwiped;
-  }
-  if (matchesReleaseGesture(Gesture::BottomEdgeSwiped, motion)) {
-    return Gesture::BottomEdgeSwiped;
-  }
-  return Gesture::TouchEnd;
-}
-
-bool releaseTouch(uint32_t nowMs, Event &event) {
-  if (!gTouch.active) {
-    return false;
-  }
-
-  ++gTouch.emptySamples;
-  if (gTouch.emptySamples < gTouchTiming.releaseConfirmSamples) {
-    return false;
-  }
-
-  const Gesture gesture = touchReleaseGesture(nowMs);
-  gTouch.active = false;
-  gTouch.emptySamples = 0;
-  event = {InputTouch, gesture, gTouch.lastX, gTouch.lastY};
-  return true;
-}
-
-bool pollTouchContact(const TouchContact &contact, uint32_t nowMs, Event &event) {
-  if (!contact.touched) {
-    return releaseTouch(nowMs, event);
-  }
-
-  gTouch.emptySamples = 0;
-
-  const TouchContact mapped = mapTouchContact(contact);
-
-  if (!gTouch.active) {
-    gTouch.active = true;
-    gTouch.startedAtMs = nowMs;
-    gTouch.startX = mapped.x;
-    gTouch.startY = mapped.y;
-    gTouch.lastX = mapped.x;
-    gTouch.lastY = mapped.y;
-    event = {InputTouch, Gesture::TouchStart, mapped.x, mapped.y};
-    return true;
-  }
-
-  gTouch.lastX = mapped.x;
-  gTouch.lastY = mapped.y;
-  event = {InputTouch, Gesture::TouchMove, mapped.x, mapped.y};
-  return true;
-}
-
-void syncTouchOrientation() {
-  const Board::UiOrientation orientation = Board::Imu::uiOrientation();
-  if (gTouch.orientation == orientation) {
-    return;
-  }
-
-  gTouch.orientation = orientation;
-  resetTouchState();
-}
-
-bool beginTouch(uint32_t nowMs) {
-  resetTouchState();
-  gTouch.lastPollMs = 0;
-  gTouch.backoffUntilMs = 0;
-  gTouch.consecutiveReadFailures = 0;
-
-  gTouch.initialized = Board::Input::beginTouch();
-  if (gTouch.initialized) {
-    gTouch.ignoreEventsUntilMs = nowMs + gTouchTiming.recoveryEventIgnoreMs;
-  }
-  return gTouch.initialized;
-}
-
-bool pollTouchEvent(uint32_t nowMs, Event &event) {
-  syncTouchOrientation();
-
-  {
-    // Touch hardware can disappear during resets; retry without blocking button input.
-    if (!gTouch.initialized) {
-      if (nowMs >= gTouch.backoffUntilMs && !beginTouch(nowMs)) {
-        gTouch.backoffUntilMs = nowMs + gTouchTiming.recoveryRetryMs;
-      }
-      return false;
-    }
-  }
-
-  {
-    // Keep failed reads from hammering the bus and keep normal polling bounded.
-    if (nowMs < gTouch.backoffUntilMs ||
-        nowMs - gTouch.lastPollMs < gTouchTiming.pollIntervalMs) {
-      return false;
-    }
-    gTouch.lastPollMs = nowMs;
-  }
-
-  TouchContact contact;
-  const bool contactRead = [&]() {
-    if (!Board::Input::touchReady()) {
-      contact = {};
-      return true;
+    void end() {
+        cancel();
+        if (gSamplerTask != nullptr) {
+            vTaskDelete(gSamplerTask);
+            gSamplerTask = nullptr;
+        }
+        if (gEventQueue != nullptr) {
+            vQueueDelete(gEventQueue);
+            gEventQueue = nullptr;
+        }
+        if (gTouchQueue != nullptr) {
+            vQueueDelete(gTouchQueue);
+            gTouchQueue = nullptr;
+        }
+        Board::Input::end();
+        gControls.initialized = false;
     }
 
-    if (Board::Input::readTouch(contact)) {
-      gTouch.consecutiveReadFailures = 0;
-      return true;
+    void cancel() {
+        gPauseAcknowledged.store(false);
+        gPaused.store(true);
+        while (gSamplerTask != nullptr && !gPauseAcknowledged.load())
+            delay(1);
+        if (gEventQueue != nullptr)
+            xQueueReset(gEventQueue);
+        if (gTouchQueue != nullptr)
+            xQueueReset(gTouchQueue);
+        Board::Input::cancel();
     }
 
-    gTouch.backoffUntilMs = nowMs + gTouchTiming.failureBackoffMs;
-    ++gTouch.consecutiveReadFailures;
-
-    if (gTouch.consecutiveReadFailures >= gTouchTiming.maxConsecutiveReadFailures) {
-      gTouch.initialized = false;
-      gTouch.backoffUntilMs = nowMs + gTouchTiming.recoveryRetryMs;
-      resetTouchState();
+    void resume() {
+        if (gSamplerTask == nullptr)
+            return;
+        gPaused.store(false);
     }
-    return false;
-  }();
 
-  if (!contactRead) {
-    return false;
-  }
+    bool poll(Event& event) {
+        event = {};
+        if (gEventQueue == nullptr) {
+            return false;
+        }
+        return xQueueReceive(gEventQueue, &event, 0) == pdTRUE;
+    }
 
-  if (nowMs < gTouch.ignoreEventsUntilMs) {
-    resetTouchState();
-    return false;
-  }
+    ui::TouchSampleResult pollTouch(ui::TouchContact& contact) {
+        TouchSample sample;
+        if (gTouchQueue == nullptr || xQueueReceive(gTouchQueue, &sample, 0) != pdTRUE)
+            return ui::TouchSampleResult::None;
+        contact = sample.contact;
+        return sample.result;
+    }
 
-  return pollTouchContact(contact, nowMs, event);
-}
-
-}  // namespace
-
-bool begin() {
-  if (!Board::Input::begin()) {
-    return false;
-  }
-
-  const uint32_t nowMs = millis();
-  gControlTiming = Board::Input::controlTiming();
-  resetControls(Board::Input::currentControls(), nowMs);
-
-  gTouchSurface = Board::Input::touchSurface();
-  gTouchTiming = Board::Input::touchTiming();
-  gTouch.orientation = Board::Imu::uiOrientation();
-  beginTouch(nowMs);
-  return true;
-}
-
-void end() {
-  cancel();
-  Board::Input::end();
-}
-
-void cancel() {
-  const uint32_t nowMs = millis();
-  resetControls(Board::Input::currentControls(), nowMs);
-  resetTouchState();
-  gTouch.initialized = false;
-  Board::Input::cancel();
-}
-
-bool poll(Event &event, uint32_t nowMs) {
-  event = {};
-
-  const ControlMask controls = Board::Input::currentControls();
-  if (pollControlsEvent(controls, nowMs, event)) {
-    return true;
-  }
-
-  return pollTouchEvent(nowMs, event);
-}
-
-}  // namespace Input
+} // namespace Input

@@ -1,0 +1,28 @@
+name = "Catppuccin Frappe"
+
+[typography]
+fontId = "literata"
+fontSizeIndex = 0
+focusHighlight = true
+tracking = 0
+anchor = 30
+guideWidth = 30
+guideGap = 5
+
+[colors]
+background = "#303446"
+foreground = "#C6D0F5"
+muted = "#A5ADCE"
+subtle = "#838BA7"
+accent = "#E78284"
+accentBar = "#E78284"
+breakAccent = "#81C8BE"
+onAccent = "#232634"
+surface = "#292C3C"
+surfaceMuted = "#414559"
+surfaceActive = "#51576D"
+outline = "#626880"
+guide = "#737994"
+guideFocus = "#E78284"
+phantom = "#737994"
+progressTrack = "#414559"

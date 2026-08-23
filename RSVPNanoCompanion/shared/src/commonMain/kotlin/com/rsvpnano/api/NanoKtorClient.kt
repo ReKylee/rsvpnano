@@ -1,13 +1,20 @@
 package com.rsvpnano.api
 
 import com.rsvpnano.models.NanoBook
-import com.rsvpnano.models.NanoChapter
 import com.rsvpnano.models.NanoRssFeeds
+import com.rsvpnano.models.NanoFocusTimers
 import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.models.NanoThemeCatalogItem
+import com.rsvpnano.models.NanoThemeSummary
+import com.rsvpnano.models.NanoThemesResponse
+import com.rsvpnano.models.NanoFontCatalogItem
+import com.rsvpnano.models.NanoFontSummary
+import com.rsvpnano.models.NanoFontsResponse
 import com.rsvpnano.models.NanoUploadResponse
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.NanoWifiUpdate
+import com.rsvpnano.models.FirmwareRelease
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.onUpload
@@ -26,8 +33,10 @@ import io.ktor.http.URLBuilder
 import io.ktor.http.appendPathSegments
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 
 class NanoKtorClient(
     private val httpClient: HttpClient,
@@ -37,20 +46,51 @@ class NanoKtorClient(
         explicitNulls = false
     },
 ) : NanoClient {
+    override suspend fun fetchFirmwareRelease(owner: String, repository: String, tag: String): FirmwareRelease {
+        val url = URLBuilder("https://api.github.com").apply {
+            appendPathSegments("repos", owner, repository, "releases")
+            if (tag.isBlank()) {
+                appendPathSegments("latest")
+            } else {
+                appendPathSegments("tags", tag)
+            }
+        }.build()
+        val response = httpClient.get(url) {
+            headers.append(HttpHeaders.Accept, "application/vnd.github+json")
+            headers.append(HttpHeaders.UserAgent, "RSVP-Nano-Companion")
+        }
+        if (!response.status.isSuccess()) {
+            throw NanoClientError("Firmware release lookup returned HTTP ${response.status}")
+        }
+        val release = json.decodeFromString(GithubRelease.serializer(), response.body<String>())
+        val commit = release.targetCommitish.trim()
+        if (commit.length != 40 || !commit.all { it.digitToIntOrNull(16) != null }) {
+            throw NanoClientError("Firmware release target is not a commit SHA.")
+        }
+        return FirmwareRelease(
+            version = "${release.tagName}+${commit.take(12)}",
+            assets = release.assets.map(GithubAsset::name),
+        )
+    }
+
     override suspend fun fetchInfo(baseUrl: String): NanoInfo =
-        json.decodeFromString(NanoInfo.serializer(), requestText(baseUrl, "api/info"))
+        requestData(baseUrl, "api/v1/device", NanoInfo.serializer())
 
     override suspend fun listBooks(baseUrl: String): List<NanoBook> {
-        val response = requestText(baseUrl, "api/books")
-        val wrapper = json.decodeFromString(DeviceBooksResponse.serializer(), response)
-        return wrapper.books.map { it.toNanoBook() }
+        return requestData(baseUrl, "api/v1/library", DeviceBooksResponse.serializer()).books
     }
 
     override suspend fun fetchSettings(baseUrl: String): NanoSettings =
-        json.decodeFromString(NanoSettings.serializer(), requestText(baseUrl, "api/settings"))
+        requestData(baseUrl, "api/v1/settings", NanoSettings.serializer())
+
+    override suspend fun fetchThemes(baseUrl: String): List<NanoThemeSummary> =
+        requestData(baseUrl, "api/v1/appearance/themes", NanoThemesResponse.serializer()).themes
+
+    override suspend fun fetchFonts(baseUrl: String): List<NanoFontSummary> =
+        requestData(baseUrl, "api/v1/appearance/fonts", NanoFontsResponse.serializer()).fonts
 
     override suspend fun updateSettings(baseUrl: String, settings: NanoSettings): NanoSettings {
-        val response = httpClient.patch(buildUrl(baseUrl, "api/settings")) {
+        val response = httpClient.put(buildUrl(baseUrl, "api/v1/settings")) {
             contentType(ContentType.Application.Json)
             setBody(settings)
         }
@@ -59,10 +99,10 @@ class NanoKtorClient(
     }
 
     override suspend fun fetchWifiSettings(baseUrl: String): NanoWifiSettings =
-        json.decodeFromString(NanoWifiSettings.serializer(), requestText(baseUrl, "api/wifi"))
+        requestData(baseUrl, "api/v1/network", NanoWifiSettings.serializer())
 
     override suspend fun updateWifi(baseUrl: String, ssid: String, password: String): NanoWifiSettings {
-        val response = httpClient.put(buildUrl(baseUrl, "api/wifi")) {
+        val response = httpClient.put(buildUrl(baseUrl, "api/v1/network")) {
             contentType(ContentType.Application.Json)
             setBody(NanoWifiUpdate(ssid = ssid, password = password))
         }
@@ -71,21 +111,32 @@ class NanoKtorClient(
     }
 
     override suspend fun forgetWifi(baseUrl: String): NanoWifiSettings {
-        val response = httpClient.delete(buildUrl(baseUrl, "api/wifi"))
+        val response = httpClient.delete(buildUrl(baseUrl, "api/v1/network"))
         val body = response.body<String>()
         return decodeDeviceResponse(response.status, body, NanoWifiSettings.serializer())
     }
 
     override suspend fun fetchRssFeeds(baseUrl: String): NanoRssFeeds =
-        json.decodeFromString(NanoRssFeeds.serializer(), requestText(baseUrl, "api/rss-feeds"))
+        requestData(baseUrl, "api/v1/feeds", NanoRssFeeds.serializer())
 
-    override suspend fun updateRssFeeds(baseUrl: String, feeds: List<String>): NanoRssFeeds {
-        val response = httpClient.put(buildUrl(baseUrl, "api/rss-feeds")) {
+    override suspend fun updateRssFeeds(baseUrl: String, config: NanoRssFeeds): NanoRssFeeds {
+        val response = httpClient.put(buildUrl(baseUrl, "api/v1/feeds")) {
             contentType(ContentType.Application.Json)
-            setBody(NanoRssFeeds(ok = true, feeds = feeds))
+            setBody(config)
         }
         val body = response.body<String>()
         return decodeDeviceResponse(response.status, body, NanoRssFeeds.serializer())
+    }
+
+    override suspend fun fetchFocusTimers(baseUrl: String): NanoFocusTimers =
+        requestData(baseUrl, "api/v1/focus", NanoFocusTimers.serializer())
+
+    override suspend fun updateFocusTimers(baseUrl: String, timers: NanoFocusTimers): NanoFocusTimers {
+        val response = httpClient.put(buildUrl(baseUrl, "api/v1/focus")) {
+            contentType(ContentType.Application.Json)
+            setBody(timers)
+        }
+        return decodeDeviceResponse(response.status, response.body<String>(), NanoFocusTimers.serializer())
     }
 
     override suspend fun uploadBook(
@@ -98,7 +149,7 @@ class NanoKtorClient(
         val response = httpClient.post(
             buildUrl(
                 baseUrl = baseUrl,
-                path = "api/books",
+                path = "api/v1/library",
                 query = listOfNotNull("name" to name, category?.let { "category" to it }),
             )
         ) {
@@ -123,8 +174,104 @@ class NanoKtorClient(
         return decodeDeviceResponse(response.status, body, NanoUploadResponse.serializer())
     }
 
+    override suspend fun uploadTheme(
+        baseUrl: String,
+        name: String,
+        data: ByteArray,
+        onProgress: ((sent: Long, total: Long) -> Unit)?,
+    ): NanoUploadResponse {
+        val response = httpClient.post(buildUrl(baseUrl, "api/v1/appearance/themes", query = listOf("name" to name))) {
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append("file", data, headers = io.ktor.http.Headers.build {
+                            append(HttpHeaders.ContentDisposition, "form-data; name=\"file\"; filename=\"$name\"")
+                            append(HttpHeaders.ContentType, ContentType.Application.OctetStream.toString())
+                        })
+                    }
+                )
+            )
+            onProgress?.let { progress ->
+                onUpload { sent, total ->
+                    progress(sent, total ?: data.size.toLong())
+                }
+            }
+        }
+
+        val body = response.body<String>()
+        return decodeDeviceResponse(response.status, body, NanoUploadResponse.serializer())
+    }
+
+    override suspend fun uploadFont(
+        baseUrl: String,
+        family: String,
+        size: String,
+        name: String,
+        data: ByteArray,
+        onProgress: ((sent: Long, total: Long) -> Unit)?,
+    ): NanoUploadResponse {
+        val response = httpClient.post(
+            buildUrl(
+                baseUrl = baseUrl,
+                path = "api/v1/appearance/fonts",
+                query = listOf("family" to family, "size" to size, "name" to name),
+            )
+        ) {
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append("file", data, headers = io.ktor.http.Headers.build {
+                            append(HttpHeaders.ContentDisposition, "form-data; name=\"file\"; filename=\"$name\"")
+                            append(HttpHeaders.ContentType, ContentType.Application.OctetStream.toString())
+                        })
+                    }
+                )
+            )
+            onProgress?.let { progress ->
+                onUpload { sent, total ->
+                    progress(sent, total ?: data.size.toLong())
+                }
+            }
+        }
+
+        val body = response.body<String>()
+        return decodeDeviceResponse(response.status, body, NanoUploadResponse.serializer())
+    }
+
+    override suspend fun fetchThemeCatalog(url: String): List<NanoThemeCatalogItem> {
+        val response = httpClient.get(url)
+        if (!response.status.isSuccess()) {
+            throw NanoClientError("Theme catalog returned HTTP ${response.status}")
+        }
+        return json.decodeFromString(ListSerializer(NanoThemeCatalogItem.serializer()), response.body<String>())
+    }
+
+    override suspend fun downloadTheme(url: String): ByteArray {
+        val response = httpClient.get(url)
+        if (!response.status.isSuccess()) {
+            throw NanoClientError("Theme download returned HTTP ${response.status}")
+        }
+        return response.body()
+    }
+
+    override suspend fun fetchFontCatalog(url: String): List<NanoFontCatalogItem> {
+        val response = httpClient.get(url)
+        if (!response.status.isSuccess()) {
+            throw NanoClientError("Font catalog returned HTTP ${response.status}")
+        }
+        return json.decodeFromString(ListSerializer(NanoFontCatalogItem.serializer()), response.body<String>())
+    }
+
+    override suspend fun downloadFont(url: String): ByteArray {
+        val response = httpClient.get(url)
+        if (!response.status.isSuccess()) {
+            throw NanoClientError("Font download returned HTTP ${response.status}")
+        }
+        return response.body()
+    }
+
     override suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse {
-        val response = httpClient.delete(buildUrl(baseUrl, "api/books", query = listOf("id" to id)))
+        val response = httpClient.delete(buildUrl(baseUrl, "api/v1/library", query = listOf("id" to id)))
         val body = response.body<String>()
         return decodeDeviceResponse(response.status, body, NanoUploadResponse.serializer())
     }
@@ -132,19 +279,13 @@ class NanoKtorClient(
     override suspend fun setBookPosition(
         baseUrl: String,
         id: String,
-        sourceSize: Long,
-        sourceFingerprint: Long,
-        wordCount: Int,
         wordIndex: Int,
     ): NanoUploadResponse {
-        val response = httpClient.patch(buildUrl(baseUrl, "api/books/position")) {
+        val response = httpClient.patch(buildUrl(baseUrl, "api/v1/library/position")) {
             contentType(ContentType.Application.Json)
             setBody(
                 BookPositionUpdate(
                     id = id,
-                    sourceSize = sourceSize,
-                    sourceFingerprint = sourceFingerprint,
-                    wordCount = wordCount,
                     wordIndex = wordIndex,
                 )
             )
@@ -153,10 +294,13 @@ class NanoKtorClient(
         return decodeDeviceResponse(response.status, body, NanoUploadResponse.serializer())
     }
 
-    private suspend fun requestText(baseUrl: String, path: String): String {
+    private suspend fun <T> requestData(
+        baseUrl: String,
+        path: String,
+        serializer: kotlinx.serialization.KSerializer<T>,
+    ): T {
         val response = httpClient.get(buildUrl(baseUrl, path))
-        ensureSuccess(response.status)
-        return response.body<String>()
+        return decodeDeviceResponse(response.status, response.body<String>(), serializer)
     }
 
     private fun buildUrl(baseUrl: String, path: String, query: List<Pair<String, String>> = emptyList()) = URLBuilder(baseUrl).apply {
@@ -164,66 +308,58 @@ class NanoKtorClient(
         query.forEach { (name, value) -> parameters.append(name, value) }
     }.build()
 
-    private fun ensureSuccess(status: HttpStatusCode) {
-        if (!status.isSuccess()) {
-            throw NanoClientError("Device rejected request with HTTP $status")
-        }
-    }
-
-    private inline fun <reified T> decodeDeviceResponse(
+    private fun <T> decodeDeviceResponse(
         status: HttpStatusCode,
         body: String,
         serializer: kotlinx.serialization.KSerializer<T>,
     ): T {
         if (!status.isSuccess()) {
-            val decoded = runCatching { json.decodeFromString(NanoUploadResponse.serializer(), body) }.getOrNull()
-            throw NanoClientError(decoded?.error ?: "Device rejected request with HTTP $status")
+            val decoded = runCatching { json.decodeFromString(ApiErrorEnvelope.serializer(), body) }.getOrNull()?.error
+            throw NanoClientError(
+                message = decoded?.message ?: "Device rejected request with HTTP $status",
+                code = decoded?.code,
+                field = decoded?.field,
+                status = status.value,
+            )
         }
-        return json.decodeFromString(serializer, body)
+        return runCatching { json.decodeFromString(ApiEnvelope.serializer(serializer), body).data }
+            .getOrElse { cause ->
+                throw NanoClientError(
+                    message = "Device returned an invalid API response.",
+                    code = "invalid_response",
+                    status = status.value,
+                    cause = cause,
+                )
+            }
     }
+
+    @Serializable
+    private data class ApiEnvelope<T>(val data: T)
+
+    @Serializable
+    private data class ApiErrorEnvelope(val error: ApiError)
+
+    @Serializable
+    private data class ApiError(val code: String, val message: String, val field: String? = null)
 
     @Serializable
     private data class DeviceBooksResponse(
-        val books: List<DeviceBook>,
+        val books: List<NanoBook>,
     )
-
-    @Serializable
-    private data class DeviceBook(
-        val id: String? = null,
-        val name: String,
-        val title: String? = null,
-        val author: String? = null,
-        val bytes: Int = 0,
-        val progressPercent: Int? = null,
-        val category: String? = null,
-        val sourceSize: Long? = null,
-        val sourceFingerprint: Long? = null,
-        val wordCount: Int? = null,
-        val wordIndex: Int? = null,
-        val chapters: List<NanoChapter> = emptyList(),
-    ) {
-        fun toNanoBook(): NanoBook = NanoBook(
-            id = id ?: name,
-            name = name,
-            title = title,
-            author = author,
-            bytes = bytes,
-            progressPercent = progressPercent,
-            category = category,
-            sourceSize = sourceSize,
-            sourceFingerprint = sourceFingerprint,
-            wordCount = wordCount,
-            wordIndex = wordIndex,
-            chapters = chapters,
-        )
-    }
 
     @Serializable
     private data class BookPositionUpdate(
         val id: String,
-        val sourceSize: Long,
-        val sourceFingerprint: Long,
-        val wordCount: Int,
         val wordIndex: Int,
     )
+
+    @Serializable
+    private data class GithubRelease(
+        @SerialName("tag_name") val tagName: String,
+        @SerialName("target_commitish") val targetCommitish: String,
+        val assets: List<GithubAsset> = emptyList(),
+    )
+
+    @Serializable
+    private data class GithubAsset(val name: String)
 }

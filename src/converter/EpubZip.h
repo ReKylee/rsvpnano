@@ -1,10 +1,13 @@
 #pragma once
 
-#include <Arduino.h>
 #include <FS.h>
+#include <span>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include "converter/EpubConverter.h"
+#include "converter/EpubPackage.h"
 
 namespace EpubZip {
 
@@ -16,7 +19,7 @@ namespace EpubZip {
     };
 
     struct ZipEntry {
-        String name;
+        std::string name;
         uint16_t method = 0;
         uint16_t flags = 0;
         uint32_t compressedSize = 0;
@@ -26,25 +29,31 @@ namespace EpubZip {
 
     class Archive {
     public:
-        bool open(const String& path);
+        bool open(std::string_view path);
         void close();
-        const ZipEntry* find(const String& name) const;
+        bool contains(std::string_view name) const;
+        const ZipEntry* find(std::string_view name) const;
 
-        bool extractToString(const String& name, String& output, size_t maxBytes);
-        ContentExtractStatus extractContentToRsvp(const String& name, File& output, size_t& wordCount, size_t maxWords,
-                                                  String& lastChapterTitle, const EpubConverter::Options& options,
-                                                  size_t itemIndex, size_t itemCount);
+        bool extractToString(std::string_view name, std::string& output, size_t maxBytes);
+        ContentExtractStatus extractContentToRsvp(std::string_view name, File& output, size_t& wordCount,
+                                                  size_t maxWords, std::string& lastChapterTitle, size_t& chapterCount,
+                                                  std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
+                                                  std::string_view fallbackChapterTitle, std::string_view bookTitle,
+                                                  const EpubConverter::Options& options, size_t itemIndex,
+                                                  size_t itemCount);
 
     private:
         void logArchiveHints(const char* reason) const;
         bool readCentralDirectory();
-        bool extractToString(const ZipEntry& entry, String& output, size_t maxBytes);
+        bool extractToString(const ZipEntry& entry, std::string& output, size_t maxBytes);
         ContentExtractStatus extractContentToRsvp(const ZipEntry& entry, File& output, size_t& wordCount,
-                                                  size_t maxWords, String& lastChapterTitle,
+                                                  size_t maxWords, std::string& lastChapterTitle, size_t& chapterCount,
+                                                  std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
+                                                  std::string_view fallbackChapterTitle, std::string_view bookTitle,
                                                   const EpubConverter::Options& options, size_t itemIndex,
                                                   size_t itemCount);
 
-        String archivePath_;
+        std::string archivePath_;
         File file_;
         std::vector<ZipEntry> entries_;
     };

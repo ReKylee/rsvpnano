@@ -1,16 +1,22 @@
 #pragma once
 
-#include <Arduino.h>
 #include <FS.h>
+#include <span>
+#include <string>
+#include <string_view>
+
+#include "converter/EpubPackage.h"
 
 namespace EpubContent {
 
-    String plainTextFromXmlFragment(const String& fragment);
-    bool writeBodyLine(File& output, const String& line, size_t& wordCount, size_t maxWords);
+    std::string plainTextFromXmlFragment(std::string_view fragment);
+    bool writeBodyLine(File& output, std::string_view line, size_t& wordCount, size_t maxWords);
 
     class RsvpContentWriter {
     public:
-        RsvpContentWriter(File& output, size_t& wordCount, size_t maxWords, String& lastChapterTitle);
+        RsvpContentWriter(File& output, size_t& wordCount, size_t maxWords, std::string& lastChapterTitle,
+                          size_t& chapterCount, std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
+                          std::string_view fallbackChapterTitle, std::string_view bookTitle);
 
         bool write(const uint8_t* data, size_t length);
         bool finish();
@@ -24,11 +30,17 @@ namespace EpubContent {
             Comment,
         };
 
-        bool flushLine();
+        bool flushLine(bool endParagraph = true);
+        bool flushWordAlignedPrefix();
+        bool writeChapter(std::string_view title);
+        bool emitTocEntriesThrough(size_t index);
+        int matchingTocEntry(std::string_view anchor) const;
+        bool suppressHeading(std::string_view heading) const;
+        void beginParagraph();
         void appendToActiveText(char c);
         bool processDecodedText(char c);
         bool processTextChar(char c);
-        bool processTag(const String& tag);
+        bool processTag(std::string_view tag);
         bool processEntityChar(char c);
         bool processCommentChar(char c);
         bool processChar(char c);
@@ -36,15 +48,23 @@ namespace EpubContent {
         File& output_;
         size_t& wordCount_;
         const size_t maxWords_;
-        String& lastChapterTitle_;
-        String line_;
-        String heading_;
-        String tag_;
-        String entity_;
-        String commentTail_;
+        std::string& lastChapterTitle_;
+        size_t& chapterCount_;
+        const std::span<const EpubPackage::TocEntry> tocEntries_;
+        const bool hasToc_;
+        const std::string fallbackChapterTitle_;
+        const std::string bookTitle_;
+        std::string line_;
+        std::string heading_;
+        std::string tag_;
+        std::string entity_;
+        std::string commentTail_;
         Mode mode_ = Mode::Text;
         bool inHeading_ = false;
         bool reachedWordLimit_ = false;
+        bool paragraphOpen_ = false;
+        bool documentChapterWritten_ = false;
+        size_t nextTocEntry_ = 0;
         int skipDepth_ = 0;
     };
 

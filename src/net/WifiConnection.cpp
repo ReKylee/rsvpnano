@@ -3,34 +3,40 @@
 #include <WiFi.h>
 
 namespace net {
-namespace {
+    namespace {
 
-constexpr uint32_t kWifiConnectTimeoutMs = 15000;
-constexpr uint32_t kWifiConnectPollMs = 250;
+        constexpr uint32_t kWifiConnectPollMs = 250;
 
-}  // namespace
+    } // namespace
 
-bool connectStation(const String &ssid, const String &password, const WifiProgress &progress) {
-  WiFi.persistent(false);
-  WiFi.setAutoReconnect(false);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid.c_str(), password.c_str());
+    std::expected<void, std::error_code> connectStation(const char* ssid, const char* password,
+                                                        const WifiProgress& progress, uint32_t timeoutMs) {
+        if (ssid == nullptr || *ssid == '\0' || timeoutMs == 0)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        WiFi.persistent(false);
+        WiFi.setAutoReconnect(false);
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(ssid, password);
 
-  const uint32_t startMs = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startMs < kWifiConnectTimeoutMs) {
-    if (progress) {
-      const uint32_t elapsedMs = millis() - startMs;
-      progress(5 + static_cast<int>((elapsedMs * 15) / kWifiConnectTimeoutMs));
+        const uint32_t startMs = millis();
+        while (WiFi.status() != WL_CONNECTED && millis() - startMs < timeoutMs) {
+            if (progress) {
+                const uint32_t elapsedMs = millis() - startMs;
+                progress(5 + static_cast<int>((elapsedMs * 15) / timeoutMs));
+            }
+            delay(kWifiConnectPollMs);
+        }
+
+        if (WiFi.status() != WL_CONNECTED)
+            return std::unexpected(std::make_error_code(std::errc::timed_out));
+        return {};
     }
-    delay(kWifiConnectPollMs);
-  }
 
-  return WiFi.status() == WL_CONNECTED;
-}
+    void disconnect() {
+        if (WiFi.getMode() == WIFI_MODE_NULL)
+            return;
+        WiFi.disconnect(true, false);
+        WiFi.mode(WIFI_OFF);
+    }
 
-void disconnect() {
-  WiFi.disconnect(true, false);
-  WiFi.mode(WIFI_OFF);
-}
-
-}  // namespace net
+} // namespace net

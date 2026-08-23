@@ -2,7 +2,7 @@ package com.rsvpnano
 
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.persistence.PendingUploadJsonStore
-import com.rsvpnano.persistence.PendingUploadStorage
+import com.rsvpnano.persistence.TextStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.assertEquals
 import kotlin.test.Test
@@ -27,7 +27,7 @@ class PendingUploadJsonStoreTest {
         }
     }
 
-    private class InMemoryStorage : PendingUploadStorage {
+    private class InMemoryStorage : TextStorage {
         private var value: String? = null
 
         override suspend fun readText(): String? = value

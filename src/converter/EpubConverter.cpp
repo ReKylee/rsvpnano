@@ -1,17 +1,22 @@
 #include "converter/EpubConverter.h"
+#include <esp_log.h>
 
-#include "board/BoardStorage.h"
 #include <algorithm>
+#include <iterator>
+#include "board/BoardStorage.h"
 
 #include "converter/EpubPackage.h"
 #include "converter/EpubZip.h"
 #include "storage/fs/StoragePaths.h"
+#include "text/AsciiText.h"
+#include "text/TextNormalizer.h"
 
 namespace {
 
     constexpr size_t kMaxOpfBytes = 256UL * 1024UL;
+    constexpr size_t kMaxTocBytes = 256UL * 1024UL;
     constexpr size_t kMaxContainerBytes = 32UL * 1024UL;
-    constexpr const char* kConverterVersion = "stream-v6";
+    constexpr const char* kConverterVersion = "stream-v8";
 
     using EpubPackage::basenameWithoutExtension;
     using EpubPackage::directoryForPath;
@@ -20,19 +25,24 @@ namespace {
     using EpubPackage::ManifestItem;
     using EpubPackage::parseDcMetadata;
     using EpubPackage::parseManifestItems;
+    using EpubPackage::parseNavTocEntries;
+    using EpubPackage::parseNcxTocEntries;
+    using EpubPackage::parsePackageVersion;
     using EpubPackage::parseRootfilePath;
     using EpubPackage::parseSpineIds;
+    using EpubPackage::TocEntry;
+    using EpubPackage::toLowerCopy;
 
     struct PackageDocuments {
-        String opfXml;
-        String opfPath;
-        String opfBaseDir;
+        std::string opfXml;
+        std::string opfPath;
+        std::string opfBaseDir;
     };
 
     struct ConversionPaths {
-        String temp;
-        String failed;
-        String lock;
+        std::string temp;
+        std::string failed;
+        std::string lock;
     };
 
     void serviceBackground() {
@@ -51,12 +61,13 @@ namespace {
         serviceBackground();
     }
 
-    String wordCountDetail(size_t wordCount) {
-        return String(wordCount) + " words";
+    std::string wordCountDetail(size_t wordCount) {
+        return std::to_string(wordCount) + " words";
     }
 
-    String itemProgressDetail(size_t itemIndex, size_t itemCount, size_t wordCount) {
-        return String(itemIndex + 1) + "/" + String(itemCount) + " " + String(wordCount) + " words";
+    std::string itemProgressDetail(size_t itemIndex, size_t itemCount, size_t wordCount) {
+        return std::to_string(itemIndex + 1) + "/" + std::to_string(itemCount) + " " + std::to_string(wordCount)
+             + " words";
     }
 
     int contentProgressPercent(size_t completedItems, size_t itemCount) {
@@ -65,42 +76,41 @@ namespace {
 
     bool readPackageDocuments(EpubZip::Archive& zip, const EpubConverter::Options& options,
                               PackageDocuments& documents) {
-        String containerXml;
+        std::string containerXml;
 
         reportProgress(options, "Opening EPUB", "Reading metadata", 8);
-        Serial.println("[epub] Reading META-INF/container.xml");
-        Serial.flush();
+        ESP_LOGD("epub", "Reading META-INF/container.xml");
         if (!zip.extractToString("META-INF/container.xml", containerXml, kMaxContainerBytes)) {
-            Serial.println("[epub] EPUB container.xml not found or unreadable");
+            ESP_LOGE("epub", "EPUB container.xml not found or unreadable");
             return false;
         }
-        Serial.printf("[epub] container.xml loaded: %u chars\n", static_cast<unsigned int>(containerXml.length()));
+        ESP_LOGI("epub", "container.xml loaded: %u chars", static_cast<unsigned int>(containerXml.length()));
 
         documents.opfPath = parseRootfilePath(containerXml);
-        if (documents.opfPath.isEmpty()) {
-            Serial.println("[epub] EPUB rootfile path not found");
+        if (documents.opfPath.empty()) {
+            ESP_LOGE("epub", "EPUB rootfile path not found");
             return false;
         }
-        Serial.printf("[epub] Rootfile OPF path: %s\n", documents.opfPath.c_str());
+        ESP_LOGD("epub", "Rootfile OPF path: %s", documents.opfPath.c_str());
 
         reportProgress(options, "Opening EPUB", "Reading package", 14);
-        Serial.printf("[epub] Reading OPF package: %s\n", documents.opfPath.c_str());
+        ESP_LOGD("epub", "Reading OPF package: %s", documents.opfPath.c_str());
         if (!zip.extractToString(documents.opfPath, documents.opfXml, kMaxOpfBytes)) {
-            Serial.printf("[epub] OPF file not readable: %s\n", documents.opfPath.c_str());
+            ESP_LOGE("epub", "OPF file not readable: %s", documents.opfPath.c_str());
             return false;
         }
 
-        Serial.printf("[epub] OPF loaded: %u chars\n", static_cast<unsigned int>(documents.opfXml.length()));
+        ESP_LOGI("epub", "OPF loaded: %u chars", static_cast<unsigned int>(documents.opfXml.length()));
         documents.opfBaseDir = directoryForPath(documents.opfPath);
         return true;
     }
 
-    std::vector<String> contentDocumentsInSpineOrder(const std::vector<ManifestItem>& manifest,
-                                                     const std::vector<String>& spineIds) {
-        std::vector<String> order;
+    std::vector<std::string> contentDocumentsInSpineOrder(const std::vector<ManifestItem>& manifest,
+                                                          const std::vector<std::string>& spineIds) {
+        std::vector<std::string> order;
         order.reserve(spineIds.size());
 
-        std::for_each(spineIds.begin(), spineIds.end(), [&](const String& spineId) {
+        std::ranges::for_each(spineIds, [&](const std::string& spineId) {
             serviceBackground();
             const ManifestItem* item = findManifestItem(manifest, spineId);
             if (item != nullptr && isContentDocument(*item)) {
@@ -111,10 +121,10 @@ namespace {
         return order;
     }
 
-    std::vector<String> allContentDocuments(const std::vector<ManifestItem>& manifest) {
-        std::vector<String> order;
+    std::vector<std::string> allContentDocuments(const std::vector<ManifestItem>& manifest) {
+        std::vector<std::string> order;
         order.reserve(manifest.size());
-        std::for_each(manifest.begin(), manifest.end(), [&](const ManifestItem& item) {
+        std::ranges::for_each(manifest, [&](const ManifestItem& item) {
             if (isContentDocument(item)) {
                 order.push_back(item.path);
             }
@@ -122,60 +132,130 @@ namespace {
         return order;
     }
 
-    std::vector<String> buildReadingOrder(const String& opfXml, const String& opfBaseDir,
-                                          const EpubConverter::Options& options) {
+    std::vector<std::string> buildReadingOrder(std::string_view opfXml, std::string_view opfBaseDir,
+                                               const EpubConverter::Options& options) {
         const std::vector<ManifestItem> manifest = parseManifestItems(opfXml, opfBaseDir);
-        const std::vector<String> spineIds = parseSpineIds(opfXml);
+        const std::vector<std::string> spineIds = parseSpineIds(opfXml);
 
-        Serial.printf("[epub] Package parsed: manifest=%u spine=%u base=%s\n",
-                      static_cast<unsigned int>(manifest.size()), static_cast<unsigned int>(spineIds.size()),
-                      opfBaseDir.c_str());
+        ESP_LOGD("epub", "Package parsed: manifest=%u spine=%u base=%.*s", static_cast<unsigned int>(manifest.size()),
+                 static_cast<unsigned int>(spineIds.size()), static_cast<int>(opfBaseDir.size()), opfBaseDir.data());
 
         reportProgress(options, "Opening EPUB", "Building reading order", 20);
         return [&]() {
-            std::vector<String> order = contentDocumentsInSpineOrder(manifest, spineIds);
+            std::vector<std::string> order = contentDocumentsInSpineOrder(manifest, spineIds);
             return order.empty() ? allContentDocuments(manifest) : order;
         }();
     }
 
-    void writeRsvpHeader(File& output, const String& epubPath, const String& opfXml) {
-        const String title = [&]() {
-            const String metadataTitle = parseDcMetadata(opfXml, "title");
-            return metadataTitle.isEmpty() ? basenameWithoutExtension(epubPath) : metadataTitle;
+    bool hasProperty(std::string_view properties, std::string_view wanted) {
+        size_t position = 0;
+        while (position < properties.length()) {
+            while (position < properties.length() && AsciiText::isWhitespace(properties[position])) {
+                ++position;
+            }
+            size_t end = position;
+            while (end < properties.length() && !AsciiText::isWhitespace(properties[end])) {
+                ++end;
+            }
+            if (properties.substr(position, end - position) == wanted) {
+                return true;
+            }
+            position = end;
+        }
+        return false;
+    }
+
+    std::vector<TocEntry> firstReadableToc(EpubZip::Archive& zip, const std::vector<const ManifestItem*>& items,
+                                           std::string_view bookTitle, bool navDocument) {
+        for (const ManifestItem* item: items) {
+            std::string markup;
+            if (!zip.extractToString(item->path, markup, kMaxTocBytes)) {
+                continue;
+            }
+            std::vector<TocEntry> entries = navDocument ? parseNavTocEntries(markup, item->path, bookTitle)
+                                                        : parseNcxTocEntries(markup, item->path, bookTitle);
+            if (!entries.empty()) {
+                return entries;
+            }
+        }
+        return {};
+    }
+
+    std::vector<TocEntry> readToc(EpubZip::Archive& zip, std::string_view opfXml, std::string_view opfBaseDir,
+                                  std::string_view bookTitle) {
+        const std::vector<ManifestItem> manifest = parseManifestItems(opfXml, opfBaseDir);
+        std::vector<const ManifestItem*> navDocuments;
+        std::vector<const ManifestItem*> ncxDocuments;
+
+        for (const ManifestItem& item: manifest) {
+            if (hasProperty(item.properties, "nav")) {
+                navDocuments.push_back(&item);
+            }
+            if (toLowerCopy(item.mediaType) == "application/x-dtbncx+xml") {
+                ncxDocuments.push_back(&item);
+            }
+        }
+
+        const bool epub3 = parsePackageVersion(opfXml).starts_with('3');
+        std::vector<TocEntry> entries = epub3 ? firstReadableToc(zip, navDocuments, bookTitle, true)
+                                              : firstReadableToc(zip, ncxDocuments, bookTitle, false);
+        if (!entries.empty()) {
+            return entries;
+        }
+        return epub3 ? firstReadableToc(zip, ncxDocuments, bookTitle, false)
+                     : firstReadableToc(zip, navDocuments, bookTitle, true);
+    }
+
+    std::string fallbackChapterTitle(std::string_view path) {
+        std::string title = basenameWithoutExtension(path);
+        std::ranges::replace(title, '_', ' ');
+        std::ranges::replace(title, '-', ' ');
+        title = std::string{AsciiText::trim(title)};
+        if (!title.empty() && title[0] >= 'a' && title[0] <= 'z') {
+            title[0] = static_cast<char>(title[0] - ('a' - 'A'));
+        }
+        return title;
+    }
+
+    void writeRsvpHeader(File& output, std::string_view epubPath, std::string_view opfXml) {
+        const std::string title = [&]() {
+            const std::string metadataTitle = parseDcMetadata(opfXml, "title");
+            return metadataTitle.empty() ? basenameWithoutExtension(epubPath) : metadataTitle;
         }();
-        const String author = parseDcMetadata(opfXml, "creator");
+        const std::string author = parseDcMetadata(opfXml, "creator");
 
         output.println("@rsvp 1");
-        output.print("@converter ");
-        output.println(kConverterVersion);
         output.print("@title ");
-        output.println(title);
-        if (!author.isEmpty()) {
+        output.println(RsvpText::normalizeDisplayText(title).c_str());
+        if (!author.empty()) {
             output.print("@author ");
-            output.println(author);
+            output.println(RsvpText::normalizeDisplayText(author).c_str());
         }
         output.print("@source ");
-        output.println(epubPath);
+        output.println(RsvpText::normalizeDisplayText(epubPath).c_str());
+        output.print("@converter ");
+        output.println(kConverterVersion);
         output.println();
     }
 
-    void reportReadingOrderReady(const EpubConverter::Options& options, const std::vector<String>& readingOrder) {
-        Serial.printf("[epub] Reading order contains %u content files\n",
-                      static_cast<unsigned int>(readingOrder.size()));
-        const String foundDetail = String(readingOrder.size()) + " content files";
+    void reportReadingOrderReady(const EpubConverter::Options& options, const std::vector<std::string>& readingOrder) {
+        ESP_LOGD("epub", "Reading order contains %u content files", static_cast<unsigned int>(readingOrder.size()));
+        const std::string foundDetail = std::to_string(readingOrder.size()) + " content files";
         reportProgress(options, "Opening EPUB", foundDetail.c_str(), 25);
     }
 
-    void streamReadingOrder(EpubZip::Archive& zip, File& output, const std::vector<String>& readingOrder,
-                            const EpubConverter::Options& options, size_t& wordCount) {
-        String lastChapterTitle;
+    void streamReadingOrder(EpubZip::Archive& zip, File& output, const std::vector<std::string>& readingOrder,
+                            const std::vector<TocEntry>& tocEntries, std::string_view bookTitle,
+                            const EpubConverter::Options& options, size_t& wordCount, size_t& chapterCount) {
+        std::string lastChapterTitle;
+        const bool hasToc = !tocEntries.empty();
 
         const auto withinWordLimit = [&]() {
             return options.maxWords == 0 || wordCount < options.maxWords;
         };
 
         const auto reportItemProgress = [&](const char* title, size_t itemIndex) {
-            const String detail = itemProgressDetail(itemIndex, readingOrder.size(), wordCount);
+            const std::string detail = itemProgressDetail(itemIndex, readingOrder.size(), wordCount);
             reportProgress(options, title, detail.c_str(), contentProgressPercent(itemIndex, readingOrder.size()));
         };
 
@@ -184,15 +264,24 @@ namespace {
 
             reportItemProgress("Extracting content", i);
 
+            std::vector<TocEntry> documentTocEntries;
+            const std::string loweredPath = toLowerCopy(readingOrder[i]);
+            std::copy_if(tocEntries.begin(), tocEntries.end(), std::back_inserter(documentTocEntries),
+                         [&](const TocEntry& entry) {
+                             return toLowerCopy(entry.path) == loweredPath;
+                         });
+
             const EpubZip::ContentExtractStatus extractStatus =
                 zip.extractContentToRsvp(readingOrder[i], output, wordCount, options.maxWords, lastChapterTitle,
-                                         options, i, readingOrder.size());
+                                         chapterCount, documentTocEntries, hasToc,
+                                         fallbackChapterTitle(readingOrder[i]), bookTitle, options, i,
+                                         readingOrder.size());
 
             reportItemProgress("Parsed content", i + 1);
 
             if (extractStatus == EpubZip::ContentExtractStatus::Unsupported
                 || extractStatus == EpubZip::ContentExtractStatus::Failed) {
-                Serial.printf("[epub] Skipping unreadable content file: %s\n", readingOrder[i].c_str());
+                ESP_LOGE("epub", "Skipping unreadable content file: %s", readingOrder[i].c_str());
                 continue;
             }
 
@@ -202,24 +291,34 @@ namespace {
         }
     }
 
-    bool promoteTempFile(const String& tempPath, const String& rsvpPath) {
-        Board::Storage::filesystem().remove(rsvpPath);
-        if (Board::Storage::filesystem().rename(tempPath, rsvpPath)) {
+    bool promoteTempFile(std::string_view tempPath, std::string_view rsvpPath) {
+        const std::string temp{tempPath};
+        const std::string destination{rsvpPath};
+        Board::Storage::filesystem().remove(destination.c_str());
+        if (Board::Storage::filesystem().rename(temp.c_str(), destination.c_str())) {
             return true;
         }
 
-        Serial.printf("[epub] Could not rename %s to %s\n", tempPath.c_str(), rsvpPath.c_str());
-        Board::Storage::filesystem().remove(tempPath);
+        ESP_LOGE("epub", "Could not rename %s to %s", temp.c_str(), destination.c_str());
+        Board::Storage::filesystem().remove(temp.c_str());
         return false;
     }
 
-    bool convertEpubToRsvp(const String& epubPath, const String& tempPath, const String& rsvpPath,
+    bool convertEpubToRsvp(std::string_view epubPath, std::string_view tempPath, std::string_view rsvpPath,
                            const EpubConverter::Options& options) {
+        const std::string sourcePath{epubPath};
+        const std::string temporaryPath{tempPath};
         reportProgress(options, "Opening EPUB", "Reading archive", 0);
 
         EpubZip::Archive zip;
         if (!zip.open(epubPath)) {
-            Serial.printf("[epub] Could not open EPUB archive: %s\n", epubPath.c_str());
+            ESP_LOGE("epub", "Could not open EPUB archive: %s", sourcePath.c_str());
+            return false;
+        }
+
+        if (zip.contains("META-INF/encryption.xml")) {
+            ESP_LOGW("epub", "Encrypted EPUB content is unsupported");
+            zip.close();
             return false;
         }
 
@@ -233,33 +332,42 @@ namespace {
             return failWithClosedZip();
         }
 
-        const std::vector<String> readingOrder = buildReadingOrder(documents.opfXml, documents.opfBaseDir, options);
+        const std::vector<std::string> readingOrder =
+            buildReadingOrder(documents.opfXml, documents.opfBaseDir, options);
         if (readingOrder.empty()) {
-            Serial.println("[epub] No readable XHTML spine items found");
+            ESP_LOGD("epub", "No readable XHTML spine items found");
             return failWithClosedZip();
         }
         reportReadingOrderReady(options, readingOrder);
 
-        Board::Storage::filesystem().remove(tempPath);
-        File output = Board::Storage::filesystem().open(tempPath, FILE_WRITE);
+        const std::string bookTitle = [&]() {
+            const std::string metadataTitle = parseDcMetadata(documents.opfXml, "title");
+            return metadataTitle.empty() ? basenameWithoutExtension(epubPath) : metadataTitle;
+        }();
+        const std::vector<TocEntry> tocEntries = readToc(zip, documents.opfXml, documents.opfBaseDir, bookTitle);
+        ESP_LOGD("epub", "Usable TOC entries: %u", static_cast<unsigned int>(tocEntries.size()));
+
+        Board::Storage::filesystem().remove(temporaryPath.c_str());
+        File output = Board::Storage::filesystem().open(temporaryPath.c_str(), FILE_WRITE);
         if (!output) {
-            Serial.printf("[epub] Could not create temporary RSVP file: %s\n", tempPath.c_str());
+            ESP_LOGE("epub", "Could not create temporary RSVP file: %s", temporaryPath.c_str());
             return failWithClosedZip();
         }
 
         writeRsvpHeader(output, epubPath, documents.opfXml);
 
         size_t wordCount = 0;
-        streamReadingOrder(zip, output, readingOrder, options, wordCount);
+        size_t chapterCount = 0;
+        streamReadingOrder(zip, output, readingOrder, tocEntries, bookTitle, options, wordCount, chapterCount);
 
-        const String finishingDetail = wordCountDetail(wordCount);
+        const std::string finishingDetail = wordCountDetail(wordCount);
         reportProgress(options, "Finishing EPUB", finishingDetail.c_str(), 96);
         output.close();
         zip.close();
 
         if (wordCount == 0) {
-            Serial.printf("[epub] No readable words extracted from %s\n", epubPath.c_str());
-            Board::Storage::filesystem().remove(tempPath);
+            ESP_LOGD("epub", "No readable words extracted from %s", sourcePath.c_str());
+            Board::Storage::filesystem().remove(temporaryPath.c_str());
             return false;
         }
 
@@ -267,19 +375,20 @@ namespace {
             return false;
         }
 
-        Serial.printf("[epub] Converted %s -> %s (%u words)\n", epubPath.c_str(), rsvpPath.c_str(),
-                      static_cast<unsigned int>(wordCount));
-        const String convertedDetail = wordCountDetail(wordCount);
+        ESP_LOGI("epub", "Converted %.*s -> %.*s (%u words)", static_cast<int>(epubPath.size()), epubPath.data(),
+                 static_cast<int>(rsvpPath.size()), rsvpPath.data(), static_cast<unsigned int>(wordCount));
+        const std::string convertedDetail = wordCountDetail(wordCount);
         reportProgress(options, "EPUB converted", convertedDetail.c_str(), 100);
         return true;
     }
 
-    void writeFailureMarker(const String& markerPath, const char* message) {
-        Board::Storage::filesystem().remove(markerPath);
+    void writeFailureMarker(std::string_view markerPath, const char* message) {
+        const std::string path{markerPath};
+        Board::Storage::filesystem().remove(path.c_str());
 
-        File marker = Board::Storage::filesystem().open(markerPath, FILE_WRITE);
+        File marker = Board::Storage::filesystem().open(path.c_str(), FILE_WRITE);
         if (!marker) {
-            Serial.printf("[epub] Could not create failure marker: %s\n", markerPath.c_str());
+            ESP_LOGE("epub", "Could not create failure marker: %s", path.c_str());
             return;
         }
 
@@ -290,14 +399,14 @@ namespace {
     }
 
     bool markerWasWrittenByCurrentConverter(File& marker) {
-        String content;
+        std::string content;
         content.reserve(256);
         while (marker.available() && content.length() < 256) {
             content += static_cast<char>(marker.read());
         }
 
-        const String expected = String("converter=") + kConverterVersion;
-        return content.indexOf(expected) >= 0;
+        const std::string expected = std::string("converter=") + kConverterVersion;
+        return content.contains(expected);
     }
 
     bool rsvpWasWrittenByCurrentConverter(File& file) {
@@ -306,7 +415,7 @@ namespace {
         }
 
         file.seek(0);
-        String line;
+        std::string line;
         line.reserve(128);
         size_t scannedLines = 0;
         while (file.available() && scannedLines < 12) {
@@ -315,15 +424,15 @@ namespace {
                 continue;
             }
             if (c == '\n') {
-                line.trim();
-                if (line.startsWith("@converter")) {
-                    const String expected = String("@converter ") + kConverterVersion;
+                line = std::string{AsciiText::trim(line)};
+                if (line.starts_with("@converter")) {
+                    const std::string expected = std::string("@converter ") + kConverterVersion;
                     return line == expected;
                 }
-                if (!line.isEmpty() && !line.startsWith("@")) {
+                if (!line.empty() && !line.starts_with('@')) {
                     break;
                 }
-                line = "";
+                line.clear();
                 ++scannedLines;
                 continue;
             }
@@ -332,25 +441,26 @@ namespace {
             }
         }
 
-        line.trim();
-        if (line.startsWith("@converter")) {
-            const String expected = String("@converter ") + kConverterVersion;
+        line = std::string{AsciiText::trim(line)};
+        if (line.starts_with("@converter")) {
+            const std::string expected = std::string("@converter ") + kConverterVersion;
             return line == expected;
         }
 
         return false;
     }
 
-    ConversionPaths conversionPathsFor(const String& rsvpPath) {
+    ConversionPaths conversionPathsFor(std::string_view rsvpPath) {
         return {
-            rsvpPath + StoragePaths::kTempExtension,
-            rsvpPath + StoragePaths::kFailedExtension,
-            rsvpPath + StoragePaths::kConvertingExtension,
+            std::string{rsvpPath} + StoragePaths::kTempExtension,
+            std::string{rsvpPath} + StoragePaths::kFailedExtension,
+            std::string{rsvpPath} + StoragePaths::kConvertingExtension,
         };
     }
 
-    bool removeStaleCacheOrReuseCurrent(const String& rsvpPath) {
-        File existing = Board::Storage::filesystem().open(rsvpPath);
+    bool removeStaleCacheOrReuseCurrent(std::string_view rsvpPath) {
+        const std::string path{rsvpPath};
+        File existing = Board::Storage::filesystem().open(path.c_str());
         if (!existing) {
             return false;
         }
@@ -366,14 +476,14 @@ namespace {
             return true;
         }
 
-        Serial.printf("[epub] Rebuilding stale RSVP cache after converter update: %s\n", rsvpPath.c_str());
-        Board::Storage::filesystem().remove(rsvpPath);
+        ESP_LOGW("epub", "Rebuilding stale RSVP cache after converter update: %s", path.c_str());
+        Board::Storage::filesystem().remove(path.c_str());
         return false;
     }
 
-    bool previousCurrentAttemptRestarted(const String& epubPath, const ConversionPaths& paths,
+    bool previousCurrentAttemptRestarted(std::string_view epubPath, const ConversionPaths& paths,
                                          const EpubConverter::Options& options) {
-        File lock = Board::Storage::filesystem().open(paths.lock);
+        File lock = Board::Storage::filesystem().open(paths.lock.c_str());
         if (!lock) {
             return false;
         }
@@ -386,21 +496,24 @@ namespace {
             return false;
         }
 
-        Board::Storage::filesystem().remove(paths.lock);
-        Board::Storage::filesystem().remove(paths.temp);
+        Board::Storage::filesystem().remove(paths.lock.c_str());
+        Board::Storage::filesystem().remove(paths.temp.c_str());
         if (!currentLock) {
-            Serial.printf("[epub] Retrying interrupted EPUB after converter update: %s\n", epubPath.c_str());
+            ESP_LOGW("epub", "Retrying interrupted EPUB after converter update: %.*s",
+                     static_cast<int>(epubPath.size()), epubPath.data());
             return false;
         }
 
-        Serial.printf("[epub] Previous conversion restart detected, skipping: %s\n", epubPath.c_str());
+        ESP_LOGW("epub", "Previous conversion restart detected, skipping: %.*s", static_cast<int>(epubPath.size()),
+                 epubPath.data());
         writeFailureMarker(paths.failed, "Previous conversion restarted before completion.");
         reportProgress(options, "Previous restart", "Skipping this EPUB", 100);
         return true;
     }
 
-    void removeOrphanedTempFile(const String& epubPath, const String& tempPath) {
-        File temp = Board::Storage::filesystem().open(tempPath);
+    void removeOrphanedTempFile(std::string_view epubPath, std::string_view tempPath) {
+        const std::string path{tempPath};
+        File temp = Board::Storage::filesystem().open(path.c_str());
         if (!temp) {
             return;
         }
@@ -411,12 +524,14 @@ namespace {
             return;
         }
 
-        Serial.printf("[epub] Removing stale temporary conversion file and retrying: %s\n", epubPath.c_str());
-        Board::Storage::filesystem().remove(tempPath);
+        ESP_LOGW("epub", "Removing stale temporary conversion file and retrying: %.*s",
+                 static_cast<int>(epubPath.size()), epubPath.data());
+        Board::Storage::filesystem().remove(path.c_str());
     }
 
-    bool shouldSkipCurrentFailure(const String& epubPath, const String& failedPath) {
-        File failed = Board::Storage::filesystem().open(failedPath);
+    bool shouldSkipCurrentFailure(std::string_view epubPath, std::string_view failedPath) {
+        const std::string path{failedPath};
+        File failed = Board::Storage::filesystem().open(path.c_str());
         if (!failed) {
             return false;
         }
@@ -429,19 +544,22 @@ namespace {
             return false;
         }
         if (currentFailure) {
-            Serial.printf("[epub] Skipping EPUB with failure marker: %s\n", epubPath.c_str());
+            ESP_LOGW("epub", "Skipping EPUB with failure marker: %.*s", static_cast<int>(epubPath.size()),
+                     epubPath.data());
             return true;
         }
 
-        Serial.printf("[epub] Retrying EPUB after converter update: %s\n", epubPath.c_str());
-        Board::Storage::filesystem().remove(failedPath);
+        ESP_LOGW("epub", "Retrying EPUB after converter update: %.*s", static_cast<int>(epubPath.size()),
+                 epubPath.data());
+        Board::Storage::filesystem().remove(path.c_str());
         return false;
     }
 
 } // namespace
 
-bool EpubConverter::isCurrentCache(const String& rsvpPath) {
-    File existing = Board::Storage::filesystem().open(rsvpPath);
+bool EpubConverter::isCurrentCache(std::string_view rsvpPath) {
+    const std::string path{rsvpPath};
+    File existing = Board::Storage::filesystem().open(path.c_str());
     const bool current = rsvpWasWrittenByCurrentConverter(existing);
     if (existing) {
         existing.close();
@@ -449,30 +567,28 @@ bool EpubConverter::isCurrentCache(const String& rsvpPath) {
     return current;
 }
 
-bool EpubConverter::convertIfNeeded(const String& epubPath, const String& rsvpPath, const Options& options) {
-    if (removeStaleCacheOrReuseCurrent(rsvpPath)) {
-        return true;
-    }
+std::expected<void, std::error_code> EpubConverter::convertIfNeeded(std::string_view epubPath,
+                                                                    std::string_view rsvpPath, const Options& options) {
+    if (removeStaleCacheOrReuseCurrent(rsvpPath))
+        return {};
 
     const ConversionPaths paths = conversionPathsFor(rsvpPath);
-    if (previousCurrentAttemptRestarted(epubPath, paths, options)) {
-        return false;
-    }
+    if (previousCurrentAttemptRestarted(epubPath, paths, options))
+        return std::unexpected(std::make_error_code(std::errc::operation_canceled));
 
     removeOrphanedTempFile(epubPath, paths.temp);
-    if (shouldSkipCurrentFailure(epubPath, paths.failed)) {
-        return false;
-    }
+    if (shouldSkipCurrentFailure(epubPath, paths.failed))
+        return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));
 
-    Serial.printf("[epub] Converting on device: %s\n", epubPath.c_str());
+    ESP_LOGD("epub", "Converting on device: %.*s", static_cast<int>(epubPath.size()), epubPath.data());
     writeFailureMarker(paths.lock, "Conversion in progress. Delete this file only if retrying.");
     const bool converted = convertEpubToRsvp(epubPath, paths.temp, rsvpPath, options);
-    Board::Storage::filesystem().remove(paths.lock);
+    Board::Storage::filesystem().remove(paths.lock.c_str());
     if (!converted) {
         writeFailureMarker(paths.failed, "Conversion failed. Remove this marker to retry.");
-        return false;
+        return std::unexpected(std::make_error_code(std::errc::io_error));
     }
 
-    Board::Storage::filesystem().remove(paths.failed);
-    return true;
+    Board::Storage::filesystem().remove(paths.failed.c_str());
+    return {};
 }

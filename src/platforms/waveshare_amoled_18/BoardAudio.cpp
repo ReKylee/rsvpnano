@@ -8,24 +8,30 @@
 
 namespace {
 
-BoardDrivers::Es8311::Context gAudioContext = {
-    &Wire,
-    WaveshareAmoled18::AudioWiring::kEs8311Address,
-    I2S_NUM_0,
-    WaveshareAmoled18::AudioWiring::kMclkPin,
-    WaveshareAmoled18::AudioWiring::kBclkPin,
-    WaveshareAmoled18::AudioWiring::kWsPin,
-    WaveshareAmoled18::AudioWiring::kDoutPin,
-};
+    BoardDrivers::Es8311::Context gAudioContext = {
+        Wire,
+        WaveshareAmoled18::AudioWiring::kEs8311Address,
+        I2S_NUM_0,
+        WaveshareAmoled18::AudioWiring::kMclkPin,
+        WaveshareAmoled18::AudioWiring::kBclkPin,
+        WaveshareAmoled18::AudioWiring::kWsPin,
+        WaveshareAmoled18::AudioWiring::kDoutPin,
+    };
 
-}  // namespace
+} // namespace
 
 namespace Board::Audio {
 
-bool begin() { return BoardPlatform::Es8311BoardAudio::begin(gAudioContext); }
+    bool begin() {
+        return BoardPlatform::Es8311BoardAudio::begin(gAudioContext);
+    }
 
-bool beep() { return BoardPlatform::Es8311BoardAudio::beep(gAudioContext); }
+    bool beep() {
+        return BoardPlatform::Es8311BoardAudio::beep(gAudioContext);
+    }
 
-bool available() { return BoardPlatform::Es8311BoardAudio::available(gAudioContext); }
+    bool available() {
+        return BoardPlatform::Es8311BoardAudio::available(gAudioContext);
+    }
 
-}  // namespace Board::Audio
+} // namespace Board::Audio

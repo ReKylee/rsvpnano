@@ -1,569 +1,475 @@
 #include "update/OtaUpdater.h"
 
 #include <algorithm>
+#include <expected>
+#include <string>
+#include <utility>
 
 #include <HTTPClient.h>
 #include <HTTPUpdate.h>
-#include "board/BoardStorage.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-
+#include "FirmwareVersion.generated.h"
 #include "net/WifiConnection.h"
+#include "text/AsciiText.h"
 #include "update/ReleaseParser.h"
-
-#ifndef RSVP_FIRMWARE_VERSION
-#define RSVP_FIRMWARE_VERSION "dev"
-#endif
 
 namespace {
 
-constexpr const char *kConfigPaths[] = {
-    "/config/ota.conf",
-    "/ota.conf",
-};
-constexpr size_t kMaxReleaseJsonBytes = 32768;
-constexpr const char *kStatusTitle = "OTA";
-const char *kRedirectHeaderKeys[] = {
-    "Location",
-};
+    constexpr size_t kMaxReleaseJsonBytes = 32768;
+    constexpr const char* kStatusTitle = "OTA";
+    const char* kRedirectHeaderKeys[] = {
+        "Location",
+    };
 
-struct ReleaseSource {
-  String owner;
-  String repo;
-  String tag;
-};
+    struct ReleaseSource {
+        std::string owner;
+        std::string repo;
+        std::string tag;
+    };
 
-String trimCopy(String value) {
-  value.trim();
-  return value;
-}
+    struct LatestRelease {
+        std::string version;
+        std::string assetUrl;
+    };
 
-bool parseBoolValue(const String &value) {
-  String lowered = trimCopy(value);
-  lowered.toLowerCase();
-  return lowered == "1" || lowered == "true" || lowered == "yes" || lowered == "on";
-}
+    struct Error {
+        OtaUpdater::ResultCode code;
+        std::string summary;
+        std::string detail;
+    };
 
-bool isUrlUnreserved(char value) {
-  return (value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z') ||
-         (value >= '0' && value <= '9') || value == '-' || value == '.' || value == '_' ||
-         value == '~';
-}
-
-String urlEncodePathSegment(const String &value) {
-  constexpr char kHex[] = "0123456789ABCDEF";
-  String encoded;
-  encoded.reserve(value.length());
-  for (size_t i = 0; i < value.length(); ++i) {
-    const char c = value[i];
-    if (isUrlUnreserved(c)) {
-      encoded += c;
-      continue;
+    std::string trimCopy(std::string_view value) {
+        return std::string{AsciiText::trim(value)};
     }
 
-    const uint8_t byte = static_cast<uint8_t>(c);
-    encoded += '%';
-    encoded += kHex[byte >> 4];
-    encoded += kHex[byte & 0x0F];
-  }
-  return encoded;
-}
-
-bool splitOwnerRepo(const String &value, String &owner, String &repo) {
-  const String trimmed = trimCopy(value);
-  const int slash = trimmed.indexOf('/');
-  if (slash <= 0 || slash >= static_cast<int>(trimmed.length() - 1)) {
-    return false;
-  }
-
-  owner = trimmed.substring(0, slash);
-  repo = trimmed.substring(slash + 1);
-  owner.trim();
-  repo.trim();
-  return !owner.isEmpty() && !repo.isEmpty();
-}
-
-ReleaseSource releaseSourceForConfig(const OtaUpdater::Config &config) {
-  ReleaseSource source{trimCopy(config.githubOwner), trimCopy(config.githubRepo),
-                       trimCopy(config.githubTag)};
-
-  splitOwnerRepo(source.owner, source.owner, source.repo);
-  splitOwnerRepo(source.repo, source.owner, source.repo);
-
-  const int at = source.tag.indexOf('@');
-  if (at > 0 && at < static_cast<int>(source.tag.length() - 1)) {
-    String repoPart = source.tag.substring(0, at);
-    source.tag = source.tag.substring(at + 1);
-    source.tag.trim();
-    repoPart.trim();
-    if (!splitOwnerRepo(repoPart, source.owner, source.repo) && !repoPart.isEmpty()) {
-      source.repo = repoPart;
-    }
-  }
-
-  return source;
-}
-
-String httpClientErrorDetail(const String &prefix, int statusCode) {
-  if (statusCode >= 0) {
-    return prefix + " HTTP " + String(statusCode);
-  }
-
-  return prefix + " " + HTTPClient::errorToString(statusCode);
-}
-
-String readBodyLimited(HTTPClient &http, size_t maxBytes) {
-  WiFiClient *stream = http.getStreamPtr();
-  if (stream == nullptr) {
-    return "";
-  }
-
-  const int reportedSize = http.getSize();
-  String body;
-  const size_t reserveBytes =
-      reportedSize > 0 ? std::min(static_cast<size_t>(reportedSize), maxBytes) : 1024;
-  body.reserve(reserveBytes);
-
-  uint8_t buffer[512];
-  size_t totalRead = 0;
-  while (http.connected() || stream->available()) {
-    if (reportedSize > 0 && totalRead >= static_cast<size_t>(reportedSize)) {
-      break;
+    bool isUrlUnreserved(char value) {
+        return (value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9')
+            || value == '-' || value == '.' || value == '_' || value == '~';
     }
 
-    const int available = stream->available();
-    if (available <= 0) {
-      delay(1);
-      continue;
+    std::string urlEncodePathSegment(std::string_view value) {
+        constexpr char kHex[] = "0123456789ABCDEF";
+        std::string encoded;
+        encoded.reserve(value.length());
+        for (const char c: value) {
+            if (isUrlUnreserved(c)) {
+                encoded += c;
+                continue;
+            }
+
+            const uint8_t byte = static_cast<uint8_t>(c);
+            encoded += '%';
+            encoded += kHex[byte >> 4];
+            encoded += kHex[byte & 0x0F];
+        }
+        return encoded;
     }
 
-    const size_t remaining = maxBytes - totalRead;
-    if (remaining == 0) {
-      break;
+    bool splitOwnerRepo(std::string_view value, std::string& owner, std::string& repo) {
+        const std::string_view trimmed = AsciiText::trim(value);
+        const size_t slash = trimmed.find('/');
+        if (slash == 0 || slash == std::string_view::npos || slash + 1 >= trimmed.length()) {
+            return false;
+        }
+
+        owner = AsciiText::trim(trimmed.substr(0, slash));
+        repo = AsciiText::trim(trimmed.substr(slash + 1));
+        return !owner.empty() && !repo.empty();
     }
 
-    const size_t chunkSize =
-        std::min(remaining, std::min(sizeof(buffer), static_cast<size_t>(available)));
-    const int bytesRead = stream->readBytes(buffer, chunkSize);
-    if (bytesRead <= 0) {
-      break;
+    ReleaseSource releaseSourceForConfig(const OtaUpdater::Config& config) {
+        ReleaseSource source{trimCopy(config.githubOwner), trimCopy(config.githubRepo), trimCopy(config.githubTag)};
+
+        splitOwnerRepo(source.owner, source.owner, source.repo);
+        splitOwnerRepo(source.repo, source.owner, source.repo);
+
+        const size_t at = source.tag.find('@');
+        if (at > 0 && at + 1 < source.tag.length()) {
+            std::string repoPart = trimCopy(std::string_view{source.tag}.substr(0, at));
+            source.tag = trimCopy(std::string_view{source.tag}.substr(at + 1));
+            if (!splitOwnerRepo(repoPart, source.owner, source.repo) && !repoPart.empty()) {
+                source.repo = repoPart;
+            }
+        }
+
+        return source;
     }
 
-    totalRead += static_cast<size_t>(bytesRead);
-    for (int i = 0; i < bytesRead; ++i) {
-      body += static_cast<char>(buffer[i]);
-    }
-  }
+    std::string httpClientErrorDetail(std::string_view prefix, int statusCode) {
+        if (statusCode >= 0) {
+            return std::string{prefix} + " HTTP " + std::to_string(statusCode);
+        }
 
-  return body;
+        const String detail = HTTPClient::errorToString(statusCode);
+        return std::string{prefix} + " " + std::string{detail.c_str(), detail.length()};
+    }
+
+    std::string readBodyLimited(HTTPClient& http, size_t maxBytes) {
+        WiFiClient* stream = http.getStreamPtr();
+        if (stream == nullptr) {
+            return {};
+        }
+
+        const int reportedSize = http.getSize();
+        std::string body;
+        const size_t reserveBytes = reportedSize > 0 ? std::min(static_cast<size_t>(reportedSize), maxBytes) : 1024;
+        body.reserve(reserveBytes);
+
+        uint8_t buffer[512];
+        size_t totalRead = 0;
+        while (http.connected() || stream->available()) {
+            if (reportedSize > 0 && totalRead >= static_cast<size_t>(reportedSize)) {
+                break;
+            }
+
+            const int available = stream->available();
+            if (available <= 0) {
+                delay(1);
+                continue;
+            }
+
+            const size_t remaining = maxBytes - totalRead;
+            if (remaining == 0) {
+                break;
+            }
+
+            const size_t chunkSize = std::min(remaining, std::min(sizeof(buffer), static_cast<size_t>(available)));
+            const int bytesRead = stream->readBytes(buffer, chunkSize);
+            if (bytesRead <= 0) {
+                break;
+            }
+
+            totalRead += static_cast<size_t>(bytesRead);
+            body.append(reinterpret_cast<const char*>(buffer), static_cast<size_t>(bytesRead));
+        }
+
+        return body;
+    }
+
+    std::string userAgentForVersion(std::string_view version) {
+        return "RSVP-Nano/" + std::string{version.empty() ? std::string_view{"dev"} : version};
+    }
+
+    std::string versionDetail(std::string_view currentVersion, std::string_view latestVersion) {
+        if (latestVersion.empty()) {
+            return std::string{currentVersion};
+        }
+        if (currentVersion.empty()) {
+            return std::string{latestVersion};
+        }
+        return std::string{currentVersion} + " -> " + std::string{latestVersion};
+    }
+
+    std::expected<void, std::string> validateAssetName(std::string_view assetName) {
+        assetName = AsciiText::trim(assetName);
+        if (assetName.empty())
+            return std::unexpected(std::string{"Asset name missing"});
+
+        if (assetName != Board::Config::OTA_ASSET_NAME)
+            return std::unexpected(std::string{"Asset does not match "} + Board::Config::BOARD_LABEL);
+
+        return {};
+    }
+
+} // namespace
+
+OtaUpdater::Config OtaUpdater::config(const settings::DeviceSettings& settings,
+                                      const settings::DeviceSecrets& secrets) {
+    Config result;
+    if (!settings.network.wifiSsid.empty()) {
+        result.wifiSsid = settings.network.wifiSsid;
+        result.wifiPassword = secrets.wifiPassword;
+    }
+
+    if (!settings.updates.repositoryOwner.empty())
+        result.githubOwner = settings.updates.repositoryOwner;
+    result.githubTag = settings.updates.releaseTag;
+    return result;
 }
 
-String userAgentForVersion(const String &version) {
-  return String("RSVP-Nano/") + (version.isEmpty() ? "dev" : version);
+std::string_view OtaUpdater::currentVersion() {
+    return kFirmwareVersion;
 }
 
-String versionDetail(const String &currentVersion, const String &latestVersion) {
-  if (latestVersion.isEmpty()) {
-    return currentVersion;
-  }
-  if (currentVersion.isEmpty()) {
-    return latestVersion;
-  }
-  return currentVersion + " -> " + latestVersion;
-}
+static void reportStatus(OtaUpdater::StatusCallback callback, void* context, const char* title, const char* line1,
+                         const char* line2, int progressPercent);
 
-bool assetNameLooksCompatibleWithBoard(const String &assetName, String &errorDetail) {
-  const String trimmed = trimCopy(assetName);
-  if (trimmed.isEmpty()) {
-    errorDetail = "Asset name missing";
-    return false;
-  }
+static std::expected<LatestRelease, std::string> fetchRelease(const OtaUpdater::Config& config,
+                                                              OtaUpdater::StatusCallback callback, void* context) {
+    const std::string installedVersion{OtaUpdater::currentVersion()};
+    const ReleaseSource source = releaseSourceForConfig(config);
+    if (source.owner.empty() || source.repo.empty())
+        return std::unexpected(std::string{"GitHub source missing"});
 
-  if (trimmed != Board::Config::OTA_ASSET_NAME) {
-    errorDetail = "Asset does not match " + String(Board::Config::BOARD_LABEL);
-    return false;
-  }
+    const std::string releasePath = source.tag.empty() ? "latest" : "tags/" + urlEncodePathSegment(source.tag);
+    const std::string url =
+        "https://api.github.com/repos/" + source.owner + "/" + source.repo + "/releases/" + releasePath;
+    const std::string sourceLabel = source.tag.empty() ? source.repo : source.repo + ":" + source.tag;
 
-  return true;
-}
+    reportStatus(callback, context, kStatusTitle, "Checking GitHub", sourceLabel.c_str(), 22);
 
-}  // namespace
+    WiFiClientSecure client;
+    // GitHub release metadata and assets can redirect across multiple hosts, so
+    // keep the transport flexible for now. A signed manifest is the best
+    // follow-up hardening step.
+    client.setInsecure();
+    client.setHandshakeTimeout(15);
 
-bool OtaUpdater::loadConfig(Config &config) const {
-  config = Config();
-  for (const char *path : kConfigPaths) {
-    if (loadConfigFromPath(path, config)) {
-      return true;
-    }
-  }
+    HTTPClient http;
+    http.setUserAgent(userAgentForVersion(installedVersion).c_str());
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    http.setTimeout(15000);
+    if (!http.begin(client, url.c_str()))
+        return std::unexpected(std::string{"HTTP begin failed"});
 
-  return false;
-}
-
-bool OtaUpdater::isConfigured(const Config &config) const {
-  return !trimCopy(config.wifiSsid).isEmpty();
-}
-
-String OtaUpdater::currentVersion() const { return RSVP_FIRMWARE_VERSION; }
-
-bool OtaUpdater::loadConfigFromPath(const char *path, Config &config) const {
-  File file = Board::Storage::filesystem().open(path);
-  if (!file || file.isDirectory()) {
-    if (file) {
-      file.close();
-    }
-    return false;
-  }
-
-  while (file.available()) {
-    String line = file.readStringUntil('\n');
-    line.trim();
-    if (line.isEmpty() || line.startsWith("#")) {
-      continue;
+    http.addHeader("Accept", "application/vnd.github+json");
+    const int statusCode = http.GET();
+    if (statusCode != HTTP_CODE_OK) {
+        const std::string errorDetail = statusCode == HTTP_CODE_NOT_FOUND
+                                          ? (source.tag.empty() ? "No published release" : "Release tag not found")
+                                          : httpClientErrorDetail("GitHub", statusCode);
+        http.end();
+        return std::unexpected(errorDetail);
     }
 
-    const int equalsIndex = line.indexOf('=');
-    if (equalsIndex <= 0) {
-      continue;
-    }
-
-    String key = line.substring(0, equalsIndex);
-    String value = line.substring(equalsIndex + 1);
-    key.trim();
-    value.trim();
-    key.toLowerCase();
-
-    if (key == "wifi_ssid") {
-      config.wifiSsid = value;
-    } else if (key == "wifi_password") {
-      config.wifiPassword = value;
-    } else if (key == "github_owner") {
-      config.githubOwner = value;
-    } else if (key == "github_repo") {
-      config.githubRepo = value;
-    } else if (key == "github_tag") {
-      config.githubTag = value;
-    } else if (key == "asset_name") {
-      config.assetName = value;
-    } else if (key == "auto_check") {
-      config.autoCheck = parseBoolValue(value);
-    }
-  }
-
-  file.close();
-  return true;
-}
-
-bool OtaUpdater::connectWiFi(const Config &config, StatusCallback callback,
-                             void *context) const {
-  return net::connectStation(config.wifiSsid, config.wifiPassword, [&](int percent) {
-    reportStatus(callback, context, kStatusTitle, "Connecting Wi-Fi", config.wifiSsid, percent);
-  });
-}
-
-void OtaUpdater::disconnectWiFi() const { net::disconnect(); }
-
-bool OtaUpdater::fetchRelease(const Config &config, LatestRelease &release,
-                              String &errorDetail, StatusCallback callback, void *context) const {
-  const String version = currentVersion();
-  const ReleaseSource source = releaseSourceForConfig(config);
-  if (source.owner.isEmpty() || source.repo.isEmpty()) {
-    errorDetail = "GitHub source missing";
-    return false;
-  }
-
-  const String releasePath =
-      source.tag.isEmpty() ? "latest" : "tags/" + urlEncodePathSegment(source.tag);
-  const String url = "https://api.github.com/repos/" + source.owner + "/" + source.repo +
-                     "/releases/" + releasePath;
-  const String sourceLabel = source.tag.isEmpty() ? source.repo : source.repo + ":" + source.tag;
-
-  reportStatus(callback, context, kStatusTitle, "Checking GitHub", sourceLabel, 22);
-
-  WiFiClientSecure client;
-  // GitHub release metadata and assets can redirect across multiple hosts, so keep the transport
-  // flexible for now. A signed manifest is the best follow-up hardening step.
-  client.setInsecure();
-  client.setHandshakeTimeout(15);
-
-  HTTPClient http;
-  http.setUserAgent(userAgentForVersion(version));
-  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  http.setTimeout(15000);
-  if (!http.begin(client, url)) {
-    errorDetail = "HTTP begin failed";
-    return false;
-  }
-
-  http.addHeader("Accept", "application/vnd.github+json");
-  const int statusCode = http.GET();
-  if (statusCode != HTTP_CODE_OK) {
-    if (statusCode == HTTP_CODE_NOT_FOUND) {
-      errorDetail = source.tag.isEmpty() ? "No published release" : "Release tag not found";
-    } else {
-      errorDetail = httpClientErrorDetail("GitHub", statusCode);
-    }
+    const std::string body = readBodyLimited(http, kMaxReleaseJsonBytes);
     http.end();
-    return false;
-  }
 
-  const String body = readBodyLimited(http, kMaxReleaseJsonBytes);
-  http.end();
+    auto parsed = releaseparser::parse(body, config.assetName);
+    if (!parsed)
+        return std::unexpected(std::string{"Release tag missing"});
+    LatestRelease release;
+    release.assetUrl = parsed->assetUrl;
 
-  releaseparser::ReleaseInfo parsed;
-  if (!releaseparser::parse(body, config.assetName, parsed)) {
-    errorDetail = "Release tag missing";
-    return false;
-  }
-  release.tagName = parsed.tagName;
-  release.assetUrl = parsed.assetUrl;
-
-  if (release.assetUrl.isEmpty()) {
-    errorDetail = config.assetName + " missing";
-    return false;
-  }
-
-  return true;
-}
-
-bool OtaUpdater::resolveDownloadUrl(const String &assetUrl, const String &version,
-                                    String &resolvedUrl, String &errorDetail,
-                                    StatusCallback callback, void *context) const {
-  reportStatus(callback, context, kStatusTitle, "Resolving asset", version, 29);
-
-  WiFiClientSecure client;
-  client.setInsecure();
-  client.setHandshakeTimeout(15);
-
-  HTTPClient http;
-  http.collectHeaders(kRedirectHeaderKeys, 1);
-  http.setUserAgent(userAgentForVersion(version));
-  http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
-  http.setTimeout(15000);
-  if (!http.begin(client, assetUrl)) {
-    errorDetail = "Asset URL failed";
-    return false;
-  }
-
-  http.addHeader("Accept", "application/octet-stream");
-  const int statusCode = http.GET();
-  if (statusCode == HTTP_CODE_OK) {
-    resolvedUrl = assetUrl;
+    reportStatus(callback, context, kStatusTitle, "Checking version", parsed->tagName.c_str(), 25);
+    const std::string commitUrl = "https://api.github.com/repos/" + source.owner + "/" + source.repo + "/commits/"
+                                + urlEncodePathSegment(parsed->tagName);
+    if (!http.begin(client, commitUrl.c_str()))
+        return std::unexpected(std::string{"Commit lookup failed"});
+    http.addHeader("Accept", "application/vnd.github.sha");
+    const int commitStatus = http.GET();
+    if (commitStatus != HTTP_CODE_OK) {
+        const std::string errorDetail = httpClientErrorDetail("Tag commit", commitStatus);
+        http.end();
+        return std::unexpected(errorDetail);
+    }
+    std::string commitSha = readBodyLimited(http, 64);
     http.end();
-    return true;
-  }
+    auto releaseVersion = releaseparser::versionForCommit(parsed->tagName, commitSha);
+    if (!releaseVersion)
+        return std::unexpected(std::string{"Tag commit invalid"});
+    release.version = std::move(*releaseVersion);
 
-  if (statusCode == HTTP_CODE_MOVED_PERMANENTLY || statusCode == HTTP_CODE_FOUND ||
-      statusCode == HTTP_CODE_SEE_OTHER || statusCode == HTTP_CODE_TEMPORARY_REDIRECT ||
-      statusCode == HTTP_CODE_PERMANENT_REDIRECT) {
-    resolvedUrl = http.header("Location");
+    if (release.assetUrl.empty())
+        return std::unexpected(config.assetName + " missing");
+
+    return release;
+}
+
+static std::expected<std::string, std::string> resolveDownloadUrl(std::string_view assetUrl, std::string_view version,
+                                                                  OtaUpdater::StatusCallback callback, void* context) {
+    const std::string assetUrlString{assetUrl};
+    const std::string versionString{version};
+    reportStatus(callback, context, kStatusTitle, "Resolving asset", versionString.c_str(), 29);
+
+    WiFiClientSecure client;
+    client.setInsecure();
+    client.setHandshakeTimeout(15);
+
+    HTTPClient http;
+    http.collectHeaders(kRedirectHeaderKeys, 1);
+    http.setUserAgent(userAgentForVersion(versionString).c_str());
+    http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+    http.setTimeout(15000);
+    if (!http.begin(client, assetUrlString.c_str()))
+        return std::unexpected(std::string{"Asset URL failed"});
+
+    http.addHeader("Accept", "application/octet-stream");
+    const int statusCode = http.GET();
+    if (statusCode == HTTP_CODE_OK) {
+        http.end();
+        return std::string{assetUrl};
+    }
+
+    if (statusCode == HTTP_CODE_MOVED_PERMANENTLY || statusCode == HTTP_CODE_FOUND || statusCode == HTTP_CODE_SEE_OTHER
+        || statusCode == HTTP_CODE_TEMPORARY_REDIRECT || statusCode == HTTP_CODE_PERMANENT_REDIRECT) {
+        String resolvedUrl = http.header("Location");
+        http.end();
+        if (!resolvedUrl.isEmpty())
+            return std::string{resolvedUrl.c_str(), resolvedUrl.length()};
+        return std::unexpected(std::string{"Asset redirect missing"});
+    }
+
+    const std::string errorDetail = httpClientErrorDetail("Asset", statusCode);
     http.end();
-    if (!resolvedUrl.isEmpty()) {
-      return true;
-    }
-    errorDetail = "Asset redirect missing";
-    return false;
-  }
-
-  errorDetail = httpClientErrorDetail("Asset", statusCode);
-  http.end();
-  return false;
+    return std::unexpected(errorDetail);
 }
 
-void OtaUpdater::reportStatus(StatusCallback callback, void *context, const char *title,
-                              const String &line1, const String &line2,
-                              int progressPercent) const {
-  if (callback == nullptr) {
-    return;
-  }
-
-  callback(context, title, line1.c_str(), line2.c_str(), progressPercent);
-}
-
-OtaUpdater::Result OtaUpdater::checkOnly(const Config &config, StatusCallback callback,
-                                         void *context) const {
-  Result result;
-  result.currentVersion = currentVersion();
-
-  String assetCompatibilityError;
-  if (!assetNameLooksCompatibleWithBoard(config.assetName, assetCompatibilityError)) {
-    result.code = ResultCode::AssetMismatch;
-    result.summary = "Wrong OTA asset";
-    result.detail = assetCompatibilityError;
-    return result;
-  }
-
-  if (!isConfigured(config)) {
-    result.code = ResultCode::NotConfigured;
-    result.summary = "Wi-Fi not set";
-    result.detail = "Settings -> Wi-Fi";
-    return result;
-  }
-
-  if (!connectWiFi(config, callback, context)) {
-    disconnectWiFi();
-    result.code = ResultCode::ConnectFailed;
-    result.summary = "Wi-Fi failed";
-    result.detail = "Check credentials";
-    return result;
-  }
-
-  LatestRelease release;
-  String metadataError;
-  if (!fetchRelease(config, release, metadataError, callback, context)) {
-    disconnectWiFi();
-    result.code = ResultCode::MetadataFailed;
-    result.summary = "GitHub failed";
-    result.detail = metadataError;
-    return result;
-  }
-
-  disconnectWiFi();
-  result.latestVersion = release.tagName;
-  if (release.tagName == result.currentVersion) {
-    result.code = ResultCode::NoUpdate;
-    result.summary = "Already current";
-    result.detail = release.tagName;
-    return result;
-  }
-
-  if (release.assetUrl.isEmpty()) {
-    result.code = ResultCode::AssetMissing;
-    result.summary = "Asset missing";
-    result.detail = config.assetName;
-    return result;
-  }
-
-  result.code = ResultCode::UpdateAvailable;
-  result.summary = "Update available";
-  result.detail = release.tagName;
-  return result;
-}
-
-OtaUpdater::Result OtaUpdater::checkAndInstall(const Config &config, StatusCallback callback,
-                                               void *context) const {
-  Result result;
-  result.currentVersion = currentVersion();
-
-  String assetCompatibilityError;
-  if (!assetNameLooksCompatibleWithBoard(config.assetName, assetCompatibilityError)) {
-    result.code = ResultCode::AssetMismatch;
-    result.summary = "Wrong OTA asset";
-    result.detail = assetCompatibilityError;
-    return result;
-  }
-
-  if (!isConfigured(config)) {
-    result.code = ResultCode::NotConfigured;
-    result.summary = "Wi-Fi not set";
-    result.detail = "Settings -> Wi-Fi";
-    return result;
-  }
-
-  if (!connectWiFi(config, callback, context)) {
-    disconnectWiFi();
-    result.code = ResultCode::ConnectFailed;
-    result.summary = "Wi-Fi failed";
-    result.detail = "Check credentials";
-    return result;
-  }
-
-  LatestRelease release;
-  String metadataError;
-  if (!fetchRelease(config, release, metadataError, callback, context)) {
-    disconnectWiFi();
-    result.code = ResultCode::MetadataFailed;
-    result.summary = "GitHub failed";
-    result.detail = metadataError;
-    return result;
-  }
-
-  result.latestVersion = release.tagName;
-  if (release.tagName == result.currentVersion) {
-    disconnectWiFi();
-    result.code = ResultCode::NoUpdate;
-    result.summary = "Already current";
-    result.detail = release.tagName;
-    return result;
-  }
-
-  if (release.assetUrl.isEmpty()) {
-    disconnectWiFi();
-    result.code = ResultCode::AssetMissing;
-    result.summary = "Asset missing";
-    result.detail = config.assetName;
-    return result;
-  }
-
-  reportStatus(callback, context, kStatusTitle, "Preparing update",
-               versionDetail(result.currentVersion, result.latestVersion), 28);
-
-  String resolvedAssetUrl;
-  String resolveError;
-  if (!resolveDownloadUrl(release.assetUrl, result.latestVersion, resolvedAssetUrl, resolveError,
-                          callback, context)) {
-    disconnectWiFi();
-    result.code = ResultCode::InstallFailed;
-    result.summary = "Asset failed";
-    result.detail = resolveError;
-    return result;
-  }
-
-  WiFiClientSecure client;
-  // Match the metadata request behavior until the update path gains certificate pinning or
-  // signature verification above the transport layer.
-  client.setInsecure();
-  client.setHandshakeTimeout(15);
-
-  HTTPUpdate updater;
-  updater.rebootOnUpdate(false);
-  updater.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-
-  int lastReportedProgress = -1;
-  updater.onProgress([this, callback, context, &result, &lastReportedProgress](int current,
-                                                                                int total) {
-    if (total <= 0) {
-      reportStatus(callback, context, kStatusTitle, "Downloading update", result.latestVersion,
-                   -1);
-      return;
+static void reportStatus(OtaUpdater::StatusCallback callback, void* context, const char* title, const char* line1,
+                         const char* line2, int progressPercent) {
+    if (callback == nullptr) {
+        return;
     }
 
-    const int progress = 30 + static_cast<int>((static_cast<int64_t>(current) * 65) / total);
-    if (progress == lastReportedProgress) {
-      return;
+    callback(context, title, line1, line2, progressPercent);
+}
+
+static OtaUpdater::Result resultForError(Error error) {
+    return {
+        .code = error.code,
+        .currentVersion = std::string{OtaUpdater::currentVersion()},
+        .summary = std::move(error.summary),
+        .detail = std::move(error.detail),
+    };
+}
+
+static std::expected<LatestRelease, Error> prepareRelease(const OtaUpdater::Config& config,
+                                                          OtaUpdater::StatusCallback callback, void* context) {
+    if (auto compatible = validateAssetName(config.assetName); !compatible) {
+        return std::unexpected(Error{
+            .code = OtaUpdater::ResultCode::AssetMismatch,
+            .summary = "Wrong OTA asset",
+            .detail = std::move(compatible.error()),
+        });
     }
 
-    lastReportedProgress = progress;
-    reportStatus(callback, context, kStatusTitle, "Downloading update", result.latestVersion,
-                 progress);
-  });
+    if (AsciiText::trim(config.wifiSsid).empty()) {
+        return std::unexpected(Error{
+            .code = OtaUpdater::ResultCode::NotConfigured,
+            .summary = "Wi-Fi not set",
+            .detail = "Settings -> Wi-Fi",
+        });
+    }
 
-  const String version = result.currentVersion;
-  const t_httpUpdate_return updateResult =
-      updater.update(client, resolvedAssetUrl, version, [version](HTTPClient *http) {
-        http->setUserAgent(userAgentForVersion(version));
+    auto connected = net::connectStation(config.wifiSsid.c_str(), config.wifiPassword.c_str(), [&](int percent) {
+        reportStatus(callback, context, kStatusTitle, "Connecting Wi-Fi", config.wifiSsid.c_str(), percent);
+    });
+    if (!connected) {
+        net::disconnect();
+        return std::unexpected(Error{
+            .code = OtaUpdater::ResultCode::ConnectFailed,
+            .summary = "Wi-Fi failed",
+            .detail = connected.error().message(),
+        });
+    }
+
+    auto release = fetchRelease(config, callback, context);
+    if (!release) {
+        net::disconnect();
+        return std::unexpected(Error{
+            .code = OtaUpdater::ResultCode::MetadataFailed,
+            .summary = "GitHub failed",
+            .detail = std::move(release.error()),
+        });
+    }
+
+    return std::move(*release);
+}
+
+OtaUpdater::Result OtaUpdater::checkOnly(const Config& config, StatusCallback callback, void* context) {
+    auto release = prepareRelease(config, callback, context);
+    if (!release)
+        return resultForError(std::move(release.error()));
+
+    net::disconnect();
+    Result result;
+    result.currentVersion = currentVersion();
+    result.latestVersion = release->version;
+    if (release->version == result.currentVersion) {
+        result.code = ResultCode::NoUpdate;
+        result.summary = "Already current";
+        result.detail = release->version;
+        return result;
+    }
+
+    result.code = ResultCode::UpdateAvailable;
+    result.summary = "Update available";
+    result.detail = release->version;
+    return result;
+}
+
+OtaUpdater::Result OtaUpdater::checkAndInstall(const Config& config, StatusCallback callback, void* context) {
+    auto release = prepareRelease(config, callback, context);
+    if (!release)
+        return resultForError(std::move(release.error()));
+
+    Result result;
+    result.currentVersion = currentVersion();
+    result.latestVersion = release->version;
+    if (release->version == result.currentVersion) {
+        net::disconnect();
+        result.code = ResultCode::NoUpdate;
+        result.summary = "Already current";
+        result.detail = release->version;
+        return result;
+    }
+
+    const std::string detail = versionDetail(result.currentVersion, result.latestVersion);
+    reportStatus(callback, context, kStatusTitle, "Preparing update", detail.c_str(), 28);
+
+    auto resolvedAssetUrl = resolveDownloadUrl(release->assetUrl, result.latestVersion, callback, context);
+    if (!resolvedAssetUrl) {
+        net::disconnect();
+        result.code = ResultCode::InstallFailed;
+        result.summary = "Asset failed";
+        result.detail = resolvedAssetUrl.error();
+        return result;
+    }
+
+    WiFiClientSecure client;
+    // Match the metadata request behavior until the update path gains certificate
+    // pinning or signature verification above the transport layer.
+    client.setInsecure();
+    client.setHandshakeTimeout(15);
+
+    HTTPUpdate updater;
+    updater.rebootOnUpdate(false);
+    updater.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+
+    int lastReportedProgress = -1;
+    updater.onProgress([callback, context, &result, &lastReportedProgress](int current, int total) {
+        if (total <= 0) {
+            reportStatus(callback, context, kStatusTitle, "Downloading update", result.latestVersion.c_str(), -1);
+            return;
+        }
+
+        const int progress = 30 + static_cast<int>((static_cast<int64_t>(current) * 65) / total);
+        if (progress == lastReportedProgress) {
+            return;
+        }
+
+        lastReportedProgress = progress;
+        reportStatus(callback, context, kStatusTitle, "Downloading update", result.latestVersion.c_str(), progress);
+    });
+
+    const String version = result.currentVersion.c_str();
+    const String resolvedUrl = resolvedAssetUrl->c_str();
+    const t_httpUpdate_return updateResult = updater.update(client, resolvedUrl, version, [version](HTTPClient* http) {
+        http->setUserAgent(userAgentForVersion({version.c_str(), version.length()}).c_str());
         http->addHeader("Accept", "application/octet-stream");
-      });
+    });
 
-  disconnectWiFi();
+    net::disconnect();
 
-  switch (updateResult) {
+    switch (updateResult) {
     case HTTP_UPDATE_OK:
-      result.code = ResultCode::Success;
-      result.summary = "Update ready";
-      result.detail = result.latestVersion;
-      result.rebootRequired = true;
-      return result;
+        result.code = ResultCode::Success;
+        result.summary = "Update ready";
+        result.detail = result.latestVersion;
+        result.rebootRequired = true;
+        return result;
     case HTTP_UPDATE_NO_UPDATES:
-      result.code = ResultCode::NoUpdate;
-      result.summary = "Already current";
-      result.detail = result.latestVersion;
-      return result;
+        result.code = ResultCode::NoUpdate;
+        result.summary = "Already current";
+        result.detail = result.latestVersion;
+        return result;
     case HTTP_UPDATE_FAILED:
     default:
-      result.code = ResultCode::InstallFailed;
-      result.summary = "Update failed";
-      result.detail = updater.getLastErrorString();
-      return result;
-  }
+        result.code = ResultCode::InstallFailed;
+        result.summary = "Update failed";
+        const String error = updater.getLastErrorString();
+        result.detail.assign(error.c_str(), error.length());
+        return result;
+    }
 }

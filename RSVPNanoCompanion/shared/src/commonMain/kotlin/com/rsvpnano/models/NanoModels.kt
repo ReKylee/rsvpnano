@@ -11,24 +11,46 @@ data class NanoChapter(
 @Serializable
 data class NanoBook(
     val id: String,
-    val name: String? = null,
-    val title: String? = null,
-    val author: String? = null,
+    val name: String,
     val bytes: Int = 0,
-    val progressPercent: Int? = null,
-    val category: String? = null,
-    val sourceSize: Long? = null,
-    val sourceFingerprint: Long? = null,
-    val wordCount: Int? = null,
-    val wordIndex: Int? = null,
-    val chapters: List<NanoChapter> = emptyList(),
+    val category: String,
+    val metadata: NanoBookMetadata,
+    val source: NanoBookSource? = null,
+    val reading: NanoReadingProgress? = null,
 ) {
     val displayTitle: String
-        get() = title?.takeIf { it.isNotBlank() } ?: displayName.substringAfterLast('/').ifBlank { "Untitled" }
-
-    val displayName: String
-        get() = name?.takeIf { it.isNotBlank() } ?: id
+        get() = metadata.title.takeIf { it.isNotBlank() } ?: name.substringAfterLast('/').ifBlank { "Untitled" }
 }
+
+@Serializable
+data class NanoBookMetadata(
+    val title: String,
+    val author: String = "",
+    val wordCount: Int = 0,
+    val chapterCount: Int = 0,
+    val chapters: List<NanoChapter> = emptyList(),
+)
+
+@Serializable
+data class NanoBookSource(
+    val size: Long,
+    val fingerprint: Long,
+)
+
+@Serializable
+data class NanoReadingProgress(
+    val wordIndex: Int,
+    val percent: Int,
+    val remainingWords: Int,
+    val estimatedMinutes: Int,
+    val currentChapter: NanoCurrentChapter? = null,
+)
+
+@Serializable
+data class NanoCurrentChapter(
+    val number: Int,
+    val title: String,
+)
 
 @Serializable
 data class PendingUpload(
@@ -42,32 +64,43 @@ data class PendingUpload(
 @Serializable
 data class NanoInfo(
     val name: String,
+    val apiVersion: Int,
     val mode: String? = null,
-    val baseUrl: String? = null,
     val networkSsid: String? = null,
-    val pairingCode: String? = null,
-    val uploadPath: String? = null
+    val firmwareVersion: String = "",
+    val otaAsset: String = "",
 )
 
 @Serializable
 data class NanoUploadResponse(
-    val ok: Boolean,
     val path: String? = null,
-    val error: String? = null,
+    val id: String? = null,
+    val deleted: Boolean? = null,
+    val wordIndex: Int? = null,
+    val percent: Int? = null,
 )
 
 @Serializable
 data class NanoRssFeeds(
-    val ok: Boolean,
-    val feeds: List<String>,
+    val feeds: List<String> = emptyList(),
+)
+
+@Serializable
+data class NanoFocusTimer(
+    val name: String = "",
+    val focusMinutes: Int = 25,
+    val breakMinutes: Int = 5,
+    val rounds: Int = 4,
+)
+
+@Serializable
+data class NanoFocusTimers(
+    val timers: List<NanoFocusTimer> = emptyList(),
 )
 
 @Serializable
 data class NanoWifiSettings(
-    val ok: Boolean,
-    val configured: Boolean,
-    val ssid: String,
-    val passwordSet: Boolean,
+    val passwordSet: Boolean = false,
 )
 
 @Serializable
@@ -77,84 +110,106 @@ data class NanoWifiUpdate(
 )
 
 @Serializable
+data class NanoFontCatalogItem(
+    val id: String,
+    val name: String,
+    val files: Map<String, String> = emptyMap(),
+)
+
+@Serializable
+data class NanoFontSummary(
+    val id: String,
+    val name: String,
+)
+
+@Serializable
+data class NanoFontsResponse(
+    val fonts: List<NanoFontSummary> = emptyList(),
+)
+
+@Serializable
+data class NanoThemeCatalogItem(
+    val id: String,
+    val name: String,
+    val file: String,
+)
+
+@Serializable
+data class NanoThemeSummary(
+    val id: String,
+    val name: String,
+)
+
+@Serializable
+data class NanoThemesResponse(
+    val themes: List<NanoThemeSummary> = emptyList(),
+)
+
+@Serializable
 data class NanoSettings(
-    val ok: Boolean,
-    val version: Int,
-    val reading: Reading,
-    val display: Display,
-    val typography: Typography,
-    val limits: Limits? = null,
+    val reading: Reading = Reading(),
+    val `interface`: Interface = Interface(),
+    val network: Network = Network(),
+    val updates: Updates = Updates(),
 ) {
     @Serializable
     data class Reading(
-        val wpm: Int,
-        val readerMode: String,
-        val pauseMode: String,
-        val accurateTimeEstimate: Boolean,
-        val pacing: Pacing,
+        val wpm: Int = 300,
+        val pauseMode: String = NanoSettingsSchema.PAUSE_MODE_SENTENCE_END,
+        val phantomWords: Boolean = true,
+        val chapterScrollReversed: Boolean = false,
+        val footerMetric: String = NanoSettingsSchema.FOOTER_PERCENTAGE,
+        val batteryLabel: String = NanoSettingsSchema.BATTERY_PERCENTAGE,
+        val batteryIconVisible: Boolean = true,
+        val batteryVisibleWhileReading: Boolean = true,
+        val chapterVisibleWhileReading: Boolean = false,
+        val progressVisibleWhileReading: Boolean = false,
+        val leftHanded: Boolean = false,
+        val typography: Typography = Typography(),
+        val pacing: Pacing = Pacing(),
     )
 
     @Serializable
     data class Pacing(
-        val longWordMs: Int,
-        val complexWordMs: Int,
-        val punctuationMs: Int,
-    )
-
-    @Serializable
-    data class Display(
-        val brightnessIndex: Int,
-        val darkMode: Boolean,
-        val nightMode: Boolean,
-        val handedness: String,
-        val readerControls: String = NanoSettingsSchema.READER_CONTROLS_STANDARD,
-        val footerMetric: String,
-        val batteryLabel: String,
-        val readingBattery: Boolean = true,
-        val readingChapter: Boolean = false,
-        val readingProgress: Boolean = false,
-        val screensaver: Int = NanoSettingsSchema.SCREENSAVER_LIFE,
-        val standbyTimerIndex: Int = NanoSettingsSchema.STANDBY_TIMER_NEVER,
-        val language: Int,
-        val phantomWords: Boolean,
-        val fontSizeIndex: Int,
+        val longWordDelayMs: Int = 200,
+        val complexWordDelayMs: Int = 200,
+        val punctuationDelayMs: Int = 200,
     )
 
     @Serializable
     data class Typography(
-        val typeface: String,
-        val focusHighlight: Boolean,
-        val tracking: Int,
-        val anchorPercent: Int,
-        val guideWidth: Int,
-        val guideGap: Int,
+        val fontId: String = NanoSettingsSchema.TYPEFACE_DEFAULT,
+        val fontSizeIndex: Int = 0,
+        val focusHighlight: Boolean = true,
+        val tracking: Int = 0,
+        val anchor: Int = 30,
+        val guideWidth: Int = 30,
+        val guideGap: Int = 5,
     )
 
     @Serializable
-    data class Limits(
-        val wpm: RangeLimit? = null,
-        val brightnessIndex: RangeLimit? = null,
-        val pacingMs: RangeLimit? = null,
-        val tracking: RangeLimit? = null,
-        val anchorPercent: RangeLimit? = null,
-        val guideWidth: RangeLimit? = null,
-        val guideGap: RangeLimit? = null,
+    data class Interface(
+        val brightnessPercent: Int = 70,
+        val language: String = NanoLanguages.DEFAULT,
+        val standbyTimerIndex: Int = NanoSettingsSchema.STANDBY_TIMER_NEVER,
+        val screensaver: String = NanoSettingsSchema.SCREENSAVER_LIFE,
+        val selectedThemeId: String = NanoSettingsSchema.THEME_DEFAULT,
     )
 
     @Serializable
-    data class RangeLimit(
-        val min: Int,
-        val max: Int,
+    data class Network(
+        val wifiSsid: String = "",
     )
 
-    fun withAccurateTimeEstimate(value: Boolean): NanoSettings =
-        copy(reading = reading.copy(accurateTimeEstimate = value))
+    @Serializable
+    data class Updates(
+        val automatic: Boolean = false,
+        val repositoryOwner: String = "",
+        val releaseTag: String = "",
+    )
 
     fun withWpm(value: Int): NanoSettings =
         copy(reading = reading.copy(wpm = NanoSettingsSchema.snapWpm(value)))
-
-    fun withReaderMode(value: String): NanoSettings =
-        copy(reading = reading.copy(readerMode = value))
 
     fun withPauseMode(value: String): NanoSettings =
         copy(reading = reading.copy(pauseMode = value))
@@ -162,142 +217,149 @@ data class NanoSettings(
     fun withPacingLongWordMs(value: Int): NanoSettings =
         copy(
             reading = reading.copy(
-                pacing = reading.pacing.copy(longWordMs = NanoSettingsSchema.snapPacingMs(value)),
+                pacing = reading.pacing.copy(longWordDelayMs = NanoSettingsSchema.snapPacingMs(value)),
             ),
         )
 
     fun withPacingComplexWordMs(value: Int): NanoSettings =
         copy(
             reading = reading.copy(
-                pacing = reading.pacing.copy(complexWordMs = NanoSettingsSchema.snapPacingMs(value)),
+                pacing = reading.pacing.copy(complexWordDelayMs = NanoSettingsSchema.snapPacingMs(value)),
             ),
         )
 
     fun withPacingPunctuationMs(value: Int): NanoSettings =
         copy(
             reading = reading.copy(
-                pacing = reading.pacing.copy(punctuationMs = NanoSettingsSchema.snapPacingMs(value)),
+                pacing = reading.pacing.copy(punctuationDelayMs = NanoSettingsSchema.snapPacingMs(value)),
             ),
         )
 
-    fun withBrightnessIndex(value: Int): NanoSettings =
-        copy(display = display.copy(brightnessIndex = NanoSettingsSchema.coerceBrightnessIndex(value)))
+    fun withBrightnessPercent(value: Int): NanoSettings =
+        copy(`interface` = `interface`.copy(brightnessPercent = NanoSettingsSchema.coerceBrightnessPercent(value)))
+
+    fun withThemeId(value: String): NanoSettings {
+        return copy(`interface` = `interface`.copy(selectedThemeId = value.ifBlank { NanoSettingsSchema.THEME_DEFAULT }))
+    }
 
     fun withHandedness(value: String): NanoSettings =
-        copy(display = display.copy(handedness = value))
-
-    fun withReaderControls(value: String): NanoSettings =
-        copy(display = display.copy(readerControls = value))
+        copy(reading = reading.copy(leftHanded = value == NanoSettingsSchema.HANDEDNESS_LEFT))
 
     fun withFooterMetric(value: String): NanoSettings =
-        copy(display = display.copy(footerMetric = value))
+        copy(reading = reading.copy(footerMetric = value))
 
     fun withBatteryLabel(value: String): NanoSettings =
-        copy(display = display.copy(batteryLabel = value))
+        copy(reading = reading.copy(batteryLabel = value))
+
+    fun withBatteryIconVisible(value: Boolean): NanoSettings =
+        copy(reading = reading.copy(batteryIconVisible = value))
 
     fun withReadingBattery(value: Boolean): NanoSettings =
-        copy(display = display.copy(readingBattery = value))
+        copy(reading = reading.copy(batteryVisibleWhileReading = value))
 
     fun withReadingChapter(value: Boolean): NanoSettings =
-        copy(display = display.copy(readingChapter = value))
+        copy(reading = reading.copy(chapterVisibleWhileReading = value))
 
     fun withReadingProgress(value: Boolean): NanoSettings =
-        copy(display = display.copy(readingProgress = value))
+        copy(reading = reading.copy(progressVisibleWhileReading = value))
 
-    fun withScreensaver(value: Int): NanoSettings =
-        copy(display = display.copy(screensaver = NanoSettingsSchema.coerceScreensaver(value)))
+    fun withScreensaver(value: String): NanoSettings =
+        copy(`interface` = `interface`.copy(screensaver = NanoSettingsSchema.coerceScreensaver(value)))
 
     fun withStandbyTimerIndex(value: Int): NanoSettings =
-        copy(display = display.copy(standbyTimerIndex = NanoSettingsSchema.coerceStandbyTimerIndex(value)))
+        copy(`interface` = `interface`.copy(standbyTimerIndex = NanoSettingsSchema.coerceStandbyTimerIndex(value)))
 
-    fun withLanguage(value: Int): NanoSettings =
-        copy(display = display.copy(language = NanoSettingsSchema.coerceLanguage(value)))
-
-    fun withAppearance(darkMode: Boolean, nightMode: Boolean): NanoSettings =
-        copy(display = display.copy(darkMode = darkMode, nightMode = nightMode))
+    fun withLanguage(value: String): NanoSettings =
+        copy(`interface` = `interface`.copy(language = NanoSettingsSchema.coerceLanguage(value)))
 
     fun withPhantomWords(value: Boolean): NanoSettings =
-        copy(display = display.copy(phantomWords = value))
+        copy(reading = reading.copy(phantomWords = value))
 
     fun withFontSizeIndex(value: Int): NanoSettings =
-        copy(display = display.copy(fontSizeIndex = NanoSettingsSchema.coerceFontSizeIndex(value)))
+        copy(
+            reading = reading.copy(
+                typography = reading.typography.copy(
+                    fontSizeIndex = NanoSettingsSchema.coerceFontSizeIndex(value),
+                ),
+            ),
+        )
 
     fun withTypeface(value: String): NanoSettings =
-        copy(typography = typography.copy(typeface = value))
+        copy(reading = reading.copy(typography = reading.typography.copy(fontId = value)))
 
     fun withFocusHighlight(value: Boolean): NanoSettings =
-        copy(typography = typography.copy(focusHighlight = value))
+        copy(reading = reading.copy(typography = reading.typography.copy(focusHighlight = value)))
 
     fun withTracking(value: Int): NanoSettings =
-        copy(typography = typography.copy(tracking = NanoSettingsSchema.coerceTracking(value)))
+        copy(
+            reading = reading.copy(
+                typography = reading.typography.copy(tracking = NanoSettingsSchema.coerceTracking(value)),
+            ),
+        )
 
     fun withAnchorPercent(value: Int): NanoSettings =
-        copy(typography = typography.copy(anchorPercent = NanoSettingsSchema.coerceAnchorPercent(value)))
+        copy(
+            reading = reading.copy(
+                typography = reading.typography.copy(anchor = NanoSettingsSchema.coerceAnchorPercent(value)),
+            ),
+        )
 
     fun withGuideWidth(value: Int): NanoSettings =
-        copy(typography = typography.copy(guideWidth = NanoSettingsSchema.snapGuideWidth(value)))
+        copy(
+            reading = reading.copy(
+                typography = reading.typography.copy(guideWidth = NanoSettingsSchema.snapGuideWidth(value)),
+            ),
+        )
 
     fun withGuideGap(value: Int): NanoSettings =
-        copy(typography = typography.copy(guideGap = NanoSettingsSchema.coerceGuideGap(value)))
-
-    val appearanceMode: String
-        get() = when {
-            display.nightMode -> NanoSettingsSchema.APPEARANCE_NIGHT
-            display.darkMode -> NanoSettingsSchema.APPEARANCE_DARK
-            else -> NanoSettingsSchema.APPEARANCE_LIGHT
-        }
-
-    fun withAppearanceMode(value: String): NanoSettings =
-        withAppearance(
-            darkMode = value == NanoSettingsSchema.APPEARANCE_DARK ||
-                value == NanoSettingsSchema.APPEARANCE_NIGHT,
-            nightMode = value == NanoSettingsSchema.APPEARANCE_NIGHT,
+        copy(
+            reading = reading.copy(
+                typography = reading.typography.copy(guideGap = NanoSettingsSchema.coerceGuideGap(value)),
+            ),
         )
+
+    fun withUpdateOwner(value: String): NanoSettings =
+        copy(updates = updates.copy(repositoryOwner = value))
+
+    fun withUpdateTag(value: String): NanoSettings =
+        copy(updates = updates.copy(releaseTag = value))
+
+    fun withAutomaticUpdateChecks(value: Boolean): NanoSettings =
+        copy(updates = updates.copy(automatic = value))
 }
 
 object NanoSettingsSchema {
-    const val READER_MODE_RSVP = "rsvp"
-    const val READER_MODE_SCROLL = "scroll"
-    const val PAUSE_MODE_SENTENCE_END = "sentence_end"
+    const val THEME_DEFAULT = "default"
+    const val PAUSE_MODE_SENTENCE_END = "sentenceEnd"
     const val PAUSE_MODE_INSTANT = "instant"
-    const val APPEARANCE_LIGHT = "light"
-    const val APPEARANCE_DARK = "dark"
-    const val APPEARANCE_NIGHT = "night"
     const val HANDEDNESS_LEFT = "left"
     const val HANDEDNESS_RIGHT = "right"
-    const val READER_CONTROLS_STANDARD = "standard"
-    const val READER_CONTROLS_REWIND_TOP_RIGHT = "rewind_top_right"
     const val FOOTER_PERCENTAGE = "percentage"
-    const val FOOTER_CHAPTER_TIME = "chapter_time"
-    const val FOOTER_BOOK_TIME = "book_time"
-    const val BATTERY_PERCENT = "percent"
-    const val BATTERY_TIME_REMAINING = "time_remaining"
+    const val FOOTER_CHAPTER_TIME = "chapterTime"
+    const val FOOTER_BOOK_TIME = "bookTime"
+    const val BATTERY_PERCENTAGE = "percentage"
+    const val BATTERY_TIME_REMAINING = "timeRemaining"
     const val BATTERY_VOLTAGE = "voltage"
-    const val SCREENSAVER_LIFE = 0
-    const val SCREENSAVER_MAZE = 2
-    const val SCREENSAVER_VORONOI = 3
-    const val SCREENSAVER_SCREEN_OFF = 6
-    const val TYPEFACE_STANDARD = "standard"
-    const val TYPEFACE_ATKINSON = "atkinson"
-    const val TYPEFACE_OPEN_DYSLEXIC = "open_dyslexic"
+    const val SCREENSAVER_LIFE = "life"
+    const val SCREENSAVER_MAZE = "maze"
+    const val SCREENSAVER_VORONOI = "voronoi"
+    const val SCREENSAVER_SCREEN_OFF = "screenOff"
+    const val SCREENSAVER_REACTION = "reaction"
+    const val TYPEFACE_DEFAULT = "literata"
 
     const val WPM_MIN = 10
     const val WPM_MAX = 1000
-    const val WPM_LOW_STEP = 10
-    const val WPM_HIGH_STEP = 25
-    const val WPM_STEP_CUTOFF = 100
+    const val WPM_STEP = 10
     const val PACING_MS_MIN = 0
     const val PACING_MS_MAX = 600
     const val PACING_MS_STEP = 50
-    const val BRIGHTNESS_MIN = 0
-    const val BRIGHTNESS_MAX = 4
+    const val BRIGHTNESS_MIN = 5
+    const val BRIGHTNESS_MAX = 100
     const val STANDBY_TIMER_NEVER = 0
     const val STANDBY_TIMER_1_MIN = 1
     const val STANDBY_TIMER_5_MIN = 2
-    const val STANDBY_TIMER_10_MIN = 3
+    const val STANDBY_TIMER_15_MIN = 3
     const val STANDBY_TIMER_30_MIN = 4
-    const val LANGUAGE_MIN = 0
-    const val LANGUAGE_MAX = 5
     const val FONT_SIZE_MIN = 0
     const val FONT_SIZE_MAX = 2
     const val TRACKING_MIN = -2
@@ -315,25 +377,21 @@ object NanoSettingsSchema {
 
     fun snapWpm(value: Int): Int {
         val clamped = value.coerceIn(WPM_MIN, WPM_MAX)
-        return if (clamped <= WPM_STEP_CUTOFF) {
-            snapToStep(clamped, WPM_LOW_STEP).coerceIn(WPM_MIN, WPM_STEP_CUTOFF)
-        } else {
-            (WPM_STEP_CUTOFF + snapToStep(clamped - WPM_STEP_CUTOFF, WPM_HIGH_STEP))
-                .coerceIn(WPM_STEP_CUTOFF, WPM_MAX)
-        }
+        return snapToStep(clamped, WPM_STEP).coerceIn(WPM_MIN, WPM_MAX)
     }
 
     fun snapPacingMs(value: Int): Int =
         snapToStep(value, PACING_MS_STEP).coerceIn(PACING_MS_MIN, PACING_MS_MAX)
 
-    fun coerceBrightnessIndex(value: Int): Int =
+    fun coerceBrightnessPercent(value: Int): Int =
         value.coerceIn(BRIGHTNESS_MIN, BRIGHTNESS_MAX)
 
-    fun coerceScreensaver(value: Int): Int =
+    fun coerceScreensaver(value: String): String =
         when (value) {
             SCREENSAVER_MAZE,
             SCREENSAVER_VORONOI,
-            SCREENSAVER_SCREEN_OFF
+            SCREENSAVER_SCREEN_OFF,
+            SCREENSAVER_REACTION
             -> value
             else -> SCREENSAVER_LIFE
         }
@@ -341,8 +399,9 @@ object NanoSettingsSchema {
     fun coerceStandbyTimerIndex(value: Int): Int =
         value.coerceIn(STANDBY_TIMER_NEVER, STANDBY_TIMER_30_MIN)
 
-    fun coerceLanguage(value: Int): Int =
-        value.coerceIn(LANGUAGE_MIN, LANGUAGE_MAX)
+    fun coerceLanguage(value: String): String =
+        value.takeIf { candidate -> NanoLanguages.OPTIONS.any { it.first == candidate } }
+            ?: NanoLanguages.DEFAULT
 
     fun coerceFontSizeIndex(value: Int): Int =
         value.coerceIn(FONT_SIZE_MIN, FONT_SIZE_MAX)
@@ -363,17 +422,30 @@ object NanoSettingsSchema {
 @Serializable
 data class RememberedNano(
     val ssid: String,
-    val bssid: String? = null,
 )
 
 @Serializable
 data class CompanionAppSettings(
-    val defaultAddress: String = "http://192.168.4.1",
     val rememberedNano: RememberedNano? = null,
-) {
-    fun withDefaultAddress(value: String): CompanionAppSettings =
-        copy(defaultAddress = value)
+    val firmwareNotificationsEnabled: Boolean = false,
+    val firmwareUpdateTarget: FirmwareUpdateTarget? = null,
+    val lastNotifiedFirmwareVersion: String? = null,
+)
 
-    fun withRememberedNano(value: RememberedNano?): CompanionAppSettings =
-        copy(rememberedNano = value)
-}
+@Serializable
+data class FirmwareUpdateTarget(
+    val currentVersion: String,
+    val otaAsset: String,
+    val owner: String,
+    val tag: String,
+)
+
+data class FirmwareRelease(
+    val version: String,
+    val assets: List<String>,
+)
+
+data class FirmwareUpdate(
+    val currentVersion: String,
+    val availableVersion: String,
+)

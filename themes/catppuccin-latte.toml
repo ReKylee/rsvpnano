@@ -1,0 +1,28 @@
+name = "Catppuccin Latte"
+
+[typography]
+fontId = "literata"
+fontSizeIndex = 0
+focusHighlight = true
+tracking = 0
+anchor = 30
+guideWidth = 30
+guideGap = 5
+
+[colors]
+background = "#EFF1F5"
+foreground = "#4C4F69"
+muted = "#6C6F85"
+subtle = "#8C8FA1"
+accent = "#D20F39"
+accentBar = "#D20F39"
+breakAccent = "#179299"
+onAccent = "#EFF1F5"
+surface = "#E6E9EF"
+surfaceMuted = "#CCD0DA"
+surfaceActive = "#BCC0CC"
+outline = "#9CA0B0"
+guide = "#7C7F93"
+guideFocus = "#D20F39"
+phantom = "#9CA0B0"
+progressTrack = "#CCD0DA"

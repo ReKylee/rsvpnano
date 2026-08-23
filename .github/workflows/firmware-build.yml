@@ -51,6 +51,11 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
 
+      - name: Set local firmware tag
+        env:
+          RSVP_FIRMWARE_TAG: ${{ inputs.firmware_tag }}
+        run: git tag -f "$RSVP_FIRMWARE_TAG" HEAD
+
       - name: Export firmware environment
         env:
           RSVP_FIRMWARE_TAG: ${{ inputs.firmware_tag }}

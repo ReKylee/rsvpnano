@@ -34,6 +34,12 @@ class BenchmarkRunTests(unittest.TestCase):
             fonts = root / "fonts"
             (fonts / "Reader Font").mkdir(parents=True)
             (fonts / "Reader Font/font.rfont4").write_bytes(b"font-v6")
+            (fonts / "index.json").write_text(
+                '[{"id":"reader-font","file":"Reader Font/font.rfont4"}]', encoding="utf-8"
+            )
+            legacy_font = volume / "fonts/Reader Font/font.rfont4"
+            legacy_font.parent.mkdir(parents=True)
+            legacy_font.write_bytes(b"font-v5")
 
             self.assertEqual(volume, find_benchmark_volume([other, volume]))
             prepare_volume(volume, fixture, multilingual, vertical, fonts)
@@ -41,11 +47,12 @@ class BenchmarkRunTests(unittest.TestCase):
             self.assertEqual(b"epub", (volume / DEVICE_EPUB_PATH).read_bytes())
             self.assertEqual(b"@rsvp 1\nmultilingual", (volume / DEVICE_MULTILINGUAL_PATH).read_bytes())
             self.assertEqual(b"vertical", (volume / DEVICE_VERTICAL_EPUB_PATH).read_bytes())
-            self.assertEqual(b"font-v6", (volume / "fonts/Reader Font/font.rfont4").read_bytes())
-            self.assertIn("Reader Font/font.rfont4", (volume / FONT_MANIFEST_PATH).read_text(encoding="ascii"))
+            self.assertEqual(b"font-v6", (volume / "fonts/reader-font/font.rfont4").read_bytes())
+            self.assertFalse(legacy_font.exists())
+            self.assertIn("reader-font/font.rfont4", (volume / FONT_MANIFEST_PATH).read_text(encoding="ascii"))
             self.assertEqual("ready\n", (volume / RUN_READY_PATH).read_text(encoding="ascii"))
 
-            installed_font = volume / "fonts/Reader Font/font.rfont4"
+            installed_font = volume / "fonts/reader-font/font.rfont4"
             installed_mtime = installed_font.stat().st_mtime_ns
             (volume / FONT_MANIFEST_PATH).unlink()
             prepare_volume(volume, fixture, multilingual, vertical, fonts)

@@ -27,6 +27,7 @@ DEVICE_VERTICAL_EPUB_PATH = Path("benchmark/vertical-cjk.epub")
 DEVICE_MARKER_PATH = Path("benchmark/.rsvpnano-benchmark")
 RUN_READY_PATH = Path("benchmark/.run-ready")
 FONT_MANIFEST_PATH = Path("benchmark/fonts.sha256")
+RFONT4_FILENAME = "font.rfont4"
 ESPRESSIF_USB_ID = "VID:PID=303A:1001"
 COPY_BUFFER_SIZE = 1024 * 1024
 
@@ -145,6 +146,14 @@ def file_sha256(path: Path) -> str:
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
+def catalog_fonts(fonts_root: Path) -> list[tuple[Path, Path]]:
+    catalog = json.loads((fonts_root / "index.json").read_text(encoding="utf-8"))
+    return [
+        (fonts_root / entry["file"], Path(entry["id"]) / RFONT4_FILENAME)
+        for entry in catalog
+    ]
+
+
 def wait_for_benchmark_volume(sd_root: str, timeout: float) -> Path:
     explicit = Path(sd_root).resolve() if sd_root else None
     deadline = time.monotonic() + timeout
@@ -165,18 +174,18 @@ def prepare_volume(
     fonts_root: Path | None = None,
 ) -> Path:
     if fonts_root is not None:
-        sources = sorted(fonts_root.glob("*/font.rfont4"))
-        source_hashes = [(source, file_sha256(source)) for source in sources]
+        sources = catalog_fonts(fonts_root)
+        source_hashes = [(source, target, file_sha256(source)) for source, target in sources]
         manifest = "".join(
-            f"{source.relative_to(fonts_root).as_posix()}\t{digest}\n"
-            for source, digest in source_hashes
+            f"{target.as_posix()}\t{digest}\n"
+            for source, target, digest in source_hashes
         )
         manifest_path = root / FONT_MANIFEST_PATH
         installed_manifest = manifest_path.read_text(encoding="ascii") if manifest_path.is_file() else ""
         if manifest != installed_manifest:
             copied = 0
-            for index, (source, digest) in enumerate(source_hashes, start=1):
-                target_font = root / "fonts" / source.relative_to(fonts_root)
+            for index, (source, target, digest) in enumerate(source_hashes, start=1):
+                target_font = root / "fonts" / target
                 unchanged = (
                     target_font.is_file()
                     and target_font.stat().st_size == source.stat().st_size
@@ -196,6 +205,10 @@ def prepare_volume(
                     output.flush()
                     os.fsync(output.fileno())
                 copied += 1
+                published_path = root / "fonts" / source.relative_to(fonts_root)
+                if published_path != target_font and published_path.is_file():
+                    published_path.unlink()
+                    published_path.parent.rmdir()
             manifest_path.parent.mkdir(parents=True, exist_ok=True)
             with manifest_path.open("w", encoding="ascii") as output:
                 output.write(manifest)

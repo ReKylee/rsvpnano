@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COMPANION_DIR="$ROOT_DIR/RSVPNanoCompanion"
-OUTPUT_DIR="$COMPANION_DIR/ios/RSVPNanoCompanion/SharedFrameworks"
+OUTPUT_DIR="$COMPANION_DIR/apps/ios/RSVPNanoCompanion/SharedFrameworks"
 
 cd "$ROOT_DIR"
 

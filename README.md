@@ -172,9 +172,9 @@ the Android app can be built and installed with Android Studio or the Android SD
 
 See:
 
-[`RSVPNanoCompanion/ios/RSVPNanoCompanion/README.md`](RSVPNanoCompanion/ios/RSVPNanoCompanion/README.md)
+[`RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/README.md`](RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/README.md)
 
-[`RSVPNanoCompanion/androidApp/README.md`](RSVPNanoCompanion/androidApp/README.md)
+[`RSVPNanoCompanion/apps/android/README.md`](RSVPNanoCompanion/apps/android/README.md)
 
 ## Home Wi-Fi, RSS, And OTA
 
@@ -448,9 +448,9 @@ Current app features include:
 
 Temporary install instructions are in:
 
-[`RSVPNanoCompanion/ios/RSVPNanoCompanion/README.md`](RSVPNanoCompanion/ios/RSVPNanoCompanion/README.md)
+[`RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/README.md`](RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/README.md)
 
-[`RSVPNanoCompanion/androidApp/README.md`](RSVPNanoCompanion/androidApp/README.md)
+[`RSVPNanoCompanion/apps/android/README.md`](RSVPNanoCompanion/apps/android/README.md)
 
 ## Build From Source
 
@@ -509,7 +509,7 @@ pio device monitor
 The iOS app lives in:
 
 ```text
-RSVPNanoCompanion/ios/RSVPNanoCompanion
+RSVPNanoCompanion/apps/ios/RSVPNanoCompanion
 ```
 
 Open the Xcode project from that folder when installing the app locally.

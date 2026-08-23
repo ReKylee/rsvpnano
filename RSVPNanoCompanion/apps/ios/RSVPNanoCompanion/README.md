@@ -28,7 +28,7 @@ bash RSVPNanoCompanion/tools/build_shared_xcframework.sh
 The script writes:
 
 ```text
-RSVPNanoCompanion/ios/RSVPNanoCompanion/SharedFrameworks/shared.xcframework
+RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/SharedFrameworks/shared.xcframework
 ```
 
 The iOS project expects that framework to be embedded and signed by Xcode. If Xcode loses the
@@ -40,7 +40,7 @@ Content` for the app target and set it to `Embed & Sign`.
 Open:
 
 ```text
-RSVPNanoCompanion/ios/RSVPNanoCompanion/RSVPNanoCompanion.xcodeproj
+RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/RSVPNanoCompanion.xcodeproj
 ```
 
 Use the `RSVPNanoCompanion` scheme for the main app. Check signing for both targets:
@@ -57,9 +57,9 @@ group.com.rsvpnano.companion
 If you need a personal bundle ID or App Group, update all matching locations:
 
 ```text
-RSVPNanoCompanion/ios/RSVPNanoCompanion/RSVPNanoCompanion/RSVPNanoCompanion.entitlements
-RSVPNanoCompanion/ios/RSVPNanoCompanion/RSVPNanoShareExtension/RSVPNanoShareExtension.entitlements
-RSVPNanoCompanion/ios/RSVPNanoCompanion/RSVPNanoCompanion/Models.swift
+RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/RSVPNanoCompanion/RSVPNanoCompanion.entitlements
+RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/RSVPNanoShareExtension/RSVPNanoShareExtension.entitlements
+RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/RSVPNanoCompanion/Models.swift
 ```
 
 ## Run On Device

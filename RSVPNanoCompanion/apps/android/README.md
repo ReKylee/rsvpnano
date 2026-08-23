@@ -18,7 +18,7 @@ Install Android Studio or a JDK 17 + Android SDK environment, then run from the 
 The release APK is written under:
 
 ```text
-RSVPNanoCompanion/androidApp/build/outputs/apk/release/
+RSVPNanoCompanion/apps/android/build/outputs/apk/release/
 ```
 
 ## Run
@@ -30,7 +30,7 @@ RSVPNanoCompanion/androidApp/build/outputs/apk/release/
 Or install the debug APK with Android SDK platform tools:
 
 ```bash
-adb install -r RSVPNanoCompanion/androidApp/build/outputs/apk/debug/androidApp-debug.apk
+adb install -r RSVPNanoCompanion/apps/android/build/outputs/apk/debug/androidApp-debug.apk
 adb shell monkey -p com.rsvpnano.android -c android.intent.category.LAUNCHER 1
 ```
 
@@ -38,7 +38,7 @@ If multiple Android devices/emulators are connected, pass the ADB serial:
 
 ```bash
 adb devices
-adb -s SERIAL_FROM_ADB install -r RSVPNanoCompanion/androidApp/build/outputs/apk/debug/androidApp-debug.apk
+adb -s SERIAL_FROM_ADB install -r RSVPNanoCompanion/apps/android/build/outputs/apk/debug/androidApp-debug.apk
 adb -s SERIAL_FROM_ADB shell monkey -p com.rsvpnano.android -c android.intent.category.LAUNCHER 1
 ```
 
@@ -50,7 +50,7 @@ Developer options.
 ```bash
 adb pair PHONE_LAN_IP:PAIRING_PORT
 adb connect PHONE_LAN_IP:DEBUGGING_PORT
-adb -s PHONE_LAN_IP:DEBUGGING_PORT install -r RSVPNanoCompanion/androidApp/build/outputs/apk/debug/androidApp-debug.apk
+adb -s PHONE_LAN_IP:DEBUGGING_PORT install -r RSVPNanoCompanion/apps/android/build/outputs/apk/debug/androidApp-debug.apk
 ```
 
 If the phone was first connected by USB and TCP mode is enabled:
@@ -58,7 +58,7 @@ If the phone was first connected by USB and TCP mode is enabled:
 ```bash
 adb -s SERIAL_FROM_ADB tcpip 5555
 adb connect PHONE_LAN_IP:5555
-adb -s PHONE_LAN_IP:5555 install -r RSVPNanoCompanion/androidApp/build/outputs/apk/debug/androidApp-debug.apk
+adb -s PHONE_LAN_IP:5555 install -r RSVPNanoCompanion/apps/android/build/outputs/apk/debug/androidApp-debug.apk
 ```
 
 ## Connect To The Reader

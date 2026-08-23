@@ -60,5 +60,5 @@ include(":webApp")
 
 project(":shared").projectDir = file("RSVPNanoCompanion/shared")
 project(":conversionCore").projectDir = file("RSVPNanoCompanion/conversionCore")
-project(":androidApp").projectDir = file("RSVPNanoCompanion/androidApp")
-project(":webApp").projectDir = file("RSVPNanoCompanion/webApp")
+project(":androidApp").projectDir = file("RSVPNanoCompanion/apps/android")
+project(":webApp").projectDir = file("RSVPNanoCompanion/apps/web")

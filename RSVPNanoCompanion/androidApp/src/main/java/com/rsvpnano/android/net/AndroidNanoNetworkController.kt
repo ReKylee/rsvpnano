@@ -97,7 +97,7 @@ class AndroidNanoNetworkController(
             val callback = nanoRequestCallback()
             requestCallback = callback
             markRequestStarted(rememberedNano = rememberedNano)
-            connectivityManager.requestNetwork(request, callback, REQUEST_TIMEOUT_MS)
+            connectivityManager.requestNetwork(request, callback)
             NanoWifiRequestResult.Started
         }.onFailure {
             requestCallback = null
@@ -350,7 +350,6 @@ class AndroidNanoNetworkController(
 
     companion object {
         private const val DISCOVERY_TIMEOUT_MS = 2_500L
-        private const val REQUEST_TIMEOUT_MS = 6_000
         private const val SERVICE_TYPE = "_rsvpnano._tcp."
     }
 

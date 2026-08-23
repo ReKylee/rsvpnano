@@ -22,15 +22,16 @@ tasks.register("checkAndroid") {
 val assembleWebSite by tasks.registering(Sync::class) {
 	group = "distribution"
 	description = "Stages the Compose/Wasm application and firmware for GitHub Pages."
+	val siteDirectory = layout.buildDirectory.dir("webSite")
 
 	dependsOn(":webApp:wasmJsBrowserDistribution")
 	from(project(":webApp").layout.buildDirectory.dir("dist/wasmJs/productionExecutable"))
 	from(layout.projectDirectory.dir("web/firmware")) {
 		into("firmware")
 	}
-	into(layout.buildDirectory.dir("webSite"))
+	into(siteDirectory)
 	doLast {
-		val site = layout.buildDirectory.dir("webSite").get().asFile
+		val site = siteDirectory.get().asFile
 		val assets = site.walkTopDown()
 			.filter { it.isFile && !it.relativeTo(site).invariantSeparatorsPath.startsWith("firmware/") }
 			.map { "./${it.relativeTo(site).invariantSeparatorsPath}" }
@@ -41,7 +42,7 @@ val assembleWebSite by tasks.registering(Sync::class) {
 			}
 			.sorted()
 			.joinToString(prefix = "[\n  \"", separator = "\",\n  \"", postfix = "\"\n]\n")
-		file("${site.path}/asset-manifest.json").writeText(assets)
+		site.resolve("asset-manifest.json").writeText(assets)
 	}
 }
 

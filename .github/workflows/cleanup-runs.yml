@@ -1,0 +1,70 @@
+name: Clean workflow runs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: clean-workflow-runs
+  cancel-in-progress: true
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Keep only runs from the latest main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          latest_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+
+          list_runs() {
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" \
+              --jq '.workflow_runs[] | [.id, .head_sha, .status] | @tsv'
+          }
+
+          while IFS=$'\t' read -r run_id head_sha status; do
+            if [ "$run_id" = "$GITHUB_RUN_ID" ] || [ "$head_sha" = "$latest_sha" ] || [ "$status" = "completed" ]; then
+              continue
+            fi
+
+            echo "Cancelling run ${run_id} from ${head_sha}."
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" >/dev/null 2>&1 || true
+          done < <(list_runs)
+
+          for attempt in {1..12}; do
+            old_run_active=false
+            while IFS=$'\t' read -r run_id head_sha status; do
+              if [ "$run_id" != "$GITHUB_RUN_ID" ] && [ "$head_sha" != "$latest_sha" ] && [ "$status" != "completed" ]; then
+                old_run_active=true
+                break
+              fi
+            done < <(list_runs)
+
+            if [ "$old_run_active" = false ]; then
+              break
+            fi
+
+            if [ "$attempt" = 12 ]; then
+              echo "::error::Some older workflow runs did not stop within one minute."
+              exit 1
+            fi
+            sleep 5
+          done
+
+          while IFS=$'\t' read -r run_id head_sha status; do
+            if [ "$run_id" = "$GITHUB_RUN_ID" ] || [ "$head_sha" = "$latest_sha" ] || [ "$status" != "completed" ]; then
+              continue
+            fi
+
+            echo "Deleting run ${run_id} from ${head_sha}."
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" >/dev/null
+          done < <(list_runs)

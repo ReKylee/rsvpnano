@@ -57,6 +57,12 @@ namespace Axs15231bTouch {
             return false;
         }
 
+        // Some panels return nonzero-filled idle frames with plausible point counts.
+        if (data[0] != 0) {
+            sample.touched = false;
+            return true;
+        }
+
         const uint8_t points = data[1];
         if (points == 0 || points > 4) {
             sample.touched = false;

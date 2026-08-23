@@ -112,6 +112,38 @@ READER_SCRIPT_MAPS = {
 }
 SHAPED_GLYPH_CODEPOINT = 0xFFFFFFFF
 FONT_LAYOUT_TAGS = ("GDEF", "GSUB", "GPOS")
+ROTATE_VERTICAL_GLYPH = 0xFFFF
+
+# Unicode 17 UAX #50 defaults needed by the CJK reader packs. The converter keeps
+# the property out of firmware; only exceptional glyph rules reach RFont4.
+VERTICAL_UPRIGHT_RANGES = (
+    (0x1100, 0x11FF), (0x18B0, 0x18FF), (0x2150, 0x218F), (0x2400, 0x245F),
+    (0x2BB8, 0x2BFF), (0x2E80, 0xA4CF), (0xA960, 0xA97F), (0xAC00, 0xD7FF),
+    (0xE000, 0xFAFF), (0xFE10, 0xFE1F), (0xFE30, 0xFE48), (0xFE50, 0xFE6F),
+    (0x11580, 0x115FF), (0x11A00, 0x11AAF), (0x13000, 0x1467F),
+    (0x16FE0, 0x18DFF), (0x1AFF0, 0x1AFFF), (0x1B000, 0x1B2FF),
+    (0x1F000, 0x1F2FF), (0x1F300, 0x1F64F), (0x1F680, 0x1F7FF),
+    (0x1F900, 0x1FAFF), (0x20000, 0x3FFFD), (0xF0000, 0x10FFFD),
+)
+VERTICAL_UPRIGHT_EXCEPTIONS = frozenset((
+    0x00A7, 0x00A9, 0x00AE, 0x00B1, 0x00BC, 0x00BD, 0x00BE, 0x00D7, 0x00F7,
+    0x2016, 0x2020, 0x2021, 0x2030, 0x2031, 0x203B, 0x203C, 0x2042, 0x2047,
+    0x2048, 0x2049, 0x2051, 0x221E, 0x2234, 0x2235,
+    *range(0x2460, 0x2500), *range(0x25A0, 0x25B7), *range(0x25B8, 0x25C1),
+    *range(0x25C2, 0x25F8), *range(0x2600, 0x2768), *range(0x2776, 0x2794),
+    0xFFE0, 0xFFE1, 0xFFE2, 0xFFE4, 0xFFE5, 0xFFE6, 0xFFE7,
+))
+VERTICAL_ROTATE_OVERRIDES = frozenset((
+    0x2018, 0x2019, 0x201C, 0x201D, 0x2329, 0x232A,
+    *range(0x3008, 0x3012), *range(0x3014, 0x3020), 0x301C, 0x3030, 0x30A0, 0x30FC,
+    0xFE59, 0xFE5A, 0xFE5B, 0xFE5C, 0xFE5D, 0xFE5E,
+    0xFF08, 0xFF09, 0xFF1A, 0xFF1B, 0xFF3B, 0xFF3D, 0xFF3F,
+    0xFF5B, 0xFF5C, 0xFF5D, 0xFF5E, 0xFF5F, 0xFF60, 0xFFE3,
+))
+VERTICAL_FULLWIDTH_UPRIGHT_RANGES = (
+    (0xFF01, 0xFF0C), (0xFF0E, 0xFF19), (0xFF1F, 0xFF3A), (0xFF3C, 0xFF3C),
+    (0xFF3E, 0xFF3E), (0xFF40, 0xFF5A),
+)
 
 
 @dataclass(frozen=True)
@@ -450,6 +482,65 @@ def font_layout(font_path: Path, codepoints: list[int]) -> tuple[int, int, dict[
     tables = {tag: font.getTableData(tag) for tag in FONT_LAYOUT_TAGS if tag in font}
     font.close()
     return units_per_em, glyph_count, tables, glyph_ids
+
+
+def vertical_substitutions(font_path: Path) -> dict[int, int]:
+    font = TTFont(str(font_path))
+    if "GSUB" not in font:
+        font.close()
+        return {}
+    glyph_ids = font.getReverseGlyphMap()
+    substitutions: dict[int, int] = {}
+    features = font["GSUB"].table.FeatureList
+    lookups = font["GSUB"].table.LookupList.Lookup
+    if features is not None:
+        for tag in ("vert", "vrt2"):
+            for feature in features.FeatureRecord:
+                if feature.FeatureTag != tag:
+                    continue
+                for lookup_index in feature.Feature.LookupListIndex:
+                    lookup = lookups[lookup_index]
+                    for subtable in lookup.SubTable:
+                        if lookup.LookupType == 7:
+                            subtable = subtable.ExtSubTable
+                        for source, alternate in getattr(subtable, "mapping", {}).items():
+                            substitutions[glyph_ids[source]] = glyph_ids[alternate]
+    font.close()
+    return substitutions
+
+
+def vertical_fallback_rotates(codepoint: int) -> bool:
+    if codepoint in VERTICAL_ROTATE_OVERRIDES:
+        return True
+    if codepoint in VERTICAL_UPRIGHT_EXCEPTIONS:
+        return False
+    return not any(start <= codepoint <= end for start, end in (
+        *VERTICAL_UPRIGHT_RANGES, *VERTICAL_FULLWIDTH_UPRIGHT_RANGES,
+    ))
+
+
+def vertical_behaviors(font_path: Path, codepoints: list[int]) -> tuple[dict[int, int | None], set[int]]:
+    substitutions = vertical_substitutions(font_path)
+    cmap = cmap_for_font(font_path)
+    font = TTFont(str(font_path))
+    glyph_ids = font.getReverseGlyphMap()
+    font.close()
+    behaviors: dict[int, int | None] = {}
+    alternates: set[int] = set()
+    for codepoint in codepoints:
+        glyph_name = cmap.get(codepoint)
+        if glyph_name is None:
+            continue
+        source = glyph_ids[glyph_name]
+        alternate = substitutions.get(source)
+        if alternate is not None:
+            behaviors[codepoint] = alternate
+            alternates.add(alternate)
+        elif vertical_fallback_rotates(codepoint):
+            behaviors[codepoint] = ROTATE_VERTICAL_GLYPH
+        else:
+            behaviors[codepoint] = None
+    return behaviors, alternates
 
 
 def value_x_advance(value_record: object | None) -> int:
@@ -841,18 +932,20 @@ def generate_font(
 
 SIZE_LABELS = ("large", "medium", "small", "compact")
 RFONT4_MAGIC = 0x34544652
-RFONT4_VERSION = 7
-RFONT4_HEADER_FORMAT = "<I7H2B4H12I"
+RFONT4_VERSION = 8
+RFONT4_HEADER_FORMAT = "<I8H2B6H14I"
 RFONT4_STRIKE_FORMAT = "<IBBBbbBBBBB4I"
 RFONT4_GLYPH_FORMAT = "<II4BbbHH"
 RFONT4_KERN_FORMAT = "<Ib"
-RFONT4_GLYPH_IDENTITY_FORMAT = "<IH"
+RFONT4_SUPPLEMENTARY_FORMAT = "<IH"
+RFONT4_VERTICAL_RULE_FORMAT = "<IH"
 RFONT4_LAYOUT_TABLE_FORMAT = "<III"
 RFONT4_HEADER_SIZE = struct.calcsize(RFONT4_HEADER_FORMAT)
 RFONT4_STRIKE_SIZE = struct.calcsize(RFONT4_STRIKE_FORMAT)
 RFONT4_GLYPH_SIZE = struct.calcsize(RFONT4_GLYPH_FORMAT)
 RFONT4_KERN_SIZE = struct.calcsize(RFONT4_KERN_FORMAT)
-RFONT4_GLYPH_IDENTITY_SIZE = struct.calcsize(RFONT4_GLYPH_IDENTITY_FORMAT)
+RFONT4_SUPPLEMENTARY_SIZE = struct.calcsize(RFONT4_SUPPLEMENTARY_FORMAT)
+RFONT4_VERTICAL_RULE_SIZE = struct.calcsize(RFONT4_VERTICAL_RULE_FORMAT)
 RFONT4_LAYOUT_TABLE_SIZE = struct.calcsize(RFONT4_LAYOUT_TABLE_FORMAT)
 
 
@@ -969,12 +1062,108 @@ def glyph_bitmap_order(
     )
 
 
+def unpack_glyph_pixels(raw: bytes, width: int, height: int, row_stride: int,
+                        bits_per_pixel: int) -> tuple[tuple[int, ...], ...]:
+    rows: list[tuple[int, ...]] = []
+    for y in range(height):
+        packed = raw[y * row_stride:(y + 1) * row_stride]
+        if bits_per_pixel == 1:
+            rows.append(tuple(15 if packed[x >> 3] & (0x80 >> (x & 7)) else 0 for x in range(width)))
+        else:
+            rows.append(tuple((packed[x >> 1] >> 4) if (x & 1) == 0 else (packed[x >> 1] & 0x0F)
+                              for x in range(width)))
+    return tuple(rows)
+
+
+def generated_glyph_data(symbol: str, body: str) -> tuple[
+    dict[int, int],
+    dict[int, bytes],
+    dict[int, tuple[int, ...]],
+]:
+    bitmap = parse_byte_array(body, f"{symbol}Bitmap")
+    glyphs = parse_record_entries(array_block(body, f"{symbol}Glyphs"))
+    identities = parse_record_entries(array_block(body, f"{symbol}Identities"))
+    source_by_codepoint: dict[int, int] = {}
+    bitmap_by_source: dict[int, bytes] = {}
+    metrics_by_source: dict[int, tuple[int, ...]] = {}
+    for identity, glyph in zip(identities, glyphs):
+        codepoint, source = identity
+        if codepoint != SHAPED_GLYPH_CODEPOINT:
+            source_by_codepoint[codepoint] = source
+        if source and source not in bitmap_by_source:
+            raw = bitmap[glyph[0]:glyph[0] + glyph[8]]
+            bitmap_by_source[source] = raw
+            metrics_by_source[source] = tuple(glyph[2:8])
+    return source_by_codepoint, bitmap_by_source, metrics_by_source
+
+
+def reduce_vertical_behaviors(generated: list[tuple[str, str, dict[str, int | float]]],
+                              behaviors: dict[int, int | None]) -> dict[int, int | None]:
+    if not behaviors:
+        return {}
+    strikes = [(*generated_glyph_data(symbol, body),
+                max(int(stats["size"]), int(stats["y_advance"])), int(stats["ascent"]),
+                int(stats["bits_per_pixel"]))
+               for symbol, body, stats in generated]
+    reduced = dict(behaviors)
+    placement_only = 0
+    for codepoint, alternate in behaviors.items():
+        if alternate is None or alternate == ROTATE_VERTICAL_GLYPH:
+            continue
+        identical = True
+        shared_bitmap = True
+        rotated = True
+        for source_by_codepoint, bitmap_by_source, metrics_by_source, advance, ascent, bits_per_pixel in strikes:
+            source = source_by_codepoint.get(codepoint)
+            canonical = bitmap_by_source.get(source or 0)
+            variant = bitmap_by_source.get(alternate)
+            canonical_metrics = metrics_by_source.get(source or 0)
+            variant_metrics = metrics_by_source.get(alternate)
+            if canonical is None or variant is None or canonical_metrics is None or variant_metrics is None:
+                identical = shared_bitmap = rotated = False
+                break
+            same_bitmap = canonical_metrics[:3] == variant_metrics[:3] and canonical == variant
+            shared_bitmap &= same_bitmap
+            identical &= same_bitmap and canonical_metrics == variant_metrics
+            canonical_pixels = unpack_glyph_pixels(
+                canonical, canonical_metrics[0], canonical_metrics[1], canonical_metrics[2],
+                bits_per_pixel,
+            )
+            variant_pixels = unpack_glyph_pixels(
+                variant, variant_metrics[0], variant_metrics[1], variant_metrics[2],
+                bits_per_pixel,
+            )
+            clockwise = tuple(tuple(canonical_pixels[len(canonical_pixels) - y - 1][x]
+                                    for y in range(len(canonical_pixels)))
+                              for x in range(len(canonical_pixels[0]))) if canonical_pixels and canonical_pixels[0] else canonical_pixels
+            centered_variant = (
+                variant_metrics is not None
+                and variant_metrics[4] == (advance - variant_metrics[0]) // 2
+                and ascent + variant_metrics[5] == (advance - variant_metrics[1]) // 2
+            )
+            rotated &= clockwise == variant_pixels and centered_variant
+        if identical:
+            reduced[codepoint] = None
+        elif rotated:
+            reduced[codepoint] = ROTATE_VERTICAL_GLYPH
+        elif shared_bitmap:
+            placement_only += 1
+    rules = [behavior for behavior in reduced.values() if behavior is not None]
+    print(
+        f"vertical rules={len(rules)} rotate={rules.count(ROTATE_VERTICAL_GLYPH)} "
+        f"placementOnly={placement_only} alternate={sum(rule != ROTATE_VERTICAL_GLYPH for rule in rules) - placement_only}"
+    )
+    return reduced
+
+
 def generated_strike(
     symbol: str,
     body: str,
     stats: dict[str, int | float],
     codepoint_ranks: dict[int, int] | None = None,
     glyph_id_ranks: dict[int, int] | None = None,
+    vertical_by_codepoint: dict[int, int | None] | None = None,
+    retained_extra_glyph_ids: set[int] | None = None,
 ) -> dict[str, object]:
     bitmap = parse_byte_array(body, f"{symbol}Bitmap")
     page_map = parse_byte_array(body, f"{symbol}PageMap")
@@ -986,22 +1175,66 @@ def generated_strike(
     identity_entries = parse_record_entries(array_block(body, f"{symbol}Identities"))
     if len(identity_entries) != len(glyph_entries):
         raise ValueError(f"glyph identities for {symbol} do not match its glyph records")
+    retained = list(range(len(identity_entries)))
+    if retained_extra_glyph_ids is not None:
+        retained = [index for index, (codepoint, glyph_id) in enumerate(identity_entries)
+                    if codepoint != SHAPED_GLYPH_CODEPOINT or glyph_id in retained_extra_glyph_ids]
+        identity_entries = [identity_entries[index] for index in retained]
+        glyph_entries = [glyph_entries[index] for index in retained]
+    filtered_index = {original: index for index, original in enumerate(retained)}
 
+    canonical_by_key: dict[tuple[str, int], int] = {}
+    canonical_old_indices: list[int] = []
+    old_to_new: list[int] = []
+    for old_index, (codepoint, glyph_id) in enumerate(identity_entries):
+        key = ("glyph", glyph_id) if glyph_id else ("codepoint", codepoint)
+        canonical = canonical_by_key.get(key)
+        if canonical is None:
+            canonical = len(canonical_old_indices)
+            canonical_by_key[key] = canonical
+            canonical_old_indices.append(old_index)
+        old_to_new.append(canonical)
+
+    def bitmap_for(index: int) -> bytes:
+        entry = glyph_entries[index]
+        raw = bitmap[entry[0]:entry[0] + entry[8]]
+        if len(raw) != entry[8]:
+            raise ValueError(f"glyph bitmap for {symbol} exceeds its strike")
+        return raw
+
+    def kerning_for(index: int) -> tuple[tuple[int, ...], ...]:
+        entry = glyph_entries[index]
+        return tuple(tuple(pair) for pair in kern_entries[entry[1]:entry[1] + entry[9]])
+
+    for old_index, canonical in enumerate(old_to_new):
+        first = canonical_old_indices[canonical]
+        if old_index == first:
+            continue
+        if (glyph_entries[old_index][2:8] != glyph_entries[first][2:8]
+                or bitmap_for(old_index) != bitmap_for(first)
+                or kerning_for(old_index) != kerning_for(first)):
+            raise ValueError(
+                f"source glyph {identity_entries[old_index][1]} has non-identical duplicate render data in {symbol}"
+            )
+
+    canonical_identities = [identity_entries[index] for index in canonical_old_indices]
+    canonical_entries = [glyph_entries[index][:] for index in canonical_old_indices]
     bits_per_pixel = int(stats["bits_per_pixel"])
     bitmap_encoding = 0 if bits_per_pixel == 1 else 1
     encoded_bitmap = bytearray()
+    stored_bitmaps: dict[bytes, tuple[int, int]] = {}
     if bitmap_encoding:
         try:
             import lz4.block
         except ImportError as error:
             raise RuntimeError("RFont4 generation requires the lz4 Python package") from error
-    for index in glyph_bitmap_order(identity_entries, codepoint_ranks or {}, glyph_id_ranks or {}):
-        entry = glyph_entries[index]
-        source_offset = entry[0]
-        decoded_bytes = entry[8]
-        raw = bitmap[source_offset:source_offset + decoded_bytes]
-        if len(raw) != decoded_bytes:
-            raise ValueError(f"glyph bitmap for {symbol} exceeds its strike")
+    for index in glyph_bitmap_order(canonical_identities, codepoint_ranks or {}, glyph_id_ranks or {}):
+        entry = canonical_entries[index]
+        raw = bitmap_for(canonical_old_indices[index])
+        existing = stored_bitmaps.get(raw)
+        if existing is not None:
+            entry[0], entry[8] = existing
+            continue
         entry[0] = len(encoded_bitmap)
         if not raw or not bitmap_encoding:
             stored = raw
@@ -1020,10 +1253,22 @@ def generated_strike(
                 stored = compressed
                 entry[8] = len(stored)
         encoded_bitmap.extend(stored)
+        stored_bitmaps[raw] = (entry[0], entry[8])
 
-    glyphs = b"".join(struct.pack(RFONT4_GLYPH_FORMAT, *entry) for entry in glyph_entries)
-    kern = b"".join(struct.pack(RFONT4_KERN_FORMAT, *entry) for entry in kern_entries)
-    identities = b"".join(struct.pack(RFONT4_GLYPH_IDENTITY_FORMAT, *entry) for entry in identity_entries)
+    interned_kerning: list[tuple[int, ...]] = []
+    kerning_offsets: dict[tuple[tuple[int, ...], ...], int] = {}
+    for index, entry in enumerate(canonical_entries):
+        pairs = kerning_for(canonical_old_indices[index])
+        offset = kerning_offsets.get(pairs)
+        if offset is None:
+            offset = len(interned_kerning)
+            kerning_offsets[pairs] = offset
+            interned_kerning.extend(pairs)
+        entry[1] = offset
+        entry[9] = len(pairs)
+
+    glyphs = b"".join(struct.pack(RFONT4_GLYPH_FORMAT, *entry) for entry in canonical_entries)
+    kern = b"".join(struct.pack(RFONT4_KERN_FORMAT, *entry) for entry in interned_kerning)
 
     page_tables = bytearray()
     for index in range(int(stats["page_count"])):
@@ -1031,25 +1276,31 @@ def generated_strike(
         values = parse_uint16_array_block(array_block(body, page_name))
         if len(values) != 256:
             raise ValueError(f"page table {page_name} has {len(values)} entries, expected 256")
-        page_tables.extend(struct.pack("<256H", *values))
+        page_tables.extend(struct.pack(
+            "<256H",
+            *(old_to_new[filtered_index[value]] if value != MISSING_GLYPH_INDEX else value for value in values),
+        ))
 
     return {
-        "glyph_count": len(glyph_entries),
-        "kerning_count": len(kern_entries),
+        "glyph_count": len(canonical_entries),
+        "kerning_count": len(interned_kerning),
         "page_count": int(stats["page_count"]),
         "y_advance": int(stats["y_advance"]),
         "ascent": int(stats["ascent"]),
         "descent": int(stats["descent"]),
         "word_ink_top": int(stats["word_ink_top"]),
         "word_ink_bottom": int(stats["word_ink_bottom"]),
-        "max_width": int(max((entry[2] for entry in glyph_entries), default=0)),
-        "max_height": int(max((entry[3] for entry in glyph_entries), default=0)),
+        "max_width": int(max((entry[2] for entry in canonical_entries), default=0)),
+        "max_height": int(max((entry[3] for entry in canonical_entries), default=0)),
         "pixels_per_em": int(stats["size"]),
         "bits_per_pixel": bits_per_pixel,
         "bitmap_encoding": bitmap_encoding,
         "bitmap": bytes(encoded_bitmap),
         "glyphs": glyphs,
-        "identities": identities,
+        "identities": identity_entries,
+        "canonical_identities": canonical_identities,
+        "old_to_new": old_to_new,
+        "vertical_by_codepoint": vertical_by_codepoint or {},
         "page_map": page_map,
         "page_tables": bytes(page_tables),
         "kerning": kern,
@@ -1081,30 +1332,110 @@ def pack_rfont4_family(
     glyph_count = int(strikes[0]["glyph_count"])
     page_count = int(strikes[0]["page_count"])
     identities = strikes[0]["identities"]
+    canonical_identities = strikes[0]["canonical_identities"]
+    old_to_new = strikes[0]["old_to_new"]
+    vertical_by_codepoint = strikes[0]["vertical_by_codepoint"]
     page_map = strikes[0]["page_map"]
     page_tables = strikes[0]["page_tables"]
     for strike in strikes[1:]:
-        if strike["glyph_count"] != glyph_count or strike["identities"] != identities:
-            raise ValueError("all RFont4 strikes must have identical glyph identities")
+        if (strike["glyph_count"] != glyph_count or strike["identities"] != identities
+                or strike["canonical_identities"] != canonical_identities
+                or strike["old_to_new"] != old_to_new
+                or strike["vertical_by_codepoint"] != vertical_by_codepoint):
+            raise ValueError("all RFont4 strikes must have identical normalized glyph mappings")
         if (strike["page_count"] != page_count or strike["page_map"] != page_map
                 or strike["page_tables"] != page_tables):
             raise ValueError("all RFont4 strikes must have identical codepoint lookup tables")
 
-    identities_offset = len(data)
-    data.extend(identities)
+    source_to_render = {
+        glyph_id: render_index
+        for render_index, (_, glyph_id) in enumerate(canonical_identities)
+        if glyph_id
+    }
+    if not selected_tables:
+        render_by_key: dict[tuple[bytes, ...], int] = {}
+        retained: list[int] = []
+        render_remap: list[int] = []
+        for render_index in range(glyph_count):
+            records = tuple(
+                strike["glyphs"][render_index * RFONT4_GLYPH_SIZE:(render_index + 1) * RFONT4_GLYPH_SIZE]
+                for strike in strikes
+            )
+            key = records
+            canonical = render_by_key.get(key)
+            if canonical is None:
+                canonical = len(retained)
+                render_by_key[key] = canonical
+                retained.append(render_index)
+            render_remap.append(canonical)
+        if len(retained) != glyph_count:
+            for strike in strikes:
+                strike["glyphs"] = b"".join(
+                    strike["glyphs"][index * RFONT4_GLYPH_SIZE:(index + 1) * RFONT4_GLYPH_SIZE]
+                    for index in retained
+                )
+                page_entries = struct.unpack(f"<{len(strike['page_tables']) // 2}H", strike["page_tables"])
+                strike["page_tables"] = struct.pack(
+                    f"<{len(page_entries)}H",
+                    *(render_remap[index] if index != MISSING_GLYPH_INDEX else index for index in page_entries),
+                )
+                strike["glyph_count"] = len(retained)
+            old_to_new = [render_remap[index] for index in old_to_new]
+            source_to_render = {glyph_id: render_remap[index] for glyph_id, index in source_to_render.items()}
+            canonical_identities = [canonical_identities[index] for index in retained]
+            print(f"shared identical render records={glyph_count - len(retained)}")
+            glyph_count = len(retained)
+            page_tables = strikes[0]["page_tables"]
+
+    supplementary = sorted(
+        (codepoint, old_to_new[index])
+        for index, (codepoint, _) in enumerate(identities)
+        if 0xFFFF < codepoint < SHAPED_GLYPH_CODEPOINT
+    )
+    if len(supplementary) > 0xFFFF:
+        raise ValueError("RFont4 supports at most 65535 supplementary mappings")
+    supplementary_offset = len(data)
+    for record in supplementary:
+        data.extend(struct.pack(RFONT4_SUPPLEMENTARY_FORMAT, *record))
     page_map_offset = len(data)
     data.extend(page_map)
     page_tables_offset = len(data)
     data.extend(page_tables)
+    glyph_ids_offset = len(data)
+    if selected_tables:
+        data.extend(struct.pack(f"<{glyph_count}H", *(entry[1] for entry in canonical_identities)))
     glyph_map_offset = len(data)
     if selected_tables:
         glyph_map = [0xFFFF] * source_glyph_count
-        for glyph_index, (_, glyph_id) in enumerate(
-            struct.iter_unpack(RFONT4_GLYPH_IDENTITY_FORMAT, identities)
-        ):
+        for glyph_index, (_, glyph_id) in enumerate(canonical_identities):
             if glyph_id and glyph_map[glyph_id] == 0xFFFF:
                 glyph_map[glyph_id] = glyph_index
         data.extend(struct.pack(f"<{source_glyph_count}H", *glyph_map))
+    vertical_rules_offset = len(data)
+    vertical_rules: list[tuple[int, int]] = []
+    for codepoint, _ in identities:
+        behavior = vertical_by_codepoint.get(codepoint)
+        if behavior is None:
+            continue
+        alternate = (ROTATE_VERTICAL_GLYPH if behavior == ROTATE_VERTICAL_GLYPH
+                     else source_to_render.get(behavior))
+        if alternate is None:
+            raise ValueError(f"vertical alternate glyph {behavior} was not rendered")
+        vertical_rules.append((codepoint, alternate))
+    vertical_rules.sort()
+    for rule in vertical_rules:
+        data.extend(struct.pack(RFONT4_VERTICAL_RULE_FORMAT, *rule))
+    referenced = {
+        old_to_new[index]
+        for index, (codepoint, _) in enumerate(identities)
+        if codepoint != SHAPED_GLYPH_CODEPOINT
+    }
+    referenced.update(alternate for _, alternate in vertical_rules if alternate != ROTATE_VERTICAL_GLYPH)
+    if selected_tables:
+        referenced.update(index for index in glyph_map if index != MISSING_GLYPH_INDEX)
+    unreferenced = set(range(glyph_count)) - referenced
+    if unreferenced:
+        raise ValueError(f"RFont4 has unreferenced render glyphs: {sorted(unreferenced)[:8]}")
 
     strike_records: list[tuple[int, ...]] = []
     for strike in strikes:
@@ -1140,7 +1471,8 @@ def pack_rfont4_family(
         RFONT4_STRIKE_SIZE,
         RFONT4_GLYPH_SIZE,
         RFONT4_KERN_SIZE,
-        RFONT4_GLYPH_IDENTITY_SIZE,
+        RFONT4_SUPPLEMENTARY_SIZE,
+        RFONT4_VERTICAL_RULE_SIZE,
         RFONT4_LAYOUT_TABLE_SIZE,
         len(strikes),
         len(selected_tables),
@@ -1148,16 +1480,20 @@ def pack_rfont4_family(
         units_per_em if selected_tables else 0,
         len(locale_data),
         page_count,
+        len(supplementary),
+        len(vertical_rules),
         glyph_count,
         source_glyph_count if selected_tables else 0,
         script_mask,
         name_offset,
         locale_offset,
         strikes_offset,
-        identities_offset,
+        supplementary_offset,
         page_map_offset,
         page_tables_offset,
+        glyph_ids_offset,
         glyph_map_offset,
+        vertical_rules_offset,
         layout_tables_offset,
         len(data),
     )
@@ -1206,6 +1542,7 @@ def main() -> int:
     parser.add_argument("--output-root", type=Path, default=Path(__file__).resolve().parent)
     parser.add_argument("--header", action="store_true", help="emit the built-in C++ fallback instead of .rfont4 files")
     parser.add_argument("--shaping", action="store_true", help="embed OpenType layout data and its glyph closure")
+    parser.add_argument("--vertical", action="store_true", help="embed sparse UAX #50 and vert/vrt2 glyph rules")
     parser.add_argument("--alpha-cutoff", type=int, default=DEFAULT_ALPHA_CUTOFF)
     parser.add_argument("--gamma", type=float, default=DEFAULT_GAMMA)
     parser.add_argument("--no-kerning", action="store_true")
@@ -1222,6 +1559,10 @@ def main() -> int:
     layout_upm, source_glyph_count, layout_tables, shaping_glyph_ids = (
         font_layout(args.font, codepoints) if args.shaping and not args.header else (0, 0, {}, set())
     )
+    vertical_by_codepoint, vertical_glyph_ids = (
+        vertical_behaviors(args.font, codepoints) if args.vertical and not args.header else ({}, set())
+    )
+    extra_glyph_ids = shaping_glyph_ids | vertical_glyph_ids
     font_display_name = args.name or args.font.stem
     locales = parse_locales(args.locales)
     declared_scripts = parse_scripts(args.scripts)
@@ -1275,7 +1616,7 @@ def main() -> int:
                 size,
                 symbol,
                 codepoints,
-                shaping_glyph_ids,
+                extra_glyph_ids,
                 kerning_units,
                 upm,
                 cutoff,
@@ -1303,7 +1644,7 @@ def main() -> int:
     else:
         output_root = args.output or args.output_root
         family_dir = output_root / font_display_name
-        generated_strikes: list[dict[str, object]] = []
+        generated: list[tuple[str, str, dict[str, int | float]]] = []
         for label, size in named_sizes:
             symbol = f"{base}_{size}"
             body, stats = generate_font(
@@ -1312,7 +1653,7 @@ def main() -> int:
                 size,
                 symbol,
                 codepoints,
-                shaping_glyph_ids,
+                extra_glyph_ids,
                 kerning_units,
                 upm,
                 cutoff,
@@ -1323,10 +1664,19 @@ def main() -> int:
                 max_neighbors,
                 1 if label == "compact" else 4,
             )
-            generated_strikes.append(
-                generated_strike(symbol, body, stats, codepoint_ranks, glyph_id_ranks)
-            )
+            generated.append((symbol, body, stats))
             all_stats.append(stats)
+        vertical_by_codepoint = reduce_vertical_behaviors(generated, vertical_by_codepoint)
+        retained_extra_glyph_ids = shaping_glyph_ids | {
+            behavior for behavior in vertical_by_codepoint.values()
+            if behavior not in (None, ROTATE_VERTICAL_GLYPH)
+        }
+        generated_strikes: list[dict[str, object]] = []
+        for symbol, body, stats in generated:
+            generated_strikes.append(
+                generated_strike(symbol, body, stats, codepoint_ranks, glyph_id_ranks, vertical_by_codepoint,
+                                 retained_extra_glyph_ids)
+            )
         family_script_mask = capability_mask(
             [int(stats["script_mask"]) for stats in all_stats], declared_scripts
         )

@@ -5,9 +5,9 @@ from unittest import TestCase, mock
 
 from fonts.convert_alpha4_font import (
     DEFAULT_SIZE_SPEC,
-    RFONT4_GLYPH_IDENTITY_FORMAT,
-    RFONT4_GLYPH_IDENTITY_SIZE,
     RFONT4_HEADER_FORMAT,
+    RFONT4_SUPPLEMENTARY_FORMAT,
+    RFONT4_SUPPLEMENTARY_SIZE,
     RFONT4_STRIKE_FORMAT,
     SCRIPT_MATH,
     capability_mask,
@@ -18,6 +18,7 @@ from fonts.convert_alpha4_font import (
     parse_size_spec,
     read_hex_order,
     script_mask,
+    vertical_fallback_rotates,
 )
 from RSVPNanoCompanion.tools.generate_multilingual_corpus import PARAGRAPHS
 
@@ -95,6 +96,12 @@ class FontMapTest(TestCase):
         with self.assertRaises(ValueError):
             parse_scripts("Math")
 
+    def test_vertical_orientation_is_explicit_and_cjk_specific(self) -> None:
+        self.assertFalse(vertical_fallback_rotates(0x4E00))
+        self.assertFalse(vertical_fallback_rotates(0x3042))
+        self.assertTrue(vertical_fallback_rotates(ord("A")))
+        self.assertTrue(vertical_fallback_rotates(0x3008))
+
     def test_generated_fonts_cover_the_multilingual_corpus(self) -> None:
         fonts = {
             "latin": alpha4_header_codepoints(Path("src/fonts/LiterataFallbackAlpha4.h")),
@@ -129,7 +136,8 @@ class FontMapTest(TestCase):
 
         for name in ("Noto Serif Japanese", "Noto Serif Simplified Chinese"):
             header = struct.unpack_from(RFONT4_HEADER_FORMAT, Path(f"fonts/{name}/font.rfont4").read_bytes())
-            self.assertEqual(0, header[9], name)
+            self.assertEqual(0, header[10], name)
+            self.assertGreater(header[16], 0, name)
 
         ascii_letters = set(range(ord("A"), ord("Z") + 1)) | set(range(ord("a"), ord("z") + 1))
         for name in (
@@ -159,22 +167,31 @@ class FontMapTest(TestCase):
 def rfont4_codepoints(path: Path) -> set[int]:
     data = path.read_bytes()
     header = struct.unpack_from(RFONT4_HEADER_FORMAT, data)
-    glyph_count, identities_offset = header[14], header[20]
-    return {
+    page_count, supplementary_count = header[14], header[15]
+    supplementary_offset, page_map_offset, page_tables_offset = header[23], header[24], header[25]
+    result = {
         struct.unpack_from(
-            RFONT4_GLYPH_IDENTITY_FORMAT,
+            RFONT4_SUPPLEMENTARY_FORMAT,
             data,
-            identities_offset + index * RFONT4_GLYPH_IDENTITY_SIZE,
+            supplementary_offset + index * RFONT4_SUPPLEMENTARY_SIZE,
         )[0]
-        for index in range(glyph_count)
+        for index in range(supplementary_count)
     }
+    for high, page in enumerate(data[page_map_offset:page_map_offset + 256]):
+        if page >= page_count:
+            continue
+        for low in range(256):
+            glyph = struct.unpack_from("<H", data, page_tables_offset + (page * 256 + low) * 2)[0]
+            if glyph != 0xFFFF:
+                result.add((high << 8) | low)
+    return result
 
 
 def rfont4_compact_strike(path: Path) -> tuple[int, ...]:
     data = path.read_bytes()
     header = struct.unpack_from(RFONT4_HEADER_FORMAT, data)
     strike_size = struct.calcsize(RFONT4_STRIKE_FORMAT)
-    return struct.unpack_from(RFONT4_STRIKE_FORMAT, data, header[19] + 3 * strike_size)
+    return struct.unpack_from(RFONT4_STRIKE_FORMAT, data, header[22] + 3 * strike_size)
 
 
 def alpha4_header_codepoints(path: Path) -> set[int]:

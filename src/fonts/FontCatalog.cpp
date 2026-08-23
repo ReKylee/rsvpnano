@@ -322,13 +322,22 @@ std::expected<std::reference_wrapper<FontCatalog::LoadedFamily>, std::string> Fo
     {
         constexpr uint32_t kPsramCapabilities = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
         const RFont4::Header& header = loaded.directory.header;
-        const uint32_t metadataEnd = header.glyphMapOffset + header.sourceGlyphCount * sizeof(uint16_t);
-        const size_t metadataSize = metadataEnd - header.identitiesOffset;
+        const uint32_t metadataEnd = header.verticalRulesOffset
+                                   + header.verticalRuleCount * sizeof(RFont4::VerticalRule);
+        const size_t leadingSize = header.pageMapOffset - header.supplementaryOffset;
+        const size_t trailingSize = metadataEnd - header.pageTablesOffset;
+        const size_t metadataSize = leadingSize + trailingSize;
         if (metadataSize <= heap_caps_get_largest_free_block(kPsramCapabilities))
             loaded.residentMetadata.reset(static_cast<uint8_t*>(heap_caps_malloc(metadataSize, kPsramCapabilities)));
         if (loaded.residentMetadata) {
-            if (auto read = readPsramSection(loaded.file, header.identitiesOffset,
-                                             {loaded.residentMetadata.get(), metadataSize});
+            if (leadingSize != 0) {
+                if (auto read = readPsramSection(loaded.file, header.supplementaryOffset,
+                                                 {loaded.residentMetadata.get(), leadingSize});
+                    !read)
+                    return fail(read.error());
+            }
+            if (auto read = readPsramSection(loaded.file, header.pageTablesOffset,
+                                             {loaded.residentMetadata.get() + leadingSize, trailingSize});
                 !read)
                 return fail(read.error());
             ESP_LOGI("font", "resident family metadata family=%s bytes=%u", families_[familyIndex].id.c_str(),
@@ -336,11 +345,8 @@ std::expected<std::reference_wrapper<FontCatalog::LoadedFamily>, std::string> Fo
         }
     }
 #endif
-    if (!loaded.residentMetadata) {
-        if (auto read = readSection(loaded.file, loaded.directory.header.pageMapOffset, std::span{loaded.pageMap});
-            !read)
-            return fail(read.error());
-    }
+    if (auto read = readSection(loaded.file, loaded.directory.header.pageMapOffset, std::span{loaded.pageMap}); !read)
+        return fail(read.error());
     return std::ref(loaded);
 }
 
@@ -356,6 +362,8 @@ std::expected<std::reference_wrapper<const ui::fonts::AlphaFont>, std::string> F
     loaded.font = {
         .name = families_[family.familyIndex].label,
         .glyphCount = header.glyphCount,
+        .supplementaryCount = header.supplementaryCount,
+        .verticalRuleCount = header.verticalRuleCount,
         .yAdvance = strike.yAdvance,
         .ascent = strike.ascent,
         .descent = strike.descent,
@@ -376,17 +384,25 @@ std::expected<std::reference_wrapper<const ui::fonts::AlphaFont>, std::string> F
         .bitmapEncoding = strike.bitmapEncoding,
     };
 
+    loaded.font.pageMap = family.pageMap.data();
     if (family.residentMetadata) {
+        const size_t leadingSize = header.pageMapOffset - header.supplementaryOffset;
         const auto section = [&](uint32_t offset) {
-            return family.residentMetadata.get() + (offset - header.identitiesOffset);
+            return offset < header.pageMapOffset
+                     ? family.residentMetadata.get() + (offset - header.supplementaryOffset)
+                     : family.residentMetadata.get() + leadingSize + (offset - header.pageTablesOffset);
         };
-        loaded.font.identities = reinterpret_cast<const RFont4::GlyphIdentityRecord*>(section(header.identitiesOffset));
-        loaded.font.pageMap = section(header.pageMapOffset);
+        if (header.supplementaryCount != 0)
+            loaded.font.supplementary =
+                reinterpret_cast<const RFont4::SupplementaryRecord*>(section(header.supplementaryOffset));
         loaded.font.pageTableData = section(header.pageTablesOffset);
-        if (header.sourceGlyphCount != 0)
+        if (header.layoutTableCount != 0) {
+            loaded.font.glyphIds = section(header.glyphIdsOffset);
             loaded.font.glyphMap = section(header.glyphMapOffset);
-    } else {
-        loaded.font.pageMap = family.pageMap.data();
+        }
+        if (header.verticalRuleCount != 0)
+            loaded.font.verticalRules =
+                reinterpret_cast<const RFont4::VerticalRule*>(section(header.verticalRulesOffset));
     }
 
 #if defined(BOARD_HAS_PSRAM)

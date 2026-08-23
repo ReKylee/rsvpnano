@@ -34,6 +34,8 @@ class FontPresetTest(TestCase):
         self.assertEqual({"noto-serif-japanese", "noto-serif-simplified-chinese"}, set(localized))
         shaped = {preset.id: preset.glyph_locality_map for preset in PRESETS if preset.glyph_locality_map}
         self.assertEqual({"amiri", "noto-naskh-arabic"}, set(shaped))
+        vertical = {preset.id for preset in PRESETS if preset.vertical}
+        self.assertEqual({"noto-serif-japanese", "noto-serif-simplified-chinese"}, vertical)
 
     def test_shaped_locality_maps_cover_the_arabic_benchmark_text(self) -> None:
         text = next(text for locale, _direction, _chapter, text in PARAGRAPHS if locale == "ar") + " العربية"

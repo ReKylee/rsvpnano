@@ -6,6 +6,8 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "fonts/AlphaFont.h"
@@ -45,20 +47,26 @@ namespace {
 
     uint32_t validateFamilyLookup(const std::vector<uint8_t>& bytes, const RFont4::Header& header) {
         uint32_t scriptMask = 0;
-        uint32_t previousCodepoint = 0;
-        for (uint32_t glyphIndex = 0; glyphIndex < header.glyphCount; ++glyphIndex) {
-            const auto identity = recordAt<RFont4::GlyphIdentityRecord>(bytes, header.identitiesOffset, glyphIndex);
-            TEST_ASSERT_TRUE(glyphIndex == 0 || identity.codepoint > previousCodepoint
-                             || (identity.codepoint == RFont4::kShapedGlyphCodepoint
-                                 && previousCodepoint == RFont4::kShapedGlyphCodepoint));
-            if (identity.codepoint <= UINT16_MAX) {
-                const uint8_t page = bytes[header.pageMapOffset + (identity.codepoint >> 8U)];
-                TEST_ASSERT_TRUE(page < header.pageTableCount);
-                const uint32_t entry = page * RFont4::kPageTableEntries + (identity.codepoint & 0xFFU);
-                TEST_ASSERT_EQUAL_UINT16(glyphIndex, recordAt<uint16_t>(bytes, header.pageTablesOffset, entry));
+        for (uint32_t high = 0; high < RFont4::kPageMapBytes; ++high) {
+            const uint8_t page = bytes[header.pageMapOffset + high];
+            if (page >= header.pageTableCount)
+                continue;
+            for (uint32_t low = 0; low < RFont4::kPageTableEntries; ++low) {
+                const uint32_t entry = page * RFont4::kPageTableEntries + low;
+                const uint16_t glyphIndex = recordAt<uint16_t>(bytes, header.pageTablesOffset, entry);
+                if (glyphIndex == UINT16_MAX)
+                    continue;
+                TEST_ASSERT_LESS_THAN(header.glyphCount, glyphIndex);
+                scriptMask |= UnicodeText::scriptMask((high << 8U) | low);
             }
-            scriptMask |= UnicodeText::scriptMask(identity.codepoint);
-            previousCodepoint = identity.codepoint;
+        }
+        uint32_t previousCodepoint = UINT16_MAX;
+        for (uint16_t index = 0; index < header.supplementaryCount; ++index) {
+            const auto record = recordAt<RFont4::SupplementaryRecord>(bytes, header.supplementaryOffset, index);
+            TEST_ASSERT_GREATER_THAN(previousCodepoint, record.codepoint);
+            TEST_ASSERT_LESS_THAN(header.glyphCount, record.glyphIndex);
+            scriptMask |= UnicodeText::scriptMask(record.codepoint);
+            previousCodepoint = record.codepoint;
         }
 
         for (uint32_t glyphId = 0; glyphId < header.sourceGlyphCount; ++glyphId) {
@@ -66,8 +74,16 @@ namespace {
             if (glyphIndex == UINT16_MAX)
                 continue;
             TEST_ASSERT_TRUE(glyphIndex < header.glyphCount);
-            const auto identity = recordAt<RFont4::GlyphIdentityRecord>(bytes, header.identitiesOffset, glyphIndex);
-            TEST_ASSERT_EQUAL_UINT16(glyphId, identity.glyphId);
+            TEST_ASSERT_EQUAL_UINT16(glyphId, recordAt<uint16_t>(bytes, header.glyphIdsOffset, glyphIndex));
+        }
+        uint32_t previousVerticalCodepoint = 0;
+        for (uint16_t index = 0; index < header.verticalRuleCount; ++index) {
+            const auto rule = recordAt<RFont4::VerticalRule>(bytes, header.verticalRulesOffset, index);
+            TEST_ASSERT_TRUE(index == 0 || rule.codepoint > previousVerticalCodepoint);
+            TEST_ASSERT_LESS_OR_EQUAL_HEX32(0x10FFFF, rule.codepoint);
+            TEST_ASSERT_TRUE(rule.alternateIndex == RFont4::kRotateVerticalGlyph
+                             || rule.alternateIndex < header.glyphCount);
+            previousVerticalCodepoint = rule.codepoint;
         }
         return scriptMask;
     }
@@ -76,6 +92,8 @@ namespace {
         TEST_ASSERT_TRUE(strike.bitsPerPixel == 1 || strike.bitsPerPixel == 4);
         TEST_ASSERT_TRUE(strike.bitmapEncoding == RFont4::BitmapEncoding::raw
                          || strike.bitmapEncoding == RFont4::BitmapEncoding::lz4);
+        std::unordered_map<std::string_view, uint32_t> bitmapOffsets;
+        std::unordered_map<std::string_view, uint32_t> kerningOffsets;
         for (uint32_t glyphIndex = 0; glyphIndex < glyphCount; ++glyphIndex) {
             const auto glyph = recordAt<RFont4::GlyphRecord>(bytes, strike.glyphsOffset, glyphIndex);
             const size_t decodedBytes = static_cast<size_t>(glyph.rowStride) * glyph.height;
@@ -91,6 +109,16 @@ namespace {
                 TEST_ASSERT_TRUE(RFont4::decompressLz4Block(encoded, decoded));
             }
             TEST_ASSERT_TRUE(static_cast<uint64_t>(glyph.kernOffset) + glyph.kernCount <= strike.kerningPairCount);
+            const std::string_view storedBitmap{
+                reinterpret_cast<const char*>(bytes.data() + strike.bitmapOffset + glyph.bitmapOffset), storedBytes};
+            const auto [bitmap, insertedBitmap] = bitmapOffsets.try_emplace(storedBitmap, glyph.bitmapOffset);
+            TEST_ASSERT_TRUE(insertedBitmap || bitmap->second == glyph.bitmapOffset);
+            const std::string_view storedKerning{
+                reinterpret_cast<const char*>(bytes.data() + strike.kerningOffset
+                                              + glyph.kernOffset * sizeof(RFont4::KerningRecord)),
+                static_cast<size_t>(glyph.kernCount) * sizeof(RFont4::KerningRecord)};
+            const auto [kerning, insertedKerning] = kerningOffsets.try_emplace(storedKerning, glyph.kernOffset);
+            TEST_ASSERT_TRUE(insertedKerning || kerning->second == glyph.kernOffset);
 
             uint32_t previousRight = 0;
             for (uint32_t index = 0; index < glyph.kernCount; ++index) {
@@ -123,6 +151,51 @@ namespace {
                                     static_cast<uint8_t>(strikes[index].bitmapEncoding));
             validateStrike(bytes, strikes[index], header.glyphCount);
         }
+        if (header.sourceGlyphCount == 0) {
+            std::unordered_set<std::string> renderRecords;
+            for (uint32_t glyphIndex = 0; glyphIndex < header.glyphCount; ++glyphIndex) {
+                std::string key;
+                key.reserve(strikes.size() * sizeof(RFont4::GlyphRecord));
+                for (const auto& strike: strikes) {
+                    const auto* record = bytes.data() + strike.glyphsOffset
+                                       + glyphIndex * sizeof(RFont4::GlyphRecord);
+                    key.append(reinterpret_cast<const char*>(record), sizeof(RFont4::GlyphRecord));
+                }
+                TEST_ASSERT_TRUE_MESSAGE(renderRecords.insert(std::move(key)).second, path.string().c_str());
+            }
+        }
+    }
+
+    ui::fonts::AlphaFont residentStrike(const std::vector<uint8_t>& bytes, size_t strikeIndex) {
+        const auto header = recordAt<RFont4::Header>(bytes, 0);
+        const auto strikes = readStrikes(bytes, header);
+        const auto& strike = strikes[strikeIndex];
+        return {
+            .name = std::string_view{reinterpret_cast<const char*>(bytes.data() + header.nameOffset),
+                                    header.nameSize - 1U},
+            .bitmap = bytes.data() + strike.bitmapOffset,
+            .glyphs = reinterpret_cast<const ui::fonts::AlphaGlyph*>(bytes.data() + strike.glyphsOffset),
+            .supplementary = reinterpret_cast<const RFont4::SupplementaryRecord*>(
+                bytes.data() + header.supplementaryOffset),
+            .verticalRules = reinterpret_cast<const RFont4::VerticalRule*>(bytes.data() + header.verticalRulesOffset),
+            .glyphCount = header.glyphCount,
+            .supplementaryCount = header.supplementaryCount,
+            .verticalRuleCount = header.verticalRuleCount,
+            .yAdvance = strike.yAdvance,
+            .ascent = strike.ascent,
+            .descent = strike.descent,
+            .pageMap = bytes.data() + header.pageMapOffset,
+            .pageTableCount = header.pageTableCount,
+            .kerningPairs = reinterpret_cast<const ui::fonts::AlphaKerningPair*>(bytes.data() + strike.kerningOffset),
+            .kerningPairCount = strike.kerningPairCount,
+            .wordInkTop = strike.wordInkTop,
+            .wordInkBottom = strike.wordInkBottom,
+            .scriptMask = header.scriptMask,
+            .pixelsPerEm = strike.pixelsPerEm,
+            .bitsPerPixel = strike.bitsPerPixel,
+            .bitmapEncoding = strike.bitmapEncoding,
+            .pageTableData = bytes.data() + header.pageTablesOffset,
+        };
     }
 
     void test_file_cache_coalesces_small_reads_into_blocks() {
@@ -410,6 +483,37 @@ void test_compact_strike_renders_one_bit_rows() {
     TEST_ASSERT_EQUAL(2, gfx.writes);
 }
 
+void test_vertical_cjk_fixtures_render_from_sparse_rules() {
+    constexpr std::array fixtures{
+        std::pair{"fonts/Noto Serif Japanese/font.rfont4", std::string_view{"日本語「縦書き。」"}},
+        std::pair{"fonts/Noto Serif Simplified Chinese/font.rfont4", std::string_view{"中文《竖排。》"}},
+    };
+    for (const auto& [path, text]: fixtures) {
+        const auto bytes = readFont(path);
+        const auto header = recordAt<RFont4::Header>(bytes, 0);
+        TEST_ASSERT_GREATER_THAN(0, header.verticalRuleCount);
+        const auto font = residentStrike(bytes, RFont4::kCompactStrikeIndex);
+        Arduino_GFX gfx{96, 172};
+        ui::fonts::AlphaTextRenderer<96> renderer{gfx};
+        TEST_ASSERT_TRUE(renderer.begin());
+        renderer.setFont(font);
+        renderer.setTextColor(0xFFFF, 0);
+
+        int16_t top = 0;
+        std::string_view remaining = text;
+        uint32_t codepoint = 0;
+        size_t count = 0;
+        while (Utf8Text::next(remaining, codepoint)) {
+            const int16_t advance = renderer.drawVerticalCodepoint(codepoint, 48, top);
+            TEST_ASSERT_GREATER_THAN(0, advance);
+            top = static_cast<int16_t>(top + advance);
+            ++count;
+        }
+        TEST_ASSERT_GREATER_THAN(5, count);
+        TEST_ASSERT_GREATER_THAN(0, gfx.bitmapWrites);
+    }
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_file_cache_coalesces_small_reads_into_blocks);
@@ -420,5 +524,6 @@ int main(int, char**) {
     RUN_TEST(test_all_rfont4_assets_are_fully_validated_off_device);
     RUN_TEST(test_shaper_reuses_rfont4_nominal_glyphs_and_advances);
     RUN_TEST(test_compact_strike_renders_one_bit_rows);
+    RUN_TEST(test_vertical_cjk_fixtures_render_from_sparse_rules);
     return UNITY_END();
 }

@@ -113,6 +113,11 @@ Runtime behavior:
 - Each folder contains one `font.rfont4` family file with Large, Medium, and Small Alpha4 strikes plus one Compact
   1-bit strike. Compact is selectable in RSVP mode and is always used for page reading and scrub previews.
 - Optional GDEF/GSUB/GPOS shaping tables are stored once in that same file, never in a locale pack.
+- BMP page tables map codepoints directly to shared render glyphs; only supplementary codepoints have separate lookup
+  records. Identical bitmap payloads and kerning slices are interned within each strike.
+- Japanese and Chinese families store one optional sparse vertical-rule section shared by all strikes. Upright glyphs
+  have no rule, rotated glyphs reuse their canonical bitmap, and `vert`/`vrt2` alternates add pixels only when the source
+  font actually supplies a distinct glyph. The section's presence is the capability signal.
 - The selected family file stays open once. On PSRAM boards, shared lookup metadata and the active strike are loaded
   once when space permits. Otherwise, the 256-byte page map remains resident and the bounded block/bitmap caches
   service lookup data and packed rows from the file.

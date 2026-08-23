@@ -16,7 +16,7 @@ namespace RFont4 {
     constexpr char kExtension[] = ".rfont4";
     constexpr char kFilename[] = "font.rfont4";
     constexpr uint32_t kMagic = 0x34544652UL; // "RFT4", little endian on disk.
-    constexpr uint16_t kVersion = 7;
+    constexpr uint16_t kVersion = 8;
     constexpr size_t kPageMapBytes = 256;
     constexpr size_t kPageTableEntries = 256;
     constexpr size_t kSizeCount = 4;
@@ -26,6 +26,7 @@ namespace RFont4 {
     constexpr uint32_t kShapedGlyphCodepoint = UINT32_MAX;
     constexpr uint16_t kRawBitmapFlag = 0x8000U;
     constexpr uint16_t kBitmapByteMask = 0x7FFFU;
+    constexpr uint16_t kRotateVerticalGlyph = UINT16_MAX;
 
     enum class BitmapEncoding : uint8_t {
         raw,
@@ -57,7 +58,8 @@ namespace RFont4 {
         uint16_t strikeRecordSize = 0;
         uint16_t glyphRecordSize = 0;
         uint16_t kerningRecordSize = 0;
-        uint16_t glyphIdentityRecordSize = 0;
+        uint16_t supplementaryRecordSize = 0;
+        uint16_t verticalRuleRecordSize = 0;
         uint16_t layoutTableRecordSize = 0;
         uint8_t strikeCount = 0;
         uint8_t layoutTableCount = 0;
@@ -65,16 +67,20 @@ namespace RFont4 {
         uint16_t unitsPerEm = 0;
         uint16_t localeSize = 0;
         uint16_t pageTableCount = 0;
+        uint16_t supplementaryCount = 0;
+        uint16_t verticalRuleCount = 0;
         uint32_t glyphCount = 0;
         uint32_t sourceGlyphCount = 0;
         uint32_t scriptMask = 0;
         uint32_t nameOffset = 0;
         uint32_t localeOffset = 0;
         uint32_t strikesOffset = 0;
-        uint32_t identitiesOffset = 0;
+        uint32_t supplementaryOffset = 0;
         uint32_t pageMapOffset = 0;
         uint32_t pageTablesOffset = 0;
+        uint32_t glyphIdsOffset = 0;
         uint32_t glyphMapOffset = 0;
+        uint32_t verticalRulesOffset = 0;
         uint32_t layoutTablesOffset = 0;
         uint32_t totalSize = 0;
     };
@@ -110,9 +116,14 @@ namespace RFont4 {
         uint16_t kernCount = 0;
     };
 
-    struct __attribute__((packed)) GlyphIdentityRecord {
+    struct __attribute__((packed)) SupplementaryRecord {
         uint32_t codepoint = 0;
-        uint16_t glyphId = 0;
+        uint16_t glyphIndex = 0;
+    };
+
+    struct __attribute__((packed)) VerticalRule {
+        uint32_t codepoint = 0;
+        uint16_t alternateIndex = kRotateVerticalGlyph;
     };
 
     struct __attribute__((packed)) KerningRecord {
@@ -132,10 +143,11 @@ namespace RFont4 {
         std::array<LayoutTableRecord, kMaximumLayoutTableCount> layoutTables{};
     };
 
-    static_assert(sizeof(Header) == 76);
+    static_assert(sizeof(Header) == 90);
     static_assert(sizeof(StrikeRecord) == 30);
     static_assert(sizeof(GlyphRecord) == 18);
-    static_assert(sizeof(GlyphIdentityRecord) == 6);
+    static_assert(sizeof(SupplementaryRecord) == 6);
+    static_assert(sizeof(VerticalRule) == 6);
     static_assert(sizeof(KerningRecord) == 5);
     static_assert(sizeof(LayoutTableRecord) == 12);
 
@@ -144,7 +156,8 @@ namespace RFont4 {
         return header.magic == kMagic && header.version == kVersion && header.headerSize == sizeof(Header)
             && header.strikeRecordSize == sizeof(StrikeRecord) && header.glyphRecordSize == sizeof(GlyphRecord)
             && header.kerningRecordSize == sizeof(KerningRecord)
-            && header.glyphIdentityRecordSize == sizeof(GlyphIdentityRecord)
+            && header.supplementaryRecordSize == sizeof(SupplementaryRecord)
+            && header.verticalRuleRecordSize == sizeof(VerticalRule)
             && header.layoutTableRecordSize == sizeof(LayoutTableRecord) && header.strikeCount == kStrikeCount
             && header.layoutTableCount <= kMaximumLayoutTableCount && header.nameSize > 1
             && header.glyphCount > 0 && header.glyphCount <= UINT16_MAX
@@ -152,13 +165,17 @@ namespace RFont4 {
             && (header.scriptMask & ~kKnownScriptMask) == 0 && header.nameOffset == sizeof(Header)
             && header.localeOffset == header.nameOffset + header.nameSize
             && header.strikesOffset == header.localeOffset + header.localeSize
-            && header.identitiesOffset == header.strikesOffset + kStrikeCount * sizeof(StrikeRecord)
+            && header.supplementaryOffset == header.strikesOffset + kStrikeCount * sizeof(StrikeRecord)
             && header.pageMapOffset
-                   == header.identitiesOffset + header.glyphCount * sizeof(GlyphIdentityRecord)
+                   == header.supplementaryOffset + header.supplementaryCount * sizeof(SupplementaryRecord)
             && header.pageTablesOffset == header.pageMapOffset + kPageMapBytes
-            && header.glyphMapOffset
+            && header.glyphIdsOffset
                    == header.pageTablesOffset
                     + header.pageTableCount * kPageTableEntries * sizeof(uint16_t)
+            && header.glyphMapOffset
+                   == header.glyphIdsOffset + (hasShaping ? header.glyphCount * sizeof(uint16_t) : 0)
+            && header.verticalRulesOffset
+                   == header.glyphMapOffset + header.sourceGlyphCount * sizeof(uint16_t)
             && header.totalSize == fileSize
             && (hasShaping ? header.unitsPerEm > 0 && header.sourceGlyphCount > 0
                                   && header.sourceGlyphCount <= UINT16_MAX
@@ -170,20 +187,25 @@ namespace RFont4 {
         if (!headerValid(header, fileSize) || tables.size() != header.layoutTableCount)
             return false;
 
-        uint64_t cursor = header.identitiesOffset;
+        const bool hasShaping = header.layoutTableCount != 0;
+        uint64_t cursor = header.supplementaryOffset;
         const auto section = [&cursor](uint32_t offset, uint64_t bytes) {
             if (offset != cursor || bytes > UINT32_MAX - cursor)
                 return false;
             cursor += bytes;
             return true;
         };
-        if (!section(header.identitiesOffset,
-                     static_cast<uint64_t>(header.glyphCount) * sizeof(GlyphIdentityRecord))
+        if (!section(header.supplementaryOffset,
+                     static_cast<uint64_t>(header.supplementaryCount) * sizeof(SupplementaryRecord))
             || !section(header.pageMapOffset, kPageMapBytes)
             || !section(header.pageTablesOffset,
                         static_cast<uint64_t>(header.pageTableCount) * kPageTableEntries * sizeof(uint16_t))
+            || !section(header.glyphIdsOffset,
+                        hasShaping ? static_cast<uint64_t>(header.glyphCount) * sizeof(uint16_t) : 0)
             || !section(header.glyphMapOffset,
-                        static_cast<uint64_t>(header.sourceGlyphCount) * sizeof(uint16_t)))
+                        static_cast<uint64_t>(header.sourceGlyphCount) * sizeof(uint16_t))
+            || !section(header.verticalRulesOffset,
+                        static_cast<uint64_t>(header.verticalRuleCount) * sizeof(VerticalRule)))
             return false;
         for (const StrikeRecord& strike: strikes) {
             if (strike.yAdvance == 0 || strike.pixelsPerEm == 0

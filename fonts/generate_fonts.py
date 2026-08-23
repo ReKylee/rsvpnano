@@ -29,6 +29,7 @@ class FontPreset:
     locality_map: Path | None = None
     glyph_locality_map: Path | None = None
     shaping: bool = False
+    vertical: bool = False
     header: bool = False
 
 
@@ -91,6 +92,7 @@ PRESETS = (
         "Jpan",
         "ja",
         FONT_ROOT / "locality" / "ja.txt",
+        vertical=True,
     ),
     FontPreset(
         "noto-serif-simplified-chinese",
@@ -99,6 +101,7 @@ PRESETS = (
         "Hani",
         "zh-Hans",
         FONT_ROOT / "locality" / "zh-Hans.txt",
+        vertical=True,
     ),
     FontPreset(
         "opendyslexic",
@@ -142,6 +145,8 @@ def converter_command(
         command.extend(("--glyph-locality-map", str(preset.glyph_locality_map)))
     if preset.shaping:
         command.append("--shaping")
+    if preset.vertical:
+        command.append("--vertical")
     if sizes:
         command.extend(("--sizes", sizes))
     return command

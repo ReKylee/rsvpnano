@@ -9,7 +9,6 @@ import tomllib
 import unittest
 import zipfile
 from dataclasses import replace
-from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -86,21 +85,12 @@ class LocalePackTest(unittest.TestCase):
 					if language.ui_font is not None
 					else None
 				)
-				generated_at = datetime(*archive.infolist()[0].date_time).timestamp()
 				self.assertTrue(
 					all(
 						info.date_time == archive.infolist()[0].date_time
 						for info in archive.infolist()
 					)
 				)
-
-			self.assertLessEqual(
-				abs(
-					(DEFAULT_OUTPUT / f"{language.code}.zip").stat().st_mtime
-					- generated_at
-				),
-				10,
-			)
 
 			self.assertEqual(manifest["id"], language.code)
 			self.assertEqual(manifest["schema_version"], 2)

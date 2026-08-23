@@ -30,8 +30,7 @@ RSVPNanoCompanion/testdata/conversion/from-nano/
 *.rdat
 web/firmware/*.bin
 web/firmware/release.json
-RSVPNanoCompanion/web/generated/
-web/generated/
+logs/
 .cache/
 .tmp/
 compile_commands.json

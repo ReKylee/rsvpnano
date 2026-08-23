@@ -170,15 +170,15 @@ void test_reader_font_selection_uses_requested_then_font_affinity_then_terminal_
 
 void test_ui_font_selection_uses_declared_pack_scripts() {
     const locales::Catalog catalog{
-        {.manifest = {.id = "ja", .locale = "ja"},
+        {.id = "ja", .locale = "ja",
          .scriptMask = UnicodeText::ScriptHan | UnicodeText::ScriptHiragana | UnicodeText::ScriptKatakana},
-        {.manifest = {.id = "he", .locale = "he"}, .scriptMask = UnicodeText::ScriptHebrew},
-        {.manifest = {.id = "ar", .locale = "ar"}, .scriptMask = UnicodeText::ScriptArabic},
+        {.id = "he", .locale = "he", .scriptMask = UnicodeText::ScriptHebrew},
+        {.id = "ar", .locale = "ar", .scriptMask = UnicodeText::ScriptArabic},
     };
     TEST_ASSERT_EQUAL_STRING("he", locales::findPackForScripts(catalog, "he-IL", UnicodeText::ScriptHebrew)
-                                       ->manifest.id.c_str());
+                                       ->id.c_str());
     TEST_ASSERT_EQUAL_STRING("ja", locales::findPackForScripts(catalog, "en", UnicodeText::ScriptHan)
-                                       ->manifest.id.c_str());
+                                       ->id.c_str());
     TEST_ASSERT_NULL(locales::findPackForScripts(catalog, "en",
                                                  UnicodeText::ScriptHebrew | UnicodeText::ScriptArabic));
 }

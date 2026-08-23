@@ -17,10 +17,25 @@
 
 namespace locales {
 
+    struct InstalledAsset {
+        std::string path;
+        uint32_t bytes = 0;
+    };
+
+    struct InstalledUiComponent {
+        std::optional<InstalledAsset> strings;
+        std::optional<InstalledAsset> font;
+    };
+
     struct InstalledPack {
         std::string directory;
-        Manifest manifest;
+        std::string id;
+        std::string locale;
+        std::string nativeName;
+        std::string englishName;
+        TextDirection direction = TextDirection::ltr;
         uint32_t scriptMask = 0;
+        std::optional<InstalledUiComponent> ui;
     };
 
     using Catalog = std::vector<InstalledPack>;
@@ -29,7 +44,7 @@ namespace locales {
         std::string_view candidate = locale;
         while (!candidate.empty()) {
             const auto pack = std::ranges::find_if(catalog, [&](const InstalledPack& installed) {
-                return installed.manifest.locale == candidate;
+                return installed.locale == candidate;
             });
             if (pack != catalog.end())
                 return &*pack;

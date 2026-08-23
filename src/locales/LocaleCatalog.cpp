@@ -147,20 +147,22 @@ namespace locales {
                 });
         }
 
-        std::expected<void, std::string> inspectPackFiles(fs::FS& filesystem, const InstalledPack& pack) {
-            return forEachAsset(pack.manifest, [&](const Asset& asset, std::string_view name) {
-                return inspectAsset(filesystem, pack.directory, asset, name);
+        std::expected<void, std::string> inspectPackFiles(fs::FS& filesystem, std::string_view directory,
+                                                          const Manifest& manifest) {
+            return forEachAsset(manifest, [&](const Asset& asset, std::string_view name) {
+                return inspectAsset(filesystem, directory, asset, name);
             });
         }
 
-        std::expected<void, std::string> verifyPackFiles(fs::FS& filesystem, const InstalledPack& pack) {
-            return forEachAsset(pack.manifest, [&](const Asset& asset, std::string_view name) {
-                return verifyAssetHash(filesystem, pack.directory, asset, name);
+        std::expected<void, std::string> verifyPackFiles(fs::FS& filesystem, std::string_view directory,
+                                                         const Manifest& manifest) {
+            return forEachAsset(manifest, [&](const Asset& asset, std::string_view name) {
+                return verifyAssetHash(filesystem, directory, asset, name);
             });
         }
 
-        std::expected<InstalledPack, std::string> loadPack(fs::FS& filesystem, const std::string& directory,
-                                                           std::string_view id) {
+        std::expected<Manifest, std::string> loadManifest(fs::FS& filesystem, const std::string& directory,
+                                                          std::string_view id) {
             const std::string manifestPath = directory + "/manifest.toml";
             return StorageFiles::readTextFile(filesystem, manifestPath.c_str(), kMaximumManifestBytes)
                 .transform_error([](std::error_code) {
@@ -168,17 +170,40 @@ namespace locales {
                 })
                 .and_then([&](const std::string& content) {
                     return decodeManifest(content, id);
-                })
-                .transform([&directory](Manifest manifest) {
-                    uint32_t scriptMask = 0;
-                    for (const std::string_view script: manifest.scripts)
-                        scriptMask |= UnicodeText::scriptMask(script);
-                    return InstalledPack{directory, std::move(manifest), scriptMask};
                 });
         }
 
+        InstalledPack installedPack(std::string directory, Manifest manifest) {
+            uint32_t scriptMask = 0;
+            for (const std::string_view script: manifest.scripts)
+                scriptMask |= UnicodeText::scriptMask(script);
+            auto asset = [](std::optional<Asset> source) -> std::optional<InstalledAsset> {
+                if (!source)
+                    return std::nullopt;
+                return InstalledAsset{.path = std::move(source->path), .bytes = source->bytes};
+            };
+            std::optional<InstalledUiComponent> ui;
+            if (manifest.ui) {
+                ui = InstalledUiComponent{
+                    .strings = asset(std::move(manifest.ui->strings)),
+                    .font = asset(std::move(manifest.ui->font)),
+                };
+            }
+            return {
+                .directory = std::move(directory),
+                .id = std::move(manifest.id),
+                .locale = std::move(manifest.locale),
+                .nativeName = std::move(manifest.nativeName),
+                .englishName = std::move(manifest.englishName),
+                .direction = manifest.direction,
+                .scriptMask = scriptMask,
+                .ui = std::move(ui),
+            };
+        }
+
+        template<typename AssetType>
         std::expected<std::vector<uint8_t>, std::string> readAsset(fs::FS& filesystem, std::string_view directory,
-                                                                   const Asset& asset) {
+                                                                   const AssetType& asset) {
             const std::string path = assetPath(directory, asset.path);
             File file = filesystem.open(path.c_str(), FILE_READ);
             if (!file || file.isDirectory() || file.size() != asset.bytes) {
@@ -195,9 +220,9 @@ namespace locales {
         }
 
         std::expected<std::vector<uint8_t>, std::string> readUiFont(fs::FS& filesystem, const InstalledPack& pack) {
-            if (!pack.manifest.ui || !pack.manifest.ui->font)
+            if (!pack.ui || !pack.ui->font)
                 return std::unexpected("locale pack has no UI font");
-            return readAsset(filesystem, pack.directory, *pack.manifest.ui->font)
+            return readAsset(filesystem, pack.directory, *pack.ui->font)
                 .and_then([](std::vector<uint8_t> bytes) {
                     return validateU8g2Font(bytes).transform([bytes = std::move(bytes)]() mutable {
                         return std::move(bytes);
@@ -207,8 +232,8 @@ namespace locales {
 
         std::expected<UiAssets, std::string> readUiAssets(fs::FS& filesystem, const InstalledPack& pack,
                                                           size_t expectedStrings) {
-            UiAssets assets{.direction = pack.manifest.direction};
-            const UiComponent& ui = *pack.manifest.ui;
+            UiAssets assets{.direction = pack.direction};
+            const InstalledUiComponent& ui = *pack.ui;
             if (ui.strings) {
                 auto bytes = readAsset(filesystem, pack.directory, *ui.strings);
                 if (!bytes)
@@ -253,28 +278,28 @@ namespace locales {
             if (!usableDirectory)
                 continue;
 
-            auto loaded = loadPack(filesystem, directory, id);
-            if (!loaded) {
-                ESP_LOGW("languages", "rejected %s: %s", id.c_str(), loaded.error().c_str());
+            auto manifest = loadManifest(filesystem, directory, id);
+            if (!manifest) {
+                ESP_LOGW("languages", "rejected %s: %s", id.c_str(), manifest.error().c_str());
                 continue;
             }
-            InstalledPack pack = std::move(*loaded);
-            if (auto files = inspectPackFiles(filesystem, pack); !files) {
+            if (auto files = inspectPackFiles(filesystem, directory, *manifest); !files) {
                 ESP_LOGW("languages", "rejected %s: %s", id.c_str(), files.error().c_str());
                 continue;
             }
+            InstalledPack pack = installedPack(directory, std::move(*manifest));
             if (auto assets = readUiAssets(filesystem, pack, expectedStrings); !assets) {
                 ESP_LOGW("languages", "rejected %s: %s", id.c_str(), assets.error().c_str());
                 continue;
             }
             if (std::ranges::any_of(catalog, [&](const InstalledPack& installed) {
-                    return installed.manifest.id == pack.manifest.id;
+                    return installed.id == pack.id;
                 })) {
                 ESP_LOGW("languages", "rejected %s: duplicate pack ID", id.c_str());
                 continue;
             }
             if (std::ranges::any_of(catalog, [&](const InstalledPack& installed) {
-                    return installed.manifest.locale == pack.manifest.locale;
+                    return installed.locale == pack.locale;
                 })) {
                 ESP_LOGW("languages", "rejected %s: duplicate locale pack", id.c_str());
                 continue;
@@ -283,15 +308,15 @@ namespace locales {
         }
         root.close();
         std::ranges::sort(catalog, {}, [](const InstalledPack& pack) {
-            return pack.manifest.englishName;
+            return pack.englishName;
         });
         return catalog;
     }
 
     std::expected<std::vector<uint8_t>, std::string> loadUiFont(fs::FS& filesystem, const InstalledPack& pack) {
-        if (!pack.manifest.ui || !pack.manifest.ui->font)
+        if (!pack.ui || !pack.ui->font)
             return std::unexpected("locale pack has no UI font");
-        return readAsset(filesystem, pack.directory, *pack.manifest.ui->font);
+        return readAsset(filesystem, pack.directory, *pack.ui->font);
     }
 
     std::expected<UiAssets, std::string> loadUiAssets(fs::FS& filesystem, const Catalog& catalog,
@@ -347,16 +372,17 @@ namespace locales {
         const std::string backup = backupDirectory(id);
 
         recoverInterrupted(filesystem);
-        auto staged = loadPack(filesystem, staging, id);
-        if (!staged)
-            return std::unexpected(staged.error());
-        if (auto files = verifyPackFiles(filesystem, *staged); !files)
+        auto manifest = loadManifest(filesystem, staging, id);
+        if (!manifest)
+            return std::unexpected(manifest.error());
+        if (auto files = verifyPackFiles(filesystem, staging, *manifest); !files)
             return std::unexpected(files.error());
-        if (auto assets = readUiAssets(filesystem, *staged, expectedStrings); !assets)
+        InstalledPack staged = installedPack(staging, std::move(*manifest));
+        if (auto assets = readUiAssets(filesystem, staged, expectedStrings); !assets)
             return std::unexpected(assets.error());
 
         if (std::ranges::any_of(catalog, [&](const InstalledPack& pack) {
-                return pack.manifest.id != id && pack.manifest.locale == staged->manifest.locale;
+                return pack.id != id && pack.locale == staged.locale;
             }))
             return std::unexpected("another pack already provides this locale");
 
@@ -371,19 +397,19 @@ namespace locales {
 
         if (hadCurrent)
             removeTree(filesystem, backup);
-        staged->directory = current;
+        staged.directory = current;
         const auto existing = std::ranges::find(catalog, id, [](const InstalledPack& pack) {
-            return std::string_view{pack.manifest.id};
+            return std::string_view{pack.id};
         });
         if (existing == catalog.end())
-            catalog.push_back(std::move(*staged));
+            catalog.push_back(std::move(staged));
         else
-            *existing = std::move(*staged);
+            *existing = std::move(staged);
         std::ranges::sort(catalog, {}, [](const InstalledPack& pack) {
-            return pack.manifest.englishName;
+            return pack.englishName;
         });
         return std::cref(*std::ranges::find(catalog, id, [](const InstalledPack& pack) {
-            return std::string_view{pack.manifest.id};
+            return std::string_view{pack.id};
         }));
     }
 
@@ -460,7 +486,7 @@ namespace locales {
         if (directoryExists(filesystem, directory) && !removeTree(filesystem, directory))
             return std::unexpected("could not remove the installed pack");
         std::erase_if(catalog, [id](const InstalledPack& pack) {
-            return pack.manifest.id == id;
+            return pack.id == id;
         });
         return {};
     }
@@ -496,7 +522,7 @@ namespace locales {
         if (locale == "en")
             return "English";
         const auto pack = findPackForLocale(catalog, locale);
-        return pack ? std::string_view{pack->manifest.englishName} : locale;
+        return pack ? std::string_view{pack->englishName} : locale;
     }
 
 } // namespace locales

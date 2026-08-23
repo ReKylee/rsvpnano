@@ -66,7 +66,7 @@ companion::api::Result<companion::api::Located<locales::InstalledPack>> Companio
     }
 
     return companion::api::Located<locales::InstalledPack>{
-        .location = "/api/v2/locales/" + pack.manifest.id,
+        .location = "/api/v2/locales/" + pack.id,
         .value = std::cref(pack),
     };
 }
@@ -78,13 +78,13 @@ companion::api::Result<> CompanionApi::deleteLocale(httpd_req_t& request) {
 
     const auto pack =
         std::ranges::find(localeCatalog_, std::string_view{*id}, [](const locales::InstalledPack& installed) {
-            return std::string_view{installed.manifest.id};
+            return std::string_view{installed.id};
         });
     if (pack == localeCatalog_.end()) {
         return std::unexpected(companion::api::httpError(HTTP_CODE_NOT_FOUND, "locale_not_found",
                                                          "Locale pack not found", "id"));
     }
-    if (settingsStore_.settings().interface.locale == pack->manifest.locale) {
+    if (settingsStore_.settings().interface.locale == pack->locale) {
         return std::unexpected(companion::api::httpError(HTTP_CODE_CONFLICT, "resource_in_use",
                                                          "Select another interface language before removing this pack",
                                                          "id"));

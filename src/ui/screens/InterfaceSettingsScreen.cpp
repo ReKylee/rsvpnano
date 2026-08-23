@@ -9,8 +9,8 @@ namespace screens {
             bool returnNext = current == Localization::kDefaultLocale;
             for (const auto& pack: catalog) {
                 if (returnNext)
-                    return pack.manifest.locale;
-                returnNext = pack.manifest.locale == current;
+                    return pack.locale;
+                returnNext = pack.locale == current;
             }
             return Localization::kDefaultLocale;
         }

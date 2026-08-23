@@ -198,7 +198,7 @@ void test_companion_catalog_creations_return_one_resource() {
     TEST_ASSERT_FALSE(json.contains(R"("themes":)"));
     TEST_ASSERT_FALSE(json.contains(R"("settings":)"));
 
-    TEST_ASSERT_TRUE(companion::api::encode(locales::InstalledPack{.manifest = {.id = "ja", .locale = "ja"}}, json)
+    TEST_ASSERT_TRUE(companion::api::encode(locales::InstalledPack{.id = "ja", .locale = "ja"}, json)
                          .has_value());
     TEST_ASSERT_TRUE(json.contains(R"("id":"ja")"));
     TEST_ASSERT_FALSE(json.contains(R"("themes":)"));
@@ -207,7 +207,7 @@ void test_companion_catalog_creations_return_one_resource() {
 
 void test_companion_locale_list_is_minimal() {
     const std::vector<locales::InstalledPack> response{
-        {.manifest = {.id = "ja", .locale = "ja", .nativeName = "日本語"}},
+        {.id = "ja", .locale = "ja", .nativeName = "日本語"},
     };
     std::string json;
     TEST_ASSERT_TRUE(companion::api::encode(response, json).has_value());

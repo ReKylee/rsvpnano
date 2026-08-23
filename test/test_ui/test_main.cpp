@@ -28,7 +28,7 @@ namespace {
     std::vector<std::string> gLoadedUiPacks;
 
     std::expected<std::vector<uint8_t>, std::string> loadUiFont(fs::FS&, const locales::InstalledPack& pack) {
-        gLoadedUiPacks.push_back(pack.manifest.id);
+        gLoadedUiPacks.push_back(pack.id);
         return std::vector<uint8_t>{std::begin(u8g2_font_rsvpnano_ui_6x9_tf), std::end(u8g2_font_rsvpnano_ui_6x9_tf)};
     }
 
@@ -925,8 +925,8 @@ void test_multilingual_ui_keeps_each_visible_locale_font_loaded() {
     ui::Context context(gfx);
     fs::FS filesystem;
     const locales::Catalog catalog{
-        {.manifest = {.id = "ja", .locale = "ja"}, .scriptMask = UnicodeText::ScriptHan},
-        {.manifest = {.id = "zh-Hans", .locale = "zh-Hans"}, .scriptMask = UnicodeText::ScriptHan},
+        {.id = "ja", .locale = "ja", .scriptMask = UnicodeText::ScriptHan},
+        {.id = "zh-Hans", .locale = "zh-Hans", .scriptMask = UnicodeText::ScriptHan},
     };
     gLoadedUiPacks.clear();
     context.setLanguageCatalog(&filesystem, &catalog, &loadUiFont);
@@ -950,8 +950,7 @@ void test_ui_text_uses_visual_bounds_for_every_alignment() {
     ui::Context context(gfx);
     fs::FS filesystem;
     const locales::Catalog catalog{
-        {.manifest = {.id = "ar", .locale = "ar", .direction = TextDirection::rtl},
-         .scriptMask = UnicodeText::ScriptArabic},
+        {.id = "ar", .locale = "ar", .direction = TextDirection::rtl, .scriptMask = UnicodeText::ScriptArabic},
     };
     context.setLanguageCatalog(&filesystem, &catalog, &loadUiFont);
 

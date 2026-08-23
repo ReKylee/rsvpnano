@@ -48,17 +48,17 @@ namespace ui {
             locales::findPackForScripts(*languageCatalog_, preferredLocale, requiredScripts);
         if (pack == nullptr)
             return nullptr;
-        if (pack->manifest.locale == locale_ && !languageAssets_.font.empty())
+        if (pack->locale == locale_ && !languageAssets_.font.empty())
             return &languageAssets_;
         const auto cached =
-            std::ranges::find(contentFonts_, pack->manifest.id, [](const auto& entry) -> const std::string& {
+            std::ranges::find(contentFonts_, pack->id, [](const auto& entry) -> const std::string& {
                 return entry.first;
             });
         if (cached != contentFonts_.end())
             return cached->second.font.empty() ? nullptr : &cached->second;
 
         auto& [id, assets] =
-            contentFonts_.emplace_back(pack->manifest.id, locales::UiAssets{.direction = pack->manifest.direction});
+            contentFonts_.emplace_back(pack->id, locales::UiAssets{.direction = pack->direction});
         auto loaded = languageFontLoader_(*languageFilesystem_, *pack);
         if (loaded)
             assets.font = std::move(*loaded);

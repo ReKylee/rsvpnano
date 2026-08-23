@@ -132,22 +132,22 @@ template<>
 struct glz::meta<locales::InstalledPack> {
     using T = locales::InstalledPack;
     static constexpr auto readId = [](T& pack, std::string id) {
-        pack.manifest.id = std::move(id);
+        pack.id = std::move(id);
     };
     static constexpr auto writeId = [](const T& pack) -> const std::string& {
-        return pack.manifest.id;
+        return pack.id;
     };
     static constexpr auto readName = [](T& pack, std::string name) {
-        pack.manifest.nativeName = std::move(name);
+        pack.nativeName = std::move(name);
     };
     static constexpr auto writeName = [](const T& pack) -> const std::string& {
-        return pack.manifest.nativeName;
+        return pack.nativeName;
     };
     static constexpr auto readLocale = [](T& pack, std::string locale) {
-        pack.manifest.locale = std::move(locale);
+        pack.locale = std::move(locale);
     };
     static constexpr auto writeLocale = [](const T& pack) -> const std::string& {
-        return pack.manifest.locale;
+        return pack.locale;
     };
     static constexpr auto value =
         glz::object("id", glz::custom<readId, writeId>, "name", glz::custom<readName, writeName>, "locale",

@@ -1,4 +1,4 @@
-package com.rsvpnano.sync
+package com.rsvpnano.feeds
 
 object RssFeedNormalizer {
     fun normalize(feeds: List<String>): List<String> {

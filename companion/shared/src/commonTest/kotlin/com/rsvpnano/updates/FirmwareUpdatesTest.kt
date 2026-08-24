@@ -1,4 +1,4 @@
-package com.rsvpnano.app
+package com.rsvpnano.updates
 
 import com.rsvpnano.models.FirmwareRelease
 import com.rsvpnano.models.FirmwareUpdate

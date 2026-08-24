@@ -1,11 +1,11 @@
-package com.rsvpnano
+package com.rsvpnano.app
 
 import com.rsvpnano.api.NanoApi
 import com.rsvpnano.api.NanoClientError
 import com.rsvpnano.api.RepositoryClient
-import com.rsvpnano.app.NanoCompanionController
-import com.rsvpnano.app.NanoSettingsResource
-import com.rsvpnano.app.PendingDraftService
+import com.rsvpnano.sampleBook
+import com.rsvpnano.sampleSettings
+import com.rsvpnano.library.PendingDraftService
 import com.rsvpnano.converters.RsvpBookFile
 import com.rsvpnano.models.FirmwareRelease
 import com.rsvpnano.models.NanoBook
@@ -25,14 +25,14 @@ import com.rsvpnano.models.NanoThemeSummary
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.persistence.PendingUploadJsonStore
 import com.rsvpnano.persistence.TextStorage
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class NanoCompanionControllerTest {
     @Test
-    fun connectRequestsOnlyDeviceIdentity() = runBlocking {
+    fun connectRequestsOnlyDeviceIdentity() = runTest {
         val client = RecordingNanoClient()
 
         val device = controller(client).connect("http://device.local")
@@ -44,7 +44,7 @@ class NanoCompanionControllerTest {
     }
 
     @Test
-    fun unavailableLibraryDoesNotPreventConnecting() = runBlocking {
+    fun unavailableLibraryDoesNotPreventConnecting() = runTest {
         val client = RecordingNanoClient(failLibrary = true)
         val controller = controller(client)
 
@@ -58,7 +58,7 @@ class NanoCompanionControllerTest {
     }
 
     @Test
-    fun connectDoesNotHideFailureBehindRetries() = runBlocking {
+    fun connectDoesNotHideFailureBehindRetries() = runTest {
         val client = RecordingNanoClient(deviceFailures = 1)
 
         assertFailsWith<NanoClientError> {
@@ -70,7 +70,7 @@ class NanoCompanionControllerTest {
     }
 
     @Test
-    fun uploadReturnsCreatedBookAndDeleteReturnsNoDuplicateLibrary() = runBlocking {
+    fun uploadReturnsCreatedBookAndDeleteReturnsNoDuplicateLibrary() = runTest {
         val client = RecordingNanoClient()
         val controller = controller(client)
 
@@ -89,7 +89,7 @@ class NanoCompanionControllerTest {
     }
 
     @Test
-    fun bookPositionReturnsOnlyTheUpdatedBook() = runBlocking {
+    fun bookPositionReturnsOnlyTheUpdatedBook() = runTest {
         val book = sampleBook(id = "b12345678", title = "Manual", wordCount = 1000).copy(
             reading = NanoReadingProgress(100),
         )
@@ -107,7 +107,7 @@ class NanoCompanionControllerTest {
     }
 
     @Test
-    fun themeUploadReturnsOnlyTheCreatedTheme() = runBlocking {
+    fun themeUploadReturnsOnlyTheCreatedTheme() = runTest {
         val client = RecordingNanoClient()
 
         val response = controller(client).uploadTheme(
@@ -121,7 +121,7 @@ class NanoCompanionControllerTest {
     }
 
     @Test
-    fun settingsWifiAndFeedsReturnTheSavedResourcesWithoutRefreshes() = runBlocking {
+    fun settingsWifiAndFeedsReturnTheSavedResourcesWithoutRefreshes() = runTest {
         val client = RecordingNanoClient()
         val controller = controller(client)
         val settings = sampleSettings().withWpm(320).withBrightnessPercent(20)
@@ -154,7 +154,7 @@ class NanoCompanionControllerTest {
     }
 
     @Test
-    fun appearanceSelectionsUpdateOnlyTheirRequestedResource() = runBlocking {
+    fun appearanceSelectionsUpdateOnlyTheirRequestedResource() = runTest {
         val client = RecordingNanoClient()
         val controller = controller(client)
 

@@ -1,5 +1,6 @@
 package com.rsvpnano.ui
 
+import com.rsvpnano.ui.settings.SettingsDestination
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

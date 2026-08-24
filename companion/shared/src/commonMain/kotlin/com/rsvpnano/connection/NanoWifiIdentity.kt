@@ -1,4 +1,4 @@
-package com.rsvpnano.app
+package com.rsvpnano.connection
 
 import com.rsvpnano.models.RememberedNano
 

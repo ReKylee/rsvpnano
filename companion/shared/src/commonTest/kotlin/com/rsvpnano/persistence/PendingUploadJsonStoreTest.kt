@@ -1,9 +1,9 @@
-package com.rsvpnano
+package com.rsvpnano.persistence
 
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.persistence.PendingUploadJsonStore
 import com.rsvpnano.persistence.TextStorage
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlin.test.assertEquals
 import kotlin.test.Test
 
@@ -21,14 +21,14 @@ class PendingUploadJsonStoreTest {
             createdAt = "2026-05-17T10:00:00Z",
         )
 
-        runBlocking {
+        runTest {
             store.save(item)
             assertEquals(listOf(item), store.loadAll())
         }
     }
 
     @Test
-    fun saveReplacesByIdAndKeepsNewestFirst() = runBlocking {
+    fun saveReplacesByIdAndKeepsNewestFirst() = runTest {
         val store = PendingUploadJsonStore(InMemoryStorage())
         val older = PendingUpload("1", "Old", null, "Old body", "2026-05-17T10:00:00Z")
         val newer = PendingUpload("2", "New", null, "New body", "2026-05-17T11:00:00Z")
@@ -42,7 +42,7 @@ class PendingUploadJsonStoreTest {
     }
 
     @Test
-    fun deleteRemovesOnlyTheRequestedDraft() = runBlocking {
+    fun deleteRemovesOnlyTheRequestedDraft() = runTest {
         val store = PendingUploadJsonStore(InMemoryStorage())
         val first = PendingUpload("1", "First", null, "Body", "2026-05-17T10:00:00Z")
         val second = PendingUpload("2", "Second", null, "Body", "2026-05-17T11:00:00Z")

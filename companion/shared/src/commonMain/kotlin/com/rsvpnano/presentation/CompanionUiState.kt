@@ -1,13 +1,13 @@
-package com.rsvpnano.ui
+package com.rsvpnano.presentation
 
 import com.rsvpnano.app.CompanionNotice
-import com.rsvpnano.app.NanoConnectionState
-import com.rsvpnano.app.NanoEndpoint
+import com.rsvpnano.connection.NanoConnectionState
+import com.rsvpnano.connection.NanoEndpoint
 import com.rsvpnano.app.SharedAppUtils
-import com.rsvpnano.app.isCheckingReader
-import com.rsvpnano.app.isConnected
-import com.rsvpnano.app.isRequesting
-import com.rsvpnano.app.isWifiAttached
+import com.rsvpnano.connection.isCheckingReader
+import com.rsvpnano.connection.isConnected
+import com.rsvpnano.connection.isRequesting
+import com.rsvpnano.connection.isWifiAttached
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoStorageRepair

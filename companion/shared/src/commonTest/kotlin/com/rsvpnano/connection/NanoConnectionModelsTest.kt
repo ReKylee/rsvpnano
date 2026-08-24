@@ -1,8 +1,8 @@
-package com.rsvpnano
+package com.rsvpnano.connection
 
-import com.rsvpnano.app.NanoConnectionState
-import com.rsvpnano.app.NanoConnectionTransport
-import com.rsvpnano.app.NanoWifiSnapshot
+import com.rsvpnano.connection.NanoConnectionState
+import com.rsvpnano.connection.NanoConnectionTransport
+import com.rsvpnano.connection.NanoWifiSnapshot
 import com.rsvpnano.models.RememberedNano
 import kotlin.test.Test
 import kotlin.test.assertEquals

@@ -1,6 +1,6 @@
-package com.rsvpnano
+package com.rsvpnano.library
 
-import com.rsvpnano.app.PendingDraftService
+import com.rsvpnano.library.PendingDraftService
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.persistence.PendingUploadJsonStore
 import com.rsvpnano.persistence.TextStorage
@@ -9,7 +9,7 @@ import kotlin.test.assertEquals
 
 class PendingDraftServiceArticleTest {
     @Test
-    fun producesBookFileFromPendingUpload() = kotlinx.coroutines.runBlocking {
+    fun producesBookFileFromPendingUpload() = kotlinx.coroutines.test.runTest {
         val service = PendingDraftService(
             store = PendingUploadJsonStore(object : TextStorage {
                 override suspend fun readText(): String? = null

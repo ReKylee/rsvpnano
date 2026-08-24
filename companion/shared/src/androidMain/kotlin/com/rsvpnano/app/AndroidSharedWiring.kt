@@ -2,10 +2,13 @@ package com.rsvpnano.app
 
 import com.rsvpnano.api.NanoKtorClient
 import com.rsvpnano.api.ArticleFetchClient
+import com.rsvpnano.connection.NanoWifiConnector
+import com.rsvpnano.library.PendingDraftService
 import com.rsvpnano.persistence.JsonAppSettingsStore
 import com.rsvpnano.persistence.OkioTextStorage
 import com.rsvpnano.persistence.PendingUploadJsonStore
-import com.rsvpnano.ui.CompanionPresenter
+import com.rsvpnano.presentation.CompanionPresenter
+import com.rsvpnano.updates.FirmwareUpdates
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation

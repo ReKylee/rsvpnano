@@ -1,4 +1,4 @@
-package com.rsvpnano.ui
+package com.rsvpnano.ui.settings
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -79,7 +79,10 @@ import androidx.compose.ui.unit.sp
 import com.rsvpnano.models.NanoLocales
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoSettingsSchema
-import com.rsvpnano.app.releaseSource
+import com.rsvpnano.updates.releaseSource
+import com.rsvpnano.presentation.*
+import com.rsvpnano.ui.*
+import com.rsvpnano.ui.focus.FocusTimersSettings
 
 internal const val SETTINGS_INDEX_HELP = "Choose a section to configure your reader, its display, languages, or fonts."
 

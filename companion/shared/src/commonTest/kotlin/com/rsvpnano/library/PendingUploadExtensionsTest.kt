@@ -1,7 +1,7 @@
-package com.rsvpnano
+package com.rsvpnano.library
 
 import com.rsvpnano.models.PendingUpload
-import com.rsvpnano.models.needsArticleFetch
+import com.rsvpnano.library.needsArticleFetch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

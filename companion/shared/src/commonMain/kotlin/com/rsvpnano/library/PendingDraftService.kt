@@ -1,4 +1,4 @@
-package com.rsvpnano.app
+package com.rsvpnano.library
 
 import com.rsvpnano.api.ArticleFetchClient
 import com.rsvpnano.api.NanoApi

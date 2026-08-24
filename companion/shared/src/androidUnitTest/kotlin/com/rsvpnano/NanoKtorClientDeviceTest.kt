@@ -2,8 +2,8 @@ package com.rsvpnano
 
 import com.rsvpnano.api.NanoClientError
 import com.rsvpnano.api.NanoKtorClient
-import com.rsvpnano.app.catalogContentUrl
-import com.rsvpnano.app.releaseSource
+import com.rsvpnano.updates.catalogContentUrl
+import com.rsvpnano.updates.releaseSource
 import com.rsvpnano.models.NanoChapter
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp

@@ -9,7 +9,7 @@ import android.provider.OpenableColumns
 import android.provider.Settings
 import androidx.core.content.IntentCompat
 import com.rsvpnano.converters.RsvpSupportedFileTypes
-import com.rsvpnano.ui.SharedImport
+import com.rsvpnano.presentation.SharedImport
 
 fun Context.sharedImportsFrom(intent: Intent): List<SharedImport> {
     if (!intent.isAndroidShareIntent()) {

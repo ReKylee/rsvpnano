@@ -1,9 +1,10 @@
-package com.rsvpnano.ui
+package com.rsvpnano.ui.library
 
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoBookMetadata
 import com.rsvpnano.models.NanoChapter
 import com.rsvpnano.models.NanoReadingProgress
+import com.rsvpnano.ui.library.librarySubtitle
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

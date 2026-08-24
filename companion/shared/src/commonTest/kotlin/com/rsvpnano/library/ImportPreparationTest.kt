@@ -1,6 +1,6 @@
-package com.rsvpnano
+package com.rsvpnano.library
 
-import com.rsvpnano.converters.ImportPreparation
+import com.rsvpnano.library.ImportPreparation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

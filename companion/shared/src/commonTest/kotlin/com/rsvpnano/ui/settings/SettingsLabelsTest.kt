@@ -1,5 +1,6 @@
-package com.rsvpnano.ui
+package com.rsvpnano.ui.settings
 
+import com.rsvpnano.ui.settings.fontDetails
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

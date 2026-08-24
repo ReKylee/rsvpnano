@@ -1,16 +1,16 @@
-package com.rsvpnano
+package com.rsvpnano.library
 
-import com.rsvpnano.app.PendingDraftService
+import com.rsvpnano.library.PendingDraftService
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.persistence.PendingUploadJsonStore
 import com.rsvpnano.persistence.TextStorage
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class PendingDraftServiceTest {
     @Test
-    fun savesUpdatesAndDeletesDrafts() = runBlocking {
+    fun savesUpdatesAndDeletesDrafts() = runTest {
         val service = PendingDraftService(PendingUploadJsonStore(InMemoryStorage()))
         val item = PendingUpload(
             id = "1",

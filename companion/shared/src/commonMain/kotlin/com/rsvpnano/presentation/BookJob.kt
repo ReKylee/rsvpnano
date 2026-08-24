@@ -1,4 +1,4 @@
-package com.rsvpnano.ui
+package com.rsvpnano.presentation
 
 enum class BookJobStep(val activeLabel: String, val doneLabel: String) {
     Convert("Converting", "Converted"),

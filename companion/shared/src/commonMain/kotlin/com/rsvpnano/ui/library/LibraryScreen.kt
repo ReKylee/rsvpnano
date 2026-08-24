@@ -1,4 +1,4 @@
-package com.rsvpnano.ui
+package com.rsvpnano.ui.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -54,6 +54,9 @@ import com.rsvpnano.models.NanoBookLanguage
 import com.rsvpnano.models.NanoFontSummary
 import com.rsvpnano.models.NanoLanguageFont
 import com.rsvpnano.models.PendingUpload
+import com.rsvpnano.presentation.CompanionResource
+import com.rsvpnano.presentation.CompanionUiState
+import com.rsvpnano.ui.*
 import kotlin.math.roundToInt
 
 private enum class LibraryFilter(val label: String) {

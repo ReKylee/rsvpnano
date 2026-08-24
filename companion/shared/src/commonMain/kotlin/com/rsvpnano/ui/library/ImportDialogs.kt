@@ -1,4 +1,4 @@
-package com.rsvpnano.ui
+package com.rsvpnano.ui.library
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -71,6 +71,10 @@ import com.rsvpnano.converters.RsvpSupportedFileTypes
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.PendingUpload
+import com.rsvpnano.presentation.CompanionResource
+import com.rsvpnano.presentation.CompanionUiState
+import com.rsvpnano.presentation.SharedImport
+import com.rsvpnano.ui.*
 
 @Composable
 fun AddContentDialog(

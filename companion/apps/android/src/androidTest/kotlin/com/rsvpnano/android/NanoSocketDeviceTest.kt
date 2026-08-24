@@ -3,11 +3,11 @@ package com.rsvpnano.android
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.rsvpnano.app.CompanionNotice
-import com.rsvpnano.app.NanoEndpoint
-import com.rsvpnano.app.NanoWifiConnector
-import com.rsvpnano.app.NanoWifiEvent
-import com.rsvpnano.app.NanoWifiRequestResult
-import com.rsvpnano.app.NanoWifiSnapshot
+import com.rsvpnano.connection.NanoEndpoint
+import com.rsvpnano.connection.NanoWifiConnector
+import com.rsvpnano.connection.NanoWifiEvent
+import com.rsvpnano.connection.NanoWifiRequestResult
+import com.rsvpnano.connection.NanoWifiSnapshot
 import com.rsvpnano.app.createAndroidCompanionPresenter
 import com.rsvpnano.models.RememberedNano
 import java.io.File

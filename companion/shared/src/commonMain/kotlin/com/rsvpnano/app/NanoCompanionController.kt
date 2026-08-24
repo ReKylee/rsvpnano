@@ -4,6 +4,7 @@ import com.rsvpnano.api.NanoApi
 import com.rsvpnano.api.RepositoryClient
 import com.rsvpnano.converters.RsvpBookFile
 import com.rsvpnano.converters.SharedArticle
+import com.rsvpnano.library.PendingDraftService
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoFontSummary
 import com.rsvpnano.models.NanoFocusTimers
@@ -20,8 +21,8 @@ import com.rsvpnano.models.NanoLanguageFont
 import com.rsvpnano.models.NanoLocaleSummary
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.NanoThemeSummary
-import com.rsvpnano.models.needsArticleFetch
-import com.rsvpnano.sync.RssFeedNormalizer
+import com.rsvpnano.library.needsArticleFetch
+import com.rsvpnano.feeds.RssFeedNormalizer
 
 enum class NanoSettingsResource {
     Reading,

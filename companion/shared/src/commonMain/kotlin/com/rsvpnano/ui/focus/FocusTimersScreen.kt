@@ -1,4 +1,4 @@
-package com.rsvpnano.ui
+package com.rsvpnano.ui.focus
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +32,11 @@ import androidx.compose.ui.unit.dp
 import com.rsvpnano.models.NanoFocusTimer
 import com.rsvpnano.models.NanoFocusTimerRules
 import com.rsvpnano.models.NanoFocusTimers
+import com.rsvpnano.presentation.CompanionResource
+import com.rsvpnano.presentation.CompanionUiState
+import com.rsvpnano.ui.INLINE_DIVIDER
+import com.rsvpnano.ui.SettingsSection
+import com.rsvpnano.ui.settings.SettingsPage
 
 @Composable
 internal fun FocusTimersSettings(

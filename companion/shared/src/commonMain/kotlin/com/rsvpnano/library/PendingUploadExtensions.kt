@@ -1,4 +1,6 @@
-package com.rsvpnano.models
+package com.rsvpnano.library
+
+import com.rsvpnano.models.PendingUpload
 
 /**
  * Shared helper that mirrors the Swift `needsArticleFetch` behavior.

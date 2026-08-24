@@ -1,6 +1,8 @@
-package com.rsvpnano.converters
+package com.rsvpnano.library
 
 import com.rsvpnano.models.PendingUpload
+import com.rsvpnano.converters.RsvpBookFile
+import com.rsvpnano.converters.RsvpConverter
 
 object ImportPreparation {
     fun titleForText(preferredTitle: String, text: String, fallback: String): String {

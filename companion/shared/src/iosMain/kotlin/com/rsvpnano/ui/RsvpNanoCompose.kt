@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.window.ComposeUIViewController
 import com.rsvpnano.app.createIosCompanionPresenter
+import com.rsvpnano.presentation.CompanionPresenter
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import platform.UIKit.UIViewController

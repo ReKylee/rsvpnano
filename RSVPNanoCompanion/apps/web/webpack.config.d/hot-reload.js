@@ -5,9 +5,6 @@ if (config.devServer) {
   }];
   config.devServer.hot = true;
   config.devServer.liveReload = true;
-  config.devServer.static?.forEach(entry => {
-    entry.watch = true;
-  });
   config.devServer.static.push({
     directory: require("path").resolve(__dirname, "../../../../web/firmware"),
     publicPath: "/firmware",

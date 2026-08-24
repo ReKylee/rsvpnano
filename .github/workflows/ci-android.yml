@@ -13,9 +13,9 @@ on:
       - 'gradle.properties'
       - 'gradle/libs.versions.toml'
       - 'gradle/wrapper/**'
-      - 'RSVPNanoCompanion/conversionCore/**'
-      - 'RSVPNanoCompanion/shared/**'
-      - 'RSVPNanoCompanion/apps/android/**'
+      - 'companion/conversion/**'
+      - 'companion/shared/**'
+      - 'companion/apps/android/**'
       - '.github/workflows/ci-android.yml'
   pull_request:
     paths:
@@ -25,9 +25,9 @@ on:
       - 'gradle.properties'
       - 'gradle/libs.versions.toml'
       - 'gradle/wrapper/**'
-      - 'RSVPNanoCompanion/conversionCore/**'
-      - 'RSVPNanoCompanion/shared/**'
-      - 'RSVPNanoCompanion/apps/android/**'
+      - 'companion/conversion/**'
+      - 'companion/shared/**'
+      - 'companion/apps/android/**'
       - '.github/workflows/ci-android.yml'
 
 concurrency:
@@ -61,5 +61,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: android-release-apk
-          path: RSVPNanoCompanion/apps/android/build/outputs/apk/release/*.apk
+          path: companion/apps/android/build/outputs/apk/release/*.apk
           if-no-files-found: error

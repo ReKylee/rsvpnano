@@ -20,7 +20,7 @@ from fonts.convert_alpha4_font import (
     script_mask,
     vertical_fallback_rotates,
 )
-from RSVPNanoCompanion.tools.generate_multilingual_corpus import PARAGRAPHS
+from tools.companion.generate_multilingual_corpus import PARAGRAPHS
 
 
 class FontMapTest(TestCase):

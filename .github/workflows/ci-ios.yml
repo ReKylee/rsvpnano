@@ -13,9 +13,9 @@ on:
       - 'gradle.properties'
       - 'gradle/libs.versions.toml'
       - 'gradle/wrapper/**'
-      - 'RSVPNanoCompanion/conversionCore/**'
-      - 'RSVPNanoCompanion/shared/**'
-      - 'RSVPNanoCompanion/apps/ios/**'
+      - 'companion/conversion/**'
+      - 'companion/shared/**'
+      - 'companion/apps/ios/**'
       - '.github/workflows/ci-ios.yml'
   pull_request:
     paths:
@@ -25,9 +25,9 @@ on:
       - 'gradle.properties'
       - 'gradle/libs.versions.toml'
       - 'gradle/wrapper/**'
-      - 'RSVPNanoCompanion/conversionCore/**'
-      - 'RSVPNanoCompanion/shared/**'
-      - 'RSVPNanoCompanion/apps/ios/**'
+      - 'companion/conversion/**'
+      - 'companion/shared/**'
+      - 'companion/apps/ios/**'
       - '.github/workflows/ci-ios.yml'
 
 concurrency:
@@ -51,7 +51,7 @@ jobs:
       - name: Build iOS app
         run: >-
           xcodebuild
-          -project RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/RSVPNanoCompanion.xcodeproj
+          -project companion/apps/ios/RSVPNanoCompanion/RSVPNanoCompanion.xcodeproj
           -scheme RSVPNanoCompanion
           -configuration Debug
           -sdk iphonesimulator

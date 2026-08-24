@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-OUTPUT = ROOT / "RSVPNanoCompanion" / "testdata" / "multilingual"
+OUTPUT = ROOT / "companion" / "testdata" / "multilingual"
 TITLE = "Multilingual Reader Corpus"
 VERTICAL_TITLE = "Vertical CJK Reader Fixture"
 VERTICAL_PARAGRAPHS = (

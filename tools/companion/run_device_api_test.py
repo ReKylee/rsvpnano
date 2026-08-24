@@ -117,7 +117,7 @@ def run_gradle_test(repo_root: Path, base_url: str, iterations: int, write: bool
 
     report = (
         repo_root
-        / "RSVPNanoCompanion"
+        / "companion"
         / "shared"
         / "build"
         / "test-results"

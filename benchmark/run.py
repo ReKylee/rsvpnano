@@ -18,9 +18,9 @@ from compare import parse_log, parse_wpm_sweep, write_summary
 
 
 DEFAULT_ENV = "benchmark_waveshare_esp32s3_touch_lcd_349_rev1"
-DEFAULT_EPUB_FIXTURE = "RSVPNanoCompanion/testdata/conversion/Dracula-epub.epub"
-DEFAULT_MULTILINGUAL_FIXTURE = "RSVPNanoCompanion/testdata/multilingual/multilingual.rsvp"
-DEFAULT_VERTICAL_EPUB_FIXTURE = "RSVPNanoCompanion/testdata/multilingual/vertical-cjk.epub"
+DEFAULT_EPUB_FIXTURE = "companion/testdata/conversion/Dracula-epub.epub"
+DEFAULT_MULTILINGUAL_FIXTURE = "companion/testdata/multilingual/multilingual.rsvp"
+DEFAULT_VERTICAL_EPUB_FIXTURE = "companion/testdata/multilingual/vertical-cjk.epub"
 DEVICE_EPUB_PATH = Path("benchmark/Dracula-epub.epub")
 DEVICE_MULTILINGUAL_PATH = Path("benchmark/multilingual.rsvp")
 DEVICE_VERTICAL_EPUB_PATH = Path("benchmark/vertical-cjk.epub")

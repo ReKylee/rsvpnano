@@ -71,7 +71,7 @@ Errors use their HTTP status and a JSON body with a stable developer-facing code
 The opt-in hardware test flashes firmware that boots directly into the production Companion API, discovers its URL over USB serial, and runs the Kotlin client against the ESP32:
 
 ```powershell
-python RSVPNanoCompanion/tools/run_device_api_test.py
+python tools/companion/run_device_api_test.py
 ```
 
 The default run performs three complete read passes and reports request latency. Add `--write` to reapply current settings and appearance selections, round-trip feeds and focus timers, and upload then delete a disposable book. Network credentials are never changed.

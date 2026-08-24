@@ -150,7 +150,7 @@ class EpubParityAndroidTest {
 
     private fun testVectorCandidates(name: String): List<File> {
         val candidates = listOf(
-            File("RSVPNanoCompanion/testdata/conversion", name),
+            File("companion/testdata/conversion", name),
             File("../testdata/conversion", name),
             File("testdata/conversion", name),
         )

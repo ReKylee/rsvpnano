@@ -75,7 +75,7 @@ class RsvpDemoBookParityAndroidTest {
 
     private fun demoBookFile(name: String): File {
         val candidates = generateSequence(File("").absoluteFile) { it.parentFile }
-            .map { File(it, "RSVPNanoCompanion/testdata/localization/$name") }
+            .map { File(it, "companion/testdata/localization/$name") }
             .toList()
         return candidates.firstOrNull { it.isFile }
             ?: error("Demo book not found. Checked: ${candidates.joinToString { it.path }}")
@@ -83,7 +83,7 @@ class RsvpDemoBookParityAndroidTest {
 
     private fun corpusFile(name: String): File {
         val candidates = generateSequence(File("").absoluteFile) { it.parentFile }
-            .map { File(it, "RSVPNanoCompanion/testdata/multilingual/$name") }
+            .map { File(it, "companion/testdata/multilingual/$name") }
             .toList()
         return candidates.firstOrNull { it.isFile }
             ?: error("Multilingual corpus file not found. Checked: ${candidates.joinToString { it.path }}")

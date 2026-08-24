@@ -1,7 +1,7 @@
 @rsvp 1
 @title European Letter Demo
 @author Codex
-@source RSVPNanoCompanion/testdata/localization/european-letter-demo.rsvp
+@source companion/testdata/localization/european-letter-demo.rsvp
 @chapter What This Shows
 @para
 This demo book exercises the accented, Baltic, Sami, and extended-Latin letters that the current firmware should now preserve, pace, and render correctly.

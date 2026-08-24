@@ -7,7 +7,7 @@ import uharfbuzz as hb
 
 from fonts.convert_alpha4_font import read_hex_order
 from fonts.generate_fonts import CONVERTER, FONT_ROOT, PRESETS, converter_command, selected_presets
-from RSVPNanoCompanion.tools.generate_multilingual_corpus import PARAGRAPHS
+from tools.companion.generate_multilingual_corpus import PARAGRAPHS
 
 
 class FontPresetTest(TestCase):

@@ -35,7 +35,7 @@ DEFAULT_HEADER = REPO_ROOT / "src" / "ui" / "Localization.h"
 DEFAULT_CPP = REPO_ROOT / "src" / "ui" / "Localization.generated.cpp"
 DEFAULT_COMPANION = (
 	REPO_ROOT
-	/ "RSVPNanoCompanion"
+	/ "companion"
 	/ "shared"
 	/ "src"
 	/ "commonMain"

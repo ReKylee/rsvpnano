@@ -28,7 +28,7 @@ There is no generated XCFramework to copy into the repository.
 Open:
 
 ```text
-RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/RSVPNanoCompanion.xcodeproj
+companion/apps/ios/RSVPNanoCompanion/RSVPNanoCompanion.xcodeproj
 ```
 
 Use the `RSVPNanoCompanion` scheme for the main app. Check signing for both targets:
@@ -45,9 +45,9 @@ group.com.rsvpnano.companion
 If you need a personal bundle ID or App Group, update all matching locations:
 
 ```text
-RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/RSVPNanoCompanion/RSVPNanoCompanion.entitlements
-RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/RSVPNanoShareExtension/RSVPNanoShareExtension.entitlements
-RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/RSVPNanoCompanion/Models.swift
+companion/apps/ios/RSVPNanoCompanion/RSVPNanoCompanion/RSVPNanoCompanion.entitlements
+companion/apps/ios/RSVPNanoCompanion/RSVPNanoShareExtension/RSVPNanoShareExtension.entitlements
+companion/apps/ios/RSVPNanoCompanion/RSVPNanoCompanion/Models.swift
 ```
 
 ## Run On Device
@@ -72,7 +72,7 @@ Run this locally on macOS when touching shared/iOS integration:
 ```bash
 ./gradlew checkIos --no-daemon
 xcodebuild \
-  -project RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/RSVPNanoCompanion.xcodeproj \
+  -project companion/apps/ios/RSVPNanoCompanion/RSVPNanoCompanion.xcodeproj \
   -scheme RSVPNanoCompanion \
   -sdk iphonesimulator \
   -destination 'generic/platform=iOS Simulator' \

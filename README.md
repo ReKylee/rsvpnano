@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="RSVPNanoCompanion/apps/web/src/wasmJsMain/composeResources/drawable/rsvp_nano_horizontal.svg">
-    <img src="RSVPNanoCompanion/apps/web/src/wasmJsMain/composeResources/drawable/rsvp_nano_horizontal_light.svg" alt="RSVP Nano" width="520">
+    <source media="(prefers-color-scheme: dark)" srcset="companion/apps/web/src/wasmJsMain/composeResources/drawable/rsvp_nano_horizontal.svg">
+    <img src="companion/apps/web/src/wasmJsMain/composeResources/drawable/rsvp_nano_horizontal_light.svg" alt="RSVP Nano" width="520">
   </picture>
 </p>
 
@@ -107,8 +107,8 @@ to you:
 | Companion | UI | Status |
 | --- | --- | --- |
 | [Web](https://ionutdecebal.github.io/rsvpnano/) | Compose Multiplatform on Kotlin/Wasm | Hosted setup, flashing, conversion, USB, and LAN management |
-| [Android](RSVPNanoCompanion/apps/android/README.md) | Jetpack Compose | Build from source |
-| [iOS](RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/README.md) | SwiftUI | Build from source |
+| [Android](companion/apps/android/README.md) | Jetpack Compose | Build from source |
+| [iOS](companion/apps/ios/RSVPNanoCompanion/README.md) | SwiftUI | Build from source |
 
 The companions share device models, API contracts, conversion, persistence formats, and workflows.
 Their layouts remain platform-specific.
@@ -187,17 +187,17 @@ Companion builds require JDK 17. Android also requires the Android SDK; iOS requ
 ```
 
 The staged website is written to `build/webSite`. Detailed native setup is in the
-[Android](RSVPNanoCompanion/apps/android/README.md) and
-[iOS](RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/README.md) guides.
+[Android](companion/apps/android/README.md) and
+[iOS](companion/apps/ios/RSVPNanoCompanion/README.md) guides.
 
 ## Repository layout
 
 | Path | Purpose |
 | --- | --- |
 | `src/` | Firmware application, board ports, reading engine, UI, storage, networking, and companion API |
-| `RSVPNanoCompanion/shared/` | Shared companion models, API clients, persistence, and workflows |
-| `RSVPNanoCompanion/conversionCore/` | Shared Kotlin Multiplatform document conversion |
-| `RSVPNanoCompanion/apps/` | Android, iOS, and web applications |
+| `companion/shared/` | Shared companion models, API clients, persistence, and workflows |
+| `companion/conversion/` | Shared Kotlin Multiplatform document conversion |
+| `companion/apps/` | Android, iOS, and web applications |
 | `fonts/`, `themes/`, `locale-packs/` | Installable catalogs |
 | `localization/` | Locale and UI-font generation |
 | `test/` | Native firmware tests |

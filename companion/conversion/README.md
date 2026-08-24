@@ -13,4 +13,4 @@ Run the common and browser tests with:
 bash ./gradlew :conversionCore:testDebugUnitTest :conversionCore:wasmJsBrowserTest
 ```
 
-Reference inputs and expected `.rsvp` files live in `RSVPNanoCompanion/testdata`.
+Reference inputs and expected `.rsvp` files live in `companion/testdata`.

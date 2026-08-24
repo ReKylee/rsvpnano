@@ -6,7 +6,7 @@
 #include <string_view>
 #include <vector>
 
-#include "converter/PdfTextExtractor.h"
+#include "conversion/pdf/PdfTextExtractor.h"
 
 void setUp() {}
 void tearDown() {}

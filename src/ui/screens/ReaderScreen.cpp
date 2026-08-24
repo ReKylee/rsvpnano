@@ -7,7 +7,7 @@
 
 #include "board/BoardPower.h"
 #include "settings/SettingsRules.h"
-#include "storage/StorageManager.h"
+#include "library/StorageManager.h"
 #include "storage/migration/Migration.h"
 #include "text/UnicodeText.h"
 #include "text/Utf8Text.h"

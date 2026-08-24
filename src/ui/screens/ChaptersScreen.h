@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <span>
 
-#include "book/BookMetadata.h"
+#include "library/BookMetadata.h"
 #include "reader/ReadingLoop.h"
 #include "settings/SettingsModel.h"
 #include "ui/Ui.h"

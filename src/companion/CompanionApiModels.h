@@ -12,9 +12,9 @@
 #include <utility>
 #include <vector>
 
-#include "book/BookMetadata.h"
+#include "library/BookMetadata.h"
 #include "fonts/FontCatalog.h"
-#include "locales/LocaleCatalog.h"
+#include "localization/LocaleCatalog.h"
 #include "reader/ReadingState.h"
 #include "settings/SettingsModel.h"
 #include "ui/Theme.h"

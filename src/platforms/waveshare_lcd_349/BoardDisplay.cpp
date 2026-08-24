@@ -8,7 +8,7 @@
 #include <esp_heap_caps.h>
 #include <esp_memory_utils.h>
 
-#include "display/RowPrefixCanvas.h"
+#include "platforms/waveshare_lcd_349/RowPrefixCanvas.h"
 #include "drivers/gpio/tca9554/Tca9554.h"
 #include "platforms/waveshare_lcd_349/WaveshareLcd349.h"
 

@@ -7,7 +7,7 @@
 
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
-#include "timer/FocusTimerStorage.h"
+#include "focus/FocusTimerStorage.h"
 
 namespace screens {
     void FocusScreen::begin() {

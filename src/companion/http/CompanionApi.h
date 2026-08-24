@@ -17,12 +17,12 @@
 #include <vector>
 
 #include "companion/http/CompanionHttp.h"
-#include "locales/LocaleCatalog.h"
+#include "localization/LocaleCatalog.h"
 #include "settings/SettingsGlaze.h"
 #include "settings/SettingsStore.h"
-#include "storage/StorageManager.h"
+#include "library/StorageManager.h"
 #include "storage/migration/Migration.h"
-#include "timer/FocusTimers.h"
+#include "focus/FocusTimers.h"
 #include "ui/Ui.h"
 #include "ui/screens/LibraryScreen.h"
 #include "ui/screens/ReaderScreen.h"

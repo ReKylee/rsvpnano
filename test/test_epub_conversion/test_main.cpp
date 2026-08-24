@@ -5,9 +5,9 @@
 #include <span>
 #include <vector>
 
-#include "converter/EpubContentParser.h"
-#include "converter/EpubPackage.h"
-#include "converter/RsvpWriter.h"
+#include "conversion/epub/EpubContentParser.h"
+#include "conversion/epub/EpubPackage.h"
+#include "conversion/rsvp/RsvpWriter.h"
 
 void setUp() {}
 void tearDown() {}

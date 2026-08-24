@@ -14,9 +14,9 @@
 #include "board/BoardSystem.h"
 #include "freertos/task.h"
 #include "logging/Logger.h"
-#include "rss/RssFeeds.h"
+#include "feeds/RssFeeds.h"
 #include "settings/NvsSecurity.h"
-#include "storage/index/ReadingProgress.h"
+#include "library/ReadingProgress.h"
 #include "storage/migration/Migration.h"
 #include "update/OtaUpdater.h"
 

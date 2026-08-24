@@ -8,7 +8,7 @@
 
 #include "logging/Logger.h"
 #include "storage/fs/StoragePaths.h"
-#include "storage/index/IndexedBook.h"
+#include "library/IndexedBook.h"
 #include "text/AsciiText.h"
 #include "ui/screens/ScreenCommon.h"
 

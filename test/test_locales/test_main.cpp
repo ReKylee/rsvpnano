@@ -4,11 +4,11 @@
 #include <string>
 #include <vector>
 
-#include "book/BookMetadata.h"
+#include "library/BookMetadata.h"
 #include "fonts/UiFont6x9.h"
 #include "fonts/FontCatalog.h"
-#include "locales/LocaleCatalog.h"
-#include "locales/LocalePack.h"
+#include "localization/LocaleCatalog.h"
+#include "localization/LocalePack.h"
 #include "text/LocaleTag.h"
 #include "text/BidiText.h"
 #include "text/UnicodeText.h"

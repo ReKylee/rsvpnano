@@ -4,8 +4,8 @@
 #include <utility>
 
 #include "board/BoardStorage.h"
-#include "rss/RssConfig.h"
-#include "rss/RssConfigStorage.h"
+#include "feeds/RssConfig.h"
+#include "feeds/RssConfigStorage.h"
 
 namespace {
 

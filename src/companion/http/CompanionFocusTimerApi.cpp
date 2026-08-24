@@ -5,7 +5,7 @@
 #include "board/BoardStorage.h"
 #include "logging/Logger.h"
 #include "storage/fs/StoragePaths.h"
-#include "timer/FocusTimerStorage.h"
+#include "focus/FocusTimerStorage.h"
 
 auto CompanionApi::getFocusTimers(httpd_req_t& request) -> companion::api::Result<std::span<const focus::Timer>> {
     (void) request;

@@ -7,7 +7,7 @@
 
 #include "board/BoardStorage.h"
 #include "companion/http/CompanionUpload.h"
-#include "display/ThemeStore.h"
+#include "themes/ThemeStore.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 

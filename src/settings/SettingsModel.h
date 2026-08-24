@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "settings/SettingsRules.h"
-#include "standby/ScreensaverTypes.h"
+#include "screensavers/ScreensaverTypes.h"
 #include "text/UnicodeText.h"
 namespace settings {
 

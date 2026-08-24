@@ -12,7 +12,7 @@
 #include "reader/ReadingSession.h"
 #include "settings/SettingsCodec.h"
 #include "settings/SettingsGlaze.h"
-#include "storage/library/BookLibrary.h"
+#include "library/BookLibrary.h"
 #include "text/UnicodeText.h"
 
 void setUp() {}

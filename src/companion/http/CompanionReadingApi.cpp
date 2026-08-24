@@ -11,7 +11,7 @@
 #include "logging/Logger.h"
 #include "reader/ReadingLoop.h"
 #include "storage/fs/StoragePaths.h"
-#include "storage/index/ReadingProgress.h"
+#include "library/ReadingProgress.h"
 #include "text/LocaleTag.h"
 #include "text/UnicodeText.h"
 

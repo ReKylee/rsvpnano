@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "hash/Fnv1a.h"
-#include "locales/LocaleCatalog.h"
+#include "localization/LocaleCatalog.h"
 #include "text/BidiText.h"
 #include "ui/Localization.h"
 #include "ui/Theme.h"

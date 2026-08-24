@@ -5,9 +5,9 @@
 #include <vector>
 
 #include "reader/ReadingLoop.h"
-#include "storage/StorageManager.h"
-#include "storage/index/IndexedBookStore.h"
-#include "storage/index/ReadingProgress.h"
+#include "library/StorageManager.h"
+#include "library/IndexedBookStore.h"
+#include "library/ReadingProgress.h"
 #include "ui/screens/Screens.h"
 
 namespace screens {

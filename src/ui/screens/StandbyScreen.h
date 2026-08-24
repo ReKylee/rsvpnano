@@ -1,6 +1,6 @@
 #pragma once
 
-#include "standby/Screensaver.h"
+#include "screensavers/Screensaver.h"
 #include "ui/Ui.h"
 
 namespace screens {

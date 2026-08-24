@@ -8,18 +8,18 @@
 #include <span>
 #include <string>
 
-#include "book/BookMetadata.h"
-#include "display/ThemeStore.h"
+#include "library/BookMetadata.h"
+#include "themes/ThemeStore.h"
 #include "fonts/FontCatalog.h"
-#include "locales/LocaleCatalog.h"
+#include "localization/LocaleCatalog.h"
 #include "reader/ReadingLoop.h"
 #include "settings/NvsSecurity.h"
 #include "settings/SettingsModel.h"
 #include "settings/SettingsStore.h"
-#include "standby/ScreensaverTypes.h"
-#include "timer/FocusOrientation.h"
-#include "timer/FocusSession.h"
-#include "timer/FocusTimers.h"
+#include "screensavers/ScreensaverTypes.h"
+#include "focus/FocusOrientation.h"
+#include "focus/FocusSession.h"
+#include "focus/FocusTimers.h"
 #include "ui/Ui.h"
 
 namespace screens {

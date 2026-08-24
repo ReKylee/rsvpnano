@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <functional>
 
-#include "net/WifiConnection.h"
+#include "network/WifiConnection.h"
 #include "settings/SettingsStore.h"
 
 namespace screens {

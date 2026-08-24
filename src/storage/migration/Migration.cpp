@@ -14,14 +14,14 @@
 
 #include "board/BoardStorage.h"
 #include "fonts/FontCatalog.h"
-#include "locales/LocalePack.h"
+#include "localization/LocalePack.h"
 #include "logging/Logger.h"
-#include "rss/RssConfig.h"
+#include "feeds/RssConfig.h"
 #include "settings/SettingsCodec.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
-#include "storage/index/IndexedBook.h"
-#include "timer/FocusTimers.h"
+#include "library/IndexedBook.h"
+#include "focus/FocusTimers.h"
 #include "ui/Theme.h"
 
 namespace StorageMigration {

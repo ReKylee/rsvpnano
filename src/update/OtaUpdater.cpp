@@ -11,7 +11,7 @@
 #include <WiFiClientSecure.h>
 #include "FirmwareVersion.generated.h"
 #include "board/BoardConfig.h"
-#include "net/WifiConnection.h"
+#include "network/WifiConnection.h"
 #include "text/AsciiText.h"
 #include "update/ReleaseParser.h"
 

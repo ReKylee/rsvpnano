@@ -1,5 +1,5 @@
 #include "reader/ReadingLoop.h"
-#include "storage/index/IndexedBookStore.h"
+#include "library/IndexedBookStore.h"
 
 #include <algorithm>
 #include <string_view>

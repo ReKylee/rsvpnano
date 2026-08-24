@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "standby/LifeGrid.h"
+#include "screensavers/LifeGrid.h"
 
 namespace {
 

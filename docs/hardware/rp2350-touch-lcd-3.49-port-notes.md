@@ -39,7 +39,7 @@ These parts are mostly platform-agnostic and should be reusable with minimal or 
 
 - Reader/pacing logic in `src/reader/`.
 - Most app state and menu flow in `src/app/`, once Wi-Fi/OTA paths are feature-gated.
-- Font assets and word layout logic in `src/display/DisplayManager.cpp`.
+- Font loading and text rendering in `src/fonts/` and `src/ui/screens/`.
 - Book parsing and format logic, after the storage backend is replaced.
 - Touch packet decoding in `src/drivers/touch/axs15231b_touch`, because the RP2350 board still uses AXS15231B touch over I2C.
 

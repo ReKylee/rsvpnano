@@ -10,7 +10,7 @@
 
 #include "fonts/AlphaFont.h"
 #include "fonts/UiFont6x9.h"
-#include "locales/LocalePack.h"
+#include "localization/LocalePack.h"
 #include "reader/ReadingLoop.h"
 #include "settings/SettingsRules.h"
 #include "text/UnicodeText.h"

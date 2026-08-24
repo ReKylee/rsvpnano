@@ -5,9 +5,9 @@
 #include <span>
 #include <string>
 
-#include "book/BookMetadata.h"
+#include "library/BookMetadata.h"
 #include "reader/ReadingState.h"
-#include "storage/index/IndexedBookStore.h"
+#include "library/IndexedBookStore.h"
 
 struct ReadingSession {
     BookMetadata metadata;

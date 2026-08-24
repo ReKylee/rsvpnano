@@ -4,8 +4,8 @@
 #include <string>
 #include <utility>
 
-#include "timer/FocusSession.h"
-#include "timer/FocusTimers.h"
+#include "focus/FocusSession.h"
+#include "focus/FocusTimers.h"
 #include "settings/SettingsGlaze.h"
 
 void setUp() {}

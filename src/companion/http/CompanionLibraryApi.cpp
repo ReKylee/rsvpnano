@@ -13,8 +13,8 @@
 #include "reader/ReadingLoop.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
-#include "storage/index/IndexedBook.h"
-#include "storage/index/ReadingProgress.h"
+#include "library/IndexedBook.h"
+#include "library/ReadingProgress.h"
 #include "text/AsciiText.h"
 
 namespace {

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <bit>
 
-#include "standby/PackedGrid.h"
+#include "screensavers/PackedGrid.h"
 #include "ui/screens/Screens.h"
 
 namespace screens {

@@ -1,7 +1,7 @@
 #include <unity.h>
 
-#include "standby/ReactionScreensaver.h"
-#include "standby/Screensaver.h"
+#include "screensavers/ReactionScreensaver.h"
+#include "screensavers/Screensaver.h"
 
 namespace {
 

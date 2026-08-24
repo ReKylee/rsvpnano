@@ -1,6 +1,6 @@
 #include "ui/screens/ScreenCommon.h"
 
-#include "locales/LocaleCatalog.h"
+#include "localization/LocaleCatalog.h"
 
 namespace screens {
     namespace {

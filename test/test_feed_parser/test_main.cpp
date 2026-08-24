@@ -2,8 +2,8 @@
 #include <unity.h>
 
 #include "hash/Fnv1a.h"
-#include "rss/FeedParser.h"
-#include "rss/RssConfig.h"
+#include "feeds/FeedParser.h"
+#include "feeds/RssConfig.h"
 #include "text/AsciiText.h"
 #include "text/TextNormalizer.h"
 

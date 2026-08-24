@@ -4,7 +4,6 @@
 #include <vector>
 
 #include "companion/serial/CompanionSerialProtocol.h"
-#include "usb/WebFlasherReset.h"
 
 namespace serial = companion::serial;
 
@@ -50,24 +49,9 @@ void test_corrupt_crc_is_skipped_before_next_frame() {
                             static_cast<uint8_t>(frames[0].type));
 }
 
-void test_web_flasher_reset_sequence_matches_esptool_js_only() {
-    usb::WebFlasherResetSequence sequence;
-
-    TEST_ASSERT_FALSE(sequence.update(false, true));
-    TEST_ASSERT_FALSE(sequence.update(true, true));
-    TEST_ASSERT_FALSE(sequence.update(true, false));
-    TEST_ASSERT_FALSE(sequence.update(false, false));
-
-    TEST_ASSERT_FALSE(sequence.update(true, false));
-    TEST_ASSERT_FALSE(sequence.update(true, true));
-    TEST_ASSERT_FALSE(sequence.update(false, true));
-    TEST_ASSERT_TRUE(sequence.update(false, false));
-}
-
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_fragmented_and_coalesced_frames_resynchronize);
     RUN_TEST(test_corrupt_crc_is_skipped_before_next_frame);
-    RUN_TEST(test_web_flasher_reset_sequence_matches_esptool_js_only);
     return UNITY_END();
 }

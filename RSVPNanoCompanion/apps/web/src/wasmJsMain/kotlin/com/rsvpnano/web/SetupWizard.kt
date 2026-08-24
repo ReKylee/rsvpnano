@@ -393,14 +393,60 @@ private fun InstallPage(
     onChooseFile: () -> Unit,
     onInstallFile: (SelectedFirmware) -> Unit,
 ) {
+    var bootloaderBusy by remember { mutableStateOf(false) }
+    var bootloaderStatus by remember(board.id) { mutableStateOf<String?>(null) }
+
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 18.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         WizardIntro("FIRMWARE", "Install RSVP Nano", "Plug in ${board.name}, then choose it when your browser asks.")
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Bootloader mode for ${board.name}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            Text(board.bootloaderHelp, style = MaterialTheme.typography.bodyMedium)
+            Text("USB installation", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            Text("Before choosing Install, put ${board.name} into bootloader mode.", style = MaterialTheme.typography.bodyMedium)
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val restart = {
+                    bootloaderBusy = true
+                    bootloaderStatus = "Restarting your Nano..."
+                    restartNanoInBootloader(
+                        {
+                            bootloaderBusy = false
+                            bootloaderStatus = "Nano restarted in bootloader mode. Choose Install and select the new USB JTAG/serial port."
+                        },
+                        { message ->
+                            bootloaderBusy = false
+                            bootloaderStatus = message
+                        },
+                    )
+                }
+                if (maxWidth < 620.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(board.bootloaderHelp, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        OutlinedButton(onClick = restart, enabled = secure && serialAvailable && !bootloaderBusy) {
+                            Text(if (bootloaderBusy) "Restarting..." else "Restart in bootloader mode")
+                        }
+                    }
+                } else {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                        Text(board.bootloaderHelp, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        OutlinedButton(onClick = restart, enabled = secure && serialAvailable && !bootloaderBusy) {
+                            Text(if (bootloaderBusy) "Restarting..." else "Restart in bootloader mode")
+                        }
+                    }
+                }
+            }
+            bootloaderStatus?.let { status ->
+                Text(
+                    status,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (bootloaderBusy) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                )
+            }
+            Text(
+                "For a normal update to an existing Nano, use Update in the Device section instead.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f),
+            )
             Text("Existing settings are kept unless you choose to erase the device.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f))
         }
         if (!secure) Text("Open this page over HTTPS before installing.", color = MaterialTheme.colorScheme.error)
@@ -795,6 +841,9 @@ private external fun createObjectUrl(file: BrowserFile): String
 
 @JsFun("(path) => new URL(path, document.baseURI).href")
 private external fun absoluteUrl(path: String): String
+
+@JsFun("""(ok, fail) => { (async () => { let port; let disconnected = false; let resolveDisconnect; const wait = ms => new Promise(resolve => setTimeout(resolve, ms)); const disconnect = new Promise(resolve => { resolveDisconnect = resolve; }); const onDisconnect = event => { if (event.target === port || event.port === port) { disconnected = true; resolveDisconnect(); } }; navigator.serial.addEventListener('disconnect', onDisconnect); try { port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x303a }] }); try { await port.open({ baudRate: 1200 }); } catch (error) { await Promise.race([disconnect, wait(1000)]); if (!disconnected) throw error; } if (!disconnected) { await wait(200); try { await port.close(); } catch (error) { await Promise.race([disconnect, wait(1000)]); if (!disconnected) throw error; } await Promise.race([disconnect, wait(4000)]); if (!disconnected) throw new Error('Nano did not restart in bootloader mode. Try the BOOT and RESET buttons instead.'); } await wait(800); ok(); } catch (error) { fail(error?.message || String(error)); } finally { navigator.serial.removeEventListener('disconnect', onDisconnect); try { if (!disconnected) await port?.close(); } catch (_) {} } })(); }""")
+internal external fun restartNanoInBootloader(ok: () -> Unit, fail: (String) -> Unit)
 
 @JsFun("(ok, fail) => fetch(new URL('firmware/release.json', document.baseURI), { cache: 'no-store' }).then(response => { if (!response.ok) throw new Error('HTTP ' + response.status); return response.text(); }).then(ok).catch(error => fail(error?.message || String(error)))")
 private external fun fetchDeployedReleaseJson(ok: (String) -> Unit, fail: (String) -> Unit)

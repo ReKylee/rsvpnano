@@ -4,16 +4,10 @@
 #include <algorithm>
 #include <array>
 #include "board/BoardStorage.h"
-#if __has_include(<miniz.h>)
-#include <miniz.h>
-#elif __has_include(<esp_rom/miniz.h>)
-#include <esp_rom/miniz.h>
-#else
-#include <esp32s3/rom/miniz.h>
-#endif
 #include <esp_heap_caps.h>
+#include <zlib.h>
 
-#include "converter/EpubContentWriter.h"
+#include "converter/EpubContentParser.h"
 #include "converter/EpubPackage.h"
 
 namespace EpubZip {
@@ -69,12 +63,12 @@ namespace EpubZip {
 
         void reportProgress(const EpubConverter::Options& options, const char* line1, const char* line2,
                             int progressPercent) {
-            if (options.progressCallback == nullptr) {
+            if (options.conversion.progressCallback == nullptr) {
                 return;
             }
 
             progressPercent = std::max(0, std::min(100, progressPercent));
-            options.progressCallback(options, line1, line2, progressPercent);
+            options.conversion.progressCallback(options.conversion.progressContext, line1, line2, progressPercent);
             serviceBackground();
         }
 
@@ -94,6 +88,17 @@ namespace EpubZip {
             if (buffer != nullptr) {
                 heap_caps_free(buffer);
             }
+        }
+
+        voidpf allocateZlib(voidpf, uInt itemCount, uInt itemSize) {
+            if (itemSize != 0 && itemCount > SIZE_MAX / itemSize) {
+                return Z_NULL;
+            }
+            return allocateBuffer(static_cast<size_t>(itemCount) * itemSize);
+        }
+
+        void freeZlib(voidpf, voidpf buffer) {
+            freeBuffer(buffer);
         }
 
         void reportContentProgress(const EpubConverter::Options& options, size_t itemIndex, size_t itemCount,
@@ -181,29 +186,33 @@ namespace EpubZip {
         bool inflatePayload(File& file, const ZipEntry& entry, uint32_t& totalOutputBytes, ChunkSink onChunk,
                             const char* context) {
             uint8_t* inputBuffer = static_cast<uint8_t*>(allocateBuffer(kInflateInputChunkBytes));
-            uint8_t* dictionary = static_cast<uint8_t*>(allocateBuffer(TINFL_LZ_DICT_SIZE));
-            tinfl_decompressor* inflator =
-                static_cast<tinfl_decompressor*>(allocateBuffer(sizeof(tinfl_decompressor)));
-            if (inputBuffer == nullptr || dictionary == nullptr || inflator == nullptr) {
-                ESP_LOGD("epub-zip", "No inflate buffers for %s: %s input=%s dict=%s inflator=%s", context,
+            uint8_t* outputBuffer = static_cast<uint8_t*>(allocateBuffer(kReadChunkBytes));
+            if (inputBuffer == nullptr || outputBuffer == nullptr) {
+                ESP_LOGD("epub-zip", "No inflate buffers for %s: %s input=%s output=%s", context,
                          entry.name.c_str(), inputBuffer == nullptr ? "no" : "yes",
-                         dictionary == nullptr ? "no" : "yes", inflator == nullptr ? "no" : "yes");
+                         outputBuffer == nullptr ? "no" : "yes");
                 freeBuffer(inputBuffer);
-                freeBuffer(dictionary);
-                freeBuffer(inflator);
+                freeBuffer(outputBuffer);
                 return false;
             }
 
-            tinfl_init(inflator);
+            z_stream stream{};
+            stream.zalloc = allocateZlib;
+            stream.zfree = freeZlib;
+            int status = inflateInit2(&stream, -MAX_WBITS);
+            if (status != Z_OK) {
+                ESP_LOGE("epub-zip", "Could not initialize inflate for %s status=%d context=%s", entry.name.c_str(),
+                         status, context);
+                freeBuffer(inputBuffer);
+                freeBuffer(outputBuffer);
+                return false;
+            }
 
             bool ok = true;
             uint32_t compressedRemaining = entry.compressedSize;
-            size_t inputAvailable = 0;
-            size_t inputOffset = 0;
-            tinfl_status status = TINFL_STATUS_NEEDS_MORE_INPUT;
 
-            while (status > TINFL_STATUS_DONE) {
-                if (inputAvailable == 0 && compressedRemaining > 0) {
+            while (status != Z_STREAM_END) {
+                if (stream.avail_in == 0 && compressedRemaining > 0) {
                     const size_t chunk = std::min(kInflateInputChunkBytes, static_cast<size_t>(compressedRemaining));
                     if (!readExact(file, inputBuffer, chunk)) {
                         ESP_LOGE("epub-zip", "Deflated %s read failed: %s remaining=%lu", context, entry.name.c_str(),
@@ -213,50 +222,43 @@ namespace EpubZip {
                     }
 
                     compressedRemaining -= static_cast<uint32_t>(chunk);
-                    inputAvailable = chunk;
-                    inputOffset = 0;
+                    stream.next_in = inputBuffer;
+                    stream.avail_in = static_cast<uInt>(chunk);
                 }
 
-                const size_t dictionaryOffset = totalOutputBytes & (TINFL_LZ_DICT_SIZE - 1);
-                uint8_t* writeCursor = dictionary + dictionaryOffset;
-                size_t inSize = inputAvailable;
-                size_t outSize = TINFL_LZ_DICT_SIZE - dictionaryOffset;
-                const mz_uint32 flags = compressedRemaining > 0 ? TINFL_FLAG_HAS_MORE_INPUT : 0;
+                stream.next_out = outputBuffer;
+                stream.avail_out = kReadChunkBytes;
+                status = inflate(&stream, Z_NO_FLUSH);
+                const size_t outputBytes = kReadChunkBytes - stream.avail_out;
 
-                status = tinfl_decompress(inflator, inputBuffer + inputOffset, &inSize, dictionary, writeCursor,
-                                          &outSize, flags);
-                inputAvailable -= inSize;
-                inputOffset += inSize;
-
-                if (outSize > 0) {
-                    if (!onChunk(writeCursor, outSize)) {
+                if (outputBytes > 0) {
+                    if (!onChunk(outputBuffer, outputBytes)) {
                         ok = false;
                         break;
                     }
-                    totalOutputBytes += static_cast<uint32_t>(outSize);
+                    totalOutputBytes += static_cast<uint32_t>(outputBytes);
                 }
 
                 serviceBackground();
 
-                if (status < TINFL_STATUS_DONE) {
+                if (status != Z_OK && status != Z_STREAM_END) {
                     ESP_LOGE("epub-zip", "Inflate failed for %s status=%d context=%s", entry.name.c_str(),
-                             static_cast<int>(status), context);
+                             status, context);
                     ok = false;
                     break;
                 }
 
-                if (inSize == 0 && outSize == 0 && status != TINFL_STATUS_DONE && inputAvailable == 0
-                    && compressedRemaining == 0) {
+                if (outputBytes == 0 && status != Z_STREAM_END && stream.avail_in == 0 && compressedRemaining == 0) {
                     ESP_LOGE("epub-zip", "Inflate stalled for %s status=%d context=%s", entry.name.c_str(),
-                             static_cast<int>(status), context);
+                             status, context);
                     ok = false;
                     break;
                 }
             }
 
+            inflateEnd(&stream);
             freeBuffer(inputBuffer);
-            freeBuffer(dictionary);
-            freeBuffer(inflator);
+            freeBuffer(outputBuffer);
             return ok;
         }
 
@@ -332,13 +334,10 @@ namespace EpubZip {
         return extractToString(*entry, output, maxBytes);
     }
 
-    ContentExtractStatus Archive::extractContentToRsvp(std::string_view name, File& output, size_t& wordCount,
-                                                       size_t maxWords, std::string& lastChapterTitle,
-                                                       size_t& chapterCount,
+    ContentExtractStatus Archive::extractContentToRsvp(std::string_view name, RsvpWriter& writer,
                                                        std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
                                                        std::string_view fallbackChapterTitle,
                                                        std::string_view bookTitle,
-                                                       std::string_view bookLocale, bool& verticalWritingEmitted,
                                                        const EpubConverter::Options& options, size_t itemIndex,
                                                        size_t itemCount) {
         const ZipEntry* entry = find(name);
@@ -346,9 +345,8 @@ namespace EpubZip {
             ESP_LOGE("epub-zip", "Content entry not found: %.*s", static_cast<int>(name.size()), name.data());
             return ContentExtractStatus::Failed;
         }
-        return extractContentToRsvp(*entry, output, wordCount, maxWords, lastChapterTitle, chapterCount, tocEntries,
-                                    hasToc, fallbackChapterTitle, bookTitle, bookLocale, verticalWritingEmitted,
-                                    options, itemIndex, itemCount);
+        return extractContentToRsvp(*entry, writer, tocEntries, hasToc, fallbackChapterTitle, bookTitle, options,
+                                    itemIndex, itemCount);
     }
 
     void Archive::logArchiveHints(const char* reason) const {
@@ -576,13 +574,10 @@ namespace EpubZip {
         return ok;
     }
 
-    ContentExtractStatus Archive::extractContentToRsvp(const ZipEntry& entry, File& output, size_t& wordCount,
-                                                       size_t maxWords, std::string& lastChapterTitle,
-                                                       size_t& chapterCount,
+    ContentExtractStatus Archive::extractContentToRsvp(const ZipEntry& entry, RsvpWriter& rsvpWriter,
                                                        std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
                                                        std::string_view fallbackChapterTitle,
                                                        std::string_view bookTitle,
-                                                       std::string_view bookLocale, bool& verticalWritingEmitted,
                                                        const EpubConverter::Options& options, size_t itemIndex,
                                                        size_t itemCount) {
         ESP_LOGD("epub-zip", "Extract content: %s method=%u flags=0x%04x c=%lu u=%lu", entry.name.c_str(), entry.method,
@@ -602,16 +597,14 @@ namespace EpubZip {
             return ContentExtractStatus::Failed;
         }
 
-        EpubContent::RsvpContentWriter writer(output, wordCount, maxWords, lastChapterTitle, chapterCount, tocEntries,
-                                              hasToc, fallbackChapterTitle, bookTitle, verticalWritingEmitted,
-                                              bookLocale);
+        EpubContent::Parser parser(rsvpWriter, tocEntries, hasToc, fallbackChapterTitle, bookTitle);
         uint32_t totalOutputBytes = 0;
         uint32_t lastProgressBytes = 0;
         ContentExtractStatus result = ContentExtractStatus::Complete;
 
         auto finishWriter = [&]() -> ContentExtractStatus {
-            if (!writer.finish()) {
-                return writer.reachedWordLimit() ? ContentExtractStatus::WordLimitReached
+            if (!parser.finish()) {
+                return parser.reachedWordLimit() ? ContentExtractStatus::WordLimitReached
                                                  : ContentExtractStatus::Failed;
             }
             return ContentExtractStatus::Complete;
@@ -622,13 +615,14 @@ namespace EpubZip {
                 return;
             }
             lastProgressBytes = totalOutputBytes;
-            reportContentProgress(options, itemIndex, itemCount, totalOutputBytes, entry.uncompressedSize, wordCount);
+            reportContentProgress(options, itemIndex, itemCount, totalOutputBytes, entry.uncompressedSize,
+                                  rsvpWriter.wordCount());
         };
 
         auto writeChunk = [&](const uint8_t* data, size_t length) -> bool {
-            if (!writer.write(data, length)) {
+            if (!parser.write(data, length)) {
                 result =
-                    writer.reachedWordLimit() ? ContentExtractStatus::WordLimitReached : ContentExtractStatus::Failed;
+                    parser.reachedWordLimit() ? ContentExtractStatus::WordLimitReached : ContentExtractStatus::Failed;
                 return false;
             }
             reportMaybe(false);

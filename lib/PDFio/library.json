@@ -1,0 +1,35 @@
+{
+  "name": "PDFio",
+  "version": "1.6.3",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/michaelrsweet/pdfio.git"
+  },
+  "build": {
+    "flags": [
+      "-includelib/PDFio/pdfio-platform.h"
+    ],
+    "srcDir": "upstream",
+    "includeDir": "upstream",
+    "srcFilter": [
+      "+<pdfio-aes.c>",
+      "+<pdfio-array.c>",
+      "+<pdfio-common.c>",
+      "+<pdfio-content.c>",
+      "+<pdfio-crypto.c>",
+      "+<pdfio-dict.c>",
+      "+<pdfio-file.c>",
+      "+<pdfio-md5.c>",
+      "+<pdfio-object.c>",
+      "+<pdfio-page.c>",
+      "+<pdfio-rc4.c>",
+      "+<pdfio-sha256.c>",
+      "+<pdfio-stream.c>",
+      "+<pdfio-string.c>",
+      "+<pdfio-token.c>",
+      "+<pdfio-value.c>",
+      "+<ttf.c>"
+    ]
+  }
+}

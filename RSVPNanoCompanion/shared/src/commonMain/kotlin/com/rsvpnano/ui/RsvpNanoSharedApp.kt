@@ -70,6 +70,7 @@ import androidx.navigationevent.compose.rememberNavigationEventState
 import com.rsvpnano.app.CompanionNotice
 import com.rsvpnano.app.NanoConnectionTransport
 import com.rsvpnano.app.NanoEndpoint
+import com.rsvpnano.converters.RsvpSupportedFileTypes
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.needsArticleFetch
 import io.github.vinceglb.filekit.name
@@ -120,7 +121,7 @@ fun RsvpNanoSharedApp(
             }
         }
         val filePicker = rememberFilePickerLauncher(
-            type = FileKitType.File(extensions = listOf("epub", "txt", "html", "htm", "rsvp")),
+            type = FileKitType.File(extensions = RsvpSupportedFileTypes.importExtensions),
         ) { file ->
             if (file != null) {
                 scope.launch {

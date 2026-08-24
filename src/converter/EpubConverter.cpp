@@ -6,8 +6,8 @@
 #include "board/BoardStorage.h"
 
 #include "converter/EpubPackage.h"
+#include "converter/RsvpWriter.h"
 #include "converter/EpubZip.h"
-#include "storage/fs/StoragePaths.h"
 #include "text/AsciiText.h"
 #include "text/LocaleTag.h"
 #include "text/TextNormalizer.h"
@@ -19,7 +19,6 @@ namespace {
     constexpr size_t kMaxTocBytes = 256UL * 1024UL;
     constexpr size_t kMaxContainerBytes = 32UL * 1024UL;
     constexpr size_t kMaxCssBytes = 256UL * 1024UL;
-    constexpr const char* kConverterVersion = "stream-v10";
 
     using EpubPackage::basenameWithoutExtension;
     using EpubPackage::directoryForPath;
@@ -42,12 +41,6 @@ namespace {
         std::string opfBaseDir;
     };
 
-    struct ConversionPaths {
-        std::string temp;
-        std::string failed;
-        std::string lock;
-    };
-
     void serviceBackground() {
         yield();
         delay(0);
@@ -55,12 +48,12 @@ namespace {
 
     void reportProgress(const EpubConverter::Options& options, const char* line1, const char* line2,
                         int progressPercent) {
-        if (options.progressCallback == nullptr) {
+        if (options.conversion.progressCallback == nullptr) {
             return;
         }
 
         progressPercent = std::max(0, std::min(100, progressPercent));
-        options.progressCallback(options, line1, line2, progressPercent);
+        options.conversion.progressCallback(options.conversion.progressContext, line1, line2, progressPercent);
         serviceBackground();
     }
 
@@ -235,7 +228,8 @@ namespace {
         return WritingMode::horizontalTb;
     }
 
-    void writeRsvpHeader(File& output, std::string_view epubPath, std::string_view opfXml, WritingMode writingMode) {
+    RsvpWriter createWriter(File& output, std::string_view epubPath, std::string_view opfXml, WritingMode writingMode,
+                            size_t maxWords) {
         const std::string title = [&]() {
             const std::string metadataTitle = parseDcMetadata(opfXml, "title");
             return metadataTitle.empty() ? basenameWithoutExtension(epubPath) : metadataTitle;
@@ -243,24 +237,14 @@ namespace {
         const std::string author = parseDcMetadata(opfXml, "creator");
         const auto locale = LocaleTag::normalize(parseDcMetadata(opfXml, "language"));
 
-        output.println("@rsvp 1");
-        output.print("@title ");
-        output.println(RsvpText::normalizeDisplayText(title).c_str());
-        if (!author.empty()) {
-            output.print("@author ");
-            output.println(RsvpText::normalizeDisplayText(author).c_str());
-        }
-        if (locale) {
-            output.print("@language ");
-            output.println(locale->c_str());
-        }
-        output.print("@source ");
-        output.println(RsvpText::normalizeDisplayText(epubPath).c_str());
-        output.print("@converter ");
-        output.println(kConverterVersion);
-        if (writingMode == WritingMode::verticalRl)
-            output.println("@writing-mode vertical-rl");
-        output.println();
+        return RsvpWriter(output,
+                          {.source = epubPath,
+                           .title = title,
+                           .author = author,
+                           .converter = EpubConverter::kVersion,
+                           .language = locale ? std::string_view{*locale} : std::string_view{},
+                           .verticalWriting = writingMode == WritingMode::verticalRl},
+                          maxWords);
     }
 
     void reportReadingOrderReady(const EpubConverter::Options& options, const std::vector<std::string>& readingOrder) {
@@ -269,24 +253,17 @@ namespace {
         reportProgress(options, "Opening EPUB", foundDetail.c_str(), 25);
     }
 
-    void streamReadingOrder(EpubZip::Archive& zip, File& output, const std::vector<std::string>& readingOrder,
+    void streamReadingOrder(EpubZip::Archive& zip, RsvpWriter& writer, const std::vector<std::string>& readingOrder,
                             const std::vector<TocEntry>& tocEntries, std::string_view bookTitle,
-                            std::string_view bookLocale, WritingMode writingMode,
-                            const EpubConverter::Options& options, size_t& wordCount, size_t& chapterCount) {
-        std::string lastChapterTitle;
+                            const EpubConverter::Options& options) {
         const bool hasToc = !tocEntries.empty();
-        bool verticalWritingEmitted = writingMode == WritingMode::verticalRl;
-
-        const auto withinWordLimit = [&]() {
-            return options.maxWords == 0 || wordCount < options.maxWords;
-        };
 
         const auto reportItemProgress = [&](const char* title, size_t itemIndex) {
-            const std::string detail = itemProgressDetail(itemIndex, readingOrder.size(), wordCount);
+            const std::string detail = itemProgressDetail(itemIndex, readingOrder.size(), writer.wordCount());
             reportProgress(options, title, detail.c_str(), contentProgressPercent(itemIndex, readingOrder.size()));
         };
 
-        for (size_t i = 0; i < readingOrder.size() && withinWordLimit(); ++i) {
+        for (size_t i = 0; i < readingOrder.size() && !writer.reachedWordLimit(); ++i) {
             serviceBackground();
 
             reportItemProgress("Extracting content", i);
@@ -299,10 +276,9 @@ namespace {
                          });
 
             const EpubZip::ContentExtractStatus extractStatus =
-                zip.extractContentToRsvp(readingOrder[i], output, wordCount, options.maxWords, lastChapterTitle,
-                                         chapterCount, documentTocEntries, hasToc,
-                                         fallbackChapterTitle(readingOrder[i]), bookTitle, bookLocale,
-                                         verticalWritingEmitted, options, i, readingOrder.size());
+                zip.extractContentToRsvp(readingOrder[i], writer, documentTocEntries, hasToc,
+                                         fallbackChapterTitle(readingOrder[i]), bookTitle, options, i,
+                                         readingOrder.size());
 
             reportItemProgress("Parsed content", i + 1);
 
@@ -318,23 +294,10 @@ namespace {
         }
     }
 
-    bool promoteTempFile(std::string_view tempPath, std::string_view rsvpPath) {
-        const std::string temp{tempPath};
-        const std::string destination{rsvpPath};
-        Board::Storage::filesystem().remove(destination.c_str());
-        if (Board::Storage::filesystem().rename(temp.c_str(), destination.c_str())) {
-            return true;
-        }
-
-        ESP_LOGE("epub", "Could not rename %s to %s", temp.c_str(), destination.c_str());
-        Board::Storage::filesystem().remove(temp.c_str());
-        return false;
-    }
-
-    bool convertEpubToRsvp(std::string_view epubPath, std::string_view tempPath, std::string_view rsvpPath,
+    bool convertEpubToRsvp(std::string_view epubPath, std::string_view rsvpPath,
                            const EpubConverter::Options& options) {
         const std::string sourcePath{epubPath};
-        const std::string temporaryPath{tempPath};
+        const std::string outputPath{rsvpPath};
         reportProgress(options, "Opening EPUB", "Reading archive", 0);
 
         EpubZip::Archive zip;
@@ -372,255 +335,44 @@ namespace {
             const std::string metadataTitle = parseDcMetadata(documents.opfXml, "title");
             return metadataTitle.empty() ? basenameWithoutExtension(epubPath) : metadataTitle;
         }();
-        const auto normalizedBookLocale = LocaleTag::normalize(parseDcMetadata(documents.opfXml, "language"));
-        const std::string bookLocale = normalizedBookLocale ? std::move(*normalizedBookLocale) : "und";
         const std::vector<TocEntry> tocEntries = readToc(zip, manifest, documents.opfXml, bookTitle);
         const WritingMode writingMode = explicitWritingMode(zip, manifest);
         ESP_LOGD("epub", "Usable TOC entries: %u", static_cast<unsigned int>(tocEntries.size()));
 
-        Board::Storage::filesystem().remove(temporaryPath.c_str());
-        File output = Board::Storage::filesystem().open(temporaryPath.c_str(), FILE_WRITE);
+        Board::Storage::filesystem().remove(outputPath.c_str());
+        File output = Board::Storage::filesystem().open(outputPath.c_str(), FILE_WRITE);
         if (!output) {
-            ESP_LOGE("epub", "Could not create temporary RSVP file: %s", temporaryPath.c_str());
+            ESP_LOGE("epub", "Could not create RSVP file: %s", outputPath.c_str());
             return failWithClosedZip();
         }
 
-        writeRsvpHeader(output, epubPath, documents.opfXml, writingMode);
+        RsvpWriter writer = createWriter(output, epubPath, documents.opfXml, writingMode, options.conversion.maxWords);
+        streamReadingOrder(zip, writer, readingOrder, tocEntries, bookTitle, options);
 
-        size_t wordCount = 0;
-        size_t chapterCount = 0;
-        streamReadingOrder(zip, output, readingOrder, tocEntries, bookTitle, bookLocale, writingMode, options, wordCount,
-                           chapterCount);
-
-        const std::string finishingDetail = wordCountDetail(wordCount);
+        const std::string finishingDetail = wordCountDetail(writer.wordCount());
         reportProgress(options, "Finishing EPUB", finishingDetail.c_str(), 96);
+        const bool flushed = writer.finish();
         output.close();
         zip.close();
 
-        if (wordCount == 0) {
+        if (!flushed || writer.wordCount() == 0) {
             ESP_LOGD("epub", "No readable words extracted from %s", sourcePath.c_str());
-            Board::Storage::filesystem().remove(temporaryPath.c_str());
-            return false;
-        }
-
-        if (!promoteTempFile(tempPath, rsvpPath)) {
+            Board::Storage::filesystem().remove(outputPath.c_str());
             return false;
         }
 
         ESP_LOGI("epub", "Converted %.*s -> %.*s (%u words)", static_cast<int>(epubPath.size()), epubPath.data(),
-                 static_cast<int>(rsvpPath.size()), rsvpPath.data(), static_cast<unsigned int>(wordCount));
-        const std::string convertedDetail = wordCountDetail(wordCount);
+                 static_cast<int>(rsvpPath.size()), rsvpPath.data(), static_cast<unsigned int>(writer.wordCount()));
+        const std::string convertedDetail = wordCountDetail(writer.wordCount());
         reportProgress(options, "EPUB converted", convertedDetail.c_str(), 100);
         return true;
     }
 
-    void writeFailureMarker(std::string_view markerPath, const char* message) {
-        const std::string path{markerPath};
-        Board::Storage::filesystem().remove(path.c_str());
-
-        File marker = Board::Storage::filesystem().open(path.c_str(), FILE_WRITE);
-        if (!marker) {
-            ESP_LOGE("epub", "Could not create failure marker: %s", path.c_str());
-            return;
-        }
-
-        marker.println(message == nullptr ? "Conversion failed" : message);
-        marker.print("converter=");
-        marker.println(kConverterVersion);
-        marker.close();
-    }
-
-    bool markerWasWrittenByCurrentConverter(File& marker) {
-        std::string content;
-        content.reserve(256);
-        while (marker.available() && content.length() < 256) {
-            content += static_cast<char>(marker.read());
-        }
-
-        const std::string expected = std::string("converter=") + kConverterVersion;
-        return content.contains(expected);
-    }
-
-    bool rsvpWasWrittenByCurrentConverter(File& file) {
-        if (!file || file.isDirectory()) {
-            return false;
-        }
-
-        file.seek(0);
-        std::string line;
-        line.reserve(128);
-        size_t scannedLines = 0;
-        while (file.available() && scannedLines < 12) {
-            const char c = static_cast<char>(file.read());
-            if (c == '\r') {
-                continue;
-            }
-            if (c == '\n') {
-                line = std::string{AsciiText::trim(line)};
-                if (line.starts_with("@converter")) {
-                    const std::string expected = std::string("@converter ") + kConverterVersion;
-                    return line == expected;
-                }
-                if (!line.empty() && !line.starts_with('@')) {
-                    break;
-                }
-                line.clear();
-                ++scannedLines;
-                continue;
-            }
-            if (line.length() < 128) {
-                line += c;
-            }
-        }
-
-        line = std::string{AsciiText::trim(line)};
-        if (line.starts_with("@converter")) {
-            const std::string expected = std::string("@converter ") + kConverterVersion;
-            return line == expected;
-        }
-
-        return false;
-    }
-
-    ConversionPaths conversionPathsFor(std::string_view rsvpPath) {
-        return {
-            std::string{rsvpPath} + StoragePaths::kTempExtension,
-            std::string{rsvpPath} + StoragePaths::kFailedExtension,
-            std::string{rsvpPath} + StoragePaths::kConvertingExtension,
-        };
-    }
-
-    bool removeStaleCacheOrReuseCurrent(std::string_view rsvpPath) {
-        const std::string path{rsvpPath};
-        File existing = Board::Storage::filesystem().open(path.c_str());
-        if (!existing) {
-            return false;
-        }
-
-        const bool hasCache = !existing.isDirectory() && existing.size() > 0;
-        const bool currentCache = hasCache && rsvpWasWrittenByCurrentConverter(existing);
-        existing.close();
-
-        if (!hasCache) {
-            return false;
-        }
-        if (currentCache) {
-            return true;
-        }
-
-        ESP_LOGW("epub", "Rebuilding stale RSVP cache after converter update: %s", path.c_str());
-        Board::Storage::filesystem().remove(path.c_str());
-        return false;
-    }
-
-    bool previousCurrentAttemptRestarted(std::string_view epubPath, const ConversionPaths& paths,
-                                         const EpubConverter::Options& options) {
-        File lock = Board::Storage::filesystem().open(paths.lock.c_str());
-        if (!lock) {
-            return false;
-        }
-
-        const bool lockMarker = !lock.isDirectory();
-        const bool currentLock = lockMarker && markerWasWrittenByCurrentConverter(lock);
-        lock.close();
-
-        if (!lockMarker) {
-            return false;
-        }
-
-        Board::Storage::filesystem().remove(paths.lock.c_str());
-        Board::Storage::filesystem().remove(paths.temp.c_str());
-        if (!currentLock) {
-            ESP_LOGW("epub", "Retrying interrupted EPUB after converter update: %.*s",
-                     static_cast<int>(epubPath.size()), epubPath.data());
-            return false;
-        }
-
-        ESP_LOGW("epub", "Previous conversion restart detected, skipping: %.*s", static_cast<int>(epubPath.size()),
-                 epubPath.data());
-        writeFailureMarker(paths.failed, "Previous conversion restarted before completion.");
-        reportProgress(options, "Previous restart", "Skipping this EPUB", 100);
-        return true;
-    }
-
-    void removeOrphanedTempFile(std::string_view epubPath, std::string_view tempPath) {
-        const std::string path{tempPath};
-        File temp = Board::Storage::filesystem().open(path.c_str());
-        if (!temp) {
-            return;
-        }
-
-        const bool interruptedTemp = !temp.isDirectory();
-        temp.close();
-        if (!interruptedTemp) {
-            return;
-        }
-
-        ESP_LOGW("epub", "Removing stale temporary conversion file and retrying: %.*s",
-                 static_cast<int>(epubPath.size()), epubPath.data());
-        Board::Storage::filesystem().remove(path.c_str());
-    }
-
-    bool shouldSkipCurrentFailure(std::string_view epubPath, std::string_view failedPath) {
-        const std::string path{failedPath};
-        File failed = Board::Storage::filesystem().open(path.c_str());
-        if (!failed) {
-            return false;
-        }
-
-        const bool failedMarker = !failed.isDirectory();
-        const bool currentFailure = failedMarker && markerWasWrittenByCurrentConverter(failed);
-        failed.close();
-
-        if (!failedMarker) {
-            return false;
-        }
-        if (currentFailure) {
-            ESP_LOGW("epub", "Skipping EPUB with failure marker: %.*s", static_cast<int>(epubPath.size()),
-                     epubPath.data());
-            return true;
-        }
-
-        ESP_LOGW("epub", "Retrying EPUB after converter update: %.*s", static_cast<int>(epubPath.size()),
-                 epubPath.data());
-        Board::Storage::filesystem().remove(path.c_str());
-        return false;
-    }
-
 } // namespace
 
-bool EpubConverter::isCurrentCache(std::string_view rsvpPath) {
-    const std::string path{rsvpPath};
-    File existing = Board::Storage::filesystem().open(path.c_str());
-    const bool current = rsvpWasWrittenByCurrentConverter(existing);
-    if (existing) {
-        existing.close();
-    }
-    return current;
-}
-
-std::expected<void, std::error_code> EpubConverter::convertIfNeeded(std::string_view epubPath,
-                                                                    std::string_view rsvpPath, const Options& options) {
-    if (removeStaleCacheOrReuseCurrent(rsvpPath))
-        return {};
-
-    const ConversionPaths paths = conversionPathsFor(rsvpPath);
-    if (previousCurrentAttemptRestarted(epubPath, paths, options))
-        return std::unexpected(std::make_error_code(std::errc::operation_canceled));
-
-    removeOrphanedTempFile(epubPath, paths.temp);
-    if (shouldSkipCurrentFailure(epubPath, paths.failed))
-        return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));
-
-    ESP_LOGD("epub", "Converting on device: %.*s", static_cast<int>(epubPath.size()), epubPath.data());
-    writeFailureMarker(paths.lock, "Conversion in progress. Delete this file only if retrying.");
-    const bool converted = convertEpubToRsvp(epubPath, paths.temp, rsvpPath, options);
-    Board::Storage::filesystem().remove(paths.lock.c_str());
-    if (!converted) {
-        writeFailureMarker(paths.failed, "Conversion failed. Remove this marker to retry.");
-        return std::unexpected(std::make_error_code(std::errc::io_error));
-    }
-
-    Board::Storage::filesystem().remove(paths.failed.c_str());
-    return {};
+std::expected<void, std::error_code> EpubConverter::convert(std::string_view epubPath, std::string_view rsvpPath,
+                                                            const Options& options) {
+    return convertEpubToRsvp(epubPath, rsvpPath, options)
+             ? std::expected<void, std::error_code>{}
+             : std::unexpected(std::make_error_code(std::errc::io_error));
 }

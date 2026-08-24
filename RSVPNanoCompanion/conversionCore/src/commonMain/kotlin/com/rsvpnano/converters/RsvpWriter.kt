@@ -5,28 +5,31 @@ internal class RsvpWriter(
     author: String,
     source: String,
 ) {
-    private val title = RsvpTextUtils.directiveValue(title).ifEmpty { "Untitled" }
-    private val author = RsvpTextUtils.directiveValue(author)
+    private val title = RsvpTextUtils.directiveValue(title).take(256).ifEmpty { "Untitled" }
+    private val author = RsvpTextUtils.directiveValue(author).take(256)
     private val lines = mutableListOf("@rsvp 1", "@title $title")
     private var wordCount = 0
     private var chapterCount = 0
     private var lineWords = mutableListOf<String>()
     private var lineLength = 0
     private var lastChapter = ""
+    private var language = "und"
+    private var direction = "auto"
+    private var verticalWriting = false
 
     init {
-        if (this.author.isNotEmpty()) {
-            lines += "@author ${this.author}"
-        }
-        val cleanedSource = RsvpTextUtils.directiveValue(source)
+        val cleanedSource = RsvpTextUtils.directiveValue(source).take(512)
         if (cleanedSource.isNotEmpty()) {
             lines += "@source $cleanedSource"
+        }
+        if (this.author.isNotEmpty()) {
+            lines += "@author ${this.author}"
         }
         lines += ""
     }
 
     fun addChapter(value: String) {
-        val chapter = RsvpTextUtils.directiveValue(value)
+        val chapter = RsvpTextUtils.directiveValue(value).take(256)
         if (chapter.isEmpty() || chapter == lastChapter) {
             return
         }
@@ -49,11 +52,42 @@ internal class RsvpWriter(
         }
     }
 
-    fun setLanguage(locale: String) = addDirective("language", locale)
+    fun setLanguage(locale: String) {
+        val next = RsvpTextUtils.directiveValue(locale).take(64).ifEmpty { "und" }
+        if (next == language) return
+        language = next
+        addDirective("language", next)
+    }
 
-    fun setDirection(direction: String) = addDirective("direction", direction)
+    fun setDirection(direction: String) {
+        val next = RsvpTextUtils.directiveValue(direction).takeIf { it == "ltr" || it == "rtl" } ?: "auto"
+        if (next == this.direction) return
+        this.direction = next
+        addDirective("direction", next)
+    }
 
-    fun setVerticalWriting() = addDirective("writing-mode", "vertical-rl")
+    fun setVerticalWriting() {
+        if (verticalWriting) return
+        verticalWriting = true
+        addDirective("writing-mode", "vertical-rl")
+    }
+
+    fun addEvents(events: Iterable<RsvpEvent>) {
+        events.forEach { event ->
+            when (event) {
+                RsvpEvent.VerticalWriting -> setVerticalWriting()
+                is RsvpEvent.Chapter -> addChapter(event.title)
+                is RsvpEvent.Text -> {
+                    if (event.startsParagraph) beginParagraph()
+                    addText(event.text)
+                }
+                is RsvpEvent.Language -> setLanguage(event.locale)
+                is RsvpEvent.Direction -> setDirection(event.value)
+            }
+        }
+    }
+
+    fun hasReadableText(): Boolean = wordCount > 0
 
     fun addText(text: String) {
         val readableTokens = RsvpTextUtils.cleanWordTokens(text)

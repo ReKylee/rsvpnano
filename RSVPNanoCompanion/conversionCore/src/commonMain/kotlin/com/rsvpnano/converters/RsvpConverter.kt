@@ -3,7 +3,7 @@ package com.rsvpnano.converters
 object RsvpConverter {
     const val wrapWidth = 96
 
-    fun bookFile(data: ByteArray, filename: String): RsvpBookFile {
+    suspend fun bookFile(data: ByteArray, filename: String): RsvpBookFile {
         if (RsvpSupportedFileTypes.isRsvp(filename)) {
             return RsvpBookFile(filename = filename, data = data, title = filenameWithoutExtension(filename))
         }
@@ -13,6 +13,10 @@ object RsvpConverter {
                 entries = EpubZipReader.readEntries(data),
                 filename = filename,
             )
+        }
+
+        if (RsvpSupportedFileTypes.isPdf(filename)) {
+            return PdfBookConverter.convert(data, filename)
         }
 
         val rawText = RsvpTextUtils.decodeText(data) ?: throw RsvpConversionError.unreadableText
@@ -35,18 +39,7 @@ object RsvpConverter {
 
     fun rsvpFile(title: String, author: String, source: String, events: List<RsvpEvent>): RsvpBookFile {
         val writer = RsvpWriter(title = title, author = author, source = source)
-        events.forEach { event ->
-            when (event) {
-                RsvpEvent.VerticalWriting -> writer.setVerticalWriting()
-                is RsvpEvent.Chapter -> writer.addChapter(event.title)
-                is RsvpEvent.Text -> {
-                    if (event.startsParagraph) writer.beginParagraph()
-                    writer.addText(event.text)
-                }
-                is RsvpEvent.Language -> writer.setLanguage(event.locale)
-                is RsvpEvent.Direction -> writer.setDirection(event.value)
-            }
-        }
+        writer.addEvents(events)
         return writer.finalize(fallbackChapterTitle = title)
     }
 

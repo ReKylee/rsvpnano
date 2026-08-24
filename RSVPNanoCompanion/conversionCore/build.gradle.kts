@@ -22,10 +22,12 @@ kotlin {
 		commonMain.dependencies {
 			implementation(libs.korlibs.compression)
 			implementation(libs.ksoup)
+			implementation(libs.pdf.core)
 		}
 
 		commonTest.dependencies {
 			implementation(kotlin("test"))
+			implementation(libs.kotlinx.coroutines.test)
 		}
 	}
 }

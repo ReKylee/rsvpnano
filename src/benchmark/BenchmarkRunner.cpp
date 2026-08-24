@@ -283,7 +283,7 @@ namespace {
         return expectedChecksum == actualChecksum;
     }
 
-    void reportEpubProgress(const EpubConverter::Options&, const char* line1, const char* line2, int progressPercent) {
+    void reportEpubProgress(void*, const char* line1, const char* line2, int progressPercent) {
         std::string percentLine = std::to_string(progressPercent) + "%";
         if (line2 != nullptr && line2[0] != '\0') {
             percentLine += " ";
@@ -306,10 +306,8 @@ namespace {
             .remove(StoragePaths::siblingPathWithExtension(epubPath, StoragePaths::kFailedExtension).c_str());
 
         EpubConverter::Options options;
-        options.progressCallback = reportEpubProgress;
-        options.progressTitle = "Benchmark";
-        options.progressLabel = label;
-        return EpubConverter::convertIfNeeded(epubPath, rsvpPath, options).has_value();
+        options.conversion.progressCallback = reportEpubProgress;
+        return EpubConverter::convert(epubPath, rsvpPath, options).has_value();
     }
 
     template<typename Operation>
@@ -416,7 +414,7 @@ namespace {
         listing.push_back({.path = std::string{path}});
         const bool opened = runTimed(metric, [&] {
             return IndexedBook::load(0, listing, reader.store, reader.session.metadata,
-                                     {.allowIndexBuild = true, .allowEpubConversion = false});
+                                     {.allowIndexBuild = true, .allowDocumentConversion = false});
         });
         if (!opened)
             return false;

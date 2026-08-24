@@ -8,7 +8,7 @@
 #include <system_error>
 
 #include "book/BookMetadata.h"
-#include "storage/index/BufferedWriter.h"
+#include "storage/fs/BufferedWriter.h"
 #include "storage/index/IndexedBookStore.h"
 #include "storage/library/BookLibrary.h"
 #include "text/RsvpTokenizer.h"
@@ -20,7 +20,7 @@ namespace IndexedBook {
 
     struct OpenRequest {
         bool allowIndexBuild = true;
-        bool allowEpubConversion = true;
+        bool allowDocumentConversion = true;
         StatusCallback statusCallback = nullptr;
         void* statusContext = nullptr;
     };

@@ -34,6 +34,9 @@ words. Readable lines that begin with `@` must be escaped by prefixing an additi
 | `@source <value>` | Yes | Original filename or URL. |
 | `@author <value>` | No | Display author when known. |
 | `@converter <value>` | No | Converter/cache identifier, mainly for firmware-generated cache files. |
+| `@language <BCP 47 tag>` | No | Changes the language of following readable text until another language directive. |
+| `@direction auto\|ltr\|rtl` | No | Changes the logical text direction of following readable text. |
+| `@writing-mode vertical-rl` | No | Marks a book that should use vertical right-to-left layout. Horizontal layout is the default. |
 | `@chapter <value>` | No | Chapter marker used for navigation and progress. |
 | `@para` | No | Marks the next readable word as the start of a paragraph. |
 | `@@...` | As needed | Escaped readable text line that starts with `@`. |
@@ -43,6 +46,13 @@ is available, converters should insert one fallback chapter based on the documen
 
 Converters should emit `@para` for each logical paragraph after readable text has already begun.
 Chapter boundaries imply a paragraph boundary for the following readable text.
+
+Language and direction directives are state changes. Converters must emit a new directive when a
+nested source element changes either value, then restore the previous value after that element.
+Repeated adjacent state directives should be omitted. Language tags must use valid, normalized BCP
+47 spelling with `-` separators. Text must remain in logical Unicode order. Converters must not
+reverse bidirectional text or replace characters with presentation forms because the reader owns
+bidirectional layout and shaping.
 
 ## Supported Inputs
 
@@ -55,6 +65,7 @@ Chapter boundaries imply a paragraph boundary for the following readable text.
 - `.html`
 - `.htm`
 - `.xhtml`
+- `.pdf`
 
 ### Pass Through
 
@@ -67,12 +78,14 @@ The firmware can read or convert a narrower set directly:
 - `.rsvp`
 - `.txt`
 - `.epub`
+- `.pdf`
 
 ### Share And Draft Inputs
 
 - URLs
 - Plain text
 - Text-like files: `.txt`, `.md`, `.markdown`, `.html`, `.htm`, `.xhtml`
+- Document files: `.epub`, `.pdf`
 
 ## Text And Markdown Rules
 
@@ -114,6 +127,11 @@ The firmware can read or convert a narrower set directly:
 - Content documents are selected by media type (`application/xhtml+xml`, `text/html`) or by
   `.xhtml`, `.html`, or `.htm` extension.
 - Each selected content document is processed using the HTML/XHTML rules.
+- Preserve valid `xml:lang` or `lang` changes as scoped `@language` directives.
+- Preserve `dir="auto"`, `dir="ltr"`, and `dir="rtl"` changes as scoped `@direction` directives.
+- Use the package language as the initial language when the content document does not declare one.
+- Emit one book-level `@writing-mode vertical-rl` directive when the package or readable content
+  declares vertical right-to-left writing. Do not repeat it for individual elements.
 - If a readable content document is mapped by the EPUB TOC, the output chapter marker must use
   that TOC label and must not duplicate the document's first heading.
 - If one readable content document contains several TOC-mapped chapters, generated `@chapter`
@@ -130,6 +148,24 @@ The firmware can read or convert a narrower set directly:
 - EPUBs with `META-INF/encryption.xml` must fail with a clear unsupported-conversion error rather
   than attempting to emit partially readable or corrupt text.
 
+## PDF Rules
+
+- Extract selectable text only. PDF conversion does not rasterize pages and does not perform OCR.
+- Process pages in document order and preserve the extractor's logical Unicode and paragraph order.
+- Use document title and author metadata when they are non-empty. Use the source filename as the
+  title fallback.
+- Do not infer language, direction, chapters, or writing mode when the PDF does not expose reliable
+  structure for them.
+- Insert one fallback chapter based on the resolved document title.
+- A PDF with no decodable text must fail with a clear error instead of producing an empty book.
+- Composite or custom-encoded PDF fonts require a usable Unicode character map such as
+  `ToUnicode`. A converter must reject undecodable text rather than emit character codes as text.
+- PDF font programs and font selections are extraction details. They are not copied into the RSVP
+  file. Required writing scripts are derived later from the extracted Unicode text while the
+  reader builds its index.
+- Reading order is necessarily limited by the PDF's text objects and tagging. Visually positioned
+  documents may require conversion on a computer or a corrected source document.
+
 ## Text Normalization
 
 Converters should normalize text consistently:
@@ -138,11 +174,13 @@ Converters should normalize text consistently:
 - Normalize common smart quotes, dashes, ellipses, non-breaking spaces, and ligatures.
 - Preserve punctuation in output, including punctuation-only inline fragments.
 - Count words using readable tokens containing at least one letter or digit.
+- Keep CJK text as readable phrase tokens without inserting artificial spaces between adjacent CJK
+  tokens.
 - Preserve directive safety by escaping readable lines that begin with `@`.
 
 ## Encoding
 
-Converters should support these inputs where the runtime allows it:
+Converters should support these text, HTML, and EPUB encodings where the runtime allows it:
 
 - UTF-8 with or without BOM.
 - UTF-16 with BOM.
@@ -152,6 +190,9 @@ Converters should support these inputs where the runtime allows it:
 
 Unsupported or undecodable sources should fail with a clear conversion error rather than silently
 producing empty output.
+
+PDF character decoding is handled by the PDF extractor and its embedded font mappings. The text
+encoding fallback chain above does not apply to PDF object streams.
 
 ## Runtime Responsibilities
 
@@ -166,18 +207,24 @@ Kotlin implementation should use shared ZIP and DOM parsing through `:conversion
 possible. The resulting `.rsvp` output should still match the reference test cases unless a runtime
 limitation is documented.
 
+The Kotlin PDF converter uses the shared `pdf-core` API backed by PDFium on each target. Browser
+builds package the PDFium runtime beside the application and test bundles.
+
 The firmware converter streams EPUB content to keep memory use bounded. It currently accepts UTF-8
 EPUB package and XHTML content; UTF-16, Windows-1252, and Latin-1 transcoding remain limited to the
 companion conversion runtimes. Streaming also means the firmware cannot retroactively discard an
 entire generated title or contents document after parsing it; it still suppresses navigation
-subtrees and non-content chapter headings while parsing.
+subtrees and non-content chapter headings while parsing. Firmware PDF conversion is also a
+constrained fallback and may reject documents that exceed its memory or supported PDF feature
+limits. Desktop or browser conversion remains the preferred path for complex PDFs.
 
 ## Parity Requirements
 
 - New converter behavior requires a reference test case.
-- Reference test cases must cover representative text, Markdown, HTML/XHTML, EPUB, existing `.rsvp`
-  pass-through, directive escaping, paragraphs, chapters, Unicode normalization, and punctuation
-  preservation.
+- Reference test cases must cover representative text, Markdown, HTML/XHTML, EPUB, PDF, existing
+  `.rsvp` pass-through, directive escaping, paragraphs, chapters, Unicode normalization,
+  punctuation preservation, language changes, bidirectional text, CJK tokenization, and vertical
+  writing.
 - `:conversionCore` common and browser tests should exercise the shared reference fixtures.
-- Firmware conversion behavior should use the same fixtures where its constrained streaming path applies.
+- Firmware conversion behavior should use the same fixtures where its constrained extraction path applies.
 - Output comparisons should normalize line endings only; content differences are failures.

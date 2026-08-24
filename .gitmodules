@@ -4,3 +4,9 @@
 [submodule "lib/HarfBuzz/upstream"]
 	path = lib/HarfBuzz/upstream
 	url = https://github.com/harfbuzz/harfbuzz.git
+[submodule "lib/PDFio/upstream"]
+	path = lib/PDFio/upstream
+	url = https://github.com/michaelrsweet/pdfio.git
+[submodule "lib/zlib/upstream"]
+	path = lib/zlib/upstream
+	url = https://github.com/madler/zlib.git

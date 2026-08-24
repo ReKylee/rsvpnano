@@ -60,6 +60,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.rsvpnano.converters.RsvpSupportedFileTypes
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoFocusTimer
 import com.rsvpnano.models.NanoFocusTimerRules
@@ -98,7 +99,7 @@ internal fun ColumnScope.LibraryWorkspace(presenter: CompanionPresenter, state: 
     var editingArticle by remember { mutableStateOf(false) }
     var uploadCategory by remember { mutableStateOf("book") }
     val picker = rememberFilePickerLauncher(
-        type = FileKitType.File(extensions = listOf("epub", "txt", "html", "htm", "rsvp")),
+        type = FileKitType.File(extensions = RsvpSupportedFileTypes.importExtensions),
     ) { file ->
         if (file != null) scope.launch {
             presenter.uploadSelectedFile(file.name, file.readBytes(), uploadCategory)

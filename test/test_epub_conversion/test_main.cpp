@@ -5,13 +5,43 @@
 #include <span>
 #include <vector>
 
-#include "converter/EpubContentWriter.h"
+#include "converter/EpubContentParser.h"
 #include "converter/EpubPackage.h"
+#include "converter/RsvpWriter.h"
 
 void setUp() {}
 void tearDown() {}
 
 namespace {
+
+    std::string deterministicWriterFixture() {
+        File output;
+        RsvpWriter writer(output,
+                          {.source = "fixture.txt",
+                           .title = "Fixture",
+                           .author = "Author",
+                           .converter = "fixture-v1",
+                           .language = "en"},
+                          3);
+        writer.setLanguage("en");
+        writer.setDirection("ltr");
+        writer.setDirection("ltr");
+        writer.writeChapter("One");
+        writer.writeChapter("One");
+        writer.writeText("one two three four");
+        writer.finish();
+        return output.contents();
+    }
+
+    void test_rsvp_writer_is_deterministic_and_idempotent() {
+        const std::string first = deterministicWriterFixture();
+        TEST_ASSERT_EQUAL_STRING(first.c_str(), deterministicWriterFixture().c_str());
+        TEST_ASSERT_TRUE(first.starts_with("@rsvp 1\n@title Fixture\n@source fixture.txt\n@author Author\n"
+                                          "@converter fixture-v1\n@language en\n"));
+        TEST_ASSERT_TRUE(first.contains("@direction ltr\n@chapter One\none two three\n"));
+        TEST_ASSERT_EQUAL(std::string::npos, first.find("@direction ltr", first.find("@direction ltr") + 1));
+        TEST_ASSERT_EQUAL(std::string::npos, first.find("@chapter One", first.find("@chapter One") + 1));
+    }
 
     void test_package_parses_nav_metadata_and_encoded_manifest_paths() {
         constexpr std::string_view opf = R"(<package version="3.0"><metadata><dc:title>Fixture</dc:title><dc:language>ja</dc:language></metadata><manifest>
@@ -57,12 +87,8 @@ namespace {
         TEST_ASSERT_EQUAL_STRING("chapter-1", entries[0].fragment.c_str());
     }
 
-    void test_writer_uses_ordered_toc_labels_and_paragraph_markers() {
+    void test_parser_uses_ordered_toc_labels_and_paragraph_markers() {
         File output;
-        size_t wordCount = 0;
-        size_t chapterCount = 0;
-        std::string lastChapter;
-        bool verticalWritingEmitted = false;
         const std::vector<EpubPackage::TocEntry> toc = {
             {"content.xhtml", "I. The Arrival", "chapter-1"},
             {"content.xhtml", "II. Father and Son", "chapter-2"},
@@ -70,46 +96,40 @@ namespace {
         constexpr std::string_view markup = R"(<body><h1>Book Title</h1><h2 id="chapter-1">I</h2>
             <p>The harbour was bright.</p><h2 id="chapter-2">II</h2><p>The door opened.</p></body>)";
 
-        EpubContent::RsvpContentWriter writer(output, wordCount, 0, lastChapter, chapterCount, toc, true, "content",
-                                               "Book Title", verticalWritingEmitted);
-        TEST_ASSERT_TRUE(writer.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
+        RsvpWriter writer(output, {.source = "fixture.epub", .title = "Book Title"});
+        EpubContent::Parser parser(writer, toc, true, "content", "Book Title");
+        TEST_ASSERT_TRUE(parser.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
+        TEST_ASSERT_TRUE(parser.finish());
         TEST_ASSERT_TRUE(writer.finish());
 
-        TEST_ASSERT_EQUAL_UINT32(2, chapterCount);
-        TEST_ASSERT_EQUAL_STRING(
-            "@chapter I. The Arrival\n\n@chapter II. Father and Son\nThe harbour was bright.\n\n@para\nThe door opened.\n",
-            output.contents().c_str());
+        TEST_ASSERT_EQUAL_UINT32(2, writer.chapterCount());
+        TEST_ASSERT_TRUE(output.contents().ends_with(
+            "@chapter I. The Arrival\n\n@chapter II. Father and Son\nThe harbour was bright.\n\n@para\nThe door opened.\n"));
     }
 
-    void test_writer_preserves_punctuation_only_inline_fragments_without_counting_them_as_words() {
+    void test_parser_preserves_punctuation_only_inline_fragments_without_counting_them_as_words() {
         File output;
-        size_t wordCount = 0;
-        size_t chapterCount = 0;
-        std::string lastChapter;
-        bool verticalWritingEmitted = false;
         constexpr std::string_view markup = R"(<body><h1>Letter</h1><p>Dear Reader <span>,</span></p></body>)";
 
-        EpubContent::RsvpContentWriter writer(output, wordCount, 0, lastChapter, chapterCount, {}, false, "Letter",
-                                               "Letter", verticalWritingEmitted);
-        TEST_ASSERT_TRUE(writer.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
+        RsvpWriter writer(output, {.source = "fixture.epub", .title = "Letter"});
+        EpubContent::Parser parser(writer, {}, false, "Letter", "Letter");
+        TEST_ASSERT_TRUE(parser.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
+        TEST_ASSERT_TRUE(parser.finish());
         TEST_ASSERT_TRUE(writer.finish());
 
-        TEST_ASSERT_EQUAL_UINT32(2, wordCount);
-        TEST_ASSERT_EQUAL_STRING("@chapter Letter\nDear Reader ,\n", output.contents().c_str());
+        TEST_ASSERT_EQUAL_UINT32(2, writer.wordCount());
+        TEST_ASSERT_TRUE(output.contents().ends_with("@chapter Letter\nDear Reader ,\n"));
     }
 
-    void test_writer_preserves_nested_language_and_direction_changes() {
+    void test_parser_preserves_nested_language_and_direction_changes() {
         File output;
-        size_t wordCount = 0;
-        size_t chapterCount = 0;
-        std::string lastChapter;
-        bool verticalWritingEmitted = false;
         constexpr std::string_view markup =
             R"(<body lang="ja"><p>日本語 <span xml:lang="en" dir="ltr"><span>English</span></span> 続き</p><p lang="ar" dir="rtl">مرحبا 123</p></body>)";
 
-        EpubContent::RsvpContentWriter writer(output, wordCount, 0, lastChapter, chapterCount, {}, false, "Fixture",
-                                               "Fixture", verticalWritingEmitted, "ja");
-        TEST_ASSERT_TRUE(writer.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
+        RsvpWriter writer(output, {.source = "fixture.epub", .title = "Fixture", .language = "ja"});
+        EpubContent::Parser parser(writer, {}, false, "Fixture", "Fixture");
+        TEST_ASSERT_TRUE(parser.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
+        TEST_ASSERT_TRUE(parser.finish());
         TEST_ASSERT_TRUE(writer.finish());
 
         TEST_ASSERT_TRUE(output.contents().contains("日本語\n@language en\n@direction ltr\nEnglish\n"));
@@ -118,43 +138,35 @@ namespace {
         TEST_ASSERT_TRUE(output.contents().contains("مرحبا 123\n@language ja\n@direction auto\n"));
     }
 
-    void test_writer_emits_explicit_vertical_writing_mode_once() {
+    void test_parser_emits_explicit_vertical_writing_mode_once() {
         File output;
-        size_t wordCount = 0;
-        size_t chapterCount = 0;
-        std::string lastChapter;
-        bool verticalWritingEmitted = false;
         constexpr std::string_view markup =
             R"(<head><style>html { -epub-writing-mode: vertical-rl; }</style></head><body><p style="writing-mode: vertical-rl">日本語</p></body>)";
 
-        EpubContent::RsvpContentWriter writer(output, wordCount, 0, lastChapter, chapterCount, {}, false, "Fixture",
-                                               "Fixture", verticalWritingEmitted, "ja");
-        TEST_ASSERT_TRUE(writer.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
+        RsvpWriter writer(output, {.source = "fixture.epub", .title = "Fixture", .language = "ja"});
+        EpubContent::Parser firstParser(writer, {}, false, "Fixture", "Fixture");
+        TEST_ASSERT_TRUE(firstParser.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
+        TEST_ASSERT_TRUE(firstParser.finish());
+        EpubContent::Parser secondParser(writer, {}, false, "Second", "Fixture");
+        TEST_ASSERT_TRUE(secondParser.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
+        TEST_ASSERT_TRUE(secondParser.finish());
         TEST_ASSERT_TRUE(writer.finish());
-        TEST_ASSERT_EQUAL_STRING("@writing-mode vertical-rl\n@chapter Fixture\n日本語\n", output.contents().c_str());
-
-        File secondOutput;
-        size_t secondWordCount = 0;
-        size_t secondChapterCount = 0;
-        std::string secondLastChapter;
-        EpubContent::RsvpContentWriter secondWriter(secondOutput, secondWordCount, 0, secondLastChapter,
-                                                     secondChapterCount, {}, false, "Second", "Fixture",
-                                                     verticalWritingEmitted, "ja");
-        TEST_ASSERT_TRUE(secondWriter.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
-        TEST_ASSERT_TRUE(secondWriter.finish());
-        TEST_ASSERT_FALSE(secondOutput.contents().contains("@writing-mode"));
+        const size_t first = output.contents().find("@writing-mode vertical-rl");
+        TEST_ASSERT_NOT_EQUAL(std::string::npos, first);
+        TEST_ASSERT_EQUAL(std::string::npos, output.contents().find("@writing-mode vertical-rl", first + 1));
     }
 
 } // namespace
 
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_rsvp_writer_is_deterministic_and_idempotent);
     RUN_TEST(test_package_parses_nav_metadata_and_encoded_manifest_paths);
     RUN_TEST(test_nav_toc_flattens_nested_entries_and_decodes_fragments);
     RUN_TEST(test_ncx_toc_ignores_non_content_labels);
-    RUN_TEST(test_writer_uses_ordered_toc_labels_and_paragraph_markers);
-    RUN_TEST(test_writer_preserves_punctuation_only_inline_fragments_without_counting_them_as_words);
-    RUN_TEST(test_writer_preserves_nested_language_and_direction_changes);
-    RUN_TEST(test_writer_emits_explicit_vertical_writing_mode_once);
+    RUN_TEST(test_parser_uses_ordered_toc_labels_and_paragraph_markers);
+    RUN_TEST(test_parser_preserves_punctuation_only_inline_fragments_without_counting_them_as_words);
+    RUN_TEST(test_parser_preserves_nested_language_and_direction_changes);
+    RUN_TEST(test_parser_emits_explicit_vertical_writing_mode_once);
     return UNITY_END();
 }

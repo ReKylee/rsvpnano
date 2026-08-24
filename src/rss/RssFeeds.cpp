@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 #include "board/BoardStorage.h"
+#include "converter/RsvpWriter.h"
 
 #include "hash/Fnv1a.h"
 #include "logging/Logger.h"
@@ -22,6 +23,7 @@
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 #include "text/AsciiText.h"
+#include "text/Utf8Text.h"
 
 namespace {
 
@@ -352,26 +354,32 @@ namespace {
         if (!file)
             return std::unexpected(std::make_error_code(std::errc::io_error));
 
-        file.println("@rsvp 1");
-        file.print("@title ");
-        file.println(metadataSafe(item.title).c_str());
-        file.print("@author ");
-        file.println(metadataSafe(item.author.empty() ? feedparser::sourceLabelForItem(item) : item.author).c_str());
-        if (!item.link.empty()) {
-            file.print("@source ");
-            file.println(metadataSafe(item.link).c_str());
-        }
-        file.println();
-
         std::string body = item.body;
         if (body.length() > feedparser::kMaxArticleChars) {
-            body.resize(feedparser::kMaxArticleChars);
+            body.resize(Utf8Text::prefix(body, feedparser::kMaxArticleChars).size());
             body += "\n\n[Article truncated on device.]";
         }
-        file.println(body.c_str());
-        const bool writeFailed = file.getWriteError() != 0;
+
+        const std::string title = metadataSafe(item.title);
+        const std::string author =
+            metadataSafe(item.author.empty() ? feedparser::sourceLabelForItem(item) : item.author);
+        const std::string source = metadataSafe(item.link);
+        RsvpWriter writer(file, {.source = source, .title = title, .author = author});
+        bool written = writer.writeChapter(title);
+        for (size_t start = 0; written && start < body.size();) {
+            const size_t end = body.find('\n', start);
+            std::string_view line{body.data() + start, (end == std::string::npos ? body.size() : end) - start};
+            if (!line.empty() && line.back() == '\r')
+                line.remove_suffix(1);
+            if (AsciiText::trim(line).empty())
+                writer.endParagraph();
+            else
+                written = writer.writeText(line, false);
+            start = end == std::string::npos ? body.size() : end + 1;
+        }
+        written = written && writer.finish() && writer.wordCount() > 0;
         file.close();
-        if (writeFailed) {
+        if (!written) {
             Board::Storage::filesystem().remove(tmpPath.c_str());
             return std::unexpected(std::make_error_code(std::errc::io_error));
         }

@@ -27,6 +27,7 @@ namespace StoragePaths {
     constexpr const char* kTextExtension = ".txt";
     constexpr const char* kRsvpExtension = ".rsvp";
     constexpr const char* kEpubExtension = ".epub";
+    constexpr const char* kPdfExtension = ".pdf";
     constexpr const char* kIndexExtension = ".ridx";
     constexpr const char* kDataExtension = ".rdat";
     constexpr const char* kBookStateExtension = ".rstate.toml";
@@ -37,13 +38,14 @@ namespace StoragePaths {
     bool hasTextExtension(std::string_view path);
     bool hasRsvpExtension(std::string_view path);
     bool hasEpubExtension(std::string_view path);
+    bool hasPdfExtension(std::string_view path);
+    bool hasConvertibleDocumentExtension(std::string_view path);
     std::string sanitizeFilename(std::string_view name);
     std::string parentDirectoryForPath(std::string_view path);
     std::string siblingPathWithExtension(std::string_view path, std::string_view extension);
-    std::string epubSiblingPathForRsvp(std::string_view rsvpPath);
     std::string displayNameForPath(std::string_view path);
     std::string displayNameWithoutExtension(std::string_view path);
-    std::string rsvpCachePathForEpub(std::string_view epubPath);
+    std::string rsvpCachePathForDocument(std::string_view documentPath);
     std::string indexedIndexPathFor(std::string_view path);
     std::string indexedDataPathFor(std::string_view path);
     std::string bookStatePathFor(std::string_view path);

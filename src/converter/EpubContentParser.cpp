@@ -1,4 +1,4 @@
-#include "converter/EpubContentWriter.h"
+#include "converter/EpubContentParser.h"
 
 #include <algorithm>
 #include <utility>
@@ -14,8 +14,9 @@ namespace EpubContent {
 
         constexpr size_t kMaxEntityChars = 16;
         constexpr size_t kMaxTagChars = 512;
-        constexpr size_t kOutputWrapWidth = 96;
         constexpr size_t kBufferedTextFlushThreshold = 220;
+        constexpr size_t kMaxBufferedTextBytes = 1024;
+        constexpr size_t kMaxHeadingBytes = 256;
 
         struct TagInfo {
             std::string name;
@@ -216,70 +217,13 @@ namespace EpubContent {
         return RsvpText::normalizeDisplayText(text);
     }
 
-    bool writeBodyLine(File& output, std::string_view line, size_t& wordCount, size_t maxWords) {
-        const std::string normalizedLine = RsvpText::normalizeDisplayText(line);
-        std::string outputLine;
-        bool previousCjk = false;
-
-        auto flushOutputLine = [&]() {
-            if (outputLine.empty()) {
-                return;
-            }
-            if (outputLine.starts_with('@')) {
-                output.print('@');
-            }
-            output.println(outputLine.c_str());
-            outputLine.clear();
-            previousCjk = false;
-        };
-
-        auto consumeRsvpToken = [&](const std::string& value) {
-            if (value.empty()) {
-                return true;
-            }
-
-            const bool cjk = UnicodeText::isCjkText(value);
-            const bool separated = !outputLine.empty() && !(previousCjk && cjk);
-            if (outputLine.length() + value.length() + separated > kOutputWrapWidth) {
-                flushOutputLine();
-            }
-
-            if (!outputLine.empty() && !(previousCjk && cjk)) {
-                outputLine += ' ';
-            }
-            outputLine += value;
-            previousCjk = cjk;
-            if (RsvpText::hasReadableText(value)) {
-                ++wordCount;
-            }
-            return true;
-        };
-
-        const bool keepGoing =
-            RsvpText::appendNormalizedLineWords(normalizedLine, consumeRsvpToken, wordCount, maxWords);
-
-        flushOutputLine();
-        return keepGoing;
-    }
-
-    RsvpContentWriter::RsvpContentWriter(File& output, size_t& wordCount, size_t maxWords,
-                                         std::string& lastChapterTitle, size_t& chapterCount,
-                                         std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
-                                         std::string_view fallbackChapterTitle, std::string_view bookTitle,
-                                         bool& verticalWritingEmitted,
-                                         std::string_view initialLocale, std::string_view initialDirection) :
-            output_(output),
-            wordCount_(wordCount),
-            maxWords_(maxWords),
-            lastChapterTitle_(lastChapterTitle),
-            chapterCount_(chapterCount),
+    Parser::Parser(RsvpWriter& writer, std::span<const EpubPackage::TocEntry> tocEntries, bool hasToc,
+                   std::string_view fallbackChapterTitle, std::string_view bookTitle) :
+            writer_(writer),
             tocEntries_(tocEntries),
             hasToc_(hasToc),
             fallbackChapterTitle_(fallbackChapterTitle),
-            bookTitle_(bookTitle),
-            verticalWritingEmitted_(verticalWritingEmitted),
-            locale_(initialLocale.empty() ? "und" : initialLocale),
-            direction_(initialDirection) {
+            bookTitle_(bookTitle) {
         line_.reserve(160);
         heading_.reserve(80);
         tag_.reserve(96);
@@ -291,7 +235,7 @@ namespace EpubContent {
         }
     }
 
-    bool RsvpContentWriter::write(const uint8_t* data, size_t length) {
+    bool Parser::write(const uint8_t* data, size_t length) {
         for (size_t i = 0; i < length; ++i) {
             if ((i & 0x3FF) == 0) {
                 serviceBackground();
@@ -304,27 +248,15 @@ namespace EpubContent {
         return true;
     }
 
-    bool RsvpContentWriter::changeLanguageState(std::string_view locale, std::string_view direction) {
-        if (locale == locale_ && direction == direction_)
+    bool Parser::changeLanguageState(std::string_view locale, std::string_view direction) {
+        if (locale == writer_.language() && direction == writer_.direction())
             return true;
         if (!flushLine(false))
             return false;
-        if (locale != locale_) {
-            std::string next = locale.empty() ? "und" : std::string{locale};
-            output_.print("@language ");
-            output_.println(next.c_str());
-            locale_ = std::move(next);
-        }
-        if (direction != direction_) {
-            std::string next = direction.empty() ? "auto" : std::string{direction};
-            output_.print("@direction ");
-            output_.println(next.c_str());
-            direction_ = std::move(next);
-        }
-        return true;
+        return writer_.setLanguage(locale) && writer_.setDirection(direction);
     }
 
-    bool RsvpContentWriter::finish() {
+    bool Parser::finish() {
         mode_ = Mode::Text;
         if (!flushLine()) {
             return false;
@@ -332,54 +264,33 @@ namespace EpubContent {
         return tocEntries_.empty() || emitTocEntriesThrough(tocEntries_.size() - 1);
     }
 
-    bool RsvpContentWriter::reachedWordLimit() const {
-        return reachedWordLimit_;
+    bool Parser::reachedWordLimit() const {
+        return writer_.reachedWordLimit();
     }
 
-    void RsvpContentWriter::beginParagraph() {
-        if (paragraphOpen_) {
-            return;
-        }
-        if (!documentChapterWritten_ && !hasToc_ && !fallbackChapterTitle_.empty()) {
-            writeChapter(fallbackChapterTitle_);
-        }
-        if (wordCount_ > 0) {
-            output_.println();
-            output_.println("@para");
-        }
-        paragraphOpen_ = true;
-    }
-
-    bool RsvpContentWriter::flushLine(bool endParagraph) {
+    bool Parser::flushLine(bool endParagraph) {
         line_ = std::string{AsciiText::trim(line_)};
         if (line_.empty()) {
-            if (endParagraph) {
-                paragraphOpen_ = false;
-            }
+            if (endParagraph)
+                writer_.endParagraph();
             return true;
         }
 
-        beginParagraph();
-        const bool keepGoing = writeBodyLine(output_, line_, wordCount_, maxWords_);
+        if (!documentChapterWritten_ && !hasToc_ && !fallbackChapterTitle_.empty())
+            writeChapter(fallbackChapterTitle_);
+        const bool keepGoing = writer_.writeText(line_, endParagraph);
         line_.clear();
-        if (endParagraph) {
-            paragraphOpen_ = false;
-        }
-        if (!keepGoing) {
-            reachedWordLimit_ = true;
-        }
         return keepGoing;
     }
 
-    bool RsvpContentWriter::flushWordAlignedPrefix() {
+    bool Parser::flushWordAlignedPrefix() {
         line_ = std::string{AsciiText::trim(line_)};
         int split = static_cast<int>(line_.length()) - 1;
         while (split >= 0 && !AsciiText::isWhitespace(line_[split])) {
             --split;
         }
-        if (split < 0) {
-            return true;
-        }
+        if (split < 0)
+            return line_.size() < kMaxBufferedTextBytes || flushLine(false);
 
         std::string prefix{AsciiText::trim(std::string_view{line_}.substr(0, split))};
         std::string remainder{AsciiText::trim(std::string_view{line_}.substr(split + 1))};
@@ -394,24 +305,12 @@ namespace EpubContent {
         return keepGoing;
     }
 
-    bool RsvpContentWriter::writeChapter(std::string_view title) {
-        const std::string cleaned{AsciiText::trim(RsvpText::normalizeDisplayText(title))};
-        if (cleaned.empty() || cleaned == lastChapterTitle_) {
-            return true;
-        }
-        if (wordCount_ > 0 || !lastChapterTitle_.empty()) {
-            output_.println();
-        }
-        output_.print("@chapter ");
-        output_.println(cleaned.c_str());
-        lastChapterTitle_ = cleaned;
-        ++chapterCount_;
+    bool Parser::writeChapter(std::string_view title) {
         documentChapterWritten_ = true;
-        paragraphOpen_ = false;
-        return true;
+        return writer_.writeChapter(title);
     }
 
-    bool RsvpContentWriter::emitTocEntriesThrough(size_t index) {
+    bool Parser::emitTocEntriesThrough(size_t index) {
         if (nextTocEntry_ > index || nextTocEntry_ >= tocEntries_.size()) {
             return true;
         }
@@ -427,7 +326,7 @@ namespace EpubContent {
         return true;
     }
 
-    int RsvpContentWriter::matchingTocEntry(std::string_view anchor) const {
+    int Parser::matchingTocEntry(std::string_view anchor) const {
         if (anchor.empty()) {
             return -1;
         }
@@ -439,7 +338,7 @@ namespace EpubContent {
         return -1;
     }
 
-    bool RsvpContentWriter::suppressHeading(std::string_view heading) const {
+    bool Parser::suppressHeading(std::string_view heading) const {
         if (!hasToc_) {
             return false;
         }
@@ -448,16 +347,17 @@ namespace EpubContent {
             || (!bookTitle_.empty() && normalized == normalizedLabel(bookTitle_));
     }
 
-    void RsvpContentWriter::appendToActiveText(char c) {
+    void Parser::appendToActiveText(char c) {
         if (inHeading_) {
-            appendNormalizedChar(heading_, c);
+            if (heading_.size() < kMaxHeadingBytes)
+                appendNormalizedChar(heading_, c);
             return;
         }
 
         appendNormalizedChar(line_, c);
     }
 
-    bool RsvpContentWriter::processDecodedText(char c) {
+    bool Parser::processDecodedText(char c) {
         if (skipDepth_ > 0) {
             if (inStyle_ && !styleVertical_ && !AsciiText::isWhitespace(c)) {
                 constexpr std::string_view pattern = "writing-mode:vertical-rl";
@@ -478,7 +378,7 @@ namespace EpubContent {
         return true;
     }
 
-    bool RsvpContentWriter::processTextChar(char c) {
+    bool Parser::processTextChar(char c) {
         if (c == '<') {
             tag_ = "<";
             mode_ = Mode::Tag;
@@ -497,7 +397,7 @@ namespace EpubContent {
         return processDecodedText(c);
     }
 
-    bool RsvpContentWriter::processTag(std::string_view tag) {
+    bool Parser::processTag(std::string_view tag) {
         const TagInfo tagInfo = parseTagInfo(tag);
 
         if (tagInfo.name.empty() || tag.starts_with("<!") || tag.starts_with("<?")) {
@@ -540,10 +440,12 @@ namespace EpubContent {
         }
 
         if (!tagInfo.closing && !tagInfo.selfClosing && !isVoidTag(tagInfo.name)) {
-            const std::string nextLocale = tagInfo.locale.empty() ? locale_ : tagInfo.locale;
-            const std::string nextDirection = tagInfo.direction.empty() ? direction_ : tagInfo.direction;
-            const bool changed = nextLocale != locale_ || nextDirection != direction_;
-            languageScopes_.push_back({tagInfo.name, locale_, direction_, changed});
+            const std::string previousLocale{writer_.language()};
+            const std::string previousDirection{writer_.direction()};
+            const std::string nextLocale = tagInfo.locale.empty() ? previousLocale : tagInfo.locale;
+            const std::string nextDirection = tagInfo.direction.empty() ? previousDirection : tagInfo.direction;
+            const bool changed = nextLocale != previousLocale || nextDirection != previousDirection;
+            languageScopes_.push_back({tagInfo.name, previousLocale, previousDirection, changed});
             if (changed) {
                 if (!changeLanguageState(nextLocale, nextDirection))
                     return false;
@@ -599,17 +501,13 @@ namespace EpubContent {
         return true;
     }
 
-    bool RsvpContentWriter::emitVerticalWriting() {
-        if (verticalWritingEmitted_)
-            return true;
+    bool Parser::emitVerticalWriting() {
         if (!flushLine(false))
             return false;
-        output_.println("@writing-mode vertical-rl");
-        verticalWritingEmitted_ = true;
-        return true;
+        return writer_.setVerticalWriting();
     }
 
-    bool RsvpContentWriter::processEntityChar(char c) {
+    bool Parser::processEntityChar(char c) {
         if (c == ';') {
             mode_ = Mode::Text;
             const std::string decoded = decodedEntityText(entity_);
@@ -639,7 +537,7 @@ namespace EpubContent {
         return true;
     }
 
-    bool RsvpContentWriter::processCommentChar(char c) {
+    bool Parser::processCommentChar(char c) {
         commentTail_ += c;
         if (commentTail_.length() > 3) {
             commentTail_.erase(0, commentTail_.length() - 3);
@@ -653,7 +551,7 @@ namespace EpubContent {
         return true;
     }
 
-    bool RsvpContentWriter::processChar(char c) {
+    bool Parser::processChar(char c) {
         switch (mode_) {
         case Mode::Text:
             return processTextChar(c);

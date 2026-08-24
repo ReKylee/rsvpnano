@@ -184,9 +184,9 @@ companion::api::Result<std::string> CompanionApi::installLibraryItem(httpd_req_t
                                                          "Book filename is invalid", "name",
                                                          companion::api::ConnectionPolicy::Close));
     }
-    if (StoragePaths::hasEpubExtension(filename)) {
+    if (StoragePaths::hasConvertibleDocumentExtension(filename)) {
         return std::unexpected(companion::api::httpError(
-            HTTP_CODE_BAD_REQUEST, "invalid_field", "Convert EPUB books to RSVP before uploading", "name",
+            HTTP_CODE_BAD_REQUEST, "invalid_field", "Convert EPUB or PDF books to RSVP before uploading", "name",
             companion::api::ConnectionPolicy::Close));
     }
     if (!StoragePaths::hasRsvpExtension(filename) && !StoragePaths::hasTextExtension(filename)) {

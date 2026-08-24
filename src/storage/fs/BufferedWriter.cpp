@@ -1,4 +1,4 @@
-#include "storage/index/BufferedWriter.h"
+#include "storage/fs/BufferedWriter.h"
 
 #include <cstring>
 
@@ -36,6 +36,16 @@ std::expected<void, std::error_code> BufferedWriter::write(const void* data, siz
     buffer_.resize(offset + len);
     std::memcpy(buffer_.data() + offset, bytes, len);
     return {};
+}
+
+std::expected<void, std::error_code> BufferedWriter::write(std::string_view text) {
+    return write(text.data(), text.size());
+}
+
+std::expected<void, std::error_code> BufferedWriter::writeLine(std::string_view text) {
+    if (auto written = write(text); !written)
+        return written;
+    return write("\n", 1);
 }
 
 std::expected<void, std::error_code> BufferedWriter::flush() {

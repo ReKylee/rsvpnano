@@ -1,26 +1,18 @@
 package com.rsvpnano.converters
 
 object RsvpSupportedFileTypes {
-    private val convertibleExtensions = setOf(
+    private val convertibleExtensions = listOf(
         ".epub",
         ".html",
         ".htm",
         ".xhtml",
         ".md",
         ".markdown",
+        ".pdf",
         ".txt",
     )
 
-    private val textLikeExtensions = setOf(
-        ".html",
-        ".htm",
-        ".xhtml",
-        ".md",
-        ".markdown",
-        ".txt",
-    )
-
-    private val uploadPassthroughExtensions = setOf(".rsvp")
+    val importExtensions = convertibleExtensions.map { it.removePrefix(".") } + "rsvp"
 
     fun extensionFor(filename: String): String {
         val base = filename.substringAfterLast('/').substringAfterLast('\\')
@@ -32,9 +24,14 @@ object RsvpSupportedFileTypes {
 
     fun isEpub(filename: String): Boolean = extensionFor(filename) == ".epub"
 
-    fun isTextLike(filename: String): Boolean = extensionFor(filename) in textLikeExtensions
+    fun isPdf(filename: String): Boolean = extensionFor(filename) == ".pdf"
+
+    fun isTextLike(filename: String): Boolean {
+        val extension = extensionFor(filename)
+        return extension in convertibleExtensions && extension != ".epub" && extension != ".pdf"
+    }
 
     fun isConvertible(filename: String): Boolean = extensionFor(filename) in convertibleExtensions
 
-    fun isUploadPassthrough(filename: String): Boolean = extensionFor(filename) in uploadPassthroughExtensions
+    fun isUploadPassthrough(filename: String): Boolean = isRsvp(filename)
 }

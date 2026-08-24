@@ -3,6 +3,7 @@ package com.rsvpnano
 import com.rsvpnano.converters.RsvpConverter
 import com.rsvpnano.converters.RsvpConversionError
 import java.io.File
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -11,7 +12,7 @@ import kotlin.test.assertTrue
 class EpubParityAndroidTest {
 
     @Test
-    fun convertsRealEpubToRsvp() {
+    fun convertsRealEpubToRsvp() = runTest {
         val epub = testVectorFile("sample.epub")
         val data = epub.readBytes()
         val converted = RsvpConverter.bookFile(data, epub.name)
@@ -30,7 +31,7 @@ class EpubParityAndroidTest {
     }
 
     @Test
-    fun draculaEpubsUseTocChapterTitles() {
+    fun draculaEpubsUseTocChapterTitles() = runTest {
         listOf("Dracula-epub.epub", "Dracula-epub3.epub").forEach { name ->
             val epub = testVectorFile(name)
             val converted = RsvpConverter.bookFile(epub.readBytes(), epub.name)
@@ -71,7 +72,7 @@ class EpubParityAndroidTest {
     }
 
     @Test
-    fun singleDocumentEpubUsesOrderedTocLabels() {
+    fun singleDocumentEpubUsesOrderedTocLabels() = runTest {
         val chapters = chaptersFor("single-document-toc.epub")
 
         assertEquals(
@@ -87,7 +88,7 @@ class EpubParityAndroidTest {
     }
 
     @Test
-    fun nestedTocIsFlattenedInTocOrder() {
+    fun nestedTocIsFlattenedInTocOrder() = runTest {
         assertEquals(
             listOf(
                 "@chapter Part One",
@@ -99,7 +100,7 @@ class EpubParityAndroidTest {
     }
 
     @Test
-    fun encodedTocPathsAndFragmentsResolveToContent() {
+    fun encodedTocPathsAndFragmentsResolveToContent() = runTest {
         val body = bodyFor("encoded-paths.epub")
 
         assertEquals(listOf("@chapter Encoded Chapter"), chaptersFor("encoded-paths.epub"))
@@ -107,12 +108,12 @@ class EpubParityAndroidTest {
     }
 
     @Test
-    fun epub3NavTocBeatsLegacyNcxWhenBothArePresent() {
+    fun epub3NavTocBeatsLegacyNcxWhenBothArePresent() = runTest {
         assertEquals(listOf("@chapter Nav Chapter Title"), chaptersFor("epub3-nav-priority.epub"))
     }
 
     @Test
-    fun encryptedEpubFailsExplicitly() {
+    fun encryptedEpubFailsExplicitly() = runTest {
         val epub = testVectorFile("encrypted-content.epub")
 
         assertFailsWith<RsvpConversionError> {
@@ -121,8 +122,8 @@ class EpubParityAndroidTest {
     }
 
     @Test
-    fun sparseNcxDoesNotHideBodyChapterHeadings() {
-        val epub = optionalTestVectorFile("TCOMC.epub") ?: return
+    fun sparseNcxDoesNotHideBodyChapterHeadings() = runTest {
+        val epub = optionalTestVectorFile("TCOMC.epub") ?: return@runTest
         val chapters = RsvpConverter.bookFile(epub.readBytes(), epub.name).data.decodeToString()
             .lineSequence()
             .filter { it.startsWith("@chapter ") }
@@ -156,12 +157,12 @@ class EpubParityAndroidTest {
         return candidates
     }
 
-    private fun bodyFor(name: String): String {
+    private suspend fun bodyFor(name: String): String {
         val epub = testVectorFile(name)
         return RsvpConverter.bookFile(epub.readBytes(), epub.name).data.decodeToString()
     }
 
-    private fun chaptersFor(name: String): List<String> {
+    private suspend fun chaptersFor(name: String): List<String> {
         return bodyFor(name)
             .lineSequence()
             .filter { it.startsWith("@chapter ") }

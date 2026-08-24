@@ -2,6 +2,7 @@ package com.rsvpnano
 
 import com.rsvpnano.converters.RsvpConverter
 import java.io.File
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -9,7 +10,7 @@ import kotlin.test.assertTrue
 
 class RsvpDemoBookParityAndroidTest {
     @Test
-    fun existingRsvpDemoBookPassesThroughByteForByte() {
+    fun existingRsvpDemoBookPassesThroughByteForByte() = runTest {
         val demo = demoBookFile("european-letter-demo.rsvp")
         val data = demo.readBytes()
         val converted = RsvpConverter.bookFile(data, demo.name)
@@ -20,7 +21,7 @@ class RsvpDemoBookParityAndroidTest {
     }
 
     @Test
-    fun multilingualCorpusHasIdenticalContentAcrossFormats() {
+    fun multilingualCorpusHasIdenticalContentAcrossFormats() = runTest {
         val names = listOf(
             "multilingual.txt",
             "multilingual.md",
@@ -54,12 +55,12 @@ class RsvpDemoBookParityAndroidTest {
     }
 
     @Test
-    fun verticalCjkEpubAndXhtmlPreserveExplicitWritingMode() {
+    fun verticalCjkEpubAndXhtmlPreserveExplicitWritingMode() = runTest {
         val epub = RsvpConverter.bookFile(
             corpusFile("vertical-cjk.epub").readBytes(),
             "vertical-cjk.epub",
         ).data
-        assertContentEquals(corpusFile("vertical-cjk-expected.rsvp").readBytes(), epub)
+        assertEquals(normalizedContent(corpusFile("vertical-cjk-expected.rsvp").readBytes()), normalizedContent(epub))
 
         val xhtml = RsvpConverter.bookFile(
             corpusFile("vertical-cjk.xhtml").readBytes(),

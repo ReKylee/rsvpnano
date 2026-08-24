@@ -94,6 +94,15 @@ namespace Utf8Text {
         return text;
     }
 
+    inline std::string_view prefix(std::string_view text, size_t maximumBytes) {
+        if (text.size() <= maximumBytes)
+            return text;
+        size_t length = maximumBytes;
+        while (length > 0 && isContinuation(static_cast<uint8_t>(text[length])))
+            --length;
+        return text.substr(0, length);
+    }
+
     inline size_t lastCodepointStart(std::string_view text) {
         if (text.empty())
             return 0;

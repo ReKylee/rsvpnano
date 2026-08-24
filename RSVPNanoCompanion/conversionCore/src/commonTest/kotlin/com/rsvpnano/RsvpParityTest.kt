@@ -5,6 +5,7 @@ import com.rsvpnano.converters.RsvpConverter
 import com.rsvpnano.converters.RsvpEvent
 import com.rsvpnano.converters.ArticleFormatter
 import com.rsvpnano.converters.RsvpSupportedFileTypes
+import kotlinx.coroutines.test.runTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.Test
@@ -63,6 +64,31 @@ class RsvpParityTest {
     }
 
     @Test
+    fun writerMetadataAndStateDirectivesAreCanonicalAndIdempotent() {
+        val file = RsvpConverter.rsvpFile(
+            title = "Fixture",
+            author = "Author",
+            source = "fixture.txt",
+            events = listOf(
+                RsvpEvent.Language("ja"),
+                RsvpEvent.Language("ja"),
+                RsvpEvent.Direction("ltr"),
+                RsvpEvent.Direction("ltr"),
+                RsvpEvent.VerticalWriting,
+                RsvpEvent.VerticalWriting,
+                RsvpEvent.Text("Readable text."),
+            ),
+        )
+        val body = file.data.decodeToString()
+        val lines = body.lineSequence().toList()
+
+        assertEquals(true, body.startsWith("@rsvp 1\n@title Fixture\n@source fixture.txt\n@author Author\n"))
+        assertEquals(1, lines.count { it == "@language ja" })
+        assertEquals(1, lines.count { it == "@direction ltr" })
+        assertEquals(1, lines.count { it == "@writing-mode vertical-rl" })
+    }
+
+    @Test
     fun cjkTextKeepsLogicalSpacingAndCountsReaderPhrases() {
         val text = "吾輩は猫である。名前はまだ無い。"
         val file = RsvpConverter.rsvpFile(title = "猫", source = "cat.txt", text = text)
@@ -117,7 +143,7 @@ class RsvpParityTest {
 
     @Test
     fun supportedFileTypesMatchConverterCoverage() {
-        val expectedConvertible = setOf(".epub", ".txt", ".md", ".markdown", ".html", ".htm", ".xhtml")
+        val expectedConvertible = setOf(".epub", ".txt", ".md", ".markdown", ".html", ".htm", ".xhtml", ".pdf")
         expectedConvertible.forEach { extension ->
             assertEquals(true, RsvpSupportedFileTypes.isConvertible("book$extension"), extension)
         }
@@ -125,7 +151,7 @@ class RsvpParityTest {
     }
 
     @Test
-    fun bookFilePassesRsvpThroughUnchanged() {
+    fun bookFilePassesRsvpThroughUnchanged() = runTest {
         val data = "@rsvp 1\n@title Ready\n@source ready.rsvp\n\nHello.\n".encodeToByteArray()
         val file = RsvpConverter.bookFile(data, "ready.rsvp")
 
@@ -135,7 +161,7 @@ class RsvpParityTest {
     }
 
     @Test
-    fun bookFileSupportsTextAndMarkdownExtensions() {
+    fun bookFileSupportsTextAndMarkdownExtensions() = runTest {
         val cases = listOf(
             Triple("book.txt", "Chapter Plain Text\n\nHello reader.", "Chapter Plain Text"),
             Triple("book.md", "# Markdown Chapter\n\nHello reader.", "Markdown Chapter"),
@@ -152,7 +178,7 @@ class RsvpParityTest {
     }
 
     @Test
-    fun bookFileSupportsHtmlExtensions() {
+    fun bookFileSupportsHtmlExtensions() = runTest {
         val cases = listOf(
             "book.html" to "HTML Chapter",
             "book.htm" to "HTM Chapter",
@@ -172,7 +198,7 @@ class RsvpParityTest {
     }
 
     @Test
-    fun invalidEpubFailsWithConversionError() {
+    fun invalidEpubFailsWithConversionError() = runTest {
         assertFailsWith<RsvpConversionError> {
             RsvpConverter.bookFile(byteArrayOf(), "sample.epub")
         }

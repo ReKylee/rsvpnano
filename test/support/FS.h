@@ -34,6 +34,13 @@ class File {
     return count;
   }
 
+  size_t write(const uint8_t *data, size_t size) {
+    if (data == nullptr) return 0;
+    data_->append(reinterpret_cast<const char *>(data), size);
+    position_ = data_->size();
+    return size;
+  }
+
   void print(char value) { data_->push_back(value); }
   void print(const char *value) {
     if (value != nullptr) *data_ += value;

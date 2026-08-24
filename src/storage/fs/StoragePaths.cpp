@@ -28,6 +28,14 @@ namespace StoragePaths {
         return hasExtension(path, kEpubExtension);
     }
 
+    bool hasPdfExtension(std::string_view path) {
+        return hasExtension(path, kPdfExtension);
+    }
+
+    bool hasConvertibleDocumentExtension(std::string_view path) {
+        return hasEpubExtension(path) || hasPdfExtension(path);
+    }
+
     std::string sanitizeFilename(std::string_view name) {
         std::string sanitized;
         sanitized.reserve(name.size());
@@ -60,10 +68,6 @@ namespace StoragePaths {
         return siblingPath;
     }
 
-    std::string epubSiblingPathForRsvp(std::string_view rsvpPath) {
-        return siblingPathWithExtension(rsvpPath, kEpubExtension);
-    }
-
     std::string displayNameForPath(std::string_view path) {
         const size_t separator = path.find_last_of('/');
         return std::string{separator == std::string_view::npos ? path : path.substr(separator + 1)};
@@ -72,7 +76,8 @@ namespace StoragePaths {
     std::string displayNameWithoutExtension(std::string_view path) {
         std::string name = displayNameForPath(path);
         for (const std::string_view extension:
-             {std::string_view{kTextExtension}, std::string_view{kRsvpExtension}, std::string_view{kEpubExtension}}) {
+             {std::string_view{kTextExtension}, std::string_view{kRsvpExtension}, std::string_view{kEpubExtension},
+              std::string_view{kPdfExtension}}) {
             if (hasExtension(name, extension)) {
                 name.resize(name.size() - extension.size());
                 break;
@@ -81,8 +86,8 @@ namespace StoragePaths {
         return name;
     }
 
-    std::string rsvpCachePathForEpub(std::string_view epubPath) {
-        return siblingPathWithExtension(epubPath, kRsvpExtension);
+    std::string rsvpCachePathForDocument(std::string_view documentPath) {
+        return siblingPathWithExtension(documentPath, kRsvpExtension);
     }
 
     std::string indexedIndexPathFor(std::string_view path) {

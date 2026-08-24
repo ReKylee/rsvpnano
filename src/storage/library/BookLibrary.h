@@ -17,7 +17,7 @@ namespace BookLibrary {
 
     using Listing = std::vector<Entry>;
 
-    void refresh(Listing& listing, bool includeMetadata, bool onDeviceEpubConversionEnabled);
+    void refresh(Listing& listing, bool includeMetadata, bool onDeviceDocumentConversionEnabled);
     void refreshMetadata(Entry& book);
 
     const Entry* at(const Listing& listing, size_t index);

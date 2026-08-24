@@ -24,6 +24,16 @@ namespace AsciiText {
         return isAlpha(c) || isDigit(c);
     }
 
+    constexpr int hexDigit(char c) {
+        if (c >= '0' && c <= '9')
+            return c - '0';
+        if (c >= 'a' && c <= 'f')
+            return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F')
+            return c - 'A' + 10;
+        return -1;
+    }
+
     template<std::unsigned_integral T>
     inline std::expected<T, std::error_code> parseUnsigned(std::string_view text, int base = 10) {
         T parsed = 0;

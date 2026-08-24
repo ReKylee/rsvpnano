@@ -14,16 +14,15 @@
 #include "hash/Fnv1a.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
-#include "storage/index/BufferedWriter.h"
-#include "storage/library/EpubCache.h"
+#include "storage/library/DocumentCache.h"
 #include "text/LocaleTag.h"
 #include "text/RsvpDirectives.h"
 #include "text/RsvpTokenizer.h"
 #include "text/UnicodeText.h"
 #include "text/Utf8Text.h"
 
-#ifndef RSVP_ON_DEVICE_EPUB_CONVERSION
-#define RSVP_ON_DEVICE_EPUB_CONVERSION 0
+#ifndef RSVP_ON_DEVICE_DOCUMENT_CONVERSION
+#define RSVP_ON_DEVICE_DOCUMENT_CONVERSION 0
 #endif
 
 namespace IndexedBook {
@@ -887,7 +886,7 @@ namespace IndexedBook {
         size_t parsedIndex = index;
 
         {
-            // Library selection and EPUB preparation.
+            // Library selection and source-document preparation.
             if (!StorageFiles::directoryExists(kLibraryPath)) {
                 ESP_LOGE("storage", "/library directory not found");
                 report("Book open failed", "Folders missing", "Run SD check", 100);
@@ -895,10 +894,10 @@ namespace IndexedBook {
             }
 
             if (library.empty()) {
-                BookLibrary::refresh(library, false, RSVP_ON_DEVICE_EPUB_CONVERSION);
+                BookLibrary::refresh(library, false, RSVP_ON_DEVICE_DOCUMENT_CONVERSION);
             }
             if (library.empty()) {
-                ESP_LOGD("storage", "No readable .rsvp, .txt, or .epub books found under /library");
+                ESP_LOGD("storage", "No readable RSVP, text, EPUB, or PDF books found under /library");
                 report("Book open failed", "No books found", "Add books to SD", 100);
                 return false;
             }
@@ -910,18 +909,18 @@ namespace IndexedBook {
             }
 
             path = library[index].path;
-            if (hasEpubExtension(path)) {
-                if (!request.allowEpubConversion) {
+            if (hasConvertibleDocumentExtension(path)) {
+                if (!request.allowDocumentConversion) {
                     report("Index needed", displayNameForPath(path).c_str(), "Open from library", 100);
                     return false;
                 }
 
-                auto rsvpPath = EpubCache::ensureConverted(path, request.statusCallback, request.statusContext);
+                auto rsvpPath = DocumentCache::ensureConverted(path, request.statusCallback, request.statusContext);
                 if (!rsvpPath) {
                     return false;
                 }
 
-                BookLibrary::refresh(library, true, RSVP_ON_DEVICE_EPUB_CONVERSION);
+                BookLibrary::refresh(library, true, RSVP_ON_DEVICE_DOCUMENT_CONVERSION);
                 const int convertedIndex = BookLibrary::indexOfPath(library, *rsvpPath);
                 if (convertedIndex < 0) {
                     ESP_LOGE("storage", "Converted RSVP not found in refreshed library: %s", rsvpPath->c_str());

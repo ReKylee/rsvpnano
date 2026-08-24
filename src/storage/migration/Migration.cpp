@@ -233,9 +233,8 @@ namespace StorageMigration {
                     continue;
                 }
 
-                const bool sourceFile = StoragePaths::hasTextExtension(entryPath)
-                                     || StoragePaths::hasRsvpExtension(entryPath)
-                                     || StoragePaths::hasEpubExtension(entryPath);
+                const bool indexableFile = StoragePaths::hasTextExtension(entryPath)
+                                        || StoragePaths::hasRsvpExtension(entryPath);
                 if (StoragePaths::hasTextExtension(entryPath) || StoragePaths::hasRsvpExtension(entryPath)) {
                     if (bytes == 0)
                         issue(&report, "Empty library file: " + entryPath);
@@ -244,12 +243,17 @@ namespace StorageMigration {
                     constexpr std::array<uint8_t, 2> zipMagic{'P', 'K'};
                     if (bytes < magic.size() || !readPrefix(entry, magic) || magic != zipMagic)
                         issue(&report, "Invalid EPUB file: " + entryPath);
+                } else if (StoragePaths::hasPdfExtension(entryPath)) {
+                    std::array<uint8_t, 5> magic{};
+                    constexpr std::array<uint8_t, 5> pdfMagic{'%', 'P', 'D', 'F', '-'};
+                    if (bytes < magic.size() || !readPrefix(entry, magic) || magic != pdfMagic)
+                        issue(&report, "Invalid PDF file: " + entryPath);
                 } else if (!StoragePaths::isHiddenOrSidecarPath(entryPath)
                            && !entryPath.ends_with(StoragePaths::kFailedExtension)) {
                     issue(&report, "Unsupported file in the library: " + entryPath);
                 }
                 entry.close();
-                if (sourceFile)
+                if (indexableFile)
                     repairIndex(entryPath, report);
             }
             directory.close();

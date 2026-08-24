@@ -10,6 +10,7 @@ filekit = "0.14.1"
 korlibsCompression = "6.0.0"
 kotlin = "2.4.10"
 ksoup = "0.2.6"
+pdfCore = "0.2.2"
 ktor = "3.5.0"
 lifecycle = "2.10.0"
 okio = "3.17.0"
@@ -40,6 +41,7 @@ kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 korlibs-compression = { module = "com.soywiz:korlibs-compression", version.ref = "korlibsCompression" }
 ksoup = { module = "com.fleeksoft.ksoup:ksoup", version.ref = "ksoup" }
+pdf-core = { module = "io.github.limuyang2:pdf-core", version.ref = "pdfCore" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }

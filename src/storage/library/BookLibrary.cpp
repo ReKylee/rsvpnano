@@ -11,7 +11,7 @@
 
 #include "hash/Fnv1a.h"
 #include "storage/fs/StoragePaths.h"
-#include "storage/library/EpubCache.h"
+#include "storage/library/DocumentCache.h"
 #include "text/AsciiText.h"
 #include "text/RsvpDirectives.h"
 #include "text/TextNormalizer.h"
@@ -81,19 +81,24 @@ namespace BookLibrary {
             });
         }
 
-        std::vector<DirectoryEntryInfo> collectBooks(bool onDeviceEpubConversionEnabled) {
+        std::vector<DirectoryEntryInfo> collectBooks(bool onDeviceDocumentConversionEnabled) {
             const uint32_t startedMs = millis();
             std::vector<DirectoryEntryInfo> entries = scanLibraryDirectories();
             const size_t fileCount = entries.size();
             size_t cacheProbeCount = 0;
 
             auto hasStaleGeneratedRsvp = [&](std::string_view path) {
-                if (!StoragePaths::hasRsvpExtension(path)
-                    || !inventoryHasFileWithBytes(entries, StoragePaths::epubSiblingPathForRsvp(path))) {
+                if (!StoragePaths::hasRsvpExtension(path)) {
                     return false;
                 }
+                const auto source = std::ranges::find_if(entries, [&](const DirectoryEntryInfo& candidate) {
+                    return candidate.bytes > 0 && StoragePaths::hasConvertibleDocumentExtension(candidate.path)
+                        && equalsIgnoreCase(StoragePaths::rsvpCachePathForDocument(candidate.path), path);
+                });
+                if (source == entries.end())
+                    return false;
                 ++cacheProbeCount;
-                return !EpubCache::rsvpIsCurrent(path);
+                return !DocumentCache::rsvpIsCurrent(source->path, path);
             };
 
             auto isReadableText = [&](std::string_view path) {
@@ -103,18 +108,18 @@ namespace BookLibrary {
                                                                                          StoragePaths::kRsvpExtension));
             };
 
-            auto isPendingEpub = [&](std::string_view path) {
-                if (!onDeviceEpubConversionEnabled || !StoragePaths::hasEpubExtension(path)) {
+            auto isPendingDocument = [&](std::string_view path) {
+                if (!onDeviceDocumentConversionEnabled || !StoragePaths::hasConvertibleDocumentExtension(path)) {
                     return false;
                 }
 
-                const std::string rsvpPath = StoragePaths::rsvpCachePathForEpub(path);
+                const std::string rsvpPath = StoragePaths::rsvpCachePathForDocument(path);
                 if (!inventoryHasFileWithBytes(entries, rsvpPath)) {
                     return true;
                 }
 
                 ++cacheProbeCount;
-                return !EpubCache::hasCurrentCache(path);
+                return !DocumentCache::hasCurrentCache(path);
             };
 
             for (DirectoryEntryInfo& entry: entries) {
@@ -122,7 +127,7 @@ namespace BookLibrary {
                 if (StoragePaths::isHiddenOrSidecarPath(path))
                     continue;
                 entry.readable = (!hasStaleGeneratedRsvp(path) && StoragePaths::hasRsvpExtension(path))
-                              || isReadableText(path) || isPendingEpub(path);
+                              || isReadableText(path) || isPendingDocument(path);
             }
             std::erase_if(entries, [](const DirectoryEntryInfo& entry) {
                 return !entry.readable;
@@ -144,8 +149,8 @@ namespace BookLibrary {
 
     using namespace StoragePaths;
 
-    void refresh(Listing& listing, bool includeMetadata, bool onDeviceEpubConversionEnabled) {
-        auto books = collectBooks(onDeviceEpubConversionEnabled);
+    void refresh(Listing& listing, bool includeMetadata, bool onDeviceDocumentConversionEnabled) {
+        auto books = collectBooks(onDeviceDocumentConversionEnabled);
         listing.clear();
         listing.reserve(books.size());
         for (DirectoryEntryInfo& book: books) {
@@ -165,7 +170,7 @@ namespace BookLibrary {
                                   }),
             std::ranges::count_if(listing,
                                   [](const Entry& book) {
-                                      return hasEpubExtension(book.path);
+                                      return hasConvertibleDocumentExtension(book.path);
                                   }),
         };
 
@@ -190,7 +195,7 @@ namespace BookLibrary {
             ESP_LOGW("storage", "Metadata cache skipped for %u entries", static_cast<unsigned int>(listing.size()));
         }
 
-        ESP_LOGD("storage", "Library scan: %u books (%u rsvp, %u txt, %u pending epub)",
+        ESP_LOGD("storage", "Library scan: %u books (%u rsvp, %u txt, %u pending documents)",
                  static_cast<unsigned int>(listing.size()), static_cast<unsigned int>(counts[0]),
                  static_cast<unsigned int>(counts[1]), static_cast<unsigned int>(counts[2]));
     }
@@ -203,8 +208,8 @@ namespace BookLibrary {
             if (!values.title.empty())
                 book.title = RsvpText::normalizeDisplayText(values.title);
             book.author = RsvpText::normalizeDisplayText(values.author);
-        } else if (hasEpubExtension(book.path)) {
-            book.author = RsvpText::normalizeDisplayText(EpubCache::libraryLabel(book.path));
+        } else if (hasConvertibleDocumentExtension(book.path)) {
+            book.author = RsvpText::normalizeDisplayText(DocumentCache::libraryLabel(book.path));
         }
         book.metadataLoaded = true;
     }

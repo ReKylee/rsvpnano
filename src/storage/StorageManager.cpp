@@ -12,8 +12,8 @@
 #include "storage/index/IndexedBook.h"
 #include "storage/migration/Migration.h"
 
-#ifndef RSVP_ON_DEVICE_EPUB_CONVERSION
-#define RSVP_ON_DEVICE_EPUB_CONVERSION 0
+#ifndef RSVP_ON_DEVICE_DOCUMENT_CONVERSION
+#define RSVP_ON_DEVICE_DOCUMENT_CONVERSION 0
 #endif
 
 namespace {
@@ -76,7 +76,7 @@ std::expected<void, std::error_code> StorageManager::installBook(std::string_vie
     const std::string parent = StoragePaths::parentDirectoryForPath(destinationPath);
     const bool supported = StoragePaths::hasRsvpExtension(destinationPath)
                         || StoragePaths::hasTextExtension(destinationPath)
-                        || StoragePaths::hasEpubExtension(destinationPath);
+                        || StoragePaths::hasConvertibleDocumentExtension(destinationPath);
     if ((parent != StoragePaths::kBookFilesPath && parent != StoragePaths::kArticleFilesPath) || !supported)
         return std::unexpected(std::make_error_code(std::errc::invalid_argument));
 
@@ -161,7 +161,7 @@ void StorageManager::refreshBookPaths(bool includeMetadata) {
     ESP_LOGI("storage", "library scan begin metadata=%u", includeMetadata ? 1U : 0U);
     statusCallback_(statusContext_, "SD", "Reading library", includeMetadata ? "Reading metadata" : "Finding books",
                     96);
-    BookLibrary::refresh(library_, includeMetadata, RSVP_ON_DEVICE_EPUB_CONVERSION);
+    BookLibrary::refresh(library_, includeMetadata, RSVP_ON_DEVICE_DOCUMENT_CONVERSION);
     ESP_LOGI("storage", "library scan ready books=%u metadata=%u", static_cast<unsigned>(library_.size()),
              includeMetadata ? 1U : 0U);
 }

@@ -13,7 +13,7 @@ from export_web_firmware import FLASH_EXPORTS, OTA_EXPORTS, write_release_metada
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WEB_FIRMWARE_DIR = ROOT / "web" / "firmware"
+FIRMWARE_DIR = ROOT / "build" / "firmware"
 DEFAULT_REPO = "ionutdecebal/rsvpnano"
 ASSET_FALLBACKS = {
     "rsvp-nano-esp32-s3-touch-lcd-3.49.bin": ("rsvp-nano.bin",),
@@ -86,7 +86,7 @@ def find_asset_with_fallback(release: dict, name: str, required: bool = True) ->
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Populate web/firmware from the latest published GitHub Release."
+        description="Populate build/firmware from the latest published GitHub Release."
     )
     parser.add_argument(
         "--repo",
@@ -106,7 +106,7 @@ def main() -> int:
     if not tag_name:
         raise SystemExit("Latest release is missing tag_name.")
 
-    WEB_FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
+    FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
 
     requested_assets = tuple(args.assets) if args.assets else None
     available_firmware: dict[str, str] = {}
@@ -130,7 +130,7 @@ def main() -> int:
                 raise SystemExit(f"Release asset is missing browser_download_url: {asset_name}")
             print(f"Skipping release asset with no download URL: {asset_name}")
             continue
-        destination = WEB_FIRMWARE_DIR / asset_name
+        destination = FIRMWARE_DIR / asset_name
         print(f"Downloading {release_asset_name} from {tag_name} -> {destination}")
         download_file(url, destination)
         if "id" in export:

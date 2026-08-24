@@ -64,7 +64,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: firmware-${{ matrix.environment }}
-          path: web/firmware
+          path: build/firmware
           if-no-files-found: error
 
   assemble:
@@ -76,7 +76,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           pattern: firmware-*
-          path: web/firmware
+          path: build/firmware
           merge-multiple: true
 
       - name: Assemble firmware release
@@ -85,5 +85,5 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: firmware-assets
-          path: web/firmware
+          path: build/firmware
           if-no-files-found: error

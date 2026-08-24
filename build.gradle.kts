@@ -26,7 +26,7 @@ val assembleWebSite by tasks.registering(Sync::class) {
 
 	dependsOn(":webApp:wasmJsBrowserDistribution")
 	from(project(":webApp").layout.buildDirectory.dir("dist/wasmJs/productionExecutable"))
-	from(layout.projectDirectory.dir("web/firmware")) {
+	from(layout.buildDirectory.dir("firmware")) {
 		into("firmware")
 	}
 	into(siteDirectory)

@@ -74,7 +74,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: firmware-assets
-          path: web/firmware
+          path: build/firmware
 
       - name: Write preview notes
         run: |
@@ -97,7 +97,7 @@ jobs:
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --title "$RELEASE_TITLE" --notes-file release-notes.md --prerelease
           fi
-          gh release upload "$RELEASE_TAG" web/firmware/*.bin --clobber
+          gh release upload "$RELEASE_TAG" build/firmware/*.bin --clobber
           gh release edit "$RELEASE_TAG" \
             --title "$RELEASE_TITLE" \
             --notes-file release-notes.md \

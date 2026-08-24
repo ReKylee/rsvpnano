@@ -10,9 +10,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WEB_FIRMWARE_DIR = ROOT / "web" / "firmware"
-RELEASE_METADATA_PATH = WEB_FIRMWARE_DIR / "release.json"
-VERSION_DIR = WEB_FIRMWARE_DIR / "versions"
+FIRMWARE_DIR = ROOT / "build" / "firmware"
+RELEASE_METADATA_PATH = FIRMWARE_DIR / "release.json"
+VERSION_DIR = FIRMWARE_DIR / "versions"
 BOOT_APP0_GLOB = "framework-arduinoespressif32*/tools/partitions/boot_app0.bin"
 VERSION_DECLARATION = "inline constexpr char kFirmwareVersion[] = "
 
@@ -243,14 +243,14 @@ def assemble_release() -> None:
         raise SystemExit(f"Firmware jobs produced different versions: {', '.join(sorted(versions))}")
 
     for export in (*FLASH_EXPORTS, *OTA_EXPORTS):
-        path = WEB_FIRMWARE_DIR / export["binary"]
+        path = FIRMWARE_DIR / export["binary"]
         if not path.exists():
             raise SystemExit(f"Missing exported firmware: {path}")
 
     version = versions.pop()
     write_release_metadata(version, {export["id"]: export["binary"] for export in FLASH_EXPORTS})
     shutil.rmtree(VERSION_DIR)
-    print(f"Firmware release assembled in {WEB_FIRMWARE_DIR}")
+    print(f"Firmware release assembled in {FIRMWARE_DIR}")
 
 
 def main() -> int:
@@ -283,19 +283,19 @@ def main() -> int:
     version = generated_version(required_envs)
     print(f"Firmware version: {version}")
 
-    WEB_FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
+    FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
 
     for export in FLASH_EXPORTS:
         if export["env"] not in required_envs:
             continue
-        output = WEB_FIRMWARE_DIR / export["binary"]
+        output = FIRMWARE_DIR / export["binary"]
         print(f"Exporting {export['label']} -> {output}")
         merge_firmware(export["env"], output)
 
     for export in OTA_EXPORTS:
         if export["env"] not in required_envs:
             continue
-        ota_output = WEB_FIRMWARE_DIR / export["binary"]
+        ota_output = FIRMWARE_DIR / export["binary"]
         print(f"Exporting {export['label']} -> {ota_output}")
         export_ota_binary(export["env"], ota_output)
 
@@ -305,7 +305,7 @@ def main() -> int:
         write_release_metadata(version, {export["id"]: export["binary"] for export in FLASH_EXPORTS})
         shutil.rmtree(VERSION_DIR, ignore_errors=True)
 
-    print(f"Web firmware exported to {WEB_FIRMWARE_DIR}")
+    print(f"Web firmware exported to {FIRMWARE_DIR}")
     return 0
 
 

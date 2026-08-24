@@ -72,7 +72,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: firmware-assets
-          path: web/firmware
+          path: build/firmware
 
       - name: Load release notes
         env:
@@ -101,7 +101,7 @@ jobs:
             gh release delete "$RELEASE_TAG" --yes
           fi
 
-          gh release create "$RELEASE_TAG" web/firmware/*.bin \
+          gh release create "$RELEASE_TAG" build/firmware/*.bin \
             --title "$RELEASE_TAG" \
             --notes-file release-notes.md \
             --target "$BUILD_SHA"

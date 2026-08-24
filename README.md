@@ -208,7 +208,7 @@ The staged website is written to `build/webSite`. Detailed native setup is in th
 - [v0.0.9 release notes](docs/releases/v0.0.9.md)
 - [Companion API](docs/companion-api.md)
 - [USB companion protocol](docs/companion-serial.md)
-- [Conversion format and behavior](RSVPNanoCompanion/docs/conversion-spec.md)
+- [Conversion format and behavior](docs/conversion/spec.md)
 - [Configuration files](docs/configuration.md)
 - [Hardware architecture and bring-up notes](docs/hardware/README.md)
 - [Reader fonts](fonts/README.md)

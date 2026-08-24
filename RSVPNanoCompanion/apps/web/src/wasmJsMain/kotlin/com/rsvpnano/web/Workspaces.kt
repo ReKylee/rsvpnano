@@ -1,5 +1,6 @@
 package com.rsvpnano.web
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,7 +25,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.Newspaper
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
@@ -70,6 +72,7 @@ import com.rsvpnano.models.needsArticleFetch
 import com.rsvpnano.ui.CompanionPresenter
 import com.rsvpnano.ui.CatalogInstall
 import com.rsvpnano.ui.CatalogAsset
+import com.rsvpnano.ui.BookJob
 import com.rsvpnano.ui.CompanionResource
 import com.rsvpnano.ui.CompanionUiState
 import com.rsvpnano.ui.TypographyPreview
@@ -127,55 +130,39 @@ internal fun ColumnScope.LibraryWorkspace(presenter: CompanionPresenter, state: 
         if (!editingArticle) selectedBookId = selectedBook?.id
     }
 
-    LibraryToolbar(
-        filter = filter,
-        search = search,
-        connected = state.isConnected,
-        onFilter = {
-            filter = it
-            editingArticle = false
-            selectedBookId = null
-        },
-        onSearch = { search = it },
-        onRefresh = presenter::refreshLibrary,
-        onUpload = { category ->
-            uploadCategory = category
-            picker.launch()
-        },
-        onNewArticle = {
-            filter = WebLibraryFilter.Articles
-            selectedBookId = null
-            editingArticle = true
-            presenter.cancelDraftEdit()
-        },
-    )
-
-    state.bookJob?.let { job ->
-        Surface(
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f),
-            shape = RoundedCornerShape(8.dp),
-        ) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("${job.active.activeLabel} ${job.name}", fontWeight = FontWeight.Bold)
-                    job.percent?.let { Text("$it%", style = MaterialTheme.typography.labelMedium) }
-                }
-                val progress = job.progress
-                if (progress != null) LinearProgressIndicator(progress = { progress }, Modifier.fillMaxWidth())
-                else LinearProgressIndicator(Modifier.fillMaxWidth())
-            }
-        }
+    val selectFilter: (WebLibraryFilter) -> Unit = {
+        filter = it
+        editingArticle = false
+        selectedBookId = null
+    }
+    val upload: (String) -> Unit = { category ->
+        uploadCategory = category
+        picker.launch()
+    }
+    val addArticle: () -> Unit = {
+        filter = WebLibraryFilter.Articles
+        selectedBookId = null
+        editingArticle = true
+        presenter.cancelDraftEdit()
     }
 
     BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
         if (maxWidth >= 840.dp) {
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 LibraryListPane(
+                    filter = filter,
+                    search = search,
                     books = visibleBooks,
                     drafts = visibleDrafts,
+                    bookJob = state.bookJob,
                     selectedBookId = selectedBook?.id.takeUnless { editingArticle },
                     connected = state.isConnected,
                     loading = CompanionResource.Library in state.loadingResources,
+                    onFilter = selectFilter,
+                    onSearch = { search = it },
+                    onRefresh = presenter::refreshLibrary,
+                    onUpload = upload,
+                    onAddArticle = addArticle,
                     needsArticleFetch = { it.needsArticleFetch() },
                     onSelectBook = {
                         selectedBookId = it.id
@@ -192,7 +179,13 @@ internal fun ColumnScope.LibraryWorkspace(presenter: CompanionPresenter, state: 
                 )
                 Column(Modifier.weight(2f).fillMaxHeight().verticalScroll(rememberScrollState())) {
                     if (editingArticle) {
-                        DraftEditor(presenter, state, onClose = { editingArticle = false })
+                        DraftEditor(
+                            presenter = presenter,
+                            state = state,
+                            connected = state.isConnected,
+                            onUploadArticle = { upload("article") },
+                            onClose = { editingArticle = false },
+                        )
                     } else {
                         LibraryDetailPane(selectedBook, presenter)
                     }
@@ -201,11 +194,19 @@ internal fun ColumnScope.LibraryWorkspace(presenter: CompanionPresenter, state: 
         } else {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 LibraryListPane(
+                    filter = filter,
+                    search = search,
                     books = visibleBooks,
                     drafts = visibleDrafts,
+                    bookJob = state.bookJob,
                     selectedBookId = selectedBook?.id.takeUnless { editingArticle },
                     connected = state.isConnected,
                     loading = CompanionResource.Library in state.loadingResources,
+                    onFilter = selectFilter,
+                    onSearch = { search = it },
+                    onRefresh = presenter::refreshLibrary,
+                    onUpload = upload,
+                    onAddArticle = addArticle,
                     needsArticleFetch = { it.needsArticleFetch() },
                     onSelectBook = {
                         selectedBookId = it.id
@@ -219,7 +220,15 @@ internal fun ColumnScope.LibraryWorkspace(presenter: CompanionPresenter, state: 
                     onDeleteDraft = presenter::deleteDraft,
                     onSyncArticles = presenter::syncSavedArticles,
                 )
-                if (editingArticle) DraftEditor(presenter, state, onClose = { editingArticle = false })
+                if (editingArticle) {
+                    DraftEditor(
+                        presenter = presenter,
+                        state = state,
+                        connected = state.isConnected,
+                        onUploadArticle = { upload("article") },
+                        onClose = { editingArticle = false },
+                    )
+                }
                 else LibraryDetailPane(selectedBook, presenter)
             }
         }
@@ -229,65 +238,6 @@ internal fun ColumnScope.LibraryWorkspace(presenter: CompanionPresenter, state: 
 private enum class WebLibraryFilter(val label: String) {
     Books("Books"),
     Articles("Articles"),
-}
-
-@Composable
-private fun LibraryToolbar(
-    filter: WebLibraryFilter,
-    search: String,
-    connected: Boolean,
-    onFilter: (WebLibraryFilter) -> Unit,
-    onSearch: (String) -> Unit,
-    onRefresh: () -> Unit,
-    onUpload: (String) -> Unit,
-    onNewArticle: () -> Unit,
-) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val narrow = maxWidth < 880.dp
-        val filters: @Composable () -> Unit = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                WebLibraryFilter.entries.forEach { option ->
-                    FilterChip(selected = filter == option, onClick = { onFilter(option) }, label = { Text(option.label) })
-                }
-            }
-        }
-        val actions: @Composable () -> Unit = {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("ADD TO READER", Modifier.align(Alignment.CenterVertically), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-                Button(onClick = { onUpload("book") }, enabled = connected) {
-                    Icon(Icons.Outlined.UploadFile, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(7.dp))
-                    Text("Book file")
-                }
-                OutlinedButton(onClick = { onUpload("article") }, enabled = connected) {
-                    Icon(Icons.Outlined.UploadFile, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(7.dp))
-                    Text("Article file")
-                }
-                OutlinedButton(onClick = onNewArticle) { Text("Write article") }
-            }
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (narrow) {
-                filters()
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    LibrarySearchField(search, onSearch, Modifier.weight(1f))
-                    IconButton(onClick = onRefresh, enabled = connected) {
-                        Icon(Icons.Outlined.Refresh, "Refresh library")
-                    }
-                }
-            } else {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    filters()
-                    LibrarySearchField(search, onSearch, Modifier.weight(1f))
-                    IconButton(onClick = onRefresh, enabled = connected) {
-                        Icon(Icons.Outlined.Refresh, "Refresh library")
-                    }
-                }
-            }
-            actions()
-        }
-    }
 }
 
 @Composable
@@ -304,11 +254,19 @@ private fun LibrarySearchField(value: String, onValueChange: (String) -> Unit, m
 
 @Composable
 private fun LibraryListPane(
+    filter: WebLibraryFilter,
+    search: String,
     books: List<NanoBook>,
     drafts: List<PendingUpload>,
+    bookJob: BookJob?,
     selectedBookId: String?,
     connected: Boolean,
     loading: Boolean,
+    onFilter: (WebLibraryFilter) -> Unit,
+    onSearch: (String) -> Unit,
+    onRefresh: () -> Unit,
+    onUpload: (String) -> Unit,
+    onAddArticle: () -> Unit,
     needsArticleFetch: (PendingUpload) -> Boolean,
     onSelectBook: (NanoBook) -> Unit,
     onEditDraft: (PendingUpload) -> Unit,
@@ -317,6 +275,54 @@ private fun LibraryListPane(
     modifier: Modifier = Modifier,
 ) {
     SectionCard(modifier) {
+        var addExpanded by remember { mutableStateOf(false) }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                WebLibraryFilter.entries.forEach { option ->
+                    FilterChip(selected = filter == option, onClick = { onFilter(option) }, label = { Text(option.label) })
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            Button(onClick = { addExpanded = !addExpanded }) {
+                Icon(if (addExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.Add, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Add")
+            }
+        }
+        AnimatedVisibility(addExpanded) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        addExpanded = false
+                        onUpload("book")
+                    },
+                    enabled = connected,
+                    modifier = Modifier.weight(1f).height(52.dp),
+                ) {
+                    Icon(Icons.AutoMirrored.Outlined.MenuBook, null, Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Book")
+                }
+                OutlinedButton(
+                    onClick = {
+                        addExpanded = false
+                        onAddArticle()
+                    },
+                    modifier = Modifier.weight(1f).height(52.dp),
+                ) {
+                    Icon(Icons.Outlined.Newspaper, null, Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Article")
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            LibrarySearchField(search, onSearch, Modifier.weight(1f))
+            IconButton(onClick = onRefresh, enabled = connected) {
+                Icon(Icons.Outlined.Refresh, "Refresh library")
+            }
+        }
+        bookJob?.let { LibraryUploadStatus(it) }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("ON THE READER", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
             Text("${books.size} ${if (books.size == 1) "item" else "items"}", style = MaterialTheme.typography.labelSmall)
@@ -346,6 +352,24 @@ private fun LibraryListPane(
                 Spacer(Modifier.width(7.dp))
                 Text("Sync ready articles")
             }
+        }
+    }
+}
+
+@Composable
+private fun LibraryUploadStatus(job: BookJob) {
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f),
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("${job.active.activeLabel} ${job.name}", fontWeight = FontWeight.Bold)
+                job.percent?.let { Text("$it%", style = MaterialTheme.typography.labelMedium) }
+            }
+            val progress = job.progress
+            if (progress != null) LinearProgressIndicator(progress = { progress }, Modifier.fillMaxWidth())
+            else LinearProgressIndicator(Modifier.fillMaxWidth())
         }
     }
 }
@@ -445,11 +469,22 @@ private fun LibraryDetailPane(book: NanoBook?, presenter: CompanionPresenter) {
 private fun DraftEditor(
     presenter: CompanionPresenter,
     state: CompanionUiState,
+    connected: Boolean,
+    onUploadArticle: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     SectionCard(modifier) {
-        Text(if (state.editingDraftId == null) "NEW ARTICLE" else "EDIT ARTICLE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text(if (state.editingDraftId == null) "ADD ARTICLE" else "EDIT ARTICLE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+            if (state.editingDraftId == null) {
+                OutlinedButton(onClick = onUploadArticle, enabled = connected) {
+                    Icon(Icons.Outlined.UploadFile, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(7.dp))
+                    Text("Choose file")
+                }
+            }
+        }
         OutlinedTextField(
             value = state.draftTitle,
             onValueChange = presenter::setDraftTitle,

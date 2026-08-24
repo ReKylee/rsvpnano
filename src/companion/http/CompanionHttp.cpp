@@ -133,6 +133,7 @@ CompanionApi::OperationResult CompanionApi::startServer() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.lru_purge_enable = true;
     config.global_user_ctx = this;
+    config.max_req_hdr_len = 2048;
     config.max_uri_handlers = static_cast<uint16_t>(routes.size());
     config.stack_size = 12288;
     config.recv_wait_timeout = 15;
@@ -203,8 +204,6 @@ esp_err_t CompanionApi::handleOptions(httpd_req_t* request) {
                                               "This browser origin is not allowed"));
     }
 
-    if (const esp_err_t error = self->setBrowserResponseHeaders(*request); error != ESP_OK)
-        return error;
     if (const esp_err_t error = httpd_resp_set_hdr(request, "Access-Control-Allow-Methods",
                                                    "GET, POST, PUT, PATCH, DELETE, OPTIONS");
         error != ESP_OK) {
@@ -251,7 +250,9 @@ void CompanionApi::drainServer() {
 
 esp_err_t CompanionApi::sendJson(httpd_req_t& request, t_http_codes status, std::string_view json,
                                  api::ConnectionPolicy connection) {
-    if (const esp_err_t error = setBrowserResponseHeaders(request); error != ESP_OK)
+    // esp_http_server retains header value pointers until the response is sent.
+    const auto origin = requestOrigin(request);
+    if (const esp_err_t error = setBrowserResponseHeaders(request, origin); error != ESP_OK)
         return error;
     if (const esp_err_t error = httpd_resp_set_hdr(&request, "Cache-Control", "no-store"); error != ESP_OK)
         return error;
@@ -285,7 +286,9 @@ esp_err_t CompanionApi::sendError(httpd_req_t& request, api::HttpError error) {
 }
 
 esp_err_t CompanionApi::sendNoContent(httpd_req_t& request) {
-    if (const esp_err_t error = setBrowserResponseHeaders(request); error != ESP_OK)
+    // esp_http_server retains header value pointers until the response is sent.
+    const auto origin = requestOrigin(request);
+    if (const esp_err_t error = setBrowserResponseHeaders(request, origin); error != ESP_OK)
         return error;
     if (const esp_err_t error = httpd_resp_set_hdr(&request, "Cache-Control", "no-store"); error != ESP_OK)
         return error;
@@ -297,8 +300,7 @@ esp_err_t CompanionApi::sendNoContent(httpd_req_t& request) {
     return httpd_resp_send(&request, nullptr, 0);
 }
 
-esp_err_t CompanionApi::setBrowserResponseHeaders(httpd_req_t& request) {
-    const auto origin = requestHeader(request, "Origin");
+esp_err_t CompanionApi::setBrowserResponseHeaders(httpd_req_t& request, const std::optional<std::string>& origin) {
     if (!origin || !isAllowedOrigin(*origin))
         return ESP_OK;
     if (const esp_err_t error = httpd_resp_set_hdr(&request, "Access-Control-Allow-Origin", origin->c_str());
@@ -309,8 +311,12 @@ esp_err_t CompanionApi::setBrowserResponseHeaders(httpd_req_t& request) {
 }
 
 bool CompanionApi::browserOriginAllowed(httpd_req_t& request) const {
-    const auto origin = requestHeader(request, "Origin");
+    const auto origin = requestOrigin(request);
     return !origin || isAllowedOrigin(*origin);
+}
+
+std::optional<std::string> CompanionApi::requestOrigin(httpd_req_t& request) const {
+    return requestHeader(request, "Origin");
 }
 
 api::Result<std::string> CompanionApi::readBody(httpd_req_t& request, size_t maximum,

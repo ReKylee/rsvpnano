@@ -70,7 +70,9 @@ esp_err_t CompanionApi::handleLibraryInstall(httpd_req_t* request) {
 }
 
 esp_err_t CompanionApi::sendLibrary(httpd_req_t& request) {
-    if (const esp_err_t error = setBrowserResponseHeaders(request); error != ESP_OK)
+    // esp_http_server retains header value pointers until the first chunk is sent.
+    const auto origin = requestOrigin(request);
+    if (const esp_err_t error = setBrowserResponseHeaders(request, origin); error != ESP_OK)
         return error;
     if (const esp_err_t error = httpd_resp_set_hdr(&request, "Cache-Control", "no-store"); error != ESP_OK)
         return error;

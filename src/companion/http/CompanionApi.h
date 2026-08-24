@@ -167,7 +167,8 @@ private:
     esp_err_t sendSettings(httpd_req_t& request);
     esp_err_t sendError(httpd_req_t& request, companion::api::HttpError error);
     esp_err_t sendNoContent(httpd_req_t& request);
-    esp_err_t setBrowserResponseHeaders(httpd_req_t& request);
+    esp_err_t setBrowserResponseHeaders(httpd_req_t& request, const std::optional<std::string>& origin);
+    [[nodiscard]] std::optional<std::string> requestOrigin(httpd_req_t& request) const;
     [[nodiscard]] bool browserOriginAllowed(httpd_req_t& request) const;
 
     template<typename T>

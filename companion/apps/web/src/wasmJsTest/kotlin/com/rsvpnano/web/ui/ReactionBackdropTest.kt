@@ -1,5 +1,8 @@
-package com.rsvpnano.web
+package com.rsvpnano.web.ui
 
+import com.rsvpnano.web.ui.reactionGridDimensions
+import com.rsvpnano.web.ui.seededReactionCells
+import com.rsvpnano.web.ui.stepReaction
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals

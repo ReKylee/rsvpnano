@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalWasmJsInterop::class)
 
-package com.rsvpnano.web
+package com.rsvpnano.web.setup
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
@@ -62,9 +62,14 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.rsvpnano.app.NanoConnectionTransport
-import com.rsvpnano.ui.CompanionPresenter
-import com.rsvpnano.ui.CompanionUiState
+import com.rsvpnano.connection.NanoConnectionTransport
+import com.rsvpnano.presentation.CompanionPresenter
+import com.rsvpnano.presentation.CompanionUiState
+import com.rsvpnano.web.connection.BrowserSerial
+import com.rsvpnano.web.connection.reconnectAuthorizedUsb
+import com.rsvpnano.web.connection.requestUsbConnection
+import com.rsvpnano.web.connection.supportsWebSerial
+import com.rsvpnano.web.ui.ReactionBackdrop
 import io.github.vinceglb.filekit.BrowserFile
 import io.github.vinceglb.filekit.WebFile
 import io.github.vinceglb.filekit.dialogs.FileKitType
@@ -832,9 +837,6 @@ private suspend fun fetchDeployedRelease(): DeployedRelease = suspendCancellable
 
 @JsFun("() => window.isSecureContext")
 private external fun isSecureContext(): Boolean
-
-@JsFun("() => window.isSecureContext && ('serial' in navigator)")
-internal external fun supportsWebSerial(): Boolean
 
 @JsFun("(file) => URL.createObjectURL(file)")
 private external fun createObjectUrl(file: BrowserFile): String

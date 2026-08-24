@@ -82,12 +82,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ComposeViewport
 import androidx.compose.foundation.Image
-import com.rsvpnano.app.NanoConnectionState
-import com.rsvpnano.app.NanoConnectionTransport
-import com.rsvpnano.app.NanoEndpoint
+import com.rsvpnano.connection.NanoConnectionState
+import com.rsvpnano.connection.NanoConnectionTransport
+import com.rsvpnano.connection.NanoEndpoint
 import com.rsvpnano.models.RememberedNano
-import com.rsvpnano.ui.CompanionPresenter
-import com.rsvpnano.ui.CompanionUiState
+import com.rsvpnano.presentation.CompanionPresenter
+import com.rsvpnano.presentation.CompanionUiState
+import com.rsvpnano.web.connection.BrowserSerial
+import com.rsvpnano.web.connection.requestUsbConnection
+import com.rsvpnano.web.connection.supportsWebSerial
+import com.rsvpnano.web.setup.SetupWizard
+import com.rsvpnano.web.ui.DetailRow
+import com.rsvpnano.web.ui.prefersReducedMotion
+import com.rsvpnano.web.ui.workspaces.AppearanceWorkspace
+import com.rsvpnano.web.ui.workspaces.FeedsWorkspace
+import com.rsvpnano.web.ui.workspaces.LibraryWorkspace
+import com.rsvpnano.web.ui.workspaces.SettingsWorkspace
+import com.rsvpnano.web.ui.workspaces.TimersWorkspace
 import kotlinx.browser.document
 import kotlinx.browser.window
 import org.jetbrains.compose.resources.painterResource
@@ -583,14 +594,6 @@ private fun DeviceWorkspace(presenter: CompanionPresenter, state: CompanionUiSta
                 storage(Modifier.fillMaxWidth())
             }
         }
-    }
-}
-
-@Composable
-internal fun DetailRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontWeight = FontWeight.Bold)
-        Text(value, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f))
     }
 }
 

@@ -1,5 +1,7 @@
-package com.rsvpnano.web
+package com.rsvpnano.web.setup
 
+import com.rsvpnano.web.setup.FirmwareFilenameMatch
+import com.rsvpnano.web.setup.firmwareFilenameMatch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

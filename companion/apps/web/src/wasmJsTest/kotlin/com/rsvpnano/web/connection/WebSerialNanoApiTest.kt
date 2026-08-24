@@ -1,7 +1,12 @@
 @file:OptIn(ExperimentalWasmJsInterop::class, kotlin.io.encoding.ExperimentalEncodingApi::class)
 
-package com.rsvpnano.web
+package com.rsvpnano.web.connection
 
+import com.rsvpnano.web.connection.SerialFrame
+import com.rsvpnano.web.connection.SerialFrameCodec
+import com.rsvpnano.web.connection.SerialFrameType
+import com.rsvpnano.web.connection.WebSerialNanoApi
+import com.rsvpnano.web.setup.restartNanoInBootloader
 import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals

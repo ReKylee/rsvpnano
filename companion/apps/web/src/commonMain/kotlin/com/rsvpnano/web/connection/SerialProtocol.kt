@@ -1,4 +1,4 @@
-package com.rsvpnano.web
+package com.rsvpnano.web.connection
 
 internal const val SerialProtocolVersion: Int = 1
 internal const val SerialChunkBytes: Int = 4096

@@ -1,4 +1,4 @@
-package com.rsvpnano.web
+package com.rsvpnano.web.connection
 
 import com.rsvpnano.api.NanoApi
 import com.rsvpnano.models.NanoBook

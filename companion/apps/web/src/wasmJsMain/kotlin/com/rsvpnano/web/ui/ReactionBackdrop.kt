@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalWasmJsInterop::class)
 
-package com.rsvpnano.web
+package com.rsvpnano.web.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.material3.MaterialTheme

@@ -1,11 +1,11 @@
 @file:OptIn(ExperimentalWasmJsInterop::class, kotlin.io.encoding.ExperimentalEncodingApi::class)
 
-package com.rsvpnano.web
+package com.rsvpnano.web.connection
 
 import com.rsvpnano.api.NanoApi
 import com.rsvpnano.api.NanoClientError
-import com.rsvpnano.app.NanoConnectionTransport
-import com.rsvpnano.app.NanoEndpoint
+import com.rsvpnano.connection.NanoConnectionTransport
+import com.rsvpnano.connection.NanoEndpoint
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoFocusTimer
 import com.rsvpnano.models.NanoFocusTimers
@@ -20,7 +20,7 @@ import com.rsvpnano.models.NanoThemeSummary
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.NanoWifiUpdate
 import com.rsvpnano.models.RememberedNano
-import com.rsvpnano.ui.CompanionPresenter
+import com.rsvpnano.presentation.CompanionPresenter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -401,3 +401,6 @@ private external fun serialWrite(encoded: String, ok: (String) -> Unit, fail: (S
 
 @JsFun("""(done) => { (async () => { const serial = globalThis.rsvpNanoSerial; globalThis.rsvpNanoSerial = null; if (!serial) { done('ok'); return; } try { await serial.reader.cancel(); } catch (_) {} try { serial.reader.releaseLock(); } catch (_) {} try { await serial.writer.close(); } catch (_) {} try { serial.writer.releaseLock(); } catch (_) {} try { await serial.port.close(); } catch (_) {} done('ok'); })(); }""")
 private external fun serialClose(done: (String) -> Unit)
+
+@JsFun("() => window.isSecureContext && ('serial' in navigator)")
+internal external fun supportsWebSerial(): Boolean

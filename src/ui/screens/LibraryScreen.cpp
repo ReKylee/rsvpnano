@@ -192,21 +192,30 @@ namespace screens {
         constexpr int16_t detailGap = 12;
         const int16_t textWidth = static_cast<int16_t>(detailRect.w - progressWidth - detailGap);
         const LibraryItem& item = items[selectedIndex_];
+        const std::string_view itemTitle = title(item);
         const std::string_view author = item.book == nullptr || item.book->author.empty()
                                           ? ui.text(UiText::Unknown)
                                           : std::string_view{item.book->author};
-        ui.label({detailRect.x, detailRect.y, textWidth, 18}, title(item), 2);
-        ui.label({detailRect.x, static_cast<int16_t>(detailRect.y + 20), textWidth, 10}, author, 1,
-                 ui::themes::ColorRole::Muted);
-        ui.label({detailRect.x, static_cast<int16_t>(detailRect.y + 33), textWidth, 10}, item.chapter, 1,
-                 ui::themes::ColorRole::Muted);
         std::array<char, 5> progress{};
         const auto [end, error] = std::to_chars(progress.data(), progress.data() + progress.size() - 1, item.progress);
         const size_t digits = error == std::errc{} ? static_cast<size_t>(end - progress.data()) : 1;
         progress[digits] = '%';
-        ui.label({static_cast<int16_t>(detailRect.x + detailRect.w - progressWidth), detailRect.y, progressWidth,
-                  detailRect.h},
-                 std::string_view{progress.data(), digits + 1}, 3, ui::themes::ColorRole::Accent, ui::TextAlign::Right);
+        uint32_t detailState = ui::Context::signature(itemTitle);
+        detailState = ui::Context::signature(author, detailState);
+        detailState = ui::Context::signature(item.chapter, detailState);
+        detailState = ui::Context::combine(detailState, item.progress);
+        if (ui.redraw(detailRect, detailState)) {
+            ui.drawText({detailRect.x, detailRect.y, textWidth, 18}, itemTitle, 2,
+                        ui.color(ui::themes::ColorRole::Foreground));
+            ui.drawText({detailRect.x, static_cast<int16_t>(detailRect.y + 20), textWidth, 10}, author, 1,
+                        ui.color(ui::themes::ColorRole::Muted));
+            ui.drawText({detailRect.x, static_cast<int16_t>(detailRect.y + 33), textWidth, 10}, item.chapter, 1,
+                        ui.color(ui::themes::ColorRole::Muted));
+            ui.drawText({static_cast<int16_t>(detailRect.x + detailRect.w - progressWidth), detailRect.y,
+                         progressWidth, detailRect.h},
+                        std::string_view{progress.data(), digits + 1}, 3,
+                        ui.color(ui::themes::ColorRole::Accent), ui::TextAlign::Right);
+        }
         return result;
     }
 
@@ -353,7 +362,8 @@ namespace screens {
     }
 
     uint32_t LibraryScreen::signature(const std::vector<LibraryItem>& items, size_t current) const {
-        uint32_t value = ui::Context::combine(static_cast<uint32_t>(offset_), static_cast<uint32_t>(current));
+        uint32_t value = ui::Context::combine(Fnv1a::kOffsetBasis, static_cast<uint32_t>(offset_));
+        value = ui::Context::combine(value, static_cast<uint32_t>(current));
         value = ui::Context::combine(value, items.size());
         for (const LibraryItem& item: items) {
             value = ui::Context::signature(title(item), value);

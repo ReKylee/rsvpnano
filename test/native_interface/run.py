@@ -13,8 +13,8 @@ with tempfile.TemporaryDirectory(prefix="rsvpnano-interface-") as directory:
         executable = Path(directory) / presentation
         command = shlex.split(os.environ.get("CXX", "g++")) + [
             "-std=c++23", "-Wall", "-Wextra", "-Werror", "-pedantic", "-fno-exceptions", "-fno-rtti",
-            *shlex.split(os.environ.get("CXXFLAGS", "")), f"-DTEST_WATCH={watch}",
-            "-I" + str(HERE / "support"), "-I" + str(ROOT / "test/native_choices/support"),
+            *shlex.split(os.environ.get("CXXFLAGS", "")), "-UNDEBUG", f"-DTEST_WATCH={watch}",
+            "-I" + str(HERE / "support"),
             "-I" + str(ROOT / "src"), str(HERE / "test_main.cpp"),
             str(ROOT / "src/ui/screens/InterfaceSettingsScreen.cpp"),
             str(ROOT / f"src/ui/screens/{presentation}/InterfaceSettingsScreen.cpp"), "-o", str(executable),

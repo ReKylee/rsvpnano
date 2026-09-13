@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "ui/SettingsControls.h"
+#include "ui/Inputs.h"
 
 namespace screens {
     enum class Screen : uint8_t;
@@ -16,7 +16,8 @@ namespace screens::interfaceLayout {
 
     struct Layout {
         std::array<ui::Rect, fieldCount> fields{};
-        ui::SettingsStyle style{};
+        ui::ValueStyle style{};
+        ui::NumberInput number = ui::NumberInput::Slider;
 
         ui::Rect& operator[](Field field) { return fields[static_cast<size_t>(field)]; }
         ui::Rect operator[](Field field) const { return fields[static_cast<size_t>(field)]; }

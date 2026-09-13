@@ -3,7 +3,6 @@
 #include <string_view>
 #include "ui/screens/ScreenCommon.h"
 #include "ui/screens/InterfaceSettingsLayout.h"
-#include "ui/screens/SettingsChoices.h"
 #include "ui/screens/watch/Layout.h"
 
 namespace screens::detail {

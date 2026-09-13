@@ -97,7 +97,10 @@ namespace ui {
         auto next = current;
         if (next == end || ++next == end)
             next = first;
-        decltype(auto) nextValue = std::invoke(valueFor, *next);
+        // A forward range may generate elements by value. Keep the element alive
+        // while a projected reference or view is compared and assigned.
+        auto&& nextItem = *next;
+        decltype(auto) nextValue = std::invoke(valueFor, nextItem);
         if (value == nextValue)
             return false;
         // Assignment can normalize a bounded value. Snapshot only after an actual activation.

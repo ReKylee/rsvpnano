@@ -252,7 +252,6 @@ namespace ui {
         if (screen_ != screen) {
             screen_ = screen;
             gridPage_ = 0;
-            rotaryDragging_ = false;
             contentFonts_.clear();
             invalid_ = true;
             capturedSlot_ = kSlotCapacity;
@@ -299,107 +298,97 @@ namespace ui {
 
     void Context::label(Rect rect, std::string_view text, uint8_t textSize, ui::themes::ColorRole role, TextAlign align,
                         uint8_t textLines, std::string_view textLocale, uint8_t alpha) {
-        rect = paintBounds(rect);
-        uint32_t state = combine(signature(text), textSize);
-        state = combine(state, role);
-        state = combine(state, static_cast<uint8_t>(align));
-        state = combine(state, textLines);
-        state = signature(textLocale, state);
-        state = combine(state, alpha);
-        if (!claim(Kind::Label, rect, state).changed) {
-            return;
-        }
-        drawText(rect, text, textSize, blend(role, alpha), align, textLines, textLocale);
+        const Item widget = item(Kind::Label, rect);
+        widget.draw([](Context& self, Rect rect,
+                       std::string_view text, uint8_t textSize, themes::ColorRole role, TextAlign align,
+                       uint8_t textLines, std::string_view textLocale, uint8_t alpha) {
+            self.drawText(rect, text, textSize, self.blend(role, alpha), align, textLines, textLocale);
+        }, text, textSize, role, align, textLines, textLocale, alpha);
     }
 
     void Context::separator(Rect rect, std::string_view text) {
-        rect = paintBounds(rect);
-        if (!claim(Kind::Separator, rect, signature(text)).changed)
-            return;
-
-        const int16_t labelWidth = std::min<int16_t>(rect.w, textWidthFor(text, 1));
-        const auto label = prepareText({0, 0, labelWidth, rect.h}, text, 1);
-        paint(rect, [&](Arduino_GFX& output, Rect rect) {
-            output.fillRect(rect.x, rect.y, rect.w, rect.h, color(ui::themes::ColorRole::Background));
-            drawText(output, label, color(ui::themes::ColorRole::Muted), rect.x, rect.y);
-            const int16_t lineX = static_cast<int16_t>(rect.x + labelWidth + 6);
-            if (lineX < rect.x + rect.w)
-                output.drawFastHLine(lineX, static_cast<int16_t>(rect.y + rect.h / 2),
-                                     static_cast<int16_t>(rect.x + rect.w - lineX),
-                                     blend(ui::themes::ColorRole::Muted, 96));
-            markDrawn();
-        });
+        const Item widget = item(Kind::Separator, rect);
+        widget.draw([](Context& self, Rect rect, std::string_view text) {
+            const int16_t labelWidth = std::min<int16_t>(rect.w, self.textWidthFor(text, 1));
+            const auto label = self.prepareText({0, 0, labelWidth, rect.h}, text, 1);
+            self.paint(rect, [&](Arduino_GFX& output, Rect rect) {
+                output.fillRect(rect.x, rect.y, rect.w, rect.h, self.color(ui::themes::ColorRole::Background));
+                self.drawText(output, label, self.color(ui::themes::ColorRole::Muted), rect.x, rect.y);
+                const int16_t lineX = static_cast<int16_t>(rect.x + labelWidth + 6);
+                if (lineX < rect.x + rect.w)
+                    output.drawFastHLine(lineX, static_cast<int16_t>(rect.y + rect.h / 2),
+                                         static_cast<int16_t>(rect.x + rect.w - lineX),
+                                         self.blend(ui::themes::ColorRole::Muted, 96));
+                self.markDrawn();
+            });
+        }, text);
     }
 
     bool Context::setting(Rect rect, std::string_view label, std::string_view value, SettingLayout layout) {
-        rect = paintBounds(rect);
-        const size_t slot = nextSlot_;
-        uint32_t state = signature(value, signature(label));
-        state = combine(state, static_cast<uint8_t>(layout));
-        if (claim(Kind::Setting, rect, state).changed) {
+        const Item widget = item(Kind::Setting, rect);
+        widget.draw([](Context& self, Rect rect,
+                       std::string_view label, std::string_view value, SettingLayout layout) {
             TextLayout labelText, valueText;
             const int16_t textWidth = std::max<int16_t>(0, static_cast<int16_t>(rect.w - 14));
             if (layout == SettingLayout::Inline) {
-                const int16_t labelRequired = textWidthFor(label, 2);
+                const int16_t labelRequired = self.textWidthFor(label, 2);
                 uint8_t valueSize = 2;
-                int16_t valueRequired = textWidthFor(value, 2);
+                int16_t valueRequired = self.textWidthFor(value, 2);
                 if (labelRequired + valueRequired + 8 > textWidth) {
                     valueSize = 1;
-                    valueRequired = textWidthFor(value, 1);
+                    valueRequired = self.textWidthFor(value, 1);
                 }
                 const int16_t labelWidth = labelRequired + valueRequired + 8 <= textWidth
                                              ? labelRequired
                                              : std::min<int16_t>(labelRequired, textWidth / 2);
                 const int16_t valueWidth = std::max<int16_t>(0, static_cast<int16_t>(textWidth - labelWidth - 8));
-                labelText = prepareText({7, 0, labelWidth, rect.h}, label, 2);
-                valueText = prepareText({static_cast<int16_t>(rect.w - valueWidth - 7), 0, valueWidth, rect.h}, value,
+                labelText = self.prepareText({7, 0, labelWidth, rect.h}, label, 2);
+                valueText = self.prepareText({static_cast<int16_t>(rect.w - valueWidth - 7), 0, valueWidth, rect.h}, value,
                                         valueSize, TextAlign::Right);
             } else {
-                const bool largeValue = textWidthFor(value, 2) <= textWidth;
-                labelText = prepareText({7, 3, textWidth, 8}, label, 1);
+                const bool largeValue = self.textWidthFor(value, 2) <= textWidth;
+                labelText = self.prepareText({7, 3, textWidth, 8}, label, 1);
                 valueText =
-                    prepareText({7, 11, textWidth, static_cast<int16_t>(std::max<int16_t>(0, rect.h - 13))}, value,
+                    self.prepareText({7, 11, textWidth, static_cast<int16_t>(std::max<int16_t>(0, rect.h - 13))}, value,
                                 largeValue ? 2 : 1, TextAlign::Start, !largeValue && rect.h >= 32 ? 2 : 1);
             }
-            paint(rect, [&](Arduino_GFX& output, Rect rect) {
-                const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
+            self.paint(rect, [&](Arduino_GFX& output, Rect rect) {
+                const uint16_t surface = self.color(ui::themes::ColorRole::SurfaceMuted);
                 output.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
-                output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
-                drawText(output, labelText, color(layout == SettingLayout::Inline ? themes::Foreground : themes::Muted),
+                output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, self.color(ui::themes::ColorRole::Outline));
+                self.drawText(output, labelText, self.color(layout == SettingLayout::Inline ? themes::Foreground : themes::Muted),
                          rect.x, rect.y);
-                drawText(output, valueText, color(themes::Accent), rect.x, rect.y);
+                self.drawText(output, valueText, self.color(themes::Accent), rect.x, rect.y);
             });
-        }
-        return tapped(slot, rect);
+        }, label, value, layout);
+        return widget.tapped();
     }
 
     bool Context::toggle(Rect rect, std::string_view label, bool& enabled) {
-        rect = paintBounds(rect);
-        const size_t slot = nextSlot_;
-        uint32_t state = combine(signature(label), enabled);
-        if (claim(Kind::Toggle, rect, state).changed) {
+        const Item widget = item(Kind::Toggle, rect);
+        const bool edited = widget.tapped();
+        if (edited)
+            enabled = !enabled;
+        widget.draw([](Context& self, Rect rect, std::string_view label, bool enabled) {
             constexpr int16_t switchWidth = 34;
             const auto labelText =
-                prepareText({7, 0, static_cast<int16_t>(std::max<int16_t>(0, rect.w - switchWidth - 21)), rect.h},
+                self.prepareText({7, 0, static_cast<int16_t>(std::max<int16_t>(0, rect.w - switchWidth - 21)), rect.h},
                             label, 2);
-            paint(rect, [&](Arduino_GFX& output, Rect rect) {
-                const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
+            self.paint(rect, [&](Arduino_GFX& output, Rect rect) {
+                const uint16_t surface = self.color(ui::themes::ColorRole::SurfaceMuted);
                 output.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
-                output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
+                output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, self.color(ui::themes::ColorRole::Outline));
                 const int16_t switchX = static_cast<int16_t>(rect.x + rect.w - switchWidth - 7);
                 const int16_t switchY = static_cast<int16_t>(rect.y + (rect.h - 16) / 2);
                 output.fillRoundRect(switchX, switchY, switchWidth, 16, 8,
-                                     color(enabled ? ui::themes::ColorRole::Accent
+                                     self.color(enabled ? ui::themes::ColorRole::Accent
                                                    : ui::themes::ColorRole::ProgressTrack));
                 output.fillCircle(static_cast<int16_t>(switchX + (enabled ? switchWidth - 8 : 8)),
-                                  static_cast<int16_t>(switchY + 8), 6, color(ui::themes::ColorRole::Foreground));
-                drawText(output, labelText, color(themes::Foreground), rect.x, rect.y);
+                                  static_cast<int16_t>(switchY + 8), 6, self.color(ui::themes::ColorRole::Foreground));
+                self.drawText(output, labelText, self.color(themes::Foreground), rect.x, rect.y);
             });
-        }
-        if (!tapped(slot, rect))
-            return false;
-        enabled = !enabled;
-        return true;
+        }, label, enabled);
+        return edited;
     }
 
     bool Context::tap(Rect rect, bool enabled) {
@@ -411,100 +400,88 @@ namespace ui {
 
     bool Context::button(Rect rect, std::string_view text, bool enabled, Icon icon, uint8_t textLines,
                          std::string_view detailLeft, std::string_view detailRight) {
-        rect = paintBounds(rect);
-        const size_t slot = nextSlot_;
-        const bool activated = tapped(slot, rect, enabled);
-        uint32_t state = combine(signature(text), enabled);
-        state = combine(state, static_cast<uint8_t>(icon));
-        state = combine(state, textLines);
-        state = signature(detailLeft, state);
-        state = signature(detailRight, state);
-        const Claim widget = claim(Kind::Button, rect, state);
-        if (widget.changed) {
+        const Item widget = item(Kind::Button, rect);
+        const bool activated = widget.tapped(enabled);
+        widget.draw([](Context& self, Rect rect, std::string_view text, bool enabled, Icon icon, uint8_t textLines,
+                       std::string_view detailLeft, std::string_view detailRight) {
             const int16_t iconWidth = icon == Icon::None ? 0 : std::min<int16_t>(34, rect.w / 3);
             const bool hasDetail = !detailLeft.empty() || !detailRight.empty();
             const int16_t textHeight = hasDetail ? static_cast<int16_t>(rect.h - 18) : rect.h;
             const Rect textRect{6, 0, static_cast<int16_t>(std::max<int16_t>(0, rect.w - iconWidth - 12)), textHeight};
-            const auto title = prepareText(textRect, text, 2, TextAlign::Center, textLines);
+            const auto title = self.prepareText(textRect, text, 2, TextAlign::Center, textLines);
             TextLayout detail;
             if (hasDetail) {
                 const int16_t detailY = static_cast<int16_t>(rect.h - 20);
                 if (detailLeft.empty() || detailRight.empty()) {
-                    detail = prepareText({textRect.x, detailY, textRect.w, 16},
+                    detail = self.prepareText({textRect.x, detailY, textRect.w, 16},
                                          detailLeft.empty() ? detailRight : detailLeft, 2,
                                          detailLeft.empty() ? TextAlign::Right : TextAlign::Left);
                 } else {
                     const int16_t detailWidth = static_cast<int16_t>((textRect.w - 8) / 2);
                     detail.lines.reserve(2);
-                    appendText(detail, {textRect.x, detailY, detailWidth, 16}, detailLeft, 2, TextAlign::Start, 1, {});
-                    appendText(detail,
+                    self.appendText(detail, {textRect.x, detailY, detailWidth, 16}, detailLeft, 2, TextAlign::Start, 1, {});
+                    self.appendText(detail,
                                {static_cast<int16_t>(textRect.x + textRect.w - detailWidth), detailY, detailWidth, 16},
                                detailRight, 2, TextAlign::Right, 1, {});
                 }
             }
-            paint(rect, [&](Arduino_GFX& output, Rect rect) {
-                const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
+            self.paint(rect, [&](Arduino_GFX& output, Rect rect) {
+                const uint16_t surface = self.color(ui::themes::ColorRole::SurfaceMuted);
                 output.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
                 output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5,
-                                     color(enabled ? ui::themes::ColorRole::Outline
+                                     self.color(enabled ? ui::themes::ColorRole::Outline
                                                    : ui::themes::ColorRole::ProgressTrack));
                 if (enabled && rect.w > 16 && rect.h >= 28)
                     output.fillRect(static_cast<int16_t>(rect.x + 8), static_cast<int16_t>(rect.y + rect.h - 3),
-                                    static_cast<int16_t>(rect.w - 16), 2, color(ui::themes::ColorRole::Accent));
-                drawText(output, title, color(enabled ? themes::Foreground : themes::Muted), rect.x, rect.y);
-                drawText(output, detail, color(themes::Muted), rect.x, rect.y);
+                                    static_cast<int16_t>(rect.w - 16), 2, self.color(ui::themes::ColorRole::Accent));
+                self.drawText(output, title, self.color(enabled ? themes::Foreground : themes::Muted), rect.x, rect.y);
+                self.drawText(output, detail, self.color(themes::Muted), rect.x, rect.y);
                 if (icon != Icon::None)
-                    drawIcon(output, {static_cast<int16_t>(rect.x + rect.w - iconWidth), rect.y, iconWidth, rect.h},
-                             icon, color(enabled ? ui::themes::ColorRole::Accent : ui::themes::ColorRole::Muted),
+                    self.drawIcon(output, {static_cast<int16_t>(rect.x + rect.w - iconWidth), rect.y, iconWidth, rect.h},
+                             icon, self.color(enabled ? ui::themes::ColorRole::Accent : ui::themes::ColorRole::Muted),
                              surface);
             });
-        }
+        }, text, enabled, icon, textLines, detailLeft, detailRight);
         return activated;
     }
 
     bool Context::iconButton(Rect rect, Icon icon) {
-        rect = paintBounds(rect);
-        const size_t slot = nextSlot_;
-        const bool activated = tapped(slot, rect);
-        const uint32_t state = static_cast<uint8_t>(icon);
-        const Claim widget = claim(Kind::Button, rect, state);
-        if (widget.changed) {
-            paint(rect, [&](Arduino_GFX& output, Rect rect) {
-                const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
+        const Item widget = item(Kind::IconButton, rect);
+        const bool activated = widget.tapped();
+        widget.draw([](Context& self, Rect rect, Icon icon) {
+            self.paint(rect, [&](Arduino_GFX& output, Rect rect) {
+                const uint16_t surface = self.color(ui::themes::ColorRole::SurfaceMuted);
                 output.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 7, surface);
-                output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 7, color(ui::themes::ColorRole::Outline));
-                drawIcon(output, rect, icon, color(ui::themes::ColorRole::Muted), surface);
+                output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 7, self.color(ui::themes::ColorRole::Outline));
+                self.drawIcon(output, rect, icon, self.color(ui::themes::ColorRole::Muted), surface);
             });
-        }
+        }, icon);
         return activated;
     }
 
     bool Context::tab(Rect rect, std::string_view text, bool active, Icon icon) {
-        rect = paintBounds(rect);
-        uint32_t state = combine(signature(text), active);
-        state = combine(state, static_cast<uint8_t>(icon));
-        const Claim widget = claim(Kind::Tab, rect, state);
-        if (widget.changed) {
+        const Item widget = item(Kind::Tab, rect);
+        widget.draw([](Context& self, Rect rect, std::string_view text, bool active, Icon icon) {
             const int16_t iconWidth = icon == Icon::None ? 0 : std::min<int16_t>(26, rect.w / 3);
-            const auto label = prepareText({static_cast<int16_t>(iconWidth + 8), 0,
+            const auto label = self.prepareText({static_cast<int16_t>(iconWidth + 8), 0,
                                             static_cast<int16_t>(rect.w - iconWidth - 12), rect.h},
                                            text, 2, TextAlign::Center);
-            paint(rect, [&](Arduino_GFX& output, Rect rect) {
+            self.paint(rect, [&](Arduino_GFX& output, Rect rect) {
                 const uint16_t surface =
-                    color(active ? ui::themes::ColorRole::Surface : ui::themes::ColorRole::SurfaceMuted);
+                    self.color(active ? ui::themes::ColorRole::Surface : ui::themes::ColorRole::SurfaceMuted);
                 output.fillRect(rect.x, rect.y, rect.w, rect.h, surface);
-                output.drawRect(rect.x, rect.y, rect.w, rect.h, color(ui::themes::ColorRole::Outline));
+                output.drawRect(rect.x, rect.y, rect.w, rect.h, self.color(ui::themes::ColorRole::Outline));
                 if (active) {
                     output.fillRect(rect.x, static_cast<int16_t>(rect.y + 5), 3, static_cast<int16_t>(rect.h - 10),
-                                    color(ui::themes::ColorRole::Accent));
+                                    self.color(ui::themes::ColorRole::Accent));
                 }
-                const uint16_t ink = color(active ? ui::themes::ColorRole::Foreground : ui::themes::ColorRole::Muted);
+                const uint16_t ink = self.color(active ? ui::themes::ColorRole::Foreground : ui::themes::ColorRole::Muted);
                 if (icon != Icon::None)
-                    drawIcon(output, {static_cast<int16_t>(rect.x + 7), rect.y, iconWidth, rect.h}, icon, ink, surface);
-                drawText(output, label, ink, rect.x, rect.y);
+                    self.drawIcon(output, {static_cast<int16_t>(rect.x + 7), rect.y, iconWidth, rect.h}, icon, ink, surface);
+                self.drawText(output, label, ink, rect.x, rect.y);
             });
-        }
-        return tapped(widget.index, rect);
+        }, text, active, icon);
+        return widget.tapped();
     }
 
     Context::BatteryLayout Context::batteryLayout(Rect rect, std::string_view labelText, bool showIcon) const {
@@ -525,84 +502,80 @@ namespace ui {
 
     void Context::battery(Rect rect, uint8_t percent, bool charging, std::string_view labelText, bool showIcon,
                           uint8_t iconAlpha, uint8_t labelAlpha) {
-        rect = paintBounds(rect);
         percent = std::min<uint8_t>(percent, 100);
-        uint32_t state = combine(signature(labelText), percent);
-        state = combine(state, charging);
-        state = combine(state, showIcon);
-        state = combine(state, iconAlpha);
-        state = combine(state, labelAlpha);
-        if (!claim(Kind::Battery, rect, state).changed)
-            return;
-        const auto layout = batteryLayout({0, 0, rect.w, rect.h}, labelText, showIcon);
-        const auto label = prepareText(layout.label, labelText, 2);
-        paint(rect, [&](Arduino_GFX& output, Rect rect) {
-            if (!showIcon && labelText.empty())
-                return;
-            if (showIcon)
-                drawBatteryIcon(output,
-                                {static_cast<int16_t>(layout.icon.x + rect.x),
-                                 static_cast<int16_t>(layout.icon.y + rect.y), layout.icon.w, layout.icon.h},
-                                percent, charging, blend(themes::Muted, iconAlpha), color(themes::Background));
-            drawText(output, label, blend(themes::Muted, labelAlpha), rect.x, rect.y);
-        });
+        const Item widget = item(Kind::Battery, rect);
+        widget.draw([](Context& self, Rect rect,
+                       uint8_t percent, bool charging, std::string_view labelText, bool showIcon,
+                       uint8_t iconAlpha, uint8_t labelAlpha) {
+            const auto layout = self.batteryLayout({0, 0, rect.w, rect.h}, labelText, showIcon);
+            const auto label = self.prepareText(layout.label, labelText, 2);
+            self.paint(rect, [&](Arduino_GFX& output, Rect rect) {
+                if (!showIcon && labelText.empty())
+                    return;
+                if (showIcon)
+                    self.drawBatteryIcon(output,
+                                    {static_cast<int16_t>(layout.icon.x + rect.x),
+                                     static_cast<int16_t>(layout.icon.y + rect.y), layout.icon.w, layout.icon.h},
+                                    percent, charging, self.blend(themes::Muted, iconAlpha), self.color(themes::Background));
+                self.drawText(output, label, self.blend(themes::Muted, labelAlpha), rect.x, rect.y);
+            });
+        }, percent, charging, labelText, showIcon, iconAlpha, labelAlpha);
     }
 
     void Context::progress(Rect rect, int value, int minimum, int maximum) {
-        rect = paintBounds(rect);
-        value = std::clamp(value, minimum, maximum);
-        uint32_t state = combine(static_cast<uint32_t>(value), static_cast<uint32_t>(minimum));
-        state = combine(state, static_cast<uint32_t>(maximum));
-        if (!claim(Kind::Progress, rect, state).changed) {
+        if (minimum > maximum)
             return;
-        }
-        paint(rect, [&](Arduino_GFX& output, Rect rect) {
-            output.fillRect(rect.x, rect.y, rect.w, rect.h, color(ui::themes::ColorRole::ProgressTrack));
-            if (maximum > minimum && rect.w > 2 && rect.h > 2) {
-                const int16_t fill =
-                    static_cast<int16_t>((static_cast<int32_t>(rect.w - 2) * (value - minimum)) / (maximum - minimum));
-                output.fillRect(static_cast<int16_t>(rect.x + 1), static_cast<int16_t>(rect.y + 1), fill,
-                                static_cast<int16_t>(rect.h - 2), color(ui::themes::ColorRole::Accent));
-            }
-        });
+        value = std::clamp(value, minimum, maximum);
+        const Item widget = item(Kind::Progress, rect);
+        widget.draw([](Context& self, Rect rect, int value, int minimum, int maximum) {
+            self.paint(rect, [&](Arduino_GFX& output, Rect rect) {
+                output.fillRect(rect.x, rect.y, rect.w, rect.h, self.color(ui::themes::ColorRole::ProgressTrack));
+                if (maximum > minimum && rect.w > 2 && rect.h > 2) {
+                    const int16_t fill =
+                        static_cast<int16_t>((static_cast<int32_t>(rect.w - 2) * (value - minimum)) / (maximum - minimum));
+                    output.fillRect(static_cast<int16_t>(rect.x + 1), static_cast<int16_t>(rect.y + 1), fill,
+                                    static_cast<int16_t>(rect.h - 2), self.color(ui::themes::ColorRole::Accent));
+                }
+            });
+        }, value, minimum, maximum);
     }
 
     void Context::steps(Rect rect, uint8_t current, uint8_t total, ui::themes::ColorRole activeRole) {
-        rect = paintBounds(rect);
         current = std::min(current, total);
-        uint32_t state = combine(current, total);
-        state = combine(state, activeRole);
-        if (!claim(Kind::Steps, rect, state).changed)
-            return;
-
-        paint(rect, [&](Arduino_GFX& output, Rect rect) {
-            if (total == 0)
-                return;
-            const bool vertical = rect.h > rect.w;
-            const int16_t crossSize = vertical ? rect.w : rect.h;
-            const int16_t radius =
-                std::max<int16_t>(2, std::min<int16_t>(4, static_cast<int16_t>((crossSize - 2) / 2)));
-            const int16_t spacing = static_cast<int16_t>(radius * 2 + 5);
-            const int16_t length = static_cast<int16_t>((total - 1) * spacing + radius * 2);
-            const int16_t first = static_cast<int16_t>((vertical ? rect.y : rect.x)
-                                                       + ((vertical ? rect.h : rect.w) - length) / 2 + radius);
-            const int16_t center = static_cast<int16_t>((vertical ? rect.x : rect.y) + crossSize / 2);
-            for (uint8_t index = 0; index < total; ++index) {
-                const int16_t position = static_cast<int16_t>(first + index * spacing);
-                const int16_t x = vertical ? center : position;
-                const int16_t y = vertical ? position : center;
-                if (index < current)
-                    output.fillCircle(x, y, radius, color(activeRole));
-                else
-                    output.drawCircle(x, y, radius, color(ui::themes::ColorRole::Outline));
-            }
-        });
+        const Item widget = item(Kind::Steps, rect);
+        widget.draw([](Context& self, Rect rect, uint8_t current, uint8_t total, themes::ColorRole activeRole) {
+            self.paint(rect, [&](Arduino_GFX& output, Rect rect) {
+                if (total == 0)
+                    return;
+                const bool vertical = rect.h > rect.w;
+                const int16_t crossSize = vertical ? rect.w : rect.h;
+                const int16_t radius =
+                    std::max<int16_t>(2, std::min<int16_t>(4, static_cast<int16_t>((crossSize - 2) / 2)));
+                const int16_t spacing = static_cast<int16_t>(radius * 2 + 5);
+                const int16_t length = static_cast<int16_t>((total - 1) * spacing + radius * 2);
+                const int16_t first = static_cast<int16_t>((vertical ? rect.y : rect.x)
+                                                           + ((vertical ? rect.h : rect.w) - length) / 2 + radius);
+                const int16_t center = static_cast<int16_t>((vertical ? rect.x : rect.y) + crossSize / 2);
+                for (uint8_t index = 0; index < total; ++index) {
+                    const int16_t position = static_cast<int16_t>(first + index * spacing);
+                    const int16_t x = vertical ? center : position;
+                    const int16_t y = vertical ? position : center;
+                    if (index < current)
+                        output.fillCircle(x, y, radius, self.color(activeRole));
+                    else
+                        output.drawCircle(x, y, radius, self.color(ui::themes::ColorRole::Outline));
+                }
+            });
+        }, current, total, activeRole);
     }
 
     bool Context::sliderValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,
                               std::string_view suffix, ui::themes::ColorRole activeRole) {
         rect = paintBounds(rect);
-        const size_t slot = nextSlot_;
+        if (rect.w <= 0 || rect.h <= 0 || minimum > maximum || step <= 0)
+            return false;
+        const Item widget = item(Kind::Slider, rect);
+        const size_t slot = widget.index;
         const Touch* event = touch();
         const bool labeled = !label.empty();
         const int16_t visualHeight = labeled ? std::min<int16_t>(50, rect.h) : rect.h;
@@ -623,21 +596,18 @@ namespace ui {
         const bool moving =
             event != nullptr
             && (hasTouch(*event, TouchStart) || hasTouch(*event, TouchMove) || hasTouch(*event, TouchRelease));
-        if (capturedSlot_ == slot && moving) {
+        if (slot < kSlotCapacity && capturedSlot_ == slot && moving) {
             capturedScalarValue_ = valueAt(track, event->x, minimum, maximum, step);
         }
-        if (capturedSlot_ == slot)
+        if (slot < kSlotCapacity && capturedSlot_ == slot)
             displayedValue = capturedScalarValue_;
-        if (capturedSlot_ == slot && event != nullptr && hasTouch(*event, TouchRelease))
+        if (slot < kSlotCapacity && capturedSlot_ == slot && event != nullptr && hasTouch(*event, TouchRelease))
             changed = displayedValue != capturedScalarInitialValue_;
 
-        uint32_t state = signature(suffix, signature(label));
-        state = combine(state, static_cast<uint32_t>(displayedValue));
-        state = combine(state, static_cast<uint32_t>(minimum));
-        state = combine(state, static_cast<uint32_t>(maximum));
-        state = combine(state, static_cast<uint32_t>(step));
-        state = combine(state, activeRole);
-        if (claim(Kind::Slider, rect, state).changed) {
+        widget.draw([](Context& self, Rect rect,
+                       std::string_view label, int displayedValue, int minimum, int maximum, int step,
+                       std::string_view suffix, themes::ColorRole activeRole, Rect visual, Rect track) {
+            const bool labeled = !label.empty();
             const Rect bounds = rect;
             TextLayout labelText, valueLayout;
             if (labeled) {
@@ -646,92 +616,91 @@ namespace ui {
                               suffix.data());
                 const std::string_view valueView{valueText};
                 const int16_t headerWidth = static_cast<int16_t>(visual.w - 14);
-                const bool largeInline = visual.h >= 40 && textHeightFor(label, 3) <= visual.h - 10
-                                      && textHeightFor(valueView, 3) <= visual.h - 10
-                                      && textWidthFor(label, 3) + textWidthFor(valueView, 3) + 8 <= headerWidth;
+                const bool largeInline = visual.h >= 40 && self.textHeightFor(label, 3) <= visual.h - 10
+                                      && self.textHeightFor(valueView, 3) <= visual.h - 10
+                                      && self.textWidthFor(label, 3) + self.textWidthFor(valueView, 3) + 8 <= headerWidth;
                 if (largeInline) {
-                    const int16_t valueWidth = textWidthFor(valueView, 3);
+                    const int16_t valueWidth = self.textWidthFor(valueView, 3);
                     const int16_t labelWidth = static_cast<int16_t>(headerWidth - valueWidth - 8);
                     const int16_t textHeight = static_cast<int16_t>(visual.h - 10);
-                    labelText = prepareText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 1),
+                    labelText = self.prepareText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 1),
                                              labelWidth, textHeight},
                                             label, 3);
-                    valueLayout = prepareText({static_cast<int16_t>(visual.x + visual.w - valueWidth - 7),
+                    valueLayout = self.prepareText({static_cast<int16_t>(visual.x + visual.w - valueWidth - 7),
                                                static_cast<int16_t>(visual.y + 1), valueWidth, textHeight},
                                               valueView, 3, TextAlign::Right);
                 } else if (visual.h >= 44) {
-                    labelText = prepareText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 2),
+                    labelText = self.prepareText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 2),
                                              headerWidth, 16},
                                             label, 2);
-                    valueLayout = prepareText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 18),
+                    valueLayout = self.prepareText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 18),
                                                headerWidth, 16},
                                               valueView, 2, TextAlign::Right);
                 } else {
                     uint8_t labelSize = visual.h >= 30 ? 2 : 1;
                     uint8_t valueSize = labelSize;
-                    int16_t valueWidth = textWidthFor(valueView, valueSize);
-                    if (headerWidth < textWidthFor(label, labelSize) + valueWidth + 8) {
+                    int16_t valueWidth = self.textWidthFor(valueView, valueSize);
+                    if (headerWidth < self.textWidthFor(label, labelSize) + valueWidth + 8) {
                         valueSize = 1;
-                        valueWidth = textWidthFor(valueView, 1);
+                        valueWidth = self.textWidthFor(valueView, 1);
                     }
-                    if (headerWidth < textWidthFor(label, labelSize) + valueWidth + 8)
+                    if (headerWidth < self.textWidthFor(label, labelSize) + valueWidth + 8)
                         labelSize = 1;
                     const int16_t labelWidth = std::max<int16_t>(0, static_cast<int16_t>(headerWidth - valueWidth - 8));
                     const int16_t textY = static_cast<int16_t>(visual.y + 2);
                     labelText =
-                        prepareText({static_cast<int16_t>(visual.x + 7), textY, labelWidth, 16}, label, labelSize);
+                        self.prepareText({static_cast<int16_t>(visual.x + 7), textY, labelWidth, 16}, label, labelSize);
                     valueLayout =
-                        prepareText({static_cast<int16_t>(visual.x + visual.w - valueWidth - 7), textY, valueWidth, 16},
+                        self.prepareText({static_cast<int16_t>(visual.x + visual.w - valueWidth - 7), textY, valueWidth, 16},
                                     valueView, valueSize, TextAlign::Right);
                 }
             }
-            paint(rect, [&](Arduino_GFX& output, Rect rect) {
+            self.paint(rect, [&](Arduino_GFX& output, Rect rect) {
                 const int16_t dx = rect.x - bounds.x, dy = rect.y - bounds.y;
-                const Rect visual{rect.x, static_cast<int16_t>(rect.y + (rect.h - visualHeight) / 2), rect.w,
-                                  visualHeight};
-                const Rect track{static_cast<int16_t>(visual.x + trackInset),
-                                 static_cast<int16_t>(visual.y + (labeled ? visual.h - 8 : visual.h / 2 - 1)),
-                                 static_cast<int16_t>(visual.w - 2 * trackInset), 3};
+                const Rect shiftedVisual{static_cast<int16_t>(visual.x + dx), static_cast<int16_t>(visual.y + dy),
+                                         visual.w, visual.h};
+                const Rect shiftedTrack{static_cast<int16_t>(track.x + dx), static_cast<int16_t>(track.y + dy),
+                                        track.w, track.h};
                 if (labeled) {
-                    const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
-                    output.fillRoundRect(visual.x, visual.y, visual.w, visual.h, 5, surface);
-                    output.drawRoundRect(visual.x, visual.y, visual.w, visual.h, 5,
-                                         color(ui::themes::ColorRole::Outline));
-                    drawText(output, labelText, color(themes::Foreground), dx, dy);
-                    drawText(output, valueLayout, color(activeRole), dx, dy);
+                    const uint16_t surface = self.color(ui::themes::ColorRole::SurfaceMuted);
+                    output.fillRoundRect(shiftedVisual.x, shiftedVisual.y, shiftedVisual.w, shiftedVisual.h, 5, surface);
+                    output.drawRoundRect(shiftedVisual.x, shiftedVisual.y, shiftedVisual.w, shiftedVisual.h, 5,
+                                         self.color(ui::themes::ColorRole::Outline));
+                    self.drawText(output, labelText, self.color(themes::Foreground), dx, dy);
+                    self.drawText(output, valueLayout, self.color(activeRole), dx, dy);
                 }
-                output.fillRect(track.x, track.y, track.w, track.h, color(ui::themes::ColorRole::ProgressTrack));
+                output.fillRect(shiftedTrack.x, shiftedTrack.y, shiftedTrack.w, shiftedTrack.h, self.color(ui::themes::ColorRole::ProgressTrack));
                 const int16_t knobX =
                     maximum == minimum
-                        ? track.x
-                        : static_cast<int16_t>(track.x
-                                               + (static_cast<int32_t>(track.w - 1) * (displayedValue - minimum))
+                        ? shiftedTrack.x
+                        : static_cast<int16_t>(shiftedTrack.x
+                                               + (static_cast<int32_t>(shiftedTrack.w - 1) * (displayedValue - minimum))
                                                      / (maximum - minimum));
-                const int16_t trackCenterY = static_cast<int16_t>(track.y + track.h / 2);
+                const int16_t trackCenterY = static_cast<int16_t>(shiftedTrack.y + shiftedTrack.h / 2);
                 if (step > 0 && maximum > minimum) {
                     const int intervalCount = (maximum - minimum + step - 1) / step;
                     const int tickStride = std::max(1, (intervalCount + 9) / 10);
                     for (int interval = 0;; interval = std::min(interval + tickStride, intervalCount)) {
                         const int tickValue = std::min(minimum + interval * step, maximum);
                         const int16_t tickX =
-                            static_cast<int16_t>(track.x
-                                                 + (static_cast<int32_t>(track.w - 1) * (tickValue - minimum))
+                            static_cast<int16_t>(shiftedTrack.x
+                                                 + (static_cast<int32_t>(shiftedTrack.w - 1) * (tickValue - minimum))
                                                        / (maximum - minimum));
                         output.drawFastVLine(tickX, static_cast<int16_t>(trackCenterY - 3), 7,
-                                             color(ui::themes::ColorRole::Outline));
+                                             self.color(ui::themes::ColorRole::Outline));
                         if (interval == intervalCount)
                             break;
                     }
                 }
-                output.fillRect(track.x, track.y, static_cast<int16_t>(knobX - track.x + 1), track.h,
-                                color(activeRole));
+                output.fillRect(shiftedTrack.x, shiftedTrack.y, static_cast<int16_t>(knobX - shiftedTrack.x + 1), shiftedTrack.h,
+                                self.color(activeRole));
                 const int16_t knobRadius = labeled ? 5 : 7;
-                output.fillCircle(knobX, trackCenterY, knobRadius, color(activeRole));
-                output.drawCircle(knobX, trackCenterY, knobRadius, color(ui::themes::ColorRole::OnAccent));
+                output.fillCircle(knobX, trackCenterY, knobRadius, self.color(activeRole));
+                output.drawCircle(knobX, trackCenterY, knobRadius, self.color(ui::themes::ColorRole::OnAccent));
             });
-        }
+        }, label, displayedValue, minimum, maximum, step, suffix, activeRole, visual, track);
 
-        if (capturedSlot_ == slot && event != nullptr && hasTouch(*event, TouchRelease)) {
+        if (slot < kSlotCapacity && capturedSlot_ == slot && event != nullptr && hasTouch(*event, TouchRelease)) {
             capturedSlot_ = kSlotCapacity;
         }
         if (changed)
@@ -742,7 +711,10 @@ namespace ui {
     bool Context::stepperValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,
                                std::string_view suffix, ui::themes::ColorRole activeRole) {
         rect = paintBounds(rect);
-        const size_t slot = nextSlot_;
+        if (rect.w <= 0 || rect.h <= 0 || minimum > maximum || step <= 0)
+            return false;
+        const Item widget = item(Kind::Stepper, rect);
+        const size_t slot = widget.index;
         const int safeStep = std::max(1, step);
         const int16_t buttonWidth = std::min<int16_t>(42, std::max<int16_t>(16, rect.w / 5));
         const Rect decrement{rect.x, rect.y, buttonWidth, rect.h};
@@ -763,7 +735,7 @@ namespace ui {
 
         int displayedValue = std::clamp(value, minimum, maximum);
         bool changed = false;
-        if (capturedSlot_ == slot) {
+        if (slot < kSlotCapacity && capturedSlot_ == slot) {
             const Rect target = capturedStepperDirection_ < 0 ? decrement : increment;
             const bool overTarget = event != nullptr && contains(target, event->x, event->y);
             if (overTarget && event != nullptr && hasTouch(*event, TouchRelease) && hasTouch(*event, TouchTap)) {
@@ -785,15 +757,13 @@ namespace ui {
             }
         }
 
-        uint32_t state = signature(suffix, signature(label));
-        state = combine(state, static_cast<uint32_t>(displayedValue));
-        state = combine(state, static_cast<uint32_t>(minimum));
-        state = combine(state, static_cast<uint32_t>(maximum));
-        state = combine(state, activeRole);
-        if (claim(Kind::Stepper, rect, state).changed) {
+        widget.draw([](Context& self, Rect rect,
+                       std::string_view label, int displayedValue, int minimum, int maximum,
+                       std::string_view suffix, themes::ColorRole activeRole, Rect decrement, Rect increment) {
+            const int16_t buttonWidth = decrement.w;
             const Rect bounds = rect;
-            const auto minusText = prepareText(decrement, "-", 2, TextAlign::Center);
-            const auto plusText = prepareText(increment, "+", 2, TextAlign::Center);
+            const auto minusText = self.prepareText(decrement, "-", 2, TextAlign::Center);
+            const auto plusText = self.prepareText(increment, "+", 2, TextAlign::Center);
             char valueText[24];
             std::snprintf(valueText, sizeof(valueText), "%d%.*s", displayedValue, static_cast<int>(suffix.size()),
                           suffix.data());
@@ -801,23 +771,23 @@ namespace ui {
                               static_cast<int16_t>(rect.w - buttonWidth * 2 - 12), rect.h};
             TextLayout labelText, valueLayout;
             if (rect.h >= 44) {
-                labelText = prepareText({middle.x, static_cast<int16_t>(middle.y + 2), middle.w, 16}, label, 2,
+                labelText = self.prepareText({middle.x, static_cast<int16_t>(middle.y + 2), middle.w, 16}, label, 2,
                                         TextAlign::Center);
-                valueLayout = prepareText({middle.x, static_cast<int16_t>(middle.y + 20), middle.w,
+                valueLayout = self.prepareText({middle.x, static_cast<int16_t>(middle.y + 20), middle.w,
                                            static_cast<int16_t>(middle.h - 20)},
                                           valueText, 2, TextAlign::Center);
             } else {
-                const int16_t valueWidth = std::min<int16_t>(middle.w / 2, textWidth(valueText, 2));
-                labelText = prepareText({middle.x, middle.y, static_cast<int16_t>(middle.w - valueWidth - 6), middle.h},
+                const int16_t valueWidth = std::min<int16_t>(middle.w / 2, self.textWidth(valueText, 2));
+                labelText = self.prepareText({middle.x, middle.y, static_cast<int16_t>(middle.w - valueWidth - 6), middle.h},
                                         label, 2);
-                valueLayout = prepareText({static_cast<int16_t>(middle.x + middle.w - valueWidth), middle.y, valueWidth,
+                valueLayout = self.prepareText({static_cast<int16_t>(middle.x + middle.w - valueWidth), middle.y, valueWidth,
                                            middle.h},
                                           valueText, 2, TextAlign::Right);
             }
-            paint(rect, [&](Arduino_GFX& output, Rect rect) {
+            self.paint(rect, [&](Arduino_GFX& output, Rect rect) {
                 const int16_t dx = rect.x - bounds.x, dy = rect.y - bounds.y;
-                const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
-                const uint16_t outline = color(ui::themes::ColorRole::Outline);
+                const uint16_t surface = self.color(ui::themes::ColorRole::SurfaceMuted);
+                const uint16_t outline = self.color(ui::themes::ColorRole::Outline);
                 output.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
                 output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, outline);
                 output.drawFastVLine(static_cast<int16_t>(rect.x + buttonWidth), static_cast<int16_t>(rect.y + 4),
@@ -825,47 +795,45 @@ namespace ui {
                 output.drawFastVLine(static_cast<int16_t>(rect.x + rect.w - buttonWidth),
                                      static_cast<int16_t>(rect.y + 4), static_cast<int16_t>(rect.h - 8), outline);
 
-                const uint16_t muted = color(ui::themes::ColorRole::Muted);
-                drawText(output, minusText, displayedValue > minimum ? color(activeRole) : muted, dx, dy);
-                drawText(output, plusText, displayedValue < maximum ? color(activeRole) : muted, dx, dy);
-                drawText(output, labelText, color(themes::Foreground), dx, dy);
-                drawText(output, valueLayout, color(activeRole), dx, dy);
+                const uint16_t muted = self.color(ui::themes::ColorRole::Muted);
+                self.drawText(output, minusText, displayedValue > minimum ? self.color(activeRole) : muted, dx, dy);
+                self.drawText(output, plusText, displayedValue < maximum ? self.color(activeRole) : muted, dx, dy);
+                self.drawText(output, labelText, self.color(themes::Foreground), dx, dy);
+                self.drawText(output, valueLayout, self.color(activeRole), dx, dy);
             });
-        }
+        }, label, displayedValue, minimum, maximum, suffix, activeRole, decrement, increment);
         if (changed)
             value = displayedValue;
         return changed;
     }
 
     void Context::dial(Rect rect, int value, int minimum, int maximum, std::string_view labelText) {
-        rect = paintBounds(rect);
-        value = std::clamp(value, minimum, maximum);
-        uint32_t state = combine(signature(labelText), static_cast<uint32_t>(value));
-        state = combine(state, static_cast<uint32_t>(minimum));
-        state = combine(state, static_cast<uint32_t>(maximum));
-        if (!claim(Kind::Dial, rect, state).changed) {
+        if (minimum > maximum)
             return;
-        }
-        const int16_t radius = std::max<int16_t>(2, std::min(rect.w, rect.h) / 2 - 2);
-        const int16_t cx = static_cast<int16_t>(rect.x + rect.w / 2);
-        const int16_t cy = static_cast<int16_t>(rect.y + rect.h / 2);
-        int16_t needleX = cx, needleY = cy;
-        if (maximum > minimum) {
-            constexpr float kPi = 3.14159265358979323846f;
-            const float angle = (-135.0f + 270.0f * (value - minimum) / (maximum - minimum)) * kPi / 180.0f;
-            needleX = static_cast<int16_t>(cx + std::cos(angle) * (radius - 4));
-            needleY = static_cast<int16_t>(cy + std::sin(angle) * (radius - 4));
-        }
-        const auto label = prepareText({rect.x, static_cast<int16_t>(cy + radius / 2), rect.w, textHeight(1)},
-                                       labelText, 1, TextAlign::Center);
-        const Rect bounds = rect;
-        paint(rect, [&](Arduino_GFX& output, Rect rect) {
-            const int16_t dx = rect.x - bounds.x, dy = rect.y - bounds.y;
-            output.drawCircle(cx + dx, cy + dy, radius, color(ui::themes::ColorRole::ProgressTrack));
-            if (maximum > minimum)
-                output.drawLine(cx + dx, cy + dy, needleX + dx, needleY + dy, color(ui::themes::ColorRole::Accent));
-            drawText(output, label, color(themes::Muted), dx, dy);
-        });
+        value = std::clamp(value, minimum, maximum);
+        const Item widget = item(Kind::Dial, rect);
+        widget.draw([](Context& self, Rect rect, int value, int minimum, int maximum, std::string_view labelText) {
+            const int16_t radius = std::max<int16_t>(2, std::min(rect.w, rect.h) / 2 - 2);
+            const int16_t cx = static_cast<int16_t>(rect.x + rect.w / 2);
+            const int16_t cy = static_cast<int16_t>(rect.y + rect.h / 2);
+            int16_t needleX = cx, needleY = cy;
+            if (maximum > minimum) {
+                constexpr float kPi = 3.14159265358979323846f;
+                const float angle = (-135.0f + 270.0f * (value - minimum) / (maximum - minimum)) * kPi / 180.0f;
+                needleX = static_cast<int16_t>(cx + std::cos(angle) * (radius - 4));
+                needleY = static_cast<int16_t>(cy + std::sin(angle) * (radius - 4));
+            }
+            const auto label = self.prepareText({rect.x, static_cast<int16_t>(cy + radius / 2), rect.w, self.textHeight(1)},
+                                           labelText, 1, TextAlign::Center);
+            const Rect bounds = rect;
+            self.paint(rect, [&](Arduino_GFX& output, Rect rect) {
+                const int16_t dx = rect.x - bounds.x, dy = rect.y - bounds.y;
+                output.drawCircle(cx + dx, cy + dy, radius, self.color(ui::themes::ColorRole::ProgressTrack));
+                if (maximum > minimum)
+                    output.drawLine(cx + dx, cy + dy, needleX + dx, needleY + dy, self.color(ui::themes::ColorRole::Accent));
+                self.drawText(output, label, self.color(themes::Muted), dx, dy);
+            });
+        }, value, minimum, maximum, labelText);
     }
 
     void Context::hourglass(Rect rect, uint16_t progress, bool paused, bool complete, ui::themes::ColorRole sandRole,
@@ -1114,32 +1082,46 @@ namespace ui {
         return (seed ^ value) * Fnv1a::kPrime;
     }
 
-    Context::Claim Context::claim(Kind kind, Rect rect, uint32_t state) {
+    Context::Item Context::item(Kind kind, Rect rect) {
         rect = paintBounds(rect);
         const size_t index = nextSlot_++;
+        if (index < kSlotCapacity) {
+            const Slot& slot = slots_[index];
+            // Validate structure before any button, drag or stepper can consume this frame's input.
+            if (slot.valid && (slot.kind != kind || slot.rect != rect) && capturedSlot_ == index)
+                capturedSlot_ = kSlotCapacity;
+            slotCount_ = std::max(slotCount_, index + 1);
+        }
+        return {*this, kind, rect, index};
+    }
+
+    bool Context::updateItem(const Item& item, uint32_t state) {
+        const Kind kind = item.kind;
+        const Rect rect = item.rect;
+        const size_t index = item.index;
         const bool clearNew = kind != Kind::Touch && (displayWriteAlignment() == 1 || kind == Kind::Custom);
         if (index >= kSlotCapacity) {
             if (clearNew)
                 clear(rect);
-            return {index, true};
+            return true;
         }
 
         Slot& slot = slots_[index];
-        const bool structureChanged = slot.valid && (slot.kind != kind || !(slot.rect == rect));
-        if (structureChanged && capturedSlot_ == index) {
-            capturedSlot_ = kSlotCapacity;
-        }
+        const bool structureChanged = slot.valid && (slot.kind != kind || slot.rect != rect);
         const bool changed = !slot.valid || structureChanged || slot.signature != state;
         if (changed) {
-            if (slot.valid && slot.kind != Kind::Touch && (!(slot.rect == rect) || kind == Kind::Touch)) {
+            if (slot.valid && slot.kind != Kind::Touch && (slot.rect != rect || kind == Kind::Touch))
                 clear(slot.rect);
-            }
             if (clearNew)
                 clear(rect);
             slot = {rect, state, kind, true};
         }
-        slotCount_ = std::max(slotCount_, index + 1);
-        return {index, changed};
+        return changed;
+    }
+
+    Context::Claim Context::claim(Kind kind, Rect rect, uint32_t state) {
+        const Item widget = item(kind, rect);
+        return {widget.index, updateItem(widget, state)};
     }
 
     void Context::clear(Rect rect) {
@@ -1418,7 +1400,6 @@ namespace ui {
     }
 
     void Context::resetTouchGesture() {
-        rotaryDragging_ = false;
         touchActive_ = false;
         touchHoldEmitted_ = false;
         touchOutsideSamples_ = 0;

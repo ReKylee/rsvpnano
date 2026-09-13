@@ -10,39 +10,34 @@ namespace ui {
         rect = paintBounds(rect);
         if (rect.w <= 0 || rect.h <= 0)
             return false;
-        auto state = signature(title, signature(detail));
-        state = combine(state, textSize);
-        state = combine(state, role);
-        state = combine(state, static_cast<uint8_t>(icon));
-        state = combine(state, enabled);
-        state = combine(state, alpha);
-        const Claim widget = claim(Kind::Card, rect, state);
-        if (widget.changed) {
+        const Item widget = item(Kind::Card, rect);
+        widget.draw([](Context& self, Rect rect, std::string_view title, std::string_view detail, uint8_t textSize,
+                       themes::ColorRole role, Icon icon, bool enabled, uint8_t alpha) {
             const int16_t iconWidth = icon == Icon::None ? 0 : std::min<int16_t>(32, rect.w / 4);
             const int16_t x = rect.x + 6 + iconWidth;
             const int16_t width = std::max<int16_t>(0, rect.w - 12 - iconWidth);
             const int16_t detailHeight = detail.empty() ? 0 : std::min<int16_t>(36, rect.h / 3);
-            const auto titleText = prepareFixedText({x, static_cast<int16_t>(rect.y + 3), width,
+            const auto titleText = self.prepareFixedText({x, static_cast<int16_t>(rect.y + 3), width,
                                                      static_cast<int16_t>(rect.h - detailHeight - 6)},
                                                     title, textSize, TextAlign::Center, 8);
             const auto detailText =
-                prepareFixedText({x, static_cast<int16_t>(rect.y + rect.h - detailHeight - 3), width, detailHeight},
+                self.prepareFixedText({x, static_cast<int16_t>(rect.y + rect.h - detailHeight - 3), width, detailHeight},
                                  detail, 2, TextAlign::Center, 1);
             const Rect bounds = rect;
-            paint(rect, [&](Arduino_GFX& output, Rect rect) {
+            self.paint(rect, [&](Arduino_GFX& output, Rect rect) {
                 const int16_t dx = rect.x - bounds.x, dy = rect.y - bounds.y;
-                const auto surface = blend(themes::SurfaceActive, alpha / 2);
-                const auto ink = blend(enabled ? themes::Foreground : themes::Muted, alpha);
+                const auto surface = self.blend(themes::SurfaceActive, alpha / 2);
+                const auto ink = self.blend(enabled ? themes::Foreground : themes::Muted, alpha);
                 output.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 8, surface);
-                output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 8, blend(role, alpha));
+                output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 8, self.blend(role, alpha));
                 if (iconWidth)
-                    drawIcon(output, {static_cast<int16_t>(rect.x + 6), rect.y, iconWidth, rect.h}, icon,
-                             blend(role, alpha), surface);
-                drawText(output, titleText, ink, dx, dy);
-                drawText(output, detailText, blend(role, alpha), dx, dy);
+                    self.drawIcon(output, {static_cast<int16_t>(rect.x + 6), rect.y, iconWidth, rect.h}, icon,
+                             self.blend(role, alpha), surface);
+                self.drawText(output, titleText, ink, dx, dy);
+                self.drawText(output, detailText, self.blend(role, alpha), dx, dy);
             });
-        }
-        return tapped(widget.index, rect, enabled);
+        }, title, detail, textSize, role, icon, enabled, alpha);
+        return widget.tapped(enabled);
     }
 
     size_t Context::fixedText(Rect rect, std::string_view text, uint8_t textSize, uint16_t ink, TextAlign align,
@@ -102,28 +97,27 @@ namespace ui {
     }
 
     bool Context::dockItem(Rect rect, std::string_view label, Icon icon, uint16_t accent) {
-        rect = paintBounds(rect);
-        const Claim widget = claim(Kind::Dock, rect, combine(signature(label), accent));
-        if (widget.changed) {
+        const Item widget = item(Kind::Dock, rect);
+        widget.draw([](Context& self, Rect rect, std::string_view label, Icon icon, uint16_t accent) {
             const int16_t iconWidth = std::min<int16_t>(30, rect.w - 8);
             const int16_t x = label.empty() ? rect.x + (rect.w - iconWidth) / 2 : rect.x + 6;
-            const auto labelText = prepareFixedText({static_cast<int16_t>(x + iconWidth + 3), rect.y,
+            const auto labelText = self.prepareFixedText({static_cast<int16_t>(x + iconWidth + 3), rect.y,
                                                      static_cast<int16_t>(rect.w - iconWidth - 15), rect.h},
                                                     label, 2);
             const Rect bounds = rect;
-            paint(rect, [&](Arduino_GFX& output, Rect rect) {
+            self.paint(rect, [&](Arduino_GFX& output, Rect rect) {
                 const int16_t dx = rect.x - bounds.x, dy = rect.y - bounds.y;
-                const auto surface = color(label.empty() ? themes::Surface : themes::SurfaceActive);
+                const auto surface = self.color(label.empty() ? themes::Surface : themes::SurfaceActive);
                 output.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 7, surface);
                 output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 7, accent);
-                drawIcon(output,
+                self.drawIcon(output,
                          {static_cast<int16_t>(x + dx), static_cast<int16_t>(rect.y + 4), iconWidth,
                           static_cast<int16_t>(rect.h - 8)},
                          icon, accent, surface);
-                drawText(output, labelText, color(themes::Foreground), dx, dy);
+                self.drawText(output, labelText, self.color(themes::Foreground), dx, dy);
             });
-        }
-        return tapped(widget.index, rect);
+        }, label, icon, accent);
+        return widget.tapped();
     }
 
     void Context::progressRing(Rect rect, int value, int maximum, themes::ColorRole role) {
@@ -131,60 +125,58 @@ namespace ui {
         if (rect.w < 8 || rect.h < 8)
             return;
         const int percent = maximum > 0 ? static_cast<int>(std::clamp<int64_t>(100LL * value / maximum, 0, 100)) : 0;
-        if (!claim(Kind::Ring, rect, combine(combine(signature("ring"), percent), role)).changed)
-            return;
-        const int16_t radius = std::min(rect.w, rect.h) / 2 - 2;
-        const int16_t cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
-        constexpr int segments = 60;
-        std::array<std::array<int16_t, 4>, segments> ticks{};
-        for (int i = 0; i < segments; ++i) {
-            const float angle = (i * 6 - 90) * 0.01745329252f;
-            ticks[i] = {static_cast<int16_t>(cx + std::cos(angle) * (radius - 4)),
-                        static_cast<int16_t>(cy + std::sin(angle) * (radius - 4)),
-                        static_cast<int16_t>(cx + std::cos(angle) * radius),
-                        static_cast<int16_t>(cy + std::sin(angle) * radius)};
-        }
-        char label[6];
-        std::snprintf(label, sizeof(label), "%d%%", percent);
-        const auto labelText =
-            prepareText({static_cast<int16_t>(rect.x + 7), rect.y, static_cast<int16_t>(rect.w - 14), rect.h}, label, 2,
-                        TextAlign::Center);
-        const Rect bounds = rect;
-        paint(rect, [&](Arduino_GFX& output, Rect rect) {
-            const int16_t dx = rect.x - bounds.x, dy = rect.y - bounds.y;
+        const Item widget = item(Kind::Ring, rect);
+        widget.draw([](Context& self, Rect rect, int percent, themes::ColorRole role) {
+            const int16_t radius = std::min(rect.w, rect.h) / 2 - 2;
+            const int16_t cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+            constexpr int segments = 60;
+            std::array<std::array<int16_t, 4>, segments> ticks{};
             for (int i = 0; i < segments; ++i) {
-                const auto& tick = ticks[i];
-                const auto ink = color(i * 100 < percent * segments ? role : themes::ProgressTrack);
-                output.drawLine(tick[0] + dx, tick[1] + dy, tick[2] + dx, tick[3] + dy, ink);
+                const float angle = (i * 6 - 90) * 0.01745329252f;
+                ticks[i] = {static_cast<int16_t>(cx + std::cos(angle) * (radius - 4)),
+                            static_cast<int16_t>(cy + std::sin(angle) * (radius - 4)),
+                            static_cast<int16_t>(cx + std::cos(angle) * radius),
+                            static_cast<int16_t>(cy + std::sin(angle) * radius)};
             }
-            drawText(output, labelText, color(role), dx, dy);
-        });
+            char label[6];
+            std::snprintf(label, sizeof(label), "%d%%", percent);
+            const auto labelText =
+                self.prepareText({static_cast<int16_t>(rect.x + 7), rect.y, static_cast<int16_t>(rect.w - 14), rect.h}, label, 2,
+                            TextAlign::Center);
+            const Rect bounds = rect;
+            self.paint(rect, [&](Arduino_GFX& output, Rect rect) {
+                const int16_t dx = rect.x - bounds.x, dy = rect.y - bounds.y;
+                for (int i = 0; i < segments; ++i) {
+                    const auto& tick = ticks[i];
+                    const auto ink = self.color(i * 100 < percent * segments ? role : themes::ProgressTrack);
+                    output.drawLine(tick[0] + dx, tick[1] + dy, tick[2] + dx, tick[3] + dy, ink);
+                }
+                self.drawText(output, labelText, self.color(role), dx, dy);
+            });
+        }, percent, role);
     }
 
     bool Context::rotary(Rect rect, int& value, int minimum, int maximum, int step, std::string_view label) {
         rect = paintBounds(rect);
         if (rect.w <= 0 || rect.h <= 0 || maximum <= minimum || step <= 0)
             return false;
+        const Item widget = item(Kind::Rotary, rect);
         const int before = value;
         const Touch* event = touch();
-        if (event && hasTouch(*event, TouchStart) && contains(rect, event->x, event->y)) {
-            rotaryDragging_ = true;
-            rotaryRect_ = rect;
+        if (widget.index < kSlotCapacity && event && hasTouch(*event, TouchStart) && contains(rect, event->x, event->y)) {
+            capturedSlot_ = widget.index;
             rotaryStartX_ = event->x;
             rotaryStartValue_ = value;
         }
-        if (rotaryDragging_ && rotaryRect_ == rect && event) {
+        if (widget.index < kSlotCapacity && capturedSlot_ == widget.index && event) {
             const int delta = (static_cast<int>(event->x) - rotaryStartX_) / 8;
-            value = std::clamp(rotaryStartValue_ + delta * step, minimum, maximum);
+            value = static_cast<int>(std::clamp<int64_t>(static_cast<int64_t>(rotaryStartValue_)
+                                                       + static_cast<int64_t>(delta) * step, minimum, maximum));
             if (hasTouch(*event, TouchRelease))
-                rotaryDragging_ = false;
+                capturedSlot_ = kSlotCapacity;
         }
-        auto state = combine(signature("rotary"), value);
-        state = combine(state, minimum);
-        state = combine(state, maximum);
-        state = signature(label, state);
-        if (claim(Kind::Rotary, rect, state).changed) {
-            const int16_t labelHeight = label.empty() ? 0 : textHeightFor(label, 2) + 2;
+        widget.draw([](Context& self, Rect rect, int value, int minimum, int maximum, std::string_view label) {
+            const int16_t labelHeight = label.empty() ? 0 : self.textHeightFor(label, 2) + 2;
             const int16_t diameter = std::min<int16_t>(rect.w, rect.h - labelHeight);
             const int16_t r = std::max<int16_t>(6, diameter / 2 - 3);
             const int16_t cx = rect.x + rect.w / 2, cy = rect.y + (rect.h - labelHeight) / 2;
@@ -197,26 +189,26 @@ namespace ui {
                             static_cast<int16_t>(cx + std::cos(a) * r), static_cast<int16_t>(cy + std::sin(a) * r)};
             }
             const auto number = std::to_string(value);
-            const uint8_t size = textWidth(number, 3) <= diameter - 16 && diameter >= 44 ? 3 : 2;
+            const uint8_t size = self.textWidth(number, 3) <= diameter - 16 && diameter >= 44 ? 3 : 2;
             const auto valueText =
-                prepareText({static_cast<int16_t>(rect.x + 4), static_cast<int16_t>(cy - textHeight(size) / 2),
-                             static_cast<int16_t>(rect.w - 8), textHeight(size)},
+                self.prepareText({static_cast<int16_t>(rect.x + 4), static_cast<int16_t>(cy - self.textHeight(size) / 2),
+                             static_cast<int16_t>(rect.w - 8), self.textHeight(size)},
                             number, size, TextAlign::Center);
             const auto labelText =
-                prepareFixedText({rect.x, static_cast<int16_t>(rect.y + rect.h - labelHeight), rect.w, labelHeight},
+                self.prepareFixedText({rect.x, static_cast<int16_t>(rect.y + rect.h - labelHeight), rect.w, labelHeight},
                                  label, 2, TextAlign::Center, 1);
             const Rect bounds = rect;
-            paint(rect, [&](Arduino_GFX& output, Rect rect) {
+            self.paint(rect, [&](Arduino_GFX& output, Rect rect) {
                 const int16_t dx = rect.x - bounds.x, dy = rect.y - bounds.y;
                 for (int i = 0; i <= 48; ++i) {
                     const auto& tick = ticks[i];
                     output.drawLine(tick[0] + dx, tick[1] + dy, tick[2] + dx, tick[3] + dy,
-                                    color(i <= fill ? themes::Accent : themes::ProgressTrack));
+                                    self.color(i <= fill ? themes::Accent : themes::ProgressTrack));
                 }
-                drawText(output, valueText, color(themes::Foreground), dx, dy);
-                drawText(output, labelText, color(themes::Muted), dx, dy);
+                self.drawText(output, valueText, self.color(themes::Foreground), dx, dy);
+                self.drawText(output, labelText, self.color(themes::Muted), dx, dy);
             });
-        }
+        }, value, minimum, maximum, label);
         return before != value;
     }
 

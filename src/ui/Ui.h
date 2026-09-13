@@ -16,6 +16,7 @@
 #include "hash/Fnv1a.h"
 #include "localization/LocaleCatalog.h"
 #include "text/BidiText.h"
+#include "ui/DrawCall.h"
 #include "ui/Geometry.h"
 #include "ui/Localization.h"
 #include "ui/Theme.h"
@@ -255,11 +256,14 @@ namespace ui {
         template<typename T>
         bool slider(Rect rect, std::string_view label, T& value, int minimum, int maximum, int step = 1,
                     std::string_view suffix = {}, ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent) {
-            int scalar = static_cast<int>(value);
+            if (rect.w <= 0 || rect.h <= 0 || minimum > maximum || step <= 0)
+                return false;
+            const int before = static_cast<int>(value);
+            int scalar = before;
             if (!sliderValue(rect, label, scalar, minimum, maximum, step, suffix, activeRole))
                 return false;
             value = scalar;
-            return true;
+            return static_cast<int>(value) != before;
         }
 
         template<typename T>
@@ -276,11 +280,14 @@ namespace ui {
         template<typename T>
         bool stepper(Rect rect, std::string_view label, T& value, int minimum, int maximum, int step = 1,
                      std::string_view suffix = {}, ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent) {
-            int scalar = static_cast<int>(value);
+            if (rect.w <= 0 || rect.h <= 0 || minimum > maximum || step <= 0)
+                return false;
+            const int before = static_cast<int>(value);
+            int scalar = before;
             if (!stepperValue(rect, label, scalar, minimum, maximum, step, suffix, activeRole))
                 return false;
             value = scalar;
-            return true;
+            return static_cast<int>(value) != before;
         }
         KeyboardAction keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state,
                                 std::string_view label = {}, bool masked = false);
@@ -288,6 +295,19 @@ namespace ui {
         void hourglass(Rect rect, uint16_t progressPermille, bool paused = false, bool complete = false,
                        ui::themes::ColorRole sandRole = ui::themes::ColorRole::Accent, bool reversed = false,
                        std::string_view time = {});
+        // An owned drawing region, not a nested UI submission. The stateless painter receives
+        // only graphics, translated bounds and its data; it may be replayed for display strips.
+        template<detail::StatelessDraw Draw, detail::DrawArgument... Args>
+            requires std::invocable<Draw, Arduino_GFX&, Rect, const Args&...>
+        void draw(Rect rect, Draw, const Args&... args) {
+            if (rect.w <= 0 || rect.h <= 0)
+                return;
+            const Item widget = item(Kind::Custom, rect);
+            const detail::DrawCall<Draw, Args...> call(args...);
+            if (updateItem(widget, call.signature()))
+                paint(widget.rect, [&](Arduino_GFX& output, Rect bounds) { call(output, bounds); });
+        }
+
         // Opaque regions replace their background during paint; partial custom drawing still needs a clear.
         bool redraw(Rect rect, uint32_t signature, bool opaque = false);
         void markDrawn();
@@ -331,6 +351,7 @@ namespace ui {
             Setting,
             Toggle,
             Button,
+            IconButton,
             Tab,
             Progress,
             Steps,
@@ -361,6 +382,29 @@ namespace ui {
             bool changed = true;
         };
 
+        // Per-submission handle, not a retained widget or a second copy of application state.
+        struct Item {
+            Context& context;
+            Kind kind;
+            Rect rect;
+            size_t index;
+
+            bool tapped(bool enabled = true) const {
+                return context.tapped(index, rect, enabled);
+            }
+
+            template<detail::StatelessDraw Draw, detail::DrawArgument... Args>
+            void draw(Draw, const Args&... args) const {
+                const detail::DrawCall<Draw, Args...> call(args...);
+                if (context.updateItem(*this, call.signature())) {
+                    call(context, rect);
+                    context.markDrawn();
+                }
+            }
+        };
+
+        Item item(Kind kind, Rect rect);
+        bool updateItem(const Item& item, uint32_t signature);
         Claim claim(Kind kind, Rect rect, uint32_t signature);
         Arduino_Canvas* paintBuffer();
         void clear(Rect rect);
@@ -422,8 +466,6 @@ namespace ui {
         int8_t capturedStepperDirection_ = 0;
         uint8_t screen_ = 0xFF;
         size_t gridPage_ = 0;
-        bool rotaryDragging_ = false;
-        Rect rotaryRect_{};
         int16_t rotaryStartX_ = 0;
         int rotaryStartValue_ = 0;
         bool invalid_ = true;

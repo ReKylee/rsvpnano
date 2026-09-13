@@ -15,16 +15,25 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          persist-credentials: false
 
       - name: Archive exact refactor sources
         if: github.ref == 'refs/heads/refactor/cpp-ui-architecture'
-        run: git archive --format=tar.gz HEAD > "$RUNNER_TEMP/refactor-source.tar.gz"
+        run: |
+          git rev-parse HEAD > "$RUNNER_TEMP/refactor-revision.txt"
+          git submodule status --recursive > "$RUNNER_TEMP/refactor-submodules.txt"
+          tar --exclude-vcs -czf "$RUNNER_TEMP/refactor-source.tar.gz" .
 
       - uses: actions/upload-artifact@v7
         if: github.ref == 'refs/heads/refactor/cpp-ui-architecture'
         with:
           name: refactor-source
-          path: ${{ runner.temp }}/refactor-source.tar.gz
+          path: |
+            ${{ runner.temp }}/refactor-source.tar.gz
+            ${{ runner.temp }}/refactor-revision.txt
+            ${{ runner.temp }}/refactor-submodules.txt
           retention-days: 1
           if-no-files-found: error
 

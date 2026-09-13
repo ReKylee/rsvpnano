@@ -99,7 +99,35 @@ void testMenuGeometry() {
     assert(last.x == 4 && last.y == 76 && last.w == 98);
 }
 
+void testLazyValuesAndNumericPresentation() {
+    for (const auto presentation : {ui::SettingPresentation::Inline, ui::SettingPresentation::Card}) {
+        ui::Context context;
+        ui::SettingsControls form{context, {presentation, 2}};
+        int calls = 0;
+        const auto value = [&] {
+            ++calls;
+            return std::string(128, 'x');
+        };
+        assert(!form.setting({}, UiText::Theme, value));
+        assert(calls == 0 && context.translations == 0);
+        assert(!form.setting({0, 0, 100, 40}, UiText::Theme, value));
+        assert(calls == 1 && context.lastValue == std::string(128, 'x'));
+    }
+    for (const auto number : {ui::NumberPresentation::Slider, ui::NumberPresentation::Stepper}) {
+        ui::Context context;
+        ui::SettingsControls form{context, {ui::SettingPresentation::Inline, 2, number}};
+        Scalar value{300};
+        assert(!form.number({}, UiText::Brightness, value, "%"));
+        assert(context.numerics == 0 && context.translations == 0);
+        assert(!form.number({0, 0, 100, 40}, UiText::Brightness, value, "%"));
+        assert(context.numerics == 1);
+        assert(context.sliders == (number == ui::NumberPresentation::Slider));
+        assert(context.steppers == (number == ui::NumberPresentation::Stepper));
+    }
+}
+
 int main() {
     testChoices(); testHiddenWork(); testNumericLimits(); testMenuGeometry();
+    testLazyValuesAndNumericPresentation();
     std::cout << "Settings controls: typed choices, presentation, hidden work and bounded edits passed\n";
 }

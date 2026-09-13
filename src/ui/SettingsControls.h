@@ -10,9 +10,12 @@
 namespace ui {
     enum class SettingPresentation : uint8_t { Inline, Stacked, Card };
 
+    enum class NumberPresentation : uint8_t { Slider, Stepper };
+
     struct SettingsStyle {
         SettingPresentation presentation = SettingPresentation::Inline;
         uint8_t textSize = 3;
+        NumberPresentation number = NumberPresentation::Slider;
     };
 
     // A synchronous form: owns edit bookkeeping, not the settings or their persistence.
@@ -30,6 +33,21 @@ namespace ui {
                        : ui_.setting(rect, ui_.text(label), value,
                                      style_.presentation == SettingPresentation::Inline
                                          ? SettingLayout::Inline : SettingLayout::Stacked);
+        }
+
+        // Evaluate only visible values; the result is consumed synchronously by setting().
+        template<typename Value>
+            requires requires(Value& value) { std::string_view{value()}; }
+        bool setting(Rect rect, UiText label, Value&& value) {
+            if (rect.w <= 0 || rect.h <= 0)
+                return false;
+            return setting(rect, label, value());
+        }
+
+        template<typename T>
+        bool number(Rect rect, UiText label, T& value, std::string_view suffix = {}) {
+            return style_.number == NumberPresentation::Stepper ? stepper(rect, label, value, suffix)
+                                                                : slider(rect, label, value, suffix);
         }
 
         template<typename T, size_t N>

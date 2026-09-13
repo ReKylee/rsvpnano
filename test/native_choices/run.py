@@ -12,6 +12,7 @@ with tempfile.TemporaryDirectory(prefix="rsvpnano-choices-") as directory:
     executable = Path(directory) / "choice-tests"
     command = shlex.split(os.environ.get("CXX", "g++")) + [
         "-std=c++23", "-Wall", "-Wextra", "-Werror", "-pedantic", "-fno-exceptions", "-fno-rtti",
+        *shlex.split(os.environ.get("CXXFLAGS", "")),
         "-I" + str(HERE / "support"), "-I" + str(ROOT / "src"),
         str(HERE / "test_main.cpp"),
         "-o", str(executable),

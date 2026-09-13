@@ -3,6 +3,9 @@
 #include "platforms/waveshare_lcd_349/WaveshareLcd349.h"
 
 namespace Board::Config {
+    namespace Imu = WaveshareLcd349::ImuWiring;
+    constexpr int IMU_I2C_BUS = 1;
+
     constexpr int DISPLAY_WRITE_ALIGNMENT = 1;
     constexpr int DISPLAY_BUFFER_ROWS = 0;
 

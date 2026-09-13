@@ -21,12 +21,14 @@ def main():
     flags += ["-UNDEBUG"]
     includes = ["-I" + str(HERE / "support"), "-I" + str(ROOT / "src"), "-I" + str(HERE)]
     with tempfile.TemporaryDirectory(prefix="rsvpnano-ui-inputs-") as directory:
-        def build(name, sources):
+        def build(name, sources, platform_stubs=True):
             executable = Path(directory) / name
-            subprocess.run(compiler + flags + includes + [str(source) for source in sources]
+            include_dirs = includes if platform_stubs else ["-I" + str(ROOT / "src")]
+            subprocess.run(compiler + flags + include_dirs + [str(source) for source in sources]
                            + ["-o", str(executable)], check=True)
             subprocess.run([str(executable)], check=True)
 
+        build("screen-data-headers", [HERE / "test_headers.cpp"], platform_stubs=False)
         build("geometry", [HERE / "test_geometry.cpp"])
         build("inputs", [HERE / "test_inputs.cpp", HERE / "Recording.cpp"])
         build("input-edges", [HERE / "test_input_edges.cpp", HERE / "Recording.cpp"])

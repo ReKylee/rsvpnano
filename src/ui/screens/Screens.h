@@ -22,50 +22,9 @@
 #include "focus/FocusTimers.h"
 #include "ui/Ui.h"
 #include "ui/Layouts.h"
+#include "ui/screens/Screen.h"
 
 namespace screens {
-
-    enum class Screen : uint8_t {
-        Read,
-        Library,
-        Chapters,
-        Settings,
-        ReadingSettings,
-        InterfaceSettings,
-        PacingSettings,
-        ReaderAppearance,
-        BookFonts,
-        NetworkSettings,
-        WifiScan,
-        WifiConnect,
-        NetworkEdit,
-        Device,
-        StorageEncryption,
-        Sync,
-        Ota,
-        FocusTimers,
-        FocusEditor,
-        FocusNameEdit,
-        FocusSession,
-        Reader,
-        Usb,
-        Status,
-        Standby,
-    };
-
-    enum class Action : uint8_t {
-        None,
-        OpenBook,
-        Resume,
-        PowerOff,
-        CompanionSync,
-        RssRefresh,
-        UsbTransfer,
-        StorageStatus,
-        EnableStorageEncryption,
-        OtaCheck,
-        OtaInstall,
-    };
 
     Action read(ui::Context& ui, std::string_view title, std::string_view author, uint8_t progress, Screen& screen);
     Action settings(ui::Context& ui, Screen& screen);

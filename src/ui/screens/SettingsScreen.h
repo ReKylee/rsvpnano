@@ -1,7 +1,9 @@
 #pragma once
 
 #include <array>
-#include "ui/screens/Screens.h"
+#include "ui/Geometry.h"
+#include "ui/Localization.h"
+#include "ui/screens/Screen.h"
 
 namespace screens::settingsPage {
     // Application content only. Grid packing and input behavior belong to ui/.

@@ -2,7 +2,7 @@ name: Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, refactor/cpp-ui-architecture]
   pull_request:
 
 concurrency:
@@ -10,6 +10,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Archive exact refactor sources
+        if: github.ref == 'refs/heads/refactor/cpp-ui-architecture'
+        run: git archive --format=tar.gz HEAD > "$RUNNER_TEMP/refactor-source.tar.gz"
+
+      - uses: actions/upload-artifact@v7
+        if: github.ref == 'refs/heads/refactor/cpp-ui-architecture'
+        with:
+          name: refactor-source
+          path: ${{ runner.temp }}/refactor-source.tar.gz
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Check production UI and composition
+        run: |
+          g++ --version
+          python3 test/native_ui_drawing/run.py
+          python3 test/native_ui_inputs/run.py
+          python3 test/native_interface/run.py
+
   web:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -59,11 +84,8 @@ jobs:
           python -m unittest localization/test_locale_packs.py
           python -m unittest discover -s fonts -p "test_*.py"
 
-      - name: Check driver selection and generic UI controls
-        run: |
-          python test/native_imu/run.py
-          python test/native_ui_inputs/run.py
-          python test/native_interface/run.py
+      - name: Check driver selection
+        run: python test/native_imu/run.py
 
       - name: Run native firmware tests
         run: >-

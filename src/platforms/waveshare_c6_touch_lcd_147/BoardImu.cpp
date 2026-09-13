@@ -1,48 +1,12 @@
-#include "board/BoardImu.h"
-
+#include "platforms/common/ImuBinding.h"
+#include "platforms/waveshare_c6_touch_lcd_147/WaveshareC6TouchLcd147.h"
 #include <Wire.h>
 
-#include "drivers/imu/qmi8658/Qmi8658.h"
-#include "platforms/waveshare_c6_touch_lcd_147/WaveshareC6TouchLcd147.h"
-
-namespace Board::Imu {
-
-    namespace {
-
-        TwoWire& imuWire() {
-            return Wire;
-        }
-
-    } // namespace
-
-    bool available() {
-        return true;
+namespace BoardPlatform {
+    BoardDrivers::Qmi8658::Device& qmi8658() {
+        static BoardDrivers::Qmi8658::Device device{
+            Wire, {WaveshareC6TouchLcd147::ImuWiring::kAddress,
+                    WaveshareC6TouchLcd147::ImuWiring::kReleaseBusBeforeRead, "Wire"}};
+        return device;
     }
-
-    const char* wireName() {
-        return "Wire";
-    }
-
-    uint8_t address() {
-        return WaveshareC6TouchLcd147::ImuWiring::kAddress;
-    }
-
-    bool probeAddress(uint8_t candidateAddress) {
-        return BoardDrivers::Qmi8658::probeAddress(imuWire(), candidateAddress);
-    }
-
-    bool readRegister(uint8_t deviceAddress, uint8_t reg, uint8_t& value) {
-        return BoardDrivers::Qmi8658::readRegister(imuWire(), deviceAddress, reg, value,
-                                                   WaveshareC6TouchLcd147::ImuWiring::kReleaseBusBeforeRead);
-    }
-
-    bool writeRegister(uint8_t deviceAddress, uint8_t reg, uint8_t value) {
-        return BoardDrivers::Qmi8658::writeRegister(imuWire(), deviceAddress, reg, value);
-    }
-
-    bool readRegisters(uint8_t deviceAddress, uint8_t startReg, uint8_t* buffer, size_t len) {
-        return BoardDrivers::Qmi8658::readRegisters(imuWire(), deviceAddress, startReg, buffer, len,
-                                                    WaveshareC6TouchLcd147::ImuWiring::kReleaseBusBeforeRead);
-    }
-
-} // namespace Board::Imu
+} // namespace BoardPlatform

@@ -9,6 +9,9 @@
 namespace screens {
     enum class Screen : uint8_t;
 }
+namespace settings {
+    struct InterfaceSettings;
+}
 
 namespace screens::interfaceLayout {
     enum class Field : uint8_t { Brightness, Theme, Language, Standby, Screensaver, Count };
@@ -17,7 +20,6 @@ namespace screens::interfaceLayout {
     struct Layout {
         std::array<ui::Rect, fieldCount> fields{};
         ui::ValueStyle style{};
-        ui::NumberInput number = ui::NumberInput::Slider;
 
         ui::Rect& operator[](Field field) { return fields[static_cast<size_t>(field)]; }
         ui::Rect operator[](Field field) const { return fields[static_cast<size_t>(field)]; }
@@ -25,4 +27,5 @@ namespace screens::interfaceLayout {
 
     // Defined by the selected presentation, independent of device/controller selection.
     Layout make(ui::Context& ui, Screen& screen);
+    bool brightness(ui::Context& ui, ui::Rect rect, settings::InterfaceSettings& config);
 } // namespace screens::interfaceLayout

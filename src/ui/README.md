@@ -1,143 +1,136 @@
-# UI building blocks
+# Immediate UI construction
 
-`Context` owns input and rendering state. Screen data owns values and destinations;
-layout code chooses rectangles. Controls do not own settings, persistence or boards.
-The regular and watch screens deliberately retain separate layouts.
+The application owns its data. `Context` owns interaction and rendering state;
+layouts choose geometry. Submitting a control does not create a second model or
+require a retained widget object. An input's return value reports an edit, not a
+request to repaint or persist anything.
 
-## Select from existing data
+## One drawing description
 
-`Inputs.h` provides a tap-to-cycle selector. Pass an existing forward range and,
-when necessary, projections for its display label and stored value. It does not
-require a `Choice` object, form instance, registry, or separately allocated list.
-Plain strings work without projections:
+Standard controls submit an internal `Item` before processing input. Submission
+validates the slot's geometry and kind before a button, slider, stepper or rotary
+can consume capture. The item then receives a stateless painter and its arguments.
+`DrawCall` borrows that same argument pack for both its visual fingerprint and
+its synchronous invocation. There is no separate per-control hash field list.
 
-```cpp
-constexpr std::array<std::string_view, 3> tools{"Move", "Rotate", "Scale"};
-std::string selected = "Move"; // Owned by the screen/model, outside the frame loop.
+The unchanged path skips the painter, including text measurement, layout and
+geometry preparation inside it. The dirty path paints and marks the frame drawn.
+Strings are fingerprinted by length and contents, not their addresses; rectangle
+fields are serialized explicitly instead of hashing object padding. The painter
+and argument types are part of the signature. The binding itself does not allocate
+or copy the model; existing text layout and caller formatting may still allocate.
 
-// In the screen's draw function:
-const bool changed = ui::select(context, toolRect, "Tool", selected, tools);
-```
+This construction is used by labels, separators, setting/value surfaces, toggles,
+buttons, icon buttons, tabs, batteries, progress bars, steps, sliders, steppers,
+dials, cards, dock items, progress rings and rotary controls. It preserves the
+existing direct and aligned-strip rendering paths. The rotary uses the same
+capture owner as other inputs rather than an independent rectangle-owned gesture.
 
-Existing records can be used directly:
+### Custom drawing
 
-```cpp
-struct DeviceInfo {
-    int id;
-    std::string name;
-};
-
-// devices and selectedDeviceId belong to the caller.
-const bool changed = ui::select(context, deviceRect, "Device", selectedDeviceId,
-                               devices, &DeviceInfo::name,
-                               {.layout = ui::ValueLayout::Card, .textSize = 2},
-                               &DeviceInfo::id);
-```
-
-Captions/projections can return text or the existing `UiText` keys. A projection
-may return a temporary formatted string: it is consumed synchronously, not kept
-in the control. Hidden rectangles and empty ranges do not evaluate labels. A
-missing current value displays `Unknown`; activation chooses the first item.
-Activation wraps at the end and reports a change only if the stored value differs.
-The caller must keep a borrowed selected value valid; the control cannot extend a
-catalog entry's lifetime. Projections should not mutate the range being visited.
-
-`ValueStyle` only chooses presentation (inline, stacked, or card); it does not
-change selection semantics. Application-specific values, translations and menu
-destinations remain under `screens/`, not inside the generic control implementation.
-
-## Value actions and lazy display data
-
-`ui::valueButton` displays a caption/value pair and reports activation without
-mutating the caller's data. It accepts either a value or a synchronous supplier;
-a hidden field does not call the supplier. This is useful for catalog names,
-formatted status or any other computed value, not just settings. `ui::select`
-builds its cycling interaction on this same primitive.
-
-## Numeric input
-
-`ui::number` selects a slider or stepper from `NumberInput` without a form object.
-Use a caller-owned `int` with explicit limits for ordinary numeric input; no
-settings wrapper is required:
+Pass drawing values once. Do not compute a signature, maintain a dirty flag, or
+call `markDrawn` separately:
 
 ```cpp
-// minutes belongs to the caller, outside the frame loop.
-const bool changed = ui::number(context, durationRect, "Duration", minutes,
-                                5, 60, 5, " min", ui::NumberInput::Stepper);
+context.draw(bounds,
+    [](Arduino_GFX& output, ui::Rect rect, int fillWidth, uint16_t ink) {
+        output.fillRect(rect.x, rect.y, fillWidth, rect.h, ink);
+    },
+    model.fillWidth, context.color(ui::themes::Accent));
 ```
 
-The bounded-value overload supplies `min()`, `max()` and `step()` to that same
-input path. It reports whether the value actually stored changed, including when
-assignment normalizes a proposed edit. Hidden rectangles, reversed bounds and
-nonpositive steps return false before translating the caption or invoking a
-primitive. This retains the existing integer slider/stepper semantics; it is not
-a floating-point control or a replacement for domain validation.
+The callback receives graphics and translated bounds, not `Context`: it is a
+paint operation, not a container for nested input/widget submissions. It must
+be stateless and draw only from its arguments and the supplied output. Capturing
+lambdas and unsupported argument types are rejected. Do not read unbound mutable
+globals; C++ cannot discover such dependencies. Scalars, enums, strings and
+rectangles are supported; arbitrary model objects are deliberately not hashed
+by memory representation.
 
-The existing bounded-value contract (`min()`, `max()`, `step()`) also works with
-`Context::rotary(rect, value, label)`. `ui::rotaryStepper` composes the dial and
-increment/decrement buttons without requiring a form. It returns an actual edit,
-not merely a button press at a numeric limit. Buttons fit beside the dial instead
-of overlapping it on narrow rectangles. Callers still decide what an edit does.
+Arguments, including temporary strings, are consumed during the call. Nothing
+is retained for another frame. The painter may run once per display strip, so
+input handling, model mutations and external operations must stay outside it.
+Its region must own its background; this is not an alpha-compositing API.
 
-## Geometry independent of rendering
+## Existing inputs operate on existing values
 
-`Geometry.h` contains rectangles and row/column/grid packing without Arduino,
-font or application dependencies. Existing `Grid::next()` remains the single-cell
-operation. `next(columns)` spans cells, and `next(Grid::FullRow)` starts a complete
-row when necessary. `rowsUsed()` and `gridRows(range, columns, spanProjection)` use
-the same packing rule. Full rows include any remainder from integer cell division.
+Use the actual input, rather than an additional numeric-control selector:
 
-`Grid` remains a cursor, not a scrolling container: the caller must choose a
-viewport/paging policy. It does not guarantee a minimum touch size or clamp an
-unbounded list into its height. Cell-index exhaustion returns an empty rectangle
-instead of wrapping the index.
+```cpp
+// These are caller-owned values, not UI copies.
+const bool moved = context.slider(positionBounds, "Position", model.position, 0, 100);
+const bool resized = context.stepper(sizeBounds, "Size", model.size, 1, 64);
+const bool turned = context.rotary(angleBounds, model.angle, -180, 180, 5, "Angle");
+```
 
-## Boundaries still being refactored
+The bounded-value overloads obtain `min()`, `max()` and `step()` from the existing
+value type. They return whether assignment actually changed the stored value,
+including normalization. Sliders retain preview-on-drag/commit-on-release
+semantics. Invalid numeric ranges, nonpositive steps and hidden rectangles do not
+invoke their scalar primitives. The `number`/`NumberInput` wrapper has been removed.
 
-See [the general UI review](../../docs/ui-architecture-audit.md) for source-backed
-engine findings, ownership boundaries and the regressions needed to close them.
+Regular and watch interface layouts select the native slider or stepper in their
+own application presentation source. Brightness application remains in the shared
+screen workflow; the UI library does not own that device operation.
 
-These building blocks use the existing immediate controls. This change does not
-replace slot-based identity, damage ordering, capture or the text/paint backend.
-In particular, selection uses the existing control's paint-before-edit behavior;
-it is not a new same-frame reconciliation engine. The master plan's owned-region,
-structural repaint and capture work remains separate and unfinished.
+## Existing ranges and composition
 
-No new fields are added to `Context`, and no heap widget tree or deferred callbacks
-are introduced. The selector itself retains nothing and allocates nothing; caller
-projections and the underlying text renderer may allocate. RSVP/page rendering,
-prefetch, strip painting and benchmarks are not changed here. Unchanged source is
-not proof of unchanged device timing: the 1,000-WPM hardware benchmark remains a
-required validation step for the overall refactor.
+`ui::select` in `Inputs.h` consumes an existing forward range. Label and value
+projections allow ordinary domain records without manufacturing option objects:
+
+```cpp
+const bool selected = ui::select(context, deviceBounds, "Device", model.deviceId,
+                                 devices, &DeviceInfo::name, {}, &DeviceInfo::id);
+```
+
+Projected text is consumed synchronously. Hidden fields and empty ranges do not
+resolve labels. An unknown selection displays `Unknown`; activation selects the
+first item. A caller borrowing a selected string or record must preserve that
+record's lifetime. Projections must not mutate the range being traversed.
+
+`valueButton` and the existing `rotaryStepper` composition remain optional helpers,
+not required control construction. The former accepts a synchronous lazy display
+value; the latter combines existing buttons and rotary input. Neither owns app
+settings or persistence. Selection/value actions still paint before returning
+activation; this continuation does not implement same-frame reconciliation for
+those compositions.
+
+`Geometry.h` contains independent rectangles and row/column/grid cursors.
+`Grid::next(columns)`, `next(Grid::FullRow)`, `rowsUsed()` and `gridRows()` share
+packing rules. Grid is not a scrolling container or a minimum-touch-size policy.
+
+## Remaining engine boundaries
+
+This is an incremental construction migration, not a completed ImGui replacement.
+Submission order still supplies slot identity: dynamic same-kind row reordering
+needs stable IDs. Interleaved clearing of moved/retired regions is not yet safe
+for arbitrary overlapping content. Those require production input/pixel tests,
+not screen-specific forced redraws.
+
+The hourglass, keyboard and legacy `redraw(signature)` consumers have not all
+migrated to argument-bound drawing. Font lifetimes, text line limits, independent
+paging and overflow behavior still need their own work. The fixed-capacity cache
+uses 32-bit fingerprints; field-boundary ambiguity is fixed, but hash collisions
+are not mathematically excluded.
 
 ## Tests
 
-Run from the repository root:
-
 ```sh
+python test/native_ui_drawing/run.py
+CXX=clang++ python test/native_ui_drawing/run.py
+CXXFLAGS='-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer' python test/native_ui_drawing/run.py
 python test/native_ui_inputs/run.py
-CXX=clang++ python test/native_ui_inputs/run.py
-CXXFLAGS='-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -fno-pie -no-pie' python test/native_ui_inputs/run.py
+python test/native_interface/run.py
 ```
 
-The tests compile the real geometry, input/Context headers, bounded value, and
-regular/watch settings screen sources. Primitive rendering is a recording backend;
-platform/font owners and unrelated screen declarations are stubbed. The settings
-model and bounded values are production types. This suite has no replacement
-`ui/Ui.h`. Tests cover ranges/projections, empty and missing selections,
-temporary text lifetime, hidden work, spans, bounded edits, navigation and both
-presentations. These do not replace pixel/capture, firmware-build or hardware tests.
+The new drawing suite links production `Ui.cpp`, `Controls.cpp` and `Icons.cpp`
+against the shared host canvas. It checks unchanged-frame pixel/flush/text work,
+string mutations and field boundaries, capture cancellation, same-frame toggle
+pixels, dock icon-only changes and custom drawing on direct/aligned paths. Its
+platform assets and ASCII text services are stubs; it does not validate actual
+font decoding, Unicode shaping, the firmware matrix or device timing.
 
-For this migration, GCC 14.2, Clang 17 and GCC ASan/UBSan host runs passed. A control
-trace comparison against `806686d` covered ten sizes, two screens and controlled
-page windows (300 cases per presentation). Regular traces matched; watch traces
-changed only the two side-button bounds on the narrow portrait dial. `Context`
-and `Grid` sizes matched in the host fixture. These are API/composition checks,
-not display screenshots, target memory measurements, or hardware benchmarks.
-
-The newer shared interface screen/layout split from `0b71a9f` is preserved and
-migrated to these same primitives. Its existing `test/native_interface/run.py`
-behavior cases remain and use a dedicated recording Context/catalog fixture;
-that fixture now consumes production geometry and identifies fields from their
-actual captions, not from translation-call order. Both suites pass with GCC,
-Clang and GCC ASan/UBSan. No full firmware build or hardware run is claimed.
+The input suite's numeric cases now exercise native slider/stepper templates and
+stored-value normalization. Its rendering primitives are a recording fixture,
+separate from the production rendering tests. The interface suite retains its
+existing recording UI/catalog boundaries. None replaces hardware benchmarks.

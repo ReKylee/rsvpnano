@@ -50,8 +50,7 @@ namespace screens {
                                Screen& screen) {
         using interfaceLayout::Field;
         const auto layout = interfaceLayout::make(ui, screen);
-        bool changed = ui::number(ui, layout[Field::Brightness], UiText::Brightness,
-                                  config.brightnessPercent, "%", layout.number);
+        bool changed = interfaceLayout::brightness(ui, layout[Field::Brightness], config);
         if (changed && setBrightness != nullptr)
             setBrightness(config.brightnessPercent);
 

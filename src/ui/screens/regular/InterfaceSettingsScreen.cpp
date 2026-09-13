@@ -28,4 +28,10 @@ namespace screens::interfaceLayout {
         layout[Field::Screensaver] = {rightX, secondRowY, halfWidth, rowHeight};
         return layout;
     }
+
+    bool brightness(ui::Context& ui, ui::Rect rect, settings::InterfaceSettings& config) {
+        if (rect.w <= 0 || rect.h <= 0)
+            return false;
+        return ui.slider(rect, ui.text(UiText::Brightness), config.brightnessPercent, "%");
+    }
 } // namespace screens::interfaceLayout

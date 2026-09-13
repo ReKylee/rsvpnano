@@ -73,7 +73,7 @@ namespace {
         assert(ui::select(ui, area, "Color", color, colors) && color == "blue");
     }
 
-    void lazyValuesAndNumbers(ui::Context& ui) {
+    void lazyValues(ui::Context& ui) {
         using namespace testui;
         for (const auto layout : {ui::ValueLayout::Inline, ui::ValueLayout::Card}) {
             recording = {};
@@ -85,77 +85,65 @@ namespace {
             assert(!ui::valueButton(ui, area, UiText::Theme, value, style));
             assert(calls == 1 && recording.calls.back().value == std::string(128, 'x'));
         }
-        for (const auto input : {ui::NumberInput::Slider, ui::NumberInput::Stepper}) {
-            recording = {};
-            Scalar value{300};
-            assert(!ui::number(ui, {}, UiText::Brightness, value, "%", input));
-            assert(recording.calls.empty() && recording.translations == 0);
-            assert(!ui::number(ui, area, UiText::Brightness, value, "%", input));
-            assert(recording.calls.size() == 1);
-            assert(recording.calls.back().kind == (input == ui::NumberInput::Stepper ? Kind::Stepper : Kind::Slider));
-            recording.numericValue = 350;
-            assert(ui::number(ui, area, "Level", value, {}, input));
-            assert(static_cast<int>(value) == 350);
-        }
     }
 
-    void explicitNumbers(ui::Context& ui) {
+    // Run the same contract against the native APIs, not a second numeric abstraction.
+    template<typename Input>
+    void scalarInput(Input input, testui::Kind kind) {
         using namespace testui;
-        for (const auto input : {ui::NumberInput::Slider, ui::NumberInput::Stepper}) {
-            recording = {};
-            int minutes = 25;
-            recording.numericValue = 30;
-            for (const auto rect : {ui::Rect{}, ui::Rect{0, 0, 40, 0}, ui::Rect{0, 0, -1, 40}})
-                assert(!ui::number(ui, rect, UiText::FocusMinutes, minutes, 5, 60, 5, " min", input));
-            assert(!ui::number(ui, area, UiText::FocusMinutes, minutes, 60, 5, 5, {}, input));
-            assert(!ui::number(ui, area, UiText::FocusMinutes, minutes, 5, 60, 0, {}, input));
-            assert(!ui::number(ui, area, UiText::FocusMinutes, minutes, 5, 60, -1, {}, input));
-            assert(minutes == 25 && recording.calls.empty() && recording.translations == 0);
+        recording = {};
+        Scalar bounded{300};
+        assert(!input({}, "Level", bounded, "%"));
+        assert(recording.calls.empty());
+        assert(!input(area, "Level", bounded, "%"));
+        assert(recording.calls.size() == 1 && recording.calls.back().kind == kind);
+        assert(recording.minimum == 10 && recording.maximum == 1000 && recording.step == 10);
+        recording.numericValue = 350;
+        assert(input(area, "Level", bounded, "%") && static_cast<int>(bounded) == 350);
 
-            recording.numericValue.reset();
-            assert(!ui::number(ui, area, "Duration", minutes, 5, 60, 5, " min", input));
-            assert(minutes == 25 && recording.calls.size() == 1);
-            assert(recording.minimum == 5 && recording.maximum == 60 && recording.step == 5);
-            assert(recording.calls.back().label == "Duration");
-            assert(recording.calls.back().kind == (input == ui::NumberInput::Stepper ? Kind::Stepper : Kind::Slider));
-            recording.numericValue = 30;
-            assert(ui::number(ui, area, "Duration", minutes, 5, 60, 5, " min", input));
-            assert(minutes == 30);
-            assert(!ui::number(ui, area, "Duration", minutes, 5, 60, 5, " min", input));
-            for (const int requested : {-20, 100}) {
-                recording.numericValue = requested;
-                assert(ui::number(ui, area, "Duration", minutes, 5, 60, 5, {}, input));
-                assert(minutes == (requested < 5 ? 5 : 60));
-                assert(!ui::number(ui, area, "Duration", minutes, 5, 60, 5, {}, input));
-            }
-            assert(recording.translations == 0);
+        recording = {};
+        int minutes = 25;
+        recording.numericValue = 30;
+        for (const auto rect : {ui::Rect{}, ui::Rect{0, 0, 40, 0}, ui::Rect{0, 0, -1, 40}})
+            assert(!input(rect, "Duration", minutes, 5, 60, 5, " min"));
+        assert(!input(area, "Duration", minutes, 60, 5, 5));
+        assert(!input(area, "Duration", minutes, 5, 60, 0));
+        assert(!input(area, "Duration", minutes, 5, 60, -1));
+        assert(minutes == 25 && recording.calls.empty() && recording.translations == 0);
 
-            int offset = -10;
-            recording.numericValue = -25;
-            assert(ui::number(ui, area, UiText::Tracking, offset, -40, 40, 5, {}, input));
-            assert(offset == -25 && recording.translations == 1);
-            assert(recording.calls.back().label == caption(UiText::Tracking));
-            int fixed = 7;
-            recording.numericValue = 99;
-            assert(!ui::number(ui, area, "Fixed", fixed, 7, 7, 1, {}, input));
-            assert(fixed == 7);
-
-            // Assignment can accept less than the primitive proposes; report the stored result.
-            struct EvenValue {
-                int value = 30;
-                static constexpr int min() { return 0; }
-                static constexpr int max() { return 60; }
-                static constexpr int step() { return 2; }
-                operator int() const { return value; }
-                EvenValue& operator=(int next) { value = std::clamp(next, min(), max()) / 2 * 2; return *this; }
-            } even;
-            recording.numericValue = 31;
-            assert(!ui::number(ui, area, "Even", even, {}, input));
-            assert(static_cast<int>(even) == 30);
-            recording.numericValue = 33;
-            assert(ui::number(ui, area, "Even", even, {}, input));
-            assert(static_cast<int>(even) == 32);
+        recording.numericValue.reset();
+        assert(!input(area, "Duration", minutes, 5, 60, 5, " min"));
+        assert(minutes == 25 && recording.calls.size() == 1);
+        assert(recording.minimum == 5 && recording.maximum == 60 && recording.step == 5);
+        assert(recording.calls.back().label == "Duration" && recording.calls.back().kind == kind);
+        recording.numericValue = 30;
+        assert(input(area, "Duration", minutes, 5, 60, 5, " min") && minutes == 30);
+        assert(!input(area, "Duration", minutes, 5, 60, 5, " min"));
+        for (const int requested : {-20, 100}) {
+            recording.numericValue = requested;
+            assert(input(area, "Duration", minutes, 5, 60, 5));
+            assert(minutes == (requested < 5 ? 5 : 60));
+            assert(!input(area, "Duration", minutes, 5, 60, 5));
         }
+        int offset = -10;
+        recording.numericValue = -25;
+        assert(input(area, "Offset", offset, -40, 40, 5) && offset == -25);
+        int fixed = 7;
+        recording.numericValue = 99;
+        assert(!input(area, "Fixed", fixed, 7, 7, 1) && fixed == 7);
+
+        struct EvenValue {
+            int value = 30;
+            static constexpr int min() { return 0; }
+            static constexpr int max() { return 60; }
+            static constexpr int step() { return 2; }
+            operator int() const { return value; }
+            EvenValue& operator=(int next) { value = std::clamp(next, min(), max()) / 2 * 2; return *this; }
+        } even;
+        recording.numericValue = 31;
+        assert(!input(area, "Even", even) && static_cast<int>(even) == 30);
+        recording.numericValue = 33;
+        assert(input(area, "Even", even) && static_cast<int>(even) == 32);
     }
 
     void rotaryFeedback(ui::Context& ui) {
@@ -239,9 +227,14 @@ int main() {
     Arduino_GFX gfx;
     ui::Context ui{gfx};
     selections(ui);
-    lazyValuesAndNumbers(ui);
-    explicitNumbers(ui);
+    lazyValues(ui);
+    scalarInput([&](ui::Rect rect, std::string_view label, auto& value, auto... options) {
+        return ui.slider(rect, label, value, options...);
+    }, testui::Kind::Slider);
+    scalarInput([&](ui::Rect rect, std::string_view label, auto& value, auto... options) {
+        return ui.stepper(rect, label, value, options...);
+    }, testui::Kind::Stepper);
     rotaryFeedback(ui);
     numerics(ui);
-    std::cout << "Inputs: general ranges, projections, hidden work, lifetimes and bounded numerics passed\n";
+    std::cout << "Inputs: general ranges, projections, hidden work, lifetimes and native numerics passed\n";
 }

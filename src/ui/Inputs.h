@@ -45,34 +45,6 @@ namespace ui {
             return draw(value);
     }
 
-    enum class NumberInput : uint8_t { Slider, Stepper };
-
-    template<typename Caption>
-    bool number(Context& ui, Rect rect, const Caption& label, int& value, int minimum, int maximum,
-                int step = 1, std::string_view suffix = {}, NumberInput input = NumberInput::Slider) {
-        if (rect.w <= 0 || rect.h <= 0 || minimum > maximum || step <= 0)
-            return false;
-        const int before = value;
-        const auto title = detail::caption(ui, label);
-        if (input == NumberInput::Stepper)
-            ui.stepper(rect, title, value, minimum, maximum, step, suffix);
-        else
-            ui.slider(rect, title, value, minimum, maximum, step, suffix);
-        return value != before;
-    }
-
-    template<typename Caption, typename T>
-        requires requires { T::min(); T::max(); T::step(); }
-    bool number(Context& ui, Rect rect, const Caption& label, T& value, std::string_view suffix = {},
-                NumberInput input = NumberInput::Slider) {
-        const int before = static_cast<int>(value);
-        int scalar = before;
-        if (!number(ui, rect, label, scalar, T::min(), T::max(), T::step(), suffix, input))
-            return false;
-        value = scalar;
-        return static_cast<int>(value) != before;
-    }
-
     // Tap to advance through an existing range. Labels and keys are synchronous projections;
     // nothing is retained, and callers need not manufacture a separate option model.
     template<typename Caption, typename Value, std::ranges::forward_range Items,

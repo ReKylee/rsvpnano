@@ -158,6 +158,33 @@ namespace {
         }
     }
 
+    void rotaryFeedback(ui::Context& ui) {
+        using namespace testui;
+        for (const bool increment : {false, true}) {
+            recording = {};
+            Scalar value{300};
+            recording.activate = increment ? "+" : "-";
+            assert(ui::rotaryStepper(ui, area, "Rate", value));
+            const int expected = increment ? 310 : 290;
+            assert(static_cast<int>(value) == expected);
+            // Updating the model alone is insufficient: this invocation must draw the new number.
+            assert(recording.renderedNumericValue == expected);
+            assert(recording.calls.size() == 3 && recording.calls.back().kind == Kind::Rotary);
+
+            value = increment ? Scalar::max() : Scalar::min();
+            const int limit = static_cast<int>(value);
+            assert(!ui::rotaryStepper(ui, area, "Rate", value));
+            assert(recording.renderedNumericValue == limit);
+        }
+
+        recording = {};
+        recording.numericValue = 350;
+        Scalar value{300};
+        assert(ui::rotaryStepper(ui, area, "Rate", value));
+        assert(static_cast<int>(value) == 350 && recording.renderedNumericValue == 350);
+        assert(!ui::rotaryStepper(ui, area, "Rate", value));
+    }
+
     void numerics(ui::Context& ui) {
         using namespace testui;
         recording = {};
@@ -195,9 +222,14 @@ namespace {
             recording = {};
             ui::rotaryStepper(ui, {4, 8, width, 72}, "Rate", value);
             assert(recording.calls.size() == 3);
-            const auto dial = recording.calls[0].rect;
-            const auto left = recording.calls[1].rect;
-            const auto right = recording.calls[2].rect;
+            const auto dialCall = std::ranges::find(recording.calls, Kind::Rotary, &Call::kind);
+            const auto leftCall = std::ranges::find(recording.calls, "-", &Call::label);
+            const auto rightCall = std::ranges::find(recording.calls, "+", &Call::label);
+            assert(dialCall != recording.calls.end() && leftCall != recording.calls.end()
+                   && rightCall != recording.calls.end());
+            const auto dial = dialCall->rect;
+            const auto left = leftCall->rect;
+            const auto right = rightCall->rect;
             assert(left.x + left.w <= dial.x && dial.x + dial.w <= right.x);
             assert(left.x == 4 && right.x + right.w == 4 + width);
         }
@@ -209,6 +241,7 @@ int main() {
     selections(ui);
     lazyValuesAndNumbers(ui);
     explicitNumbers(ui);
+    rotaryFeedback(ui);
     numerics(ui);
     std::cout << "Inputs: general ranges, projections, hidden work, lifetimes and bounded numerics passed\n";
 }

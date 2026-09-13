@@ -76,9 +76,14 @@ namespace {
                 Scalar value{300};
                 assert(!ui::rotaryStepper(ui, {4, 8, width, height}, "Rate", value));
                 assert(recording.calls.size() == 3);
-                const auto dial = recording.calls[0].rect;
-                const auto left = recording.calls[1].rect;
-                const auto right = recording.calls[2].rect;
+                const auto dialCall = std::ranges::find(recording.calls, Kind::Rotary, &Call::kind);
+                const auto leftCall = std::ranges::find(recording.calls, "-", &Call::label);
+                const auto rightCall = std::ranges::find(recording.calls, "+", &Call::label);
+                assert(dialCall != recording.calls.end() && leftCall != recording.calls.end()
+                       && rightCall != recording.calls.end());
+                const auto dial = dialCall->rect;
+                const auto left = leftCall->rect;
+                const auto right = rightCall->rect;
                 assert(dial.w > 0 && left.w > 0 && right.w > 0);
                 assert(left.x == 4 && right.x + right.w == 4 + width);
                 assert(left.x + left.w <= dial.x && dial.x + dial.w <= right.x);

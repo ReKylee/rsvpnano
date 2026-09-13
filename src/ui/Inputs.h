@@ -115,11 +115,12 @@ namespace ui {
         const int16_t diameter = std::min<int16_t>(rect.h, rect.w / 2);
         const int16_t sideWidth = std::min<int16_t>(48, (rect.w - diameter) / 2);
         const Rect dial{static_cast<int16_t>(rect.x + (rect.w - diameter) / 2), rect.y, diameter, rect.h};
-        ui.rotary(dial, value, minimum, maximum, step, label);
+        // Apply side-button edits before the dial paints its value in this frame.
         if (ui.button({rect.x, rect.y, sideWidth, rect.h}, "-"))
             value = static_cast<int>(std::clamp<int64_t>(static_cast<int64_t>(value) - step, minimum, maximum));
         if (ui.button({static_cast<int16_t>(rect.x + rect.w - sideWidth), rect.y, sideWidth, rect.h}, "+"))
             value = static_cast<int>(std::clamp<int64_t>(static_cast<int64_t>(value) + step, minimum, maximum));
+        ui.rotary(dial, value, minimum, maximum, step, label);
         return value != before;
     }
 

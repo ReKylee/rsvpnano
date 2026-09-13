@@ -59,10 +59,10 @@ namespace ui {
         auto& output = testui::recording;
         output.minimum = minimum; output.maximum = maximum; output.step = step;
         testui::record(testui::Kind::Rotary, rect, label);
-        if (!output.numericValue)
-            return false;
         const int before = value;
-        value = std::clamp(*output.numericValue, minimum, maximum);
+        if (output.numericValue)
+            value = std::clamp(*output.numericValue, minimum, maximum);
+        output.renderedNumericValue = value;
         return value != before;
     }
     bool Context::sliderValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,

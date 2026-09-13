@@ -19,6 +19,7 @@ namespace testui {
         std::vector<Call> calls;
         std::string activate;
         std::optional<int> numericValue;
+        std::optional<int> renderedNumericValue;
         int translations = 0;
         int minimum = 0, maximum = 0, step = 0;
         size_t pageFirst = 0;

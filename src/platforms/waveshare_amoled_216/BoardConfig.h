@@ -3,6 +3,8 @@
 #include "platforms/waveshare_amoled_216/WaveshareAmoled216.h"
 
 namespace Board::Config {
+    namespace Imu = WaveshareAmoled216::ImuWiring;
+    constexpr int IMU_I2C_BUS = 0;
 
     constexpr const char* BOARD_ID = "waveshare_esp32s3_touch_amoled_2_16";
     constexpr const char* BOARD_LABEL = "Waveshare ESP32-S3-Touch-AMOLED-2.16";

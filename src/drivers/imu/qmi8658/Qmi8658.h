@@ -26,7 +26,7 @@ namespace BoardDrivers::Qmi8658 {
 
     class Device {
     public:
-        Device(TwoWire& wire, Config config) : wire_(wire), config_(config), address_(config.address) {}
+        constexpr Device(TwoWire& wire, Config config) noexcept : wire_(wire), config_(config), address_(config.address) {}
         Device(const Device&) = delete;
         Device& operator=(const Device&) = delete;
 

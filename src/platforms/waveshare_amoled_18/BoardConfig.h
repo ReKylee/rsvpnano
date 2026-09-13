@@ -3,6 +3,8 @@
 #include "platforms/waveshare_amoled_18/WaveshareAmoled18.h"
 
 namespace Board::Config {
+    namespace Imu = WaveshareAmoled18::ImuWiring;
+    constexpr int IMU_I2C_BUS = 0;
 
     constexpr const char* BOARD_ID = WaveshareAmoled18::Version::kBoardId;
     constexpr const char* BOARD_LABEL = WaveshareAmoled18::Version::kBoardLabel;

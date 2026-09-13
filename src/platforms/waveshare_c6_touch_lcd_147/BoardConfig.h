@@ -3,6 +3,9 @@
 #include "platforms/waveshare_c6_touch_lcd_147/WaveshareC6TouchLcd147.h"
 
 namespace Board::Config {
+    namespace Imu = WaveshareC6TouchLcd147::ImuWiring;
+    constexpr int IMU_I2C_BUS = 0;
+
     constexpr int DISPLAY_WRITE_ALIGNMENT = 1;
     constexpr int DISPLAY_BUFFER_ROWS = 0;
 

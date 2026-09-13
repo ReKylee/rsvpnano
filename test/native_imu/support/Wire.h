@@ -42,3 +42,10 @@ private:
     uint8_t cursor_ = 0;
     std::vector<uint8_t> bytes_;
 };
+
+#if defined(SOC_I2C_NUM)
+extern TwoWire Wire;
+#if SOC_I2C_NUM > 1
+extern TwoWire Wire1;
+#endif
+#endif

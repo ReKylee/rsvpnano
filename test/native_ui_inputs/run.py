@@ -29,6 +29,7 @@ def main():
 
         build("geometry", [HERE / "test_geometry.cpp"])
         build("inputs", [HERE / "test_inputs.cpp", HERE / "Recording.cpp"])
+        build("input-edges", [HERE / "test_input_edges.cpp", HERE / "Recording.cpp"])
         for profile in ("regular", "watch"):
             screens = ROOT / "src/ui/screens" / profile
             build(profile, [HERE / "test_screens.cpp", HERE / "Recording.cpp",

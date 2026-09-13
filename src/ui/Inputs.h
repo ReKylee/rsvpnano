@@ -84,14 +84,16 @@ namespace ui {
         decltype(auto) nextValue = std::invoke(valueFor, *next);
         if (value == nextValue)
             return false;
+        // Assignment can normalize a bounded value. Snapshot only after an actual activation.
+        const Value before = value;
         value = nextValue;
-        return true;
+        return !(value == before);
     }
 
     // Compose the existing dial and buttons without a form object or persistence policy.
     inline bool rotaryStepper(Context& ui, Rect rect, std::string_view label, int& value,
                               int minimum, int maximum, int step) {
-        if (rect.w <= 0 || rect.h <= 0 || maximum <= minimum || step <= 0)
+        if (rect.w < 3 || rect.h <= 0 || maximum <= minimum || step <= 0)
             return false;
         const int before = value;
         const int16_t diameter = std::min<int16_t>(rect.h, rect.w / 2);

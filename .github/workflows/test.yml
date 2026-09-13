@@ -67,6 +67,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
+          persist-credentials: false
 
       - uses: actions/setup-python@v7
         with:
@@ -103,3 +104,20 @@ jobs:
 
       - name: Check native Arduino_GFX text strip rendering
         run: python test/native_canvas/run.py --fetch-library
+
+      - name: Archive native reproduction inputs
+        if: github.ref == 'refs/heads/refactor/cpp-ui-architecture'
+        run: |
+          dependency=$(python3 -c 'import configparser; c=configparser.ConfigParser(interpolation=None); c.read("platformio.ini"); print(next(v.strip() for v in c["common"]["base_lib_deps"].splitlines() if "Arduino_GFX.git#" in v))')
+          git init --quiet .validation-gfx
+          git -C .validation-gfx fetch --quiet --depth=1 "${dependency%#*}" "${dependency##*#}"
+          git -C .validation-gfx checkout --quiet --detach FETCH_HEAD
+          tar --exclude-vcs --exclude='*.o' --exclude='*.d' -czf "$RUNNER_TEMP/native-inputs.tar.gz" lib .pio/libdeps/native_test .pio/build/native_test .validation-gfx/src
+
+      - uses: actions/upload-artifact@v7
+        if: github.ref == 'refs/heads/refactor/cpp-ui-architecture'
+        with:
+          name: native-inputs
+          path: ${{ runner.temp }}/native-inputs.tar.gz
+          retention-days: 1
+          if-no-files-found: error

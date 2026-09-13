@@ -51,12 +51,22 @@ namespace ui {
             return record(rect, label, value);
         }
         template<typename T>
-        bool slider(Rect rect, std::string_view label, T& value, std::string_view) {
-            ++sliders; return editNumber(rect, label, value);
+        bool slider(Rect rect, std::string_view label, T& value, std::string_view suffix) {
+            return slider(rect, label, value, T::min(), T::max(), T::step(), suffix);
         }
         template<typename T>
-        bool stepper(Rect rect, std::string_view label, T& value, std::string_view) {
-            ++steppers; return editNumber(rect, label, value);
+        bool slider(Rect rect, std::string_view label, T& value, int minimum, int maximum, int,
+                    std::string_view) {
+            ++sliders; return editNumber(rect, label, value, minimum, maximum);
+        }
+        template<typename T>
+        bool stepper(Rect rect, std::string_view label, T& value, std::string_view suffix) {
+            return stepper(rect, label, value, T::min(), T::max(), T::step(), suffix);
+        }
+        template<typename T>
+        bool stepper(Rect rect, std::string_view label, T& value, int minimum, int maximum, int,
+                     std::string_view) {
+            ++steppers; return editNumber(rect, label, value, minimum, maximum);
         }
         bool rotary(Rect, int&, int, int, int, std::string_view) { return false; }
         bool button(Rect, std::string_view label) { return label == buttonToActivate; }
@@ -80,11 +90,11 @@ namespace ui {
             return key != UiText::Count && activateField == key;
         }
         template<typename T>
-        bool editNumber(Rect rect, std::string_view label, T& value) {
+        bool editNumber(Rect rect, std::string_view label, T& value, int minimum, int maximum) {
             if (!record(rect, label, {}))
                 return false;
             const int before = static_cast<int>(value);
-            value = before + numericDelta;
+            value = std::clamp(before + numericDelta, minimum, maximum);
             return static_cast<int>(value) != before;
         }
     };

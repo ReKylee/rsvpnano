@@ -99,6 +99,65 @@ namespace {
         }
     }
 
+    void explicitNumbers(ui::Context& ui) {
+        using namespace testui;
+        for (const auto input : {ui::NumberInput::Slider, ui::NumberInput::Stepper}) {
+            recording = {};
+            int minutes = 25;
+            recording.numericValue = 30;
+            for (const auto rect : {ui::Rect{}, ui::Rect{0, 0, 40, 0}, ui::Rect{0, 0, -1, 40}})
+                assert(!ui::number(ui, rect, UiText::FocusMinutes, minutes, 5, 60, 5, " min", input));
+            assert(!ui::number(ui, area, UiText::FocusMinutes, minutes, 60, 5, 5, {}, input));
+            assert(!ui::number(ui, area, UiText::FocusMinutes, minutes, 5, 60, 0, {}, input));
+            assert(!ui::number(ui, area, UiText::FocusMinutes, minutes, 5, 60, -1, {}, input));
+            assert(minutes == 25 && recording.calls.empty() && recording.translations == 0);
+
+            recording.numericValue.reset();
+            assert(!ui::number(ui, area, "Duration", minutes, 5, 60, 5, " min", input));
+            assert(minutes == 25 && recording.calls.size() == 1);
+            assert(recording.minimum == 5 && recording.maximum == 60 && recording.step == 5);
+            assert(recording.calls.back().label == "Duration");
+            assert(recording.calls.back().kind == (input == ui::NumberInput::Stepper ? Kind::Stepper : Kind::Slider));
+            recording.numericValue = 30;
+            assert(ui::number(ui, area, "Duration", minutes, 5, 60, 5, " min", input));
+            assert(minutes == 30);
+            assert(!ui::number(ui, area, "Duration", minutes, 5, 60, 5, " min", input));
+            for (const int requested : {-20, 100}) {
+                recording.numericValue = requested;
+                assert(ui::number(ui, area, "Duration", minutes, 5, 60, 5, {}, input));
+                assert(minutes == (requested < 5 ? 5 : 60));
+                assert(!ui::number(ui, area, "Duration", minutes, 5, 60, 5, {}, input));
+            }
+            assert(recording.translations == 0);
+
+            int offset = -10;
+            recording.numericValue = -25;
+            assert(ui::number(ui, area, UiText::Tracking, offset, -40, 40, 5, {}, input));
+            assert(offset == -25 && recording.translations == 1);
+            assert(recording.calls.back().label == caption(UiText::Tracking));
+            int fixed = 7;
+            recording.numericValue = 99;
+            assert(!ui::number(ui, area, "Fixed", fixed, 7, 7, 1, {}, input));
+            assert(fixed == 7);
+
+            // Assignment can accept less than the primitive proposes; report the stored result.
+            struct EvenValue {
+                int value = 30;
+                static constexpr int min() { return 0; }
+                static constexpr int max() { return 60; }
+                static constexpr int step() { return 2; }
+                operator int() const { return value; }
+                EvenValue& operator=(int next) { value = std::clamp(next, min(), max()) / 2 * 2; return *this; }
+            } even;
+            recording.numericValue = 31;
+            assert(!ui::number(ui, area, "Even", even, {}, input));
+            assert(static_cast<int>(even) == 30);
+            recording.numericValue = 33;
+            assert(ui::number(ui, area, "Even", even, {}, input));
+            assert(static_cast<int>(even) == 32);
+        }
+    }
+
     void numerics(ui::Context& ui) {
         using namespace testui;
         recording = {};
@@ -149,6 +208,7 @@ int main() {
     ui::Context ui{gfx};
     selections(ui);
     lazyValuesAndNumbers(ui);
+    explicitNumbers(ui);
     numerics(ui);
     std::cout << "Inputs: general ranges, projections, hidden work, lifetimes and bounded numerics passed\n";
 }

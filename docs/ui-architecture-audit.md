@@ -69,6 +69,11 @@ though their layout differs. `button` likewise appends its left and right detail
 strings consecutively. This is deterministic boundary ambiguity, not merely the
 possibility of a random hash collision.
 
+`dockItem` in `Controls.cpp` also draws an icon that is absent from its signature.
+`card` and keyboard input concatenate adjacent text fields in the same way.
+These controls need the same dependency rules as ordinary buttons; fixing one
+settings call site would leave the mechanism broken elsewhere.
+
 Acceptance: vary each visible input independently, and change text-field
 boundaries while keeping the concatenated bytes unchanged. Include icon-only
 changes and transitions between control kinds. Keep interaction identity separate
@@ -99,6 +104,28 @@ clipping and aligned transfers remain correct. A deferred payload must own or
 explicitly pin what it retains; rendering callbacks must not repeat application
 side effects when replayed across strips. Preserve the specialized reader path
 unless a measured, tested change is required.
+
+### Text layout advertises more lines than it constructs
+
+`appendText` in `Ui.cpp` constructs at most two lines despite accepting `maxLines`.
+`prepareFixedText` in `Controls.cpp` has a separate eight-entry wrapping array and
+consumed-byte accounting. These are general text-layout contracts, not settings
+screen concerns.
+
+Acceptance: define supported limits and test wrapping, measurement, truncation,
+consumed bytes and complete pagination. Include constrained bounds, UTF-8,
+mixed RTL/LTR text and fallback fonts. Keep the specialized reader path where it
+fits; a generic label is not a replacement for prepared reading content.
+
+### Slot capacity needs explicit overflow behavior
+
+`Ui.h` fixes the slot budget at 64. When `claim` exceeds that capacity, it returns
+a draw-needed result without retaining the overflow slot. Raising the constant
+alone would not define capture, cleanup or diagnostics for that state.
+
+Acceptance: test at and beyond capacity, including disappearance of overflow
+controls. Define interaction and repaint fallback behavior, expose diagnostics,
+and measure actual high-water usage before choosing a larger memory budget.
 
 ## Required completion evidence
 
@@ -131,3 +158,37 @@ C++23, warnings-as-errors, no exceptions and no RTTI. The full incoming input an
 interface suites were not rerun during this reconciliation; their earlier results
 remain separately recorded in `refactor-status.md`. Results from the superseded
 local control implementation are not evidence for the current branch.
+
+## Explicit numeric inputs and validation (`0be2e87` continuation)
+
+Preserved the newer selector normalization fix, tiny-rotary bounds checks and
+edge tests. Extended the existing `ui::number` helper with a caller-owned `int`
+and explicit minimum, maximum and step; no settings wrapper or new form API is
+required. The bounded-value overload supplies its limits to that same path and
+reports the value actually stored after assignment. Hidden rectangles, reversed
+bounds and nonpositive steps stop before translation or primitive work.
+
+The [UI README](../src/ui/README.md#numeric-input) includes a non-settings duration
+example. The interface recording fixture now accepts the explicit primitive
+overloads; its existing behavior tests are retained. No Context fields, retained
+callbacks, persistence rules or rendering implementations were added.
+
+After reconciling with `0be2e87`, the existing input and input-edge executables
+(`test_inputs.cpp` and `test_input_edges.cpp`, each linked with `Recording.cpp`)
+passed with GCC, Clang and GCC AddressSanitizer/UndefinedBehaviorSanitizer. These
+use the production Context header/templates with recording rendering primitives.
+The new numeric cases cover plain/signed integers, both presentations, localized
+and literal captions, hidden work, invalid constraints, equal bounds, no-op edits,
+clamping and assignment that normalizes the primitive's proposed value.
+
+`test/native_interface/run.py` also passed in all three configurations, compiling
+both actual regular/watch interface layouts and shared behavior against its
+separate recording Context/catalog fixture. Existing live brightness, no-op
+edits, catalog cycling, Back, hidden work and layout-bound checks passed.
+
+The builds use C++23, warnings-as-errors, no exceptions and no RTTI. The sanitizer
+flags are `-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -fno-pie -no-pie`.
+The complete `native_ui_inputs` driver, other native/pixel suites, the PlatformIO
+firmware matrix and device benchmarks were not rerun for this numeric increment.
+These results do not close the production-engine findings above or establish
+pixel/capture correctness, target memory usage or 1,000-WPM device timing.

@@ -57,6 +57,22 @@ builds its cycling interaction on this same primitive.
 ## Numeric input
 
 `ui::number` selects a slider or stepper from `NumberInput` without a form object.
+Use a caller-owned `int` with explicit limits for ordinary numeric input; no
+settings wrapper is required:
+
+```cpp
+// minutes belongs to the caller, outside the frame loop.
+const bool changed = ui::number(context, durationRect, "Duration", minutes,
+                                5, 60, 5, " min", ui::NumberInput::Stepper);
+```
+
+The bounded-value overload supplies `min()`, `max()` and `step()` to that same
+input path. It reports whether the value actually stored changed, including when
+assignment normalizes a proposed edit. Hidden rectangles, reversed bounds and
+nonpositive steps return false before translating the caption or invoking a
+primitive. This retains the existing integer slider/stepper semantics; it is not
+a floating-point control or a replacement for domain validation.
+
 The existing bounded-value contract (`min()`, `max()`, `step()`) also works with
 `Context::rotary(rect, value, label)`. `ui::rotaryStepper` composes the dial and
 increment/decrement buttons without requiring a form. It returns an actual edit,
@@ -77,6 +93,9 @@ unbounded list into its height. Cell-index exhaustion returns an empty rectangle
 instead of wrapping the index.
 
 ## Boundaries still being refactored
+
+See [the general UI review](../../docs/ui-architecture-audit.md) for source-backed
+engine findings, ownership boundaries and the regressions needed to close them.
 
 These building blocks use the existing immediate controls. This change does not
 replace slot-based identity, damage ordering, capture or the text/paint backend.

@@ -12,9 +12,18 @@
 #include "library/StorageManager.h"
 #include "ui/Localization.h"
 #include "ui/Ui.h"
-#include "ui/screens/LibraryScreen.h"
-#include "ui/screens/ReaderScreen.h"
-#include "ui/screens/Screens.h"
+#include "app/screens/library/LibraryScreen.h"
+#include "app/screens/reader/ReaderScreen.h"
+#include "app/screens/Navigation.h"
+#include "app/screens/settings/InterfaceScreen.h"
+#include "app/screens/network/NetworkScreen.h"
+#include "app/screens/focus/FocusScreen.h"
+#include "app/screens/reader/ReadScreen.h"
+#include "app/screens/settings/SettingsScreens.h"
+#include "app/screens/reader/BookFontsScreen.h"
+#include "app/screens/device/DeviceScreen.h"
+#include "app/screens/device/OtaScreen.h"
+#include "app/screens/status/StatusScreen.h"
 
 namespace {
 

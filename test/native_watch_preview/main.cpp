@@ -1,9 +1,9 @@
 #include <canvas/Arduino_Canvas.h>
 #include <cstdio>
 #include <filesystem>
-#include "ui/screens/ChaptersScreen.h"
-#include "ui/screens/ReaderLayout.h"
-#include "ui/screens/ScreenCommon.h"
+#include "app/screens/library/ChaptersScreen.h"
+#include "app/screens/reader/ReaderLayout.h"
+#include "app/screens/ScreenCommon.h"
 
 int main(int argc, char** argv) {
     if (argc != 2)

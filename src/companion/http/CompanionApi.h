@@ -24,9 +24,12 @@
 #include "storage/migration/Migration.h"
 #include "focus/FocusTimers.h"
 #include "ui/Ui.h"
-#include "ui/screens/LibraryScreen.h"
-#include "ui/screens/ReaderScreen.h"
-#include "ui/screens/Screens.h"
+#include "app/screens/library/LibraryScreen.h"
+#include "app/screens/reader/ReaderScreen.h"
+#include "app/screens/Navigation.h"
+#include "app/screens/settings/InterfaceScreen.h"
+#include "app/screens/network/NetworkScreen.h"
+#include "app/screens/focus/FocusScreen.h"
 
 class CompanionSerial;
 

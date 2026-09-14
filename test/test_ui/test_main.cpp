@@ -1,3 +1,4 @@
+#include "UiCacheChecks.h"
 #include <unity.h>
 #include "AppearanceChecks.h"
 
@@ -18,9 +19,18 @@
 #include "text/Utf8Text.h"
 #include "ui/Localization.h"
 #include "ui/Ui.h"
-#include "ui/screens/ChaptersScreen.h"
-#include "ui/screens/PageReaderScreen.h"
-#include "ui/screens/Screens.h"
+#include "app/screens/library/ChaptersScreen.h"
+#include "app/screens/reader/PageReaderScreen.h"
+#include "app/screens/Navigation.h"
+#include "app/screens/settings/InterfaceScreen.h"
+#include "app/screens/network/NetworkScreen.h"
+#include "app/screens/focus/FocusScreen.h"
+#include "app/screens/reader/ReadScreen.h"
+#include "app/screens/settings/SettingsScreens.h"
+#include "app/screens/reader/BookFontsScreen.h"
+#include "app/screens/device/DeviceScreen.h"
+#include "app/screens/device/OtaScreen.h"
+#include "app/screens/status/StatusScreen.h"
 
 namespace {
 
@@ -1664,6 +1674,11 @@ void test_appearance_controls_fit_lcd() {
 
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(uiCacheChecks::distinctTextFields);
+    RUN_TEST(uiCacheChecks::dockIconChanges);
+    RUN_TEST(uiCacheChecks::opaquePaintOwnsBackground);
+    RUN_TEST(uiCacheChecks::invisiblePaintDoesNoWork);
+    RUN_TEST(uiCacheChecks::typedReadingChoicesEditOnlyTheirMembers);
     RUN_TEST(test_unchanged_widget_does_not_draw_or_flush);
     RUN_TEST(test_reader_font_resolves_opentype_glyph_ids);
     RUN_TEST(test_reader_batches_adjacent_shaped_glyphs);

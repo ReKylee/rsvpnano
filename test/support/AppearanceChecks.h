@@ -1,8 +1,8 @@
 #pragma once
 
 #include <unity.h>
-#include "ui/screens/ReaderAppearanceLayout.h"
-#include "ui/screens/ReaderLayout.h"
+#include "app/screens/reader/ReaderAppearanceLayout.h"
+#include "app/screens/reader/ReaderLayout.h"
 
 namespace appearanceChecks {
     inline void layout(int16_t width, int16_t height) {

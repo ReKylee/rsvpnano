@@ -1,6 +1,10 @@
 #pragma once
 
-#include "ui/Ui.h"
+#include <cstddef>
+#include <cstdlib>
+
+#include "ui/Geometry.h"
+#include "ui/Touch.h"
 
 namespace ui {
     // A bounded grid page: invisible items have empty rectangles and cannot receive input.

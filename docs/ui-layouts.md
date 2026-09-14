@@ -4,19 +4,20 @@ Each board's `build_src_filter` selects exactly one presentation:
 
 | Boards | Screen implementation |
 | --- | --- |
-| LCD 3.49 rev1/rev2 | `src/ui/screens/regular/` |
-| AMOLED 2.41, 2.16, 2.06, 1.8 v1/v2; LCD 1.47 | `src/ui/screens/watch/` |
+| LCD 3.49 rev1/rev2 | `src/app/screens/<domain>/regular/` |
+| AMOLED 2.41, 2.16, 2.06, 1.8 v1/v2; LCD 1.47 | `src/app/screens/<domain>/watch/` |
 
-There is no UI-kind define or runtime boolean. The regular source filter excludes
-`watch/`; the watch source filter excludes `regular/`. Both implement the same
-screen declarations. Do not include one presentation's implementation from another.
+`RSVP_UI_WATCH` selects the matching interaction state at compile time; there is
+no runtime layout switch. The regular source filter excludes `watch/`; the watch
+source filter excludes `regular/`. Both implement the same domain screen contracts.
+Do not include one presentation's implementation from another.
 
 ## Ownership
 
 - `src/ui/`: shared rendering, touch handling, cards, rings, rotary controls,
   pagination, keyboard, typography, and theme primitives.
-- `src/ui/screens/regular/` and `watch/`: screen arrangement and presentation.
-- `src/ui/screens/ReaderLayout.h`: the selected reader presentation's geometry,
+- `src/app/screens/<domain>/regular/` and `watch/`: screen arrangement and presentation.
+- `src/app/screens/reader/ReaderLayout.h`: the selected reader presentation's geometry,
   page-font strike, and chrome contract. The shared reading engine calls it without
   inspecting the device or UI kind.
 - Shared screen workflow files retain book metadata, network operations, timer
@@ -79,3 +80,41 @@ Before release, check on the physical devices:
 - The 3.49 presentation retains its existing appearance and navigation.
 
 No hardware flashing is part of these host/build checks.
+
+## Source and state ownership
+
+The widget engine is in `src/ui`: frame caching (`Context.cpp`), surface transfers
+(`Paint.cpp`), text preparation (`Text.cpp`), touch gestures (`Touch.cpp`), and
+widget families. `Geometry.h` and `Layouts.h` do not depend on graphics or application
+screens. There is no retained widget tree or per-widget heap state; the existing
+64-entry frame cache and bounded display strips remain.
+
+Application screens live in `src/app/screens/<domain>`. Each domain keeps shared
+workflows beside `regular` and `watch` presentation implementations. Navigation IDs
+are in `Navigation.h`; each stateful screen declares its own state in its domain
+header. `RSVP_UI_WATCH` selects only the presentation-specific interaction fields.
+The same build configuration selects implementation files. The core application
+remains one owner, with its implementations separated into navigation, background
+jobs, power, preferences, USB transfer, and the boot/update loop.
+
+Settings menu entries, pacing member references, reading choices, and font target
+selection are shared data/operations. Presentations supply geometry and controls,
+not copies of settings or parallel action tables. Book font enumeration borrows
+metadata and the font catalog; only an actual override edit mutates the owning
+settings vector. No serialization, persistence format, hardware driver, dependency,
+or toolchain was changed by this reorganization.
+
+`Context::paint` owns the complete rectangular surface and supplies its background
+on both direct and strip-buffered displays. Its optional background-color argument
+lets full-surface controls avoid painting the same background twice. Prepare text
+before entering a paint callback, which may run once per display strip. Use
+`redraw(region, signature, true)` before painting an owned region; the default
+partial-custom claim still clears before callers draw directly. Keep sibling
+regions non-overlapping and submission order stable; the fixed cache is positional,
+not an arbitrary overlapping compositor. Cache overflow remains a redraw fallback.
+
+Run `python tools/check_ui_sources.py` after changing PlatformIO filters. It uses
+PlatformIO's source matcher and verifies layout/state agreement, optional widget
+selection, benchmark entrypoints, and the library-to-application dependency boundary.
+`test_ui`, `test_watch_ui`, and `test_amoled_render` exercise cache behavior,
+settings actions, layout bounds, touch behavior, text work, and strip transfers.

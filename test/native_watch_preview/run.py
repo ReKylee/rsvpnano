@@ -25,13 +25,15 @@ def main():
     support = Path(__file__).resolve().parent
     library = PROJECT / ".pio/libdeps/waveshare_esp32s3_touch_amoled_18_v2/GFX Library for Arduino/src"
     sources = [
-        "ui/Ui.cpp", "ui/Controls.cpp", "ui/Icons.cpp", "ui/Theme.cpp", "ui/Localization.generated.cpp",
+        "ui/Context.cpp", "ui/Paint.cpp", "ui/Text.cpp", "ui/Touch.cpp", "ui/Widgets.cpp",
+        "ui/ScalarControls.cpp", "ui/Hourglass.cpp", "ui/Portrait.cpp", "ui/Cards.cpp",
+        "ui/ProgressRing.cpp", "ui/Pagination.cpp", "ui/Icons.cpp", "ui/Theme.cpp", "ui/Localization.generated.cpp",
         "localization/LocalePack.cpp", "text/LocaleTag.cpp", "text/BidiText.cpp", "text/TextShaping.cpp",
-        "reader/ReadingLoop.cpp", "ui/screens/watch/ScreenCommon.cpp", "ui/screens/watch/ReadScreen.cpp",
-        "ui/screens/watch/SettingsScreen.cpp", "ui/screens/watch/DeviceScreen.cpp",
-        "ui/screens/watch/ReadingSettingsScreen.cpp", "ui/screens/watch/PacingSettingsScreen.cpp",
-        "ui/screens/watch/ChaptersScreen.cpp", "ui/screens/watch/OtaScreen.cpp",
-        "ui/screens/ReaderLayout.cpp", "ui/screens/watch/ReaderLayout.cpp",
+        "reader/ReadingLoop.cpp", "app/screens/watch/ScreenCommon.cpp", "app/screens/reader/watch/ReadScreen.cpp",
+        "app/screens/settings/watch/SettingsScreen.cpp", "app/screens/device/watch/DeviceScreen.cpp",
+        "app/screens/settings/watch/ReadingSettingsScreen.cpp", "app/screens/settings/watch/PacingSettingsScreen.cpp",
+        "app/screens/library/watch/ChaptersScreen.cpp", "app/screens/device/watch/OtaScreen.cpp",
+        "app/screens/reader/ReaderLayout.cpp", "app/screens/reader/watch/ReaderLayout.cpp",
     ]
     includes = [support, PROJECT / "test/native_canvas", PROJECT / "test/support", PROJECT / "src", library,
                 PROJECT / "lib/HarfBuzz/upstream/src", PROJECT / "lib/SheenBidi/upstream/Headers",
@@ -46,7 +48,7 @@ def main():
         executable = Path(temp) / "watch-preview.exe"
         subprocess.run([
             args.compiler, "-std=c++23", "-O1", "-funsigned-char", "-ffunction-sections", "-fdata-sections",
-            "-DGLZ_DEFAULT_OPTIMIZATION_SIZE", "-DGLZ_DISABLE_ALWAYS_INLINE",
+            "-DRSVP_UI_WATCH=1", "-DGLZ_DEFAULT_OPTIMIZATION_SIZE", "-DGLZ_DISABLE_ALWAYS_INLINE",
             *[f"-I{path}" for path in includes], str(support / "main.cpp"),
             *[str(PROJECT / "src" / file) for file in sources],
             str(library / "Arduino_G.cpp"), str(library / "Arduino_GFX.cpp"),

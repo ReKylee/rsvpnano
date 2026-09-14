@@ -1,9 +1,15 @@
+#include "app/screens/reader/ReadScreen.h"
+#include "app/screens/settings/SettingsScreens.h"
+#include "app/screens/reader/BookFontsScreen.h"
+#include "app/screens/device/DeviceScreen.h"
+#include "app/screens/device/OtaScreen.h"
+#include "app/screens/status/StatusScreen.h"
 #include <unity.h>
 #include "AppearanceChecks.h"
 #include "ui/Layouts.h"
-#include "ui/screens/ChaptersScreen.h"
-#include "ui/screens/ReaderLayout.h"
-#include "ui/screens/watch/Layout.h"
+#include "app/screens/library/ChaptersScreen.h"
+#include "app/screens/reader/ReaderLayout.h"
+#include "app/screens/watch/Layout.h"
 
 namespace {
     constexpr std::array<ui::TouchSurface, 9> watchResolutions{{

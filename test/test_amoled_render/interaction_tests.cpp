@@ -1,8 +1,8 @@
 #include <unity.h>
 
 #include "Panel.h"
-#include "ui/screens/ChaptersScreen.h"
-#include "ui/screens/watch/Layout.h"
+#include "app/screens/library/ChaptersScreen.h"
+#include "app/screens/watch/Layout.h"
 
 namespace {
     ui::TouchContact contact;

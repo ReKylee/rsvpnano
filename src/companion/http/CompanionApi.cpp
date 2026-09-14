@@ -1,3 +1,4 @@
+#include "app/screens/status/StatusScreen.h"
 #include "companion/http/CompanionApi.h"
 
 #include <ESPmDNS.h>

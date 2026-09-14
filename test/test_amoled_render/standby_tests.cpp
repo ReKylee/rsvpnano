@@ -2,7 +2,7 @@
 
 #include "Panel.h"
 #include "screensavers/Screensaver.h"
-#include "ui/screens/StandbyScreen.h"
+#include "app/screens/standby/StandbyScreen.h"
 
 namespace {
     void checkStandby(standby::Kind kind, ui::Orientation orientation) {

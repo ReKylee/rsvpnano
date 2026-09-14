@@ -6,8 +6,8 @@
 
 #include "Panel.h"
 #include "reader/ReadingLoop.h"
-#include "ui/screens/PageReaderScreen.h"
-#include "ui/screens/ReaderLayout.h"
+#include "app/screens/reader/PageReaderScreen.h"
+#include "app/screens/reader/ReaderLayout.h"
 
 namespace {
     constexpr uint8_t kBitmap[]{0xA0, 0xE0, 0xA0, 0xE0, 0xA0, 0xE0, 0xA0, 0xFE, 0x82, 0xBA, 0xAA, 0xBA,

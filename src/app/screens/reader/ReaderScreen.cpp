@@ -1,3 +1,4 @@
+#include "app/screens/status/StatusScreen.h"
 #include "app/screens/reader/ReaderScreen.h"
 #include <esp_log.h>
 

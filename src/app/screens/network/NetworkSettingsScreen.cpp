@@ -1,3 +1,4 @@
+#include "app/screens/status/StatusScreen.h"
 #include "app/screens/network/NetworkScreen.h"
 #include "app/screens/ScreenCommon.h"
 

@@ -59,6 +59,9 @@ jobs:
           python -m unittest localization/test_locale_packs.py
           python -m unittest discover -s fonts -p "test_*.py"
 
+      - name: Check UI source ownership
+        run: python tools/check_ui_sources.py
+
       - name: Run native firmware tests
         run: >-
           pio test -e native_test -e native_watch_test -e native_board_test

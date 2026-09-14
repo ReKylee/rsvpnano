@@ -1,0 +1,23 @@
+name: UI target builds
+
+on:
+  pull_request:
+    paths:
+      - 'src/ui/**'
+      - 'src/app/**'
+      - 'platformio.ini'
+      - 'tools/check_ui_sources.py'
+      - '.github/workflows/ui-target-builds.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-target-builds-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  firmware:
+    uses: ./.github/workflows/firmware-build.yml
+    with:
+      firmware_tag: ui-check-${{ github.sha }}
